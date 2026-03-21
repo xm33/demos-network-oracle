@@ -1,0 +1,355 @@
+import { readFileSync } from "fs";
+try { readFileSync(".env","utf8").split("\n").forEach(function(line) { var m = line.match(/^([^#=]+)=(.*)$/); if (m) process.env[m[1].trim()] = m[2].trim(); }); } catch(e) {}
+import { Demos, DemosTransactions } from "@kynesyslabs/demosdk/websdk";
+
+const MNEMONIC = process.env.DEMOS_MNEMONIC;
+const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
+const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
+const PROMETHEUS_URL = "http://127.0.0.1:19096";
+const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
+
+if (!MNEMONIC) {
+  console.error("DEMOS_MNEMONIC is required. Set it in .env");
+  process.exit(1);
+}
+
+const EXPECTED_FLEET = {
+  n1: { side: "A", port: 53550, host: "193.77.44.160",  identity: "0x8f3abd366c7b846c1ee940f35d2d7ef7774dfe636e6284a32bf2c5a3e1b3ba05" },
+  n2: { side: "B", port: 54550, host: "193.77.44.160",  identity: "0xbfda23d32dee055bda23f1e74a25abb7e33478da1b2013768e135cc2ed924f37" },
+  n3: { side: "A", port: 53550, host: "193.77.169.106", identity: "0x4ba486bc92263f2cb15608ed369eafbd576097e79194f0895c1e01d232aa4b52" },
+  n4: { side: "B", port: 54550, host: "193.77.50.180",  identity: "0x848ae0759c5eba1974ec942b8e1fb4962e1b256ff89e93bdb6ad12ea58ad76a9" },
+  n5: { side: "A", port: 53550, host: "193.77.50.180",  identity: "0x95cbd7147cf09dc46d91cd6ae8f2912ae0f597fac9c61d0b0c347a46374af80f" },
+  n6: { side: "B", port: 54550, host: "193.77.169.106", identity: "0x3ab3365e67583a89968082475816cf2f16f8f9a3b936a38513493d0c6b69f768" },
+  m1: { side: "A", port: 53550, host: "82.192.52.254",  identity: "0x56b46be173e20f540401d079811e5b524903a197ae5d07824d0e70a22ee6e591" },
+};
+
+const NODE_NAMES = Object.keys(EXPECTED_FLEET);
+const FLEET_SIZE = NODE_NAMES.length;
+const BLOCK_LAG_THRESHOLD = 3;
+const STALE_SECONDS_THRESHOLD = 120;
+const PROBE_TIMEOUT_MS = 5000;
+const HEARTBEAT_CYCLES = 18;
+
+let previousState = { consecutiveHealthy: 0, lastBlockHeight: null };
+
+function expectedConnStr(name) {
+  const n = EXPECTED_FLEET[name];
+  return "http://" + n.host + ":" + n.port;
+}
+
+const IDENTITY_TO_NAME = {};
+for (const [name, info] of Object.entries(EXPECTED_FLEET)) {
+  IDENTITY_TO_NAME[info.identity] = name;
+}
+
+async function promQuery(query) {
+  try {
+    const url = PROMETHEUS_URL + "/api/v1/query?query=" + encodeURIComponent(query);
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.status !== "success") return null;
+    return json.data.result;
+  } catch { return null; }
+}
+
+function promToMap(results, labelKey) {
+  if (!results) return {};
+  const map = {};
+  for (const r of results) {
+    const key = r.metric[labelKey || "node"] || "unknown";
+    map[key] = parseFloat(r.value[1]);
+  }
+  return map;
+}
+
+async function fetchInfo(url) {
+  try {
+    const start = Date.now();
+    const res = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    const latencyMs = Date.now() - start;
+    if (!res.ok) return { ok: false, error: "HTTP " + res.status, latencyMs: latencyMs };
+    const data = await res.json();
+    return { ok: true, data: data, latencyMs: latencyMs };
+  } catch (err) {
+    return { ok: false, error: err.name === "TimeoutError" ? "Timeout" : err.message, latencyMs: null };
+  }
+}
+
+async function perceive() {
+  const ts = new Date().toISOString();
+  console.log("\n[" + ts + "] Health check cycle starting...");
+
+  const [localInfoResult, secsSinceBlockData, tpsData, mempoolData, fleetUpData] = await Promise.all([
+    fetchInfo(LOCAL_INFO_URL),
+    promQuery("demos_seconds_since_last_block"),
+    promQuery("demos_tps"),
+    promQuery("demos_mempool_size"),
+    promQuery('up{job="fleet-node-exporter"}'),
+  ]);
+
+  const secsSinceBlock = promToMap(secsSinceBlockData);
+  const tps = promToMap(tpsData);
+  const mempool = promToMap(mempoolData);
+
+  const fleetUp = {};
+  if (fleetUpData) {
+    for (const r of fleetUpData) {
+      if (r.metric.node) fleetUp[r.metric.node] = parseFloat(r.value[1]) === 1;
+    }
+  }
+
+  if (!localInfoResult.ok) {
+    console.log("  LOCAL /info FAILED: " + localInfoResult.error);
+    return {
+      skip: false, type: "ALERT",
+      nodeReports: [{ name: "n3", status: "UNHEALTHY", issues: ["LOCAL_INFO_UNREACHABLE"] }],
+      chain: { block: null, onlineCount: 0, readyCount: 0, syncedCount: 0, tps: null },
+      problems: [{ name: "n3", issues: ["LOCAL_INFO_UNREACHABLE"] }],
+    };
+  }
+
+  const info = localInfoResult.data;
+  console.log("  n3 /info OK (" + localInfoResult.latencyMs + "ms) version " + info.version + " " + info.version_name);
+
+  const n3IdentityOk = info.identity === EXPECTED_FLEET.n3.identity;
+
+  const peerByConn = {};
+  for (const peer of info.peerlist || []) {
+    if (peer.connection && peer.connection.string) peerByConn[peer.connection.string] = peer;
+  }
+
+  const problems = [];
+  const nodeReports = [];
+  const blockHeights = {};
+
+  for (const name of NODE_NAMES) {
+    const expected = EXPECTED_FLEET[name];
+    const connStr = expectedConnStr(name);
+    const issues = [];
+    let blockHeight = null;
+    let syncOk = null;
+    let online = null;
+    let ready = null;
+    let identityMatch = null;
+
+    if (name === "n3") {
+      identityMatch = n3IdentityOk;
+      online = true;
+      ready = true;
+      const firstPeer = info.peerlist && info.peerlist[0];
+      blockHeight = firstPeer && firstPeer.sync ? firstPeer.sync.block : null;
+      syncOk = true;
+      if (!identityMatch) issues.push("IDENTITY_MISMATCH");
+    } else {
+      let peerData = peerByConn[connStr];
+      if (!peerData) {
+        peerData = (info.peerlist || []).find(function(p) { return p.identity === expected.identity; });
+      }
+
+      if (!peerData) {
+        issues.push("NOT_IN_PEERLIST");
+        online = false;
+      } else {
+        identityMatch = peerData.identity === expected.identity;
+        if (!identityMatch) issues.push("IDENTITY_MISMATCH");
+
+        online = peerData.status ? peerData.status.online : false;
+        if (!online) issues.push("OFFLINE");
+
+        ready = peerData.status ? peerData.status.ready : false;
+        if (online && !ready) issues.push("NOT_READY");
+
+        syncOk = peerData.sync ? peerData.sync.status : false;
+        blockHeight = peerData.sync ? peerData.sync.block : null;
+        if (!syncOk) issues.push("NOT_SYNCED");
+      }
+    }
+
+    if (blockHeight != null) blockHeights[name] = blockHeight;
+    if (fleetUp[name] === false) issues.push("EXPORTER_DOWN");
+
+    const status = issues.length > 0 ? "UNHEALTHY" : "HEALTHY";
+    nodeReports.push({ name: name, side: expected.side, status: status, issues: issues, blockHeight: blockHeight, online: online, ready: ready, syncOk: syncOk, identityMatch: identityMatch });
+    if (issues.length > 0) problems.push({ name: name, issues: issues });
+
+    const icon = status === "HEALTHY" ? "OK" : "!!";
+    const blk = blockHeight != null ? blockHeight : "?";
+    const onl = online ? "online" : "OFFLINE";
+    const rdy = ready ? "ready" : "!READY";
+    const syn = syncOk ? "synced" : "!SYNC";
+    const idOk = identityMatch === true ? "id-ok" : identityMatch === false ? "id-FAIL" : "id?";
+    const expStr = fleetUp[name] != null ? (fleetUp[name] ? "exp=UP" : "exp=DOWN") : "";
+    const issueStr = issues.length > 0 ? " << [" + issues.join(", ") + "]" : "";
+    console.log("  " + icon + " " + name + "(" + expected.side + "): block=" + blk + " " + onl + " " + rdy + " " + syn + " " + idOk + " " + expStr + issueStr);
+  }
+
+  const heights = Object.values(blockHeights);
+  const highestBlock = heights.length > 0 ? Math.max.apply(null, heights) : null;
+
+  if (highestBlock != null) {
+    for (const name of NODE_NAMES) {
+      if (blockHeights[name] != null) {
+        const lag = highestBlock - blockHeights[name];
+        if (lag >= BLOCK_LAG_THRESHOLD) {
+          const report = nodeReports.find(function(r) { return r.name === name; });
+          const issue = "BLOCK_LAG(" + lag + " behind)";
+          report.issues.push(issue);
+          report.status = "UNHEALTHY";
+          const existing = problems.find(function(p) { return p.name === name; });
+          if (existing) existing.issues.push(issue);
+          else problems.push({ name: name, issues: [issue] });
+          console.log("  !! " + name + ": " + issue);
+        }
+      }
+    }
+  }
+
+  const n3Stale = secsSinceBlock.n3 != null ? secsSinceBlock.n3 : null;
+  if (n3Stale != null && n3Stale > STALE_SECONDS_THRESHOLD) {
+    problems.push({ name: "CHAIN", issues: ["STALE(" + Math.round(n3Stale) + "s since last block)"] });
+    console.log("  !! CHAIN: stale " + Math.round(n3Stale) + "s since last block");
+  }
+
+  if (highestBlock != null && previousState.lastBlockHeight != null) {
+    if (highestBlock <= previousState.lastBlockHeight) {
+      problems.push({ name: "CHAIN", issues: ["BLOCK_STALL(no new blocks since last cycle)"] });
+      console.log("  !! CHAIN: block height unchanged since last cycle");
+    }
+  }
+  if (highestBlock != null) previousState.lastBlockHeight = highestBlock;
+
+  const n3Tps = tps.n3 != null ? tps.n3 : null;
+  const n3Mempool = mempool.n3 != null ? mempool.n3 : null;
+  const onlineCount = nodeReports.filter(function(r) { return r.online; }).length;
+  const readyCount = nodeReports.filter(function(r) { return r.ready; }).length;
+  const syncedCount = nodeReports.filter(function(r) { return r.syncOk; }).length;
+
+  console.log("  Fleet: " + onlineCount + "/" + FLEET_SIZE + " online, " + readyCount + " ready, " + syncedCount + " synced");
+  console.log("  Chain: block=" + (highestBlock != null ? highestBlock : "?") + " stale=" + (n3Stale != null ? n3Stale : "?") + "s tps=" + (n3Tps != null ? n3Tps : "?") + " mempool=" + (n3Mempool != null ? n3Mempool : "?"));
+  console.log("  Problems: " + problems.length);
+
+  if (problems.length === 0) {
+    previousState.consecutiveHealthy++;
+    console.log("  All healthy (" + previousState.consecutiveHealthy + " consecutive). Skipping post.");
+
+    if (previousState.consecutiveHealthy >= HEARTBEAT_CYCLES) {
+      previousState.consecutiveHealthy = 0;
+      return {
+        skip: false, type: "HEARTBEAT", nodeReports: nodeReports,
+        chain: { block: highestBlock, onlineCount: onlineCount, readyCount: readyCount, syncedCount: syncedCount, tps: n3Tps },
+        problems: [],
+      };
+    }
+    return { skip: true, reason: "All nodes healthy" };
+  }
+
+  previousState.consecutiveHealthy = 0;
+  return {
+    skip: false, type: "ALERT", nodeReports: nodeReports,
+    chain: { block: highestBlock, onlineCount: onlineCount, readyCount: readyCount, syncedCount: syncedCount, tps: n3Tps },
+    problems: problems,
+  };
+}
+
+function composeAlert(data) {
+  if (data.type === "HEARTBEAT") {
+    return {
+      cat: "OBSERVATION",
+      text: "Fleet heartbeat: " + data.chain.onlineCount + "/" + FLEET_SIZE + " online, all synced at block " + (data.chain.block != null ? data.chain.block : "?") + ". TPS " + (data.chain.tps != null ? data.chain.tps : "0") + ".",
+      confidence: 95,
+    };
+  }
+
+  var offline = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "OFFLINE" || i === "NOT_IN_PEERLIST"; }); });
+  var notSynced = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "NOT_SYNCED"; }); });
+  var blockLag = data.problems.filter(function(p) { return p.issues.some(function(i) { return i.indexOf("BLOCK_LAG") === 0; }); });
+  var notReady = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "NOT_READY"; }); });
+  var idMismatch = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "IDENTITY_MISMATCH"; }); });
+  var chainIssues = data.problems.filter(function(p) { return p.name === "CHAIN"; });
+  var expDown = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "EXPORTER_DOWN"; }); });
+
+  var parts = [];
+  if (offline.length > 0) parts.push("OFFLINE: " + offline.map(function(p) { return p.name; }).join(","));
+  if (notSynced.length > 0) parts.push("UNSYNC: " + notSynced.map(function(p) { return p.name; }).join(","));
+  if (blockLag.length > 0) parts.push("LAG: " + blockLag.map(function(p) { return p.name; }).join(","));
+  if (notReady.length > 0) parts.push("!READY: " + notReady.map(function(p) { return p.name; }).join(","));
+  if (idMismatch.length > 0) parts.push("ID_MISMATCH: " + idMismatch.map(function(p) { return p.name; }).join(","));
+  if (chainIssues.length > 0) parts.push(chainIssues.map(function(p) { return p.issues.join(","); }).join(","));
+  if (expDown.length > 0) parts.push("EXP: " + expDown.map(function(p) { return p.name; }).join(","));
+
+  var healthy = data.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length;
+
+  var text = "Fleet Alert [" + healthy + "/" + FLEET_SIZE + " healthy]: " + parts.join(" | ") + ". Block " + (data.chain.block != null ? data.chain.block : "?") + ".";
+  if (text.length > 280) text = text.substring(0, 277) + "...";
+
+  var severity = offline.length > 0 || chainIssues.length > 0 ? 95 : 70;
+  return { cat: "ALERT", text: text, confidence: severity };
+}
+
+async function publish(demos, post) {
+  try {
+    var hivePost = {
+      v: 1,
+      cat: post.cat,
+      text: post.text,
+      assets: ["DEM"],
+      confidence: post.confidence,
+      tags: ["node-health", "infrastructure", "monitoring"],
+    };
+
+    var HIVE_MAGIC = new Uint8Array([0x48, 0x49, 0x56, 0x45]);
+    var body = new TextEncoder().encode(JSON.stringify(hivePost));
+    var bytes = new Uint8Array(4 + body.length);
+    bytes.set(HIVE_MAGIC);
+    bytes.set(body, 4);
+
+    var tx = await DemosTransactions.store(bytes, demos);
+    var validity = await DemosTransactions.confirm(tx, demos);
+    var result = await DemosTransactions.broadcast(validity, demos);
+    var block = result && result.extra ? result.extra.confirmationBlock : "?";
+    console.log("  Published " + post.cat + ": " + post.text);
+    console.log("  TX: " + tx.hash + " (block " + block + ")");
+    return true;
+  } catch (err) {
+    console.error("  Publish failed: " + err.message);
+    return false;
+  }
+}
+
+async function main() {
+  console.log("===============================================================");
+  console.log("  SuperColony Node Health Agent v2");
+  console.log("  Fleet: " + FLEET_SIZE + " nodes across 4 servers");
+  console.log("  Interval: " + (INTERVAL_MS / 1000 / 60) + " minutes");
+  console.log("  Primary probe: " + LOCAL_INFO_URL);
+  console.log("  Prometheus: " + PROMETHEUS_URL);
+  console.log("  Demos RPC: " + RPC_URL);
+  console.log("===============================================================");
+
+  var demos = new Demos();
+  await demos.connect(RPC_URL);
+  await demos.connectWallet(MNEMONIC);
+  console.log("Wallet connected. Agent is live.\n");
+
+  async function cycle() {
+    try {
+      var data = await perceive();
+      if (data.skip) return;
+      var post = composeAlert(data);
+      await publish(demos, post);
+    } catch (err) {
+      console.error("Cycle error: " + err.message);
+      if (err.stack) console.error(err.stack);
+    }
+  }
+
+  await cycle();
+  setInterval(cycle, INTERVAL_MS);
+  console.log("\nNext check in " + (INTERVAL_MS / 1000 / 60) + " minutes. Agent running...\n");
+}
+
+main().catch(function(err) {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});
