@@ -1221,7 +1221,7 @@ function generatePrometheusMetrics(fleetData) {
         wallet: AGENT_WALLET,
         activeRpc: activeRpcUrl,
         demBalance: lastKnownBalance,
-        endpoints: ["/health", "/self", "/docs", "/reputation", "/peers", "/history", "/history/export", "/federate", "/badge", "/marketplace", "/consensus", "/incidents"]
+        endpoints: ["/health", "/self", "/docs", "/dashboard", "/reputation", "/peers", "/history", "/history/export", "/federate", "/badge", "/marketplace", "/consensus", "/incidents"]
       }, null, 2));
     } else if (req.url === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
@@ -1237,6 +1237,81 @@ function generatePrometheusMetrics(fleetData) {
         '<text x="76" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + ' ' + (bHealthy === FLEET_SIZE ? "\u2713" : "\u26a0") + '</text></svg>';
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
+    } else if (req.url === "/dashboard") {
+      var dashHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Fleet Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:20px}
+h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
+.sub{color:#8b949e;font-size:0.85em;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+.node{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px;text-align:center}
+.node.healthy{border-color:#238636}.node.unhealthy{border-color:#da3633}.node.unknown{border-color:#8b949e}
+.node h3{font-size:1.1em;margin-bottom:6px}.node .status{font-size:0.8em;margin-bottom:4px}
+.node .block{color:#8b949e;font-size:0.75em}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
+.metric{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}
+.metric .label{color:#8b949e;font-size:0.8em}.metric .value{font-size:1.4em;font-weight:bold;margin-top:4px}
+.safe{color:#3fb950}.caution{color:#d29922}.unsafe{color:#f85149}.unknown{color:#8b949e}
+.incidents{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
+.incidents h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
+.inc{padding:8px 0;border-bottom:1px solid #21262d;font-size:0.85em}
+.inc:last-child{border-bottom:none}
+.inc .id{color:#58a6ff;font-weight:bold}.inc .sev{padding:2px 6px;border-radius:4px;font-size:0.75em}
+.sev.critical{background:#da3633;color:#fff}.sev.warning{background:#d29922;color:#fff}.sev.info{background:#388bfd;color:#fff}
+.footer{color:#484f58;font-size:0.75em;text-align:center;margin-top:20px}
+.rec-box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center}
+.rec-box .rec{font-size:1.6em;font-weight:bold;margin-bottom:4px}
+.rec-box .reason{color:#8b949e;font-size:0.85em}
+</style></head><body>
+<h1>Demos Fleet Dashboard</h1>
+<div class="sub" id="updated">Loading...</div>
+<div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
+<div class="grid" id="nodes"></div>
+<div class="metrics" id="metrics"></div>
+<div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
+<div class="footer">Demos Fleet Oracle v6.4 &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a></div>
+<script>
+async function refresh(){
+  try{
+    var r=await fetch("/health");var d=await r.json();
+    document.getElementById("updated").textContent="Block "+((d.fleet&&d.fleet.block)||"?")+
+      " | "+d.fleet.healthy+"/"+d.fleet.size+" healthy | Updated "+new Date(d.timestamp).toLocaleTimeString()+
+      " | Staleness "+d.stalenessSeconds+"s";
+    var rec=d.recommendation||{};
+    var re=document.getElementById("rec");
+    re.textContent=rec.recommendation||"?";
+    re.className="rec "+(rec.recommendation==="SAFE"?"safe":rec.recommendation==="CAUTION"?"caution":rec.recommendation==="UNSAFE"?"unsafe":"unknown");
+    document.getElementById("rec-reason").textContent=(rec.safe_to_propose?"Safe to propose":"NOT safe to propose")+" — "+
+      (rec.reason||"")+" (confidence: "+(rec.confidence||"?")+")";
+    var ng=document.getElementById("nodes");ng.innerHTML="";
+    if(d.fleet&&d.fleet.nodes){d.fleet.nodes.forEach(function(n){
+      var cls=n.status==="HEALTHY"?"healthy":"unhealthy";
+      ng.innerHTML+='<div class="node '+cls+'"><h3>'+n.name+'</h3><div class="status">'+
+        (n.status==="HEALTHY"?"\u2705":"\u274C")+" "+n.status+'</div><div class="block">Block '+(n.blockHeight||"?")+'</div></div>';
+    });}
+    var mg=document.getElementById("metrics");mg.innerHTML="";
+    mg.innerHTML+='<div class="metric"><div class="label">Block Height</div><div class="value">'+((d.fleet&&d.fleet.block)||"?")+'</div></div>';
+    mg.innerHTML+='<div class="metric"><div class="label">TPS</div><div class="value">'+((d.fleet&&d.fleet.tps)||"0")+'</div></div>';
+    mg.innerHTML+='<div class="metric"><div class="label">Cycle</div><div class="value">'+d.cycleCount+'</div></div>';
+    mg.innerHTML+='<div class="metric"><div class="label">Active Incidents</div><div class="value">'+((d.activeIncidents&&d.activeIncidents.length)||0)+'</div></div>';
+  }catch(e){document.getElementById("updated").textContent="Error: "+e.message;}
+  try{
+    var ir=await fetch("/incidents?limit=10");var id=await ir.json();
+    var il=document.getElementById("inc-list");
+    if(!id.incidents||id.incidents.length===0){il.innerHTML='<div style="color:#8b949e">No incidents recorded</div>';return;}
+    il.innerHTML="";id.incidents.forEach(function(inc){
+      il.innerHTML+='<div class="inc"><span class="id">'+inc.id+'</span> <span class="sev '+inc.severity+'">'+inc.severity.toUpperCase()+
+        '</span> '+inc.description+' <span style="color:#8b949e">'+(inc.status==="active"?"\u23F3 active":
+        "\u2705 resolved in "+(inc.duration_seconds||"?")+"s")+'</span></div>';
+    });
+  }catch(e){}
+}
+refresh();setInterval(refresh,20000);
+</script></body></html>`;
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(dashHtml);
     } else if (req.url.indexOf("/history/export") === 0) {
       var expFrom = 0, expTo = Infinity;
       var fromIdx = req.url.indexOf("from=");
