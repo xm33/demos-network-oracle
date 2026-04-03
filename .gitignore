@@ -1,5 +1,9 @@
-.env
-logs/
 node_modules/
-.supercolony-marketplace-token.json
+logs/
+*.db
+.env
 *.backup
+*.log
+.supercolony-marketplace-token.json
+src/*.pre-v6.4
+src/*.backup-*

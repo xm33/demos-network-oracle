@@ -56,6 +56,7 @@ async function sleep(ms) {
 
 const MNEMONIC = process.env.DEMOS_MNEMONIC;
 const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
+const FALLBACK_RPCS = [RPC_URL, "http://193.77.44.160:53550", "http://193.77.50.180:53550"];
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
 const PROMETHEUS_URL = "http://127.0.0.1:19096";
 const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
@@ -64,8 +65,8 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
 // Public endpoints for cross-validation
 const PUBLIC_RPCS = [
-  { name: "discus", url: "https://demosnode.discus.sh/info" },
-  { name: "node2", url: "https://node2.demos.sh/info" },
+  { name: "n1", url: "http://193.77.44.160:53550/info" },
+  { name: "n5", url: "http://193.77.50.180:53550/info" },
 ];
 const EXPLORER_STATUS_URL = "https://scan.demos.network/status";
 const PUBLIC_PROBE_TIMEOUT_MS = 10000;
@@ -85,6 +86,35 @@ const SUPERCOLONY_API = "https://www.supercolony.ai";
 // Historical data file (JSON-based, lightweight)
 const HISTORY_FILE = join(LOG_DIR, "history.json");
 const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
+
+var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fleet Oracle API</title>' +
+'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#cbd5e1;padding:2rem;max-width:860px;margin:0 auto;line-height:1.5}' +
+'h1{color:#22d3ee;margin-bottom:4px;font-size:1.6rem}.sub{color:#64748b;margin-bottom:1.5rem;font-size:.9rem}' +
+'h2{color:#38bdf8;margin:1.2rem 0 .4rem;font-size:1rem;border-bottom:1px solid #1e293b;padding-bottom:4px}' +
+'.e{background:#1e293b;border-left:3px solid #22d3ee;padding:8px 12px;margin:5px 0;border-radius:0 4px 4px 0;font-size:.9rem}' +
+'.e b{color:#f59e0b}.e span{color:#94a3b8;display:block;font-size:.82rem;margin-top:2px}' +
+'code{background:#0f172a;padding:1px 5px;border-radius:3px;font-size:.85rem}' +
+'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
+'<h1>Demos Fleet Oracle</h1>' +
+'<p class="sub">Autonomous health oracle monitoring 7 validator nodes every 20 min<br>' +
+'Wallet: <code>' + AGENT_WALLET + '</code> &middot; v6.3</p>' +
+'<h2>Core</h2>' +
+'<div class="e"><b>GET /health</b><span>Full fleet snapshot: node status, blocks, TPS, reputation, public RPCs, versions</span></div>' +
+'<div class="e"><b>GET /self</b><span>Agent introspection: uptime, DEM balance, write budget, active RPC, version</span></div>' +
+'<div class="e"><b>GET /reputation</b><span>Per-node reputation scores (0-100) over 24h window</span></div>' +
+'<h2>Data</h2>' +
+'<div class="e"><b>GET /history</b><span>Last 24h of fleet data points (JSON)</span></div>' +
+'<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export historical data as CSV. Optional from/to (Unix ms)</span></div>' +
+'<div class="e"><b>GET /peers</b><span>Fleet peers + discovered non-fleet validators</span></div>' +
+'<h2>Monitoring</h2>' +
+'<div class="e"><b>GET /federate</b><span>Prometheus metrics endpoint for scraping</span></div>' +
+'<div class="e"><b>GET /federate/config</b><span>Prometheus scrape_config snippet</span></div>' +
+'<div class="e"><b>GET /badge</b><span>SVG status badge — embeddable in READMEs and dashboards</span></div>' +
+'<h2>Marketplace &amp; Consensus</h2>' +
+'<div class="e"><b>GET /marketplace</b><span>Marketplace stats: total queries, revenue, daily limits</span></div>' +
+'<div class="e"><b>GET /marketplace/queries?limit=N</b><span>Recent marketplace query history</span></div>' +
+'<div class="e"><b>GET /consensus</b><span>Multi-agent consensus state and participation guide</span></div>' +
+'<footer>All endpoints return JSON unless noted. Data refreshes every 20 minutes.</footer></body></html>';
 
 // FIX BUG 6: Write budget constants (SuperColony rate limits)
 const DAILY_PUBLISH_LIMIT = 15;
@@ -113,15 +143,25 @@ const STALE_SECONDS_THRESHOLD = 120;
 const PROBE_TIMEOUT_MS = 5000;
 const HEARTBEAT_CYCLES = 18;
 const COOLDOWN_CYCLES = 2; // must fail N consecutive cycles before alerting
+const REPEAT_ALERT_INTERVAL_MS = 21600000; // 6h — suppress identical alerts
+const LOW_BALANCE_THRESHOLD = 500;
+const CRITICAL_BALANCE_THRESHOLD = 100;
 
 let previousState = { consecutiveHealthy: 0, lastBlockHeight: null };
 // Track per-node consecutive failure counts and which nodes are in "alerted" state
 let problemHistory = {}; // { "n1": { count: 2, issues: [...], alerted: true }, ... }
 let chainProblemCount = 0; // consecutive cycles with chain-level issues
 let chainAlerted = false;
+let lastKnownBalance = null;
+let balanceAlertLevel = null; // null | "low" | "critical"
+let lastAlertSignature = null; // hash of last published alert's problem set
+let lastAlertAt = 0; // timestamp of last alert publish
+let activeRpcUrl = RPC_URL;
+let versionMismatchAlerted = false;
 
 // --- Uptime & daily summary tracking ---
 let cycleCount = 0;
+let lastPublishAt = null;
 let uptimeStats = {}; // { "n1": { healthy: 0, total: 0 }, ... }
 for (var _n of NODE_NAMES) uptimeStats[_n] = { healthy: 0, total: 0 };
 let publicRpcStats = {}; // { "discus": { reachable: 0, total: 0, totalLatency: 0 }, ... }
@@ -224,6 +264,7 @@ async function perceive() {
 
   var info = localInfoResult.data;
   log("  n3 /info OK (" + localInfoResult.latencyMs + "ms) version " + info.version + " " + info.version_name);
+  nodeVersions.n3 = { version: info.version || null, versionName: info.version_name || null };
 
   var n3IdentityOk = info.identity === EXPECTED_FLEET.n3.identity;
 
@@ -286,7 +327,7 @@ async function perceive() {
 
     var status = issues.length > 0 ? "UNHEALTHY" : "HEALTHY";
     nodeReports.push({ name: name, side: expected.side, status: status, issues: issues, blockHeight: blockHeight, online: online, ready: ready, syncOk: syncOk, identityMatch: identityMatch });
-    if (issues.length > 0) problems.push({ name: name, issues: issues });
+    if (issues.length > 0) problems.push({ name: name, issues: issues.slice() });
 
     var icon = status === "HEALTHY" ? "OK" : "!!";
     var blk = blockHeight != null ? blockHeight : "?";
@@ -458,6 +499,7 @@ async function publish(demos, post, attestations) {
       var result = await demos.store(payload);
       // FIX BUG 4: Extract and return the actual tx hash
       var txHash = (result && result.hash) ? result.hash : null;
+      lastPublishAt = Date.now();
       log("Published " + post.cat + ": " + post.text);
       log("TX: " + (txHash || "confirmed"));
 
@@ -483,6 +525,27 @@ async function publish(demos, post, attestations) {
       }
     }
   }
+  // RPC failover: try alternative RPCs before giving up
+  var fallbackList = FALLBACK_RPCS.filter(function(u) { return u !== activeRpcUrl; });
+  for (var fi = 0; fi < fallbackList.length; fi++) {
+    try {
+      log("  RPC failover: trying " + fallbackList[fi]);
+      await demos.connect(fallbackList[fi]);
+      var fbResult = await demos.store(payload);
+      var fbHash = (fbResult && fbResult.hash) ? fbResult.hash : null;
+      lastPublishAt = Date.now();
+      publishTimestamps.push(Date.now());
+      activeRpcUrl = fallbackList[fi];
+      log("  RPC failover SUCCESS via " + fallbackList[fi] + " TX: " + (fbHash || "confirmed"));
+      if (post.cat === "ALERT") await sendTelegram("ð¨ <b>FLEET ALERT</b> (via RPC failover)\n" + post.text);
+      else if (post.cat === "OBSERVATION" && post.text.indexOf("Recovery") === 0) await sendTelegram("â <b>RECOVERY</b>\n" + post.text);
+      return fbHash || "confirmed";
+    } catch (ferr) {
+      logError("  RPC failover " + fallbackList[fi] + " failed: " + ferr.message);
+      try { await demos.connect(activeRpcUrl); } catch(re) {}
+    }
+  }
+
   logError("Publish: all " + MAX_RETRIES + " attempts failed. Post lost: " + post.text);
   // Still try to notify via Telegram that publishing failed
   if (post.cat === "ALERT") {
@@ -582,66 +645,8 @@ async function probePublicRPCs(demos) {
 }
 
 async function checkExplorer() {
-  // v5.0: Try API endpoints first (JS-rendered pages don't give block numbers via HTML)
-  var API_URLS = [
-    'https://scan.demos.network/api/v2/stats',
-    'https://scan.demos.network/api?module=block&action=eth_block_number',
-    'https://scan.demos.network/api/v1/blocks?limit=1'
-  ];
-  for (var url of API_URLS) {
-    try {
-      var res = await fetch(url, { signal: AbortSignal.timeout(PUBLIC_PROBE_TIMEOUT_MS), headers: { 'Accept': 'application/json' } });
-      if (!res.ok) continue;
-      var data = await res.json();
-      if (data.total_blocks) {
-        var block = parseInt(data.total_blocks);
-        log("  Explorer: OK block=" + block + " (api-v2)");
-        return { ok: true, block: block };
-      }
-      if (data.result && data.result.startsWith('0x')) {
-        var block = parseInt(data.result, 16);
-        log("  Explorer: OK block=" + block + " (eth-api)");
-        return { ok: true, block: block };
-      }
-      if (data.items?.[0]?.height || data.data?.[0]?.height) {
-        var b = data.items?.[0] || data.data?.[0];
-        var block = parseInt(b.height || b.number);
-        log("  Explorer: OK block=" + block + " (rest-api)");
-        return { ok: true, block: block };
-      }
-    } catch (e) { continue; }
-  }
-  // Fallback: HTML parsing with expanded patterns
-  try {
-    var res = await fetch(EXPLORER_STATUS_URL, { signal: AbortSignal.timeout(PUBLIC_PROBE_TIMEOUT_MS) });
-    if (!res.ok) {
-      log("  Explorer status: FAIL HTTP " + res.status);
-      return { ok: false, error: "HTTP " + res.status };
-    }
-    var html = await res.text();
-    var patterns = [
-      /Block\s*#([\d,]+)/i,
-      /#([\d,]+)\s*indexed/i,
-      /data-block-number="(\d+)"/,
-      /block[_-]?height["\s:=]+(\d+)/i,
-      /latest[_-]?block["\s:=]+(\d+)/i,
-      /"block_number"\s*:\s*(\d+)/,
-      />(\d{4,})<\/(?:span|div|td)/
-    ];
-    for (var pattern of patterns) {
-      var match = html.match(pattern);
-      if (match) {
-        var block = parseInt(match[1].replace(/,/g, ""));
-        log("  Explorer: OK block=" + block + " (html-parsed)");
-        return { ok: true, block: block };
-      }
-    }
-    log("  Explorer: OK but block=? (no pattern matched)");
-    return { ok: true, block: null };
-  } catch (err) {
-    log("  Explorer: FAIL " + err.message);
-    return { ok: false, error: err.message };
-  }
+  log("  Explorer: disabled (SPA, not scrappable)");
+  return { ok: false, block: null };
 }
 
 function composeDailySummary(fleetData, publicRpcResults, explorerResult) {
@@ -880,6 +885,7 @@ function detectAnomalies(data) {
 
 // --- Validator discovery (crawl peer lists for unknown nodes) ---
 let discoveredPeers = {}; // { identity: { firstSeen, lastSeen, connection, ... } }
+let nodeVersions = {}; // { "n3": { version: "0.9.8", versionName: "Oxlong Michael" }, ... }
 
 function discoverValidators(infoData) {
   if (!infoData || !infoData.peerlist) return [];
@@ -1004,7 +1010,7 @@ function generatePrometheusMetrics(fleetData) {
       var payload = {
         agent: AGENT_NAME,
         wallet: AGENT_WALLET,
-        version: "6.2",
+        version: "6.3",
         timestamp: new Date().toISOString(),
         cycleCount: cycleCount,
         lastCycleAt: staleness.lastCycleAt, // FIX BUG 7
@@ -1015,6 +1021,7 @@ function generatePrometheusMetrics(fleetData) {
           block: latestHealthData.chain ? latestHealthData.chain.block : null,
           tps: latestHealthData.chain ? latestHealthData.chain.tps : null,
           nodes: latestHealthData.nodeReports || [],
+          nodeVersions: nodeVersions,
         } : null,
         publicRpcs: publicRpcStats,
         reputationScores: history.length > 0 ? calculateReputationScores() : null,
@@ -1053,7 +1060,7 @@ function generatePrometheusMetrics(fleetData) {
         dahrAttestations: dahrAvailable ? 2 : 0,
         activeAlerts: Object.keys(problemHistory).filter(function(k) { return problemHistory[k] && problemHistory[k].count >= 2; }).length,
         totalAlerts: dailyAlertCount || 0,
-        version: "6.2",
+        version: "6.3",
         wallet: AGENT_WALLET,
         cycleCount: cycleCount
       };
@@ -1079,9 +1086,60 @@ function generatePrometheusMetrics(fleetData) {
       if (mqIdx !== -1) { mqLimit = parseInt(req.url.substring(mqIdx + 6), 10) || 20; }
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(getRecentQueries(mqLimit), null, 2));
+    } else if (req.url === "/self") {
+      var selfBudget = canPublish();
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({
+        agent: "Demos Fleet Oracle",
+        version: "6.3",
+        uptimeSeconds: Math.round(process.uptime()),
+        lastCycleAt: latestHealthData ? latestHealthData.timestamp : null,
+        lastPublishAt: lastPublishAt,
+        cycleCount: cycleCount,
+        writeBudget: { hourly: selfBudget.hourly, maxHourly: HOURLY_PUBLISH_LIMIT, daily: selfBudget.daily, maxDaily: DAILY_PUBLISH_LIMIT, ok: selfBudget.ok },
+        wallet: AGENT_WALLET,
+        activeRpc: activeRpcUrl,
+        demBalance: lastKnownBalance,
+        endpoints: ["/health", "/self", "/docs", "/reputation", "/peers", "/history", "/history/export", "/federate", "/badge", "/marketplace", "/consensus"]
+      }, null, 2));
+    } else if (req.url === "/docs") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(DOCS_HTML);
+    } else if (req.url === "/badge") {
+      var bHealthy = latestHealthData && latestHealthData.nodeReports ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0;
+      var bColor = bHealthy === FLEET_SIZE ? "#4c1" : bHealthy >= 4 ? "#dfb317" : "#e05d44";
+      var bLabel = bHealthy + "/" + FLEET_SIZE;
+      var bSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="106" height="20" role="img">' +
+        '<rect width="46" height="20" fill="#555" rx="3"/><rect x="46" width="60" height="20" fill="' + bColor + '" rx="3"/>' +
+        '<rect x="46" width="4" height="20" fill="' + bColor + '"/>' +
+        '<text x="23" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">Fleet</text>' +
+        '<text x="76" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + ' ' + (bHealthy === FLEET_SIZE ? "\u2713" : "\u26a0") + '</text></svg>';
+      res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
+      res.end(bSvg);
+    } else if (req.url.indexOf("/history/export") === 0) {
+      var expFrom = 0, expTo = Infinity;
+      var fromIdx = req.url.indexOf("from=");
+      var toIdx = req.url.indexOf("to=");
+      if (fromIdx !== -1) expFrom = parseInt(req.url.substring(fromIdx + 5), 10) || 0;
+      if (toIdx !== -1) expTo = parseInt(req.url.substring(toIdx + 3), 10) || Infinity;
+      var expData = history.filter(function(h) { return h.ts >= expFrom && h.ts <= expTo; });
+      var csvLines = ["timestamp,block,tps,online_count"];
+      for (var ei = 0; ei < NODE_NAMES.length; ei++) csvLines[0] += "," + NODE_NAMES[ei] + "_healthy," + NODE_NAMES[ei] + "_block";
+      for (var ej = 0; ej < expData.length; ej++) {
+        var eh = expData[ej];
+        var row = [eh.ts, eh.block || "", eh.tps || "", eh.onlineCount || ""];
+        for (var ek = 0; ek < NODE_NAMES.length; ek++) {
+          var en = eh.nodes && eh.nodes[NODE_NAMES[ek]];
+          row.push(en ? (en.healthy ? 1 : 0) : "");
+          row.push(en && en.block != null ? en.block : "");
+        }
+        csvLines.push(row.join(","));
+      }
+      res.writeHead(200, { "Content-Type": "text/csv", "Content-Disposition": "attachment; filename=fleet-history.csv", "Access-Control-Allow-Origin": "*" });
+      res.end(csvLines.join("\n"));
     } else {
       res.writeHead(404);
-      res.end(JSON.stringify({ error: "Not found. Try /health, /reputation, /peers, /history, /federate, /marketplace, /consensus" }));
+      res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." }));
     }
   });
 
@@ -1125,9 +1183,64 @@ async function registerAgentProfile() {
 // FIX BUG 3: Shared DB handle — declared here, opened in main()
 let sharedDb = null;
 
+async function checkBalance(demos) {
+  try {
+    var info = await demos.getAddressInfo(AGENT_WALLET);
+    var bal = Number(info.balance);
+    lastKnownBalance = bal;
+
+    if (bal <= CRITICAL_BALANCE_THRESHOLD && balanceAlertLevel !== "critical") {
+      balanceAlertLevel = "critical";
+      log("  Balance CRITICAL: " + bal + " DEM");
+      await sendTelegram("🔴 <b>BALANCE CRITICAL</b>\nWallet has " + bal + " DEM remaining. Agent will stop publishing soon. Fund immediately.");
+    } else if (bal <= LOW_BALANCE_THRESHOLD && bal > CRITICAL_BALANCE_THRESHOLD && balanceAlertLevel !== "low" && balanceAlertLevel !== "critical") {
+      balanceAlertLevel = "low";
+      log("  Balance LOW: " + bal + " DEM");
+      await sendTelegram("🟡 <b>BALANCE LOW</b>\nWallet has " + bal + " DEM remaining (threshold: " + LOW_BALANCE_THRESHOLD + "). Consider funding.");
+    } else if (bal > LOW_BALANCE_THRESHOLD && balanceAlertLevel !== null) {
+      log("  Balance recovered: " + bal + " DEM");
+      balanceAlertLevel = null;
+    } else {
+      log("  Balance: " + bal + " DEM");
+    }
+  } catch (err) {
+    log("  Balance check failed: " + err.message);
+  }
+}
+
+async function probeFleetVersions() {
+  log("  Probing fleet node versions...");
+  var probes = NODE_NAMES.filter(function(n) { return n !== "n3"; }).map(function(name) {
+    var url = expectedConnStr(name) + "/info";
+    return fetchInfo(url).then(function(result) {
+      if (result.ok && result.data) {
+        nodeVersions[name] = { version: result.data.version || null, versionName: result.data.version_name || null };
+        log("    " + name + ": v" + (result.data.version || "?") + " " + (result.data.version_name || ""));
+      }
+    }).catch(function() {});
+  });
+  await Promise.all(probes);
+
+  var versions = {};
+  for (var vn in nodeVersions) {
+    var v = nodeVersions[vn].version;
+    if (v) { if (!versions[v]) versions[v] = []; versions[v].push(vn); }
+  }
+  var versionKeys = Object.keys(versions);
+  if (versionKeys.length > 1 && !versionMismatchAlerted) {
+    var mismatchStr = versionKeys.map(function(vk) { return vk + ": " + versions[vk].join(","); }).join(" | ");
+    log("  VERSION MISMATCH: " + mismatchStr);
+    await sendTelegram("\u26a0\ufe0f <b>VERSION MISMATCH</b>\n" + mismatchStr);
+    versionMismatchAlerted = true;
+  } else if (versionKeys.length <= 1 && versionMismatchAlerted) {
+    versionMismatchAlerted = false;
+    log("  Version mismatch resolved — all nodes on same version");
+  }
+}
+
 async function main() {
   log("===============================================================");
-  log("  SuperColony Node Health Agent v6.2 — Demos Fleet Oracle");
+  log("  SuperColony Node Health Agent v6.3 — Demos Fleet Oracle");
   log("  Fleet: " + FLEET_SIZE + " nodes across 4 servers");
   log("  Interval: " + (INTERVAL_MS / 1000 / 60) + " minutes");
   log("  Cooldown: " + COOLDOWN_CYCLES + " cycles before alerting");
@@ -1209,6 +1322,25 @@ async function main() {
       // FIX BUG 9: Rotate log if needed at start of each cycle
       rotateLogIfNeeded();
 
+      // Reconnect to primary RPC if on fallback
+      if (activeRpcUrl !== RPC_URL) {
+        try {
+          await demos.connect(RPC_URL);
+          activeRpcUrl = RPC_URL;
+          log("  Reconnected to primary RPC: " + RPC_URL);
+        } catch(rpcErr) {
+          log("  Primary RPC still down, staying on: " + activeRpcUrl);
+        }
+      }
+
+      // Fleet version probe (every 18 cycles ~ 6h)
+      if (cycleCount % 18 === 0) {
+        await probeFleetVersions();
+      }
+
+      // DEM balance monitoring
+      await checkBalance(demos);
+
       var data = await perceive();
 
       // --- Update uptime stats regardless of skip ---
@@ -1244,6 +1376,28 @@ async function main() {
             if (drift > 10) {
               log("  Cross-check: " + pr.name + " block=" + pr.block + " vs fleet block=" + data.chain.block + " (drift=" + drift + ")");
             }
+          }
+        }
+      }
+
+      // --- FIX: Mark nodes UNHEALTHY if far behind public RPCs ---
+      var publicHighest = 0;
+      for (var phi = 0; phi < publicRpcResults.length; phi++) {
+        if (publicRpcResults[phi].ok && publicRpcResults[phi].block && publicRpcResults[phi].block > publicHighest) {
+          publicHighest = publicRpcResults[phi].block;
+        }
+      }
+      if (publicHighest > 0 && data.nodeReports && !data.skip) {
+        for (var dri = 0; dri < data.nodeReports.length; dri++) {
+          var dnr = data.nodeReports[dri];
+          if (dnr.blockHeight != null && publicHighest - dnr.blockHeight > 100) {
+            var driftIssue = "PUBLIC_DRIFT(" + (publicHighest - dnr.blockHeight) + " behind)";
+            dnr.issues.push(driftIssue);
+            dnr.status = "UNHEALTHY";
+            var driftExisting = data.problems.find(function(p) { return p.name === dnr.name; });
+            if (driftExisting) driftExisting.issues.push(driftIssue);
+            else data.problems.push({ name: dnr.name, issues: [driftIssue] });
+            log("  !! " + dnr.name + ": " + driftIssue);
           }
         }
       }
@@ -1353,6 +1507,8 @@ async function main() {
         // Reset all tracking
         problemHistory = {};
         chainProblemCount = 0;
+        lastAlertSignature = null;
+        lastAlertAt = 0;
 
         if (recoveries.length > 0) {
           dailyRecoveryCount++;
@@ -1449,10 +1605,23 @@ async function main() {
       }
 
       // Replace data.problems with only confirmed ones, then compose and publish
-      dailyAlertCount++;
       data.problems = confirmedProblems;
+
+      // Alert deduplication: don't repeat identical alerts
+      var alertSig = confirmedProblems.map(function(p) { return p.name + ":" + p.issues.sort().join(","); }).sort().join("|");
+      var now = Date.now();
+      if (alertSig === lastAlertSignature && (now - lastAlertAt) < REPEAT_ALERT_INTERVAL_MS) {
+        log("  Dedup: identical alert suppressed (last sent " + Math.round((now - lastAlertAt) / 60000) + "m ago). Next repeat in " + Math.round((REPEAT_ALERT_INTERVAL_MS - (now - lastAlertAt)) / 60000) + "m.");
+        return;
+      }
+
+      dailyAlertCount++;
       var post = composeAlert(data);
-      await publish(demos, post, cycleAttestations);
+      var pubResult = await publish(demos, post, cycleAttestations);
+      if (pubResult) {
+        lastAlertSignature = alertSig;
+        lastAlertAt = now;
+      }
     } catch (err) {
       logError("Cycle error: " + err.message);
       if (err.stack) logError(err.stack);
