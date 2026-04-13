@@ -1254,6 +1254,17 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 .metric{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}
 .metric .label{color:#8b949e;font-size:0.8em}.metric .value{font-size:1.4em;font-weight:bold;margin-top:4px}
 .safe{color:#3fb950}.caution{color:#d29922}.unsafe{color:#f85149}.unknown{color:#8b949e}
+.sla{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
+.sla h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
+.sla table{width:100%;border-collapse:collapse;font-size:0.85em}
+.sla th{color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d}
+.sla td{padding:6px 8px;border-bottom:1px solid #21262d}
+.sla tr:last-child td{border-bottom:none}
+.uptime-bar{background:#21262d;border-radius:4px;height:8px;width:100%;margin-top:4px}
+.uptime-fill{height:8px;border-radius:4px;background:#238636}
+.uptime-fill.warn{background:#d29922}.uptime-fill.bad{background:#da3633}
+.chart-box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
+.chart-box h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
 .incidents{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
 .incidents h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
 .inc{padding:8px 0;border-bottom:1px solid #21262d;font-size:0.85em}
@@ -1270,9 +1281,39 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
 <div class="grid" id="nodes"></div>
 <div class="metrics" id="metrics"></div>
+<div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
+<div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
 <div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
-<div class="footer">Demos Fleet Oracle v6.4 &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a></div>
+<div class="footer">Demos Fleet Oracle v6.5 &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
 <script>
+function drawChart(hist){
+  var canvas=document.getElementById("blk-chart");
+  if(!canvas||!hist||hist.length<2)return;
+  var dpr=window.devicePixelRatio||1;
+  canvas.width=canvas.offsetWidth*dpr;canvas.height=120*dpr;
+  var ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+  var pts=hist.slice(-72);
+  var blocks=pts.map(function(p){return p.block||0}).filter(Boolean);
+  if(!blocks.length)return;
+  var minB=Math.min.apply(null,blocks),maxB=Math.max.apply(null,blocks),range=maxB-minB||1;
+  var W=canvas.offsetWidth,H=120,PAD=28;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle="#238636";ctx.lineWidth=2;ctx.beginPath();
+  var first=true;
+  pts.forEach(function(p,i){
+    if(!p.block)return;
+    var x=PAD+(i/(pts.length-1))*(W-PAD*2);
+    var y=(H-PAD)-((p.block-minB)/range)*(H-PAD*2);
+    first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  ctx.fillStyle="#8b949e";ctx.font="11px sans-serif";
+  ctx.fillText(maxB.toLocaleString(),4,14);
+  ctx.fillText(minB.toLocaleString(),4,H-4);
+  var t0=pts[0]&&new Date(pts[0].ts),t1=pts[pts.length-1]&&new Date(pts[pts.length-1].ts);
+  if(t0)ctx.fillText(t0.toLocaleTimeString(),PAD,H-2);
+  if(t1){ctx.textAlign="right";ctx.fillText(t1.toLocaleTimeString(),W-4,H-2);}
+}
 async function refresh(){
   try{
     var r=await fetch("/health");var d=await r.json();
@@ -1283,28 +1324,38 @@ async function refresh(){
     var re=document.getElementById("rec");
     re.textContent=rec.recommendation||"?";
     re.className="rec "+(rec.recommendation==="SAFE"?"safe":rec.recommendation==="CAUTION"?"caution":rec.recommendation==="UNSAFE"?"unsafe":"unknown");
-    document.getElementById("rec-reason").textContent=(rec.safe_to_propose?"Safe to propose":"NOT safe to propose")+" — "+
-      (rec.reason||"")+" (confidence: "+(rec.confidence||"?")+")";
+    document.getElementById("rec-reason").textContent=(rec.safe_to_propose?"Safe to propose":"NOT safe to propose")+" — "+(rec.reason||"")+" (confidence: "+(rec.confidence||"?")+")";
     var ng=document.getElementById("nodes");ng.innerHTML="";
     if(d.fleet&&d.fleet.nodes){d.fleet.nodes.forEach(function(n){
       var cls=n.status==="HEALTHY"?"healthy":"unhealthy";
-      ng.innerHTML+='<div class="node '+cls+'"><h3>'+n.name+'</h3><div class="status">'+
-        (n.status==="HEALTHY"?"\u2705":"\u274C")+" "+n.status+'</div><div class="block">Block '+(n.blockHeight||"?")+'</div></div>';
+      ng.innerHTML+='<div class="node '+cls+'"><h3>'+n.name+'</h3><div class="status">'+(n.status==="HEALTHY"?"\u2705":"\u274C")+" "+n.status+'</div><div class="block">Block '+(n.blockHeight||"?")+'</div></div>';
     });}
     var mg=document.getElementById("metrics");mg.innerHTML="";
     mg.innerHTML+='<div class="metric"><div class="label">Block Height</div><div class="value">'+((d.fleet&&d.fleet.block)||"?")+'</div></div>';
     mg.innerHTML+='<div class="metric"><div class="label">TPS</div><div class="value">'+((d.fleet&&d.fleet.tps)||"0")+'</div></div>';
     mg.innerHTML+='<div class="metric"><div class="label">Cycle</div><div class="value">'+d.cycleCount+'</div></div>';
     mg.innerHTML+='<div class="metric"><div class="label">Active Incidents</div><div class="value">'+((d.activeIncidents&&d.activeIncidents.length)||0)+'</div></div>';
+    var sb=document.getElementById("sla-body");sb.innerHTML="";
+    var up=d.uptime||{};
+    if(d.fleet&&d.fleet.nodes){d.fleet.nodes.forEach(function(n){
+      var u=up[n.name]||{healthy:0,total:0};
+      var pct=u.total>0?Math.round(u.healthy/u.total*100):null;
+      var pctStr=pct!==null?pct+"%":"—";
+      var fillCls=pct===null?"":pct>=95?"":pct>=80?" warn":" bad";
+      var bar=pct!==null?'<div class="uptime-bar"><div class="uptime-fill'+fillCls+'" style="width:'+pct+'%"></div></div>':'<div class="uptime-bar"></div>';
+      sb.innerHTML+='<tr><td><b>'+n.name+'</b></td><td>'+n.side+'</td><td>'+(n.blockHeight||"?")+'</td><td>'+pctStr+'</td><td style="width:120px">'+bar+'</td></tr>';
+    });}
   }catch(e){document.getElementById("updated").textContent="Error: "+e.message;}
+  try{
+    var hr=await fetch("/history");var hd=await hr.json();
+    drawChart(Array.isArray(hd)?hd:(hd.history||[]));
+  }catch(e){}
   try{
     var ir=await fetch("/incidents?limit=10");var id=await ir.json();
     var il=document.getElementById("inc-list");
     if(!id.incidents||id.incidents.length===0){il.innerHTML='<div style="color:#8b949e">No incidents recorded</div>';return;}
     il.innerHTML="";id.incidents.forEach(function(inc){
-      il.innerHTML+='<div class="inc"><span class="id">'+inc.id+'</span> <span class="sev '+inc.severity+'">'+inc.severity.toUpperCase()+
-        '</span> '+inc.description+' <span style="color:#8b949e">'+(inc.status==="active"?"\u23F3 active":
-        "\u2705 resolved in "+(inc.duration_seconds||"?")+"s")+'</span></div>';
+      il.innerHTML+='<div class="inc"><span class="id">'+inc.id+'</span> <span class="sev '+inc.severity+'">'+inc.severity.toUpperCase()+'</span> '+inc.description+' <span style="color:#8b949e">'+(inc.status==="active"?"\u23F3 active":"\u2705 resolved in "+(inc.duration_seconds||"?")+"s")+'</span></div>';
     });
   }catch(e){}
 }
@@ -1312,7 +1363,7 @@ refresh();setInterval(refresh,20000);
 </script></body></html>`;
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(dashHtml);
-    } else if (req.url.indexOf("/history/export") === 0) {
+    } else if (req.url.indexOf("/history/export") === 0) {} else if (req.url.indexOf("/history/export") === 0) {
       var expFrom = 0, expTo = Infinity;
       var fromIdx = req.url.indexOf("from=");
       var toIdx = req.url.indexOf("to=");
