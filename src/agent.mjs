@@ -1464,7 +1464,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
 <div class="grid" id="nodes"></div>
 <div class="metrics" id="metrics"></div>
-<div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
+<div id="signals-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Network signals</h2><div id="signals-list">Loading...</div></div><div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
 <div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
 <div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
 <div class="footer">Demos Fleet Oracle v6.5 &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
@@ -1532,6 +1532,30 @@ async function refresh(){
   try{
     var hr=await fetch("/history");var hd=await hr.json();
     drawChart(Array.isArray(hd)?hd:(hd.history||[]));
+  }catch(e){}
+  try{
+    var sl=document.getElementById("signals-list");
+    if(sl&&d.signals&&d.signals.length>0){
+      var sevColor={"info":"#58a6ff","warning":"#d29922","critical":"#f85149"};
+      var sevIcon={"info":"\u2139\ufe0f","warning":"\u26a0\ufe0f","critical":"\ud83d\udd34"};
+      var html="";
+      d.signals.forEach(function(s){
+        var col=sevColor[s.severity]||"#8b949e";
+        var icon=sevIcon[s.severity]||"\u2139\ufe0f";
+        html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #21262d">';
+        html+='<span style="font-size:14px;margin-top:1px">'+icon+'</span>';
+        html+='<div style="flex:1">';
+        html+='<span style="font-size:0.78em;font-weight:500;color:'+col+';text-transform:uppercase;letter-spacing:0.05em">'+s.type.replace(/_/g," ")+'</span>';
+        if(s.nodes&&s.nodes.length>0) html+=' <span style="font-size:0.75em;color:#8b949e">['+s.nodes.join(", ")+']</span>';
+        html+='<div style="font-size:0.82em;color:#c9d1d9;margin-top:2px">'+s.message+'</div>';
+        html+='</div>';
+        if(s.value!==null&&s.value!==undefined&&s.type!=="all_healthy"&&s.type!=="public_network_block"){
+          html+='<span style="font-size:1.1em;font-weight:bold;color:'+col+'">'+s.value+'</span>';
+        }
+        html+='</div>';
+      });
+      sl.innerHTML=html;
+    } else if(sl) { sl.innerHTML='<span style="color:#8b949e;font-size:0.85em">No signals yet</span>'; }
   }catch(e){}
   try{
     var sr=await fetch("/sentinel");var sd=await sr.json();
