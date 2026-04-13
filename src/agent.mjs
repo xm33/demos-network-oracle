@@ -1175,6 +1175,7 @@ function discoverValidators(infoData) {
 let latestHealthData = null; // updated each cycle
 let latestPublicNodes = []; // updated each cycle
 let latestVersionData = { running: "6.8", latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
+let signalAlertDedup = {}; // { "signal_type_nodes": timestamp }
 
 async function checkLatestVersion() {
   try {
@@ -1945,6 +1946,26 @@ async function main() {
         latestHealthData = data;
       }
 
+      // --- Signal-based Telegram alerts ---
+      try {
+        var currentSignals = generateSignals(data, getStaleness());
+        var alertableSignals = currentSignals.filter(function(s) { return s.severity === "warning" || s.severity === "critical"; });
+        var now = Date.now();
+        for (var sig of alertableSignals) {
+          var sigKey = "signal_" + sig.type + "_" + (sig.nodes || []).join(",");
+          if (!signalAlertDedup[sigKey] || now - signalAlertDedup[sigKey] > 6 * 60 * 60 * 1000) {
+            var sevIcon = sig.severity === "critical" ? "\ud83d\udd34" : "\u26a0\ufe0f";
+            var msg = sevIcon + " <b>SIGNAL " + sig.severity.toUpperCase() + "</b>\n";
+            msg += "<b>" + sig.type.replace(/_/g, " ").toUpperCase() + "</b>\n";
+            msg += sig.message;
+            if (sig.nodes && sig.nodes.length > 0) msg += "\nAffected: " + sig.nodes.join(", ");
+            await sendTelegram(msg);
+            signalAlertDedup[sigKey] = now;
+            log("  Signal alert sent: " + sig.type + " (" + sig.severity + ")");
+          }
+        }
+      } catch(e) { log("  Signal alert error: " + e.message); }
+
       // --- Validator discovery ---
       if (!data.skip && data.nodeReports) {
         // Crawl n3's own peerlist
@@ -2291,8 +2312,23 @@ async function pollTelegram() {
               });
               reply = lines.join(NL);
             } catch(e) { reply = "Error: " + e.message; }
+          } else if (text === "/signals") {
+            try {
+              var hr = await fetch("http://127.0.0.1:55225/health");
+              var d = await hr.json();
+              var sigs = d.signals || [];
+              var lines = ["<b>Network Signals</b>"];
+              var sevIcon = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udd34"};
+              sigs.forEach(function(s) {
+                var icon = sevIcon[s.severity] || "\u2139\ufe0f";
+                lines.push(icon + " <b>" + s.type.replace(/_/g," ").toUpperCase() + "</b>");
+                lines.push("  " + s.message);
+                if (s.nodes && s.nodes.length > 0) lines.push("  Nodes: " + s.nodes.join(", "));
+              });
+              reply = lines.join(NL);
+            } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/help" || text === "/start") {
-            var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/rec — SAFE/CAUTION/UNSAFE","/uptime — per-node uptime %","/help — this message","","Dashboard: http://193.77.169.106:55225/dashboard"];
+            var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/rec — SAFE/CAUTION/UNSAFE","/uptime — per-node uptime %","/signals — current network signals","/help — this message","","Dashboard: http://193.77.169.106:55225/dashboard"];
             reply = lines.join(NL);
           }
           if (reply && chatId === TELEGRAM_CHAT_ID) {
