@@ -268,6 +268,78 @@ function getRecommendation(data) {
 }
 
 // Load incident counter from DB on startup
+function generateSignals(data, stalenessSeconds) {
+  var signals = [];
+  if (!data || !data.nodeReports) {
+    signals.push({ type: "no_data", severity: "warning", nodes: [], value: null, message: "No fleet data available yet" });
+    return signals;
+  }
+  var nodes = data.nodeReports;
+  var total = nodes.length;
+  var onlineNodes = nodes.filter(function(n) { return n.online; });
+  var offlineNodes = nodes.filter(function(n) { return !n.online; });
+  var lagNodes = nodes.filter(function(n) { return n.issues && n.issues.some(function(i) { return i.indexOf("BLOCK_LAG") !== -1; }); });
+  var mismatchNodes = nodes.filter(function(n) { return !n.identityMatch; });
+  var notReadyNodes = nodes.filter(function(n) { return n.online && !n.ready; });
+  var notSyncedNodes = nodes.filter(function(n) { return !n.syncOk; });
+  var maxBlock = Math.max.apply(null, nodes.map(function(n) { return n.blockHeight || 0; }));
+  var minBlock = Math.min.apply(null, nodes.filter(function(n) { return n.blockHeight; }).map(function(n) { return n.blockHeight; }));
+
+  // Offline nodes
+  if (offlineNodes.length > 0) {
+    var sev = offlineNodes.length >= 3 ? "critical" : offlineNodes.length >= 2 ? "warning" : "info";
+    signals.push({ type: "node_offline", severity: sev, nodes: offlineNodes.map(function(n) { return n.name; }), value: offlineNodes.length, message: offlineNodes.map(function(n) { return n.name; }).join(", ") + " offline" });
+  }
+
+  // Block lag
+  if (lagNodes.length > 0) {
+    lagNodes.forEach(function(n) {
+      var lag = maxBlock - (n.blockHeight || 0);
+      var sev = lag > 50 ? "critical" : lag > 10 ? "warning" : "info";
+      signals.push({ type: "block_lag", severity: sev, nodes: [n.name], value: lag, message: n.name + " is " + lag + " blocks behind fleet" });
+    });
+  }
+
+  // Identity mismatch
+  if (mismatchNodes.length > 0) {
+    signals.push({ type: "identity_mismatch", severity: "critical", nodes: mismatchNodes.map(function(n) { return n.name; }), value: mismatchNodes.length, message: mismatchNodes.map(function(n) { return n.name; }).join(", ") + " identity mismatch — possible hijack" });
+  }
+
+  // Not ready
+  if (notReadyNodes.length > 0) {
+    signals.push({ type: "not_ready", severity: "info", nodes: notReadyNodes.map(function(n) { return n.name; }), value: notReadyNodes.length, message: notReadyNodes.map(function(n) { return n.name; }).join(", ") + " online but not ready" });
+  }
+
+  // Not synced
+  if (notSyncedNodes.length > 0) {
+    var sev = notSyncedNodes.length >= 3 ? "critical" : "warning";
+    signals.push({ type: "not_synced", severity: sev, nodes: notSyncedNodes.map(function(n) { return n.name; }), value: notSyncedNodes.length, message: notSyncedNodes.map(function(n) { return n.name; }).join(", ") + " not synced" });
+  }
+
+  // Chain stall
+  if (stalenessSeconds && stalenessSeconds > 120) {
+    var sev = stalenessSeconds > 300 ? "critical" : "warning";
+    signals.push({ type: "chain_stall", severity: sev, nodes: [], value: Math.round(stalenessSeconds), message: "No new data for " + Math.round(stalenessSeconds / 60) + " min — possible chain stall" });
+  }
+
+  // Low online count
+  if (onlineNodes.length < Math.ceil(total * 0.7)) {
+    signals.push({ type: "low_online_count", severity: "critical", nodes: offlineNodes.map(function(n) { return n.name; }), value: onlineNodes.length, message: "Only " + onlineNodes.length + "/" + total + " nodes online" });
+  }
+
+  // Block spread / divergence
+  if (maxBlock && minBlock && (maxBlock - minBlock) > 50) {
+    signals.push({ type: "block_divergence", severity: "warning", nodes: [], value: maxBlock - minBlock, message: "Block spread of " + (maxBlock - minBlock) + " across fleet — possible fork" });
+  }
+
+  // All healthy
+  if (signals.length === 0) {
+    signals.push({ type: "all_healthy", severity: "info", nodes: [], value: onlineNodes.length, message: onlineNodes.length + "/" + total + " nodes online, synced, no issues" });
+  }
+
+  return signals;
+}
+
 function loadIncidentCounter() {
   try {
     var row = sharedDb.prepare("SELECT id FROM incidents ORDER BY rowid DESC LIMIT 1").get();
@@ -1185,6 +1257,7 @@ function generatePrometheusMetrics(fleetData) {
         reputationScores: history.length > 0 ? calculateReputationScores() : null,
         discoveredPeers: Object.keys(discoveredPeers).length,
         uptime: uptimeStats,
+        signals: generateSignals(latestHealthData, getStaleness()),
         activeIncidents: getActiveIncidentIds(),
         publicNodes: latestPublicNodes || [],
         instanceRole: INSTANCE_ROLE,
