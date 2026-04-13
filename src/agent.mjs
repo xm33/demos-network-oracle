@@ -1489,7 +1489,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
 <div class="grid" id="nodes"></div>
 <div class="metrics" id="metrics"></div>
-<div id="signals-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Network signals</h2><div id="signals-list">Loading...</div></div><div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
+<div id="signals-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Network signals</h2><div id="signals-list">Loading...</div></div><div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div id="rep-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Reputation scores (24h)</h2><div id="rep-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
 <div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
 <div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
 <div class="footer">Demos Fleet Oracle v6.5 &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
@@ -1581,6 +1581,25 @@ async function refresh(){
       });
       sl.innerHTML=html;
     } else if(sl) { sl.innerHTML='<span style="color:#8b949e;font-size:0.85em">No signals yet</span>'; }
+  }catch(e){}
+  try{
+    var rr=await fetch("/reputation");var rd=await rr.json();
+    var rl=document.getElementById("rep-list");
+    if(rl&&rd.scores){
+      var scores=Object.entries(rd.scores).sort(function(a,b){return b[1]-a[1];});
+      var html='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Node</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Score</th><th style="color:#8b949e;padding:4px 8px;border-bottom:1px solid #21262d"></th><th style="color:#8b949e;text-align:right;padding:4px 8px;border-bottom:1px solid #21262d">Rank</th></tr></thead><tbody>';
+      scores.forEach(function(e,i){
+        var name=e[0],score=e[1];
+        var col=score>=80?"#3fb950":score>=50?"#d29922":"#f85149";
+        var barW=score+"%";
+        html+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+name+'</b></td>';
+        html+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;font-weight:bold;color:'+col+'">'+score+'</td>';
+        html+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;width:160px"><div style="background:#21262d;border-radius:4px;height:8px"><div style="height:8px;border-radius:4px;background:'+col+';width:'+barW+'"></div></div></td>';
+        html+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;text-align:right;color:#8b949e">#'+(i+1)+'</td></tr>';
+      });
+      html+='</tbody></table><div style="font-size:0.75em;color:#484f58;margin-top:8px">Window: '+rd.window+' | '+rd.historyLength+' data points</div>';
+      rl.innerHTML=html;
+    }
   }catch(e){}
   try{
     var sr=await fetch("/sentinel");var sd=await sr.json();
