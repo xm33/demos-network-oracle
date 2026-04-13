@@ -332,9 +332,24 @@ function generateSignals(data, stalenessSeconds) {
     signals.push({ type: "block_divergence", severity: "warning", nodes: [], value: maxBlock - minBlock, message: "Block spread of " + (maxBlock - minBlock) + " across fleet — possible fork" });
   }
 
-  // All healthy
-  if (signals.length === 0) {
-    signals.push({ type: "all_healthy", severity: "info", nodes: [], value: onlineNodes.length, message: onlineNodes.length + "/" + total + " nodes online, synced, no issues" });
+  // Public node signals
+  if (latestPublicNodes && latestPublicNodes.length > 0) {
+    var pubOffline = latestPublicNodes.filter(function(n) { return !n.ok; });
+    var pubOnline = latestPublicNodes.filter(function(n) { return n.ok; });
+    if (pubOffline.length > 0) {
+      signals.push({ type: "public_node_offline", severity: "info", nodes: pubOffline.map(function(n) { return n.name; }), value: pubOffline.length, message: pubOffline.map(function(n) { return n.name; }).join(", ") + " unreachable" });
+    }
+    if (pubOnline.length > 0) {
+      var pubBlocks = pubOnline.map(function(n) { return n.block; }).filter(Boolean);
+      var pubBlock = pubBlocks.length > 0 ? Math.max.apply(null, pubBlocks) : null;
+      if (pubBlock) signals.push({ type: "public_network_block", severity: "info", nodes: pubOnline.map(function(n) { return n.name; }), value: pubBlock, message: "Public network at block " + pubBlock + " (" + pubOnline.length + " nodes online)" });
+    }
+  }
+
+  // All healthy (fleet only — public node signals don't affect this)
+  var fleetSignals = signals.filter(function(s) { return s.type !== "public_node_offline" && s.type !== "public_network_block"; });
+  if (fleetSignals.length === 0) {
+    signals.unshift({ type: "all_healthy", severity: "info", nodes: [], value: onlineNodes.length, message: onlineNodes.length + "/" + total + " nodes online, synced, no issues" });
   }
 
   return signals;
