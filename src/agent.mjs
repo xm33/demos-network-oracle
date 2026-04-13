@@ -1307,6 +1307,24 @@ function generatePrometheusMetrics(fleetData) {
         '<text x="76" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + ' ' + (bHealthy === FLEET_SIZE ? "\u2713" : "\u26a0") + '</text></svg>';
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
+    } else if (req.url === "/sentinel") {
+      var sentinelData = { status: "ok", lastCheck: null, recentAlerts: [], dedupFile: "/tmp/sentinel-dedup.json" };
+      try {
+        if (existsSync("/tmp/sentinel-dedup.json")) {
+          var dedup = JSON.parse(readFileSync("/tmp/sentinel-dedup.json", "utf8"));
+          var now = Date.now();
+          var recent = Object.entries(dedup)
+            .filter(function(e) { return now - e[1] < 24 * 60 * 60 * 1000; })
+            .sort(function(a, b) { return b[1] - a[1]; })
+            .slice(0, 10)
+            .map(function(e) { return { key: e[0], ts: e[1], ago: Math.round((now - e[1]) / 60000) + "min ago" }; });
+          sentinelData.recentAlerts = recent;
+          sentinelData.lastCheck = dedup._lastCheck || null;
+          sentinelData.alertCount24h = recent.length;
+        }
+      } catch(e) { sentinelData.error = e.message; }
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(sentinelData, null, 2));
     } else if (req.url === "/dashboard") {
       var dashHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Fleet Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1351,7 +1369,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
 <div class="grid" id="nodes"></div>
 <div class="metrics" id="metrics"></div>
-<div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
+<div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Side</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
 <div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
 <div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
 <div class="footer">Demos Fleet Oracle v6.5 &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
@@ -1419,6 +1437,27 @@ async function refresh(){
   try{
     var hr=await fetch("/history");var hd=await hr.json();
     drawChart(Array.isArray(hd)?hd:(hd.history||[]));
+  }catch(e){}
+  try{
+    var sr=await fetch("/sentinel");var sd=await sr.json();
+    var sb=document.getElementById("sentinel-status");
+    if(sb){
+      var alerts=sd.recentAlerts||[];
+      var html='<div style="display:flex;gap:16px;margin-bottom:12px">';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Alerts 24h</div><div style="font-size:1.4em;font-weight:bold;color:'+(alerts.length===0?"#3fb950":"#f85149")+'">'+(alerts.length)+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Poll interval</div><div style="font-size:1.4em;font-weight:bold;color:#c9d1d9">5min</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Detectors</div><div style="font-size:1.4em;font-weight:bold;color:#c9d1d9">5</div></div>';
+      html+='</div>';
+      if(alerts.length===0){
+        html+='<div style="color:#3fb950;font-size:0.85em">\u2705 No anomalies detected in last 24h</div>';
+      } else {
+        html+='<div style="font-size:0.8em;color:#8b949e;margin-bottom:6px">Recent alerts:</div>';
+        alerts.slice(0,5).forEach(function(a){
+          html+='<div style="font-size:0.82em;padding:4px 0;border-bottom:1px solid #21262d;color:#f85149">\u26a0\ufe0f '+a.key+' <span style="color:#8b949e">('+a.ago+')</span></div>';
+        });
+      }
+      sb.innerHTML=html;
+    }
   }catch(e){}
   try{
     var pn=document.getElementById("pub-list");
