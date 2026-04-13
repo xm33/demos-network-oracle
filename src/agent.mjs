@@ -79,6 +79,28 @@ const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8080");
 
 // Agent profile
 const AGENT_WALLET = "0xbdb3e8189a62dce62229bf3badbf01e5bdb3fbeb22f6f59f4c7c2edafe802a45";
+const INSTANCE_ROLE = process.env.INSTANCE_ROLE || "primary";
+const PRIMARY_ORACLE_URL = process.env.PRIMARY_ORACLE_URL || "";
+let primaryLastSeen = 0; // timestamp of last successful primary health fetch
+let primarySilentCycles = 0;
+
+async function checkPrimaryOracle() {
+  if (!PRIMARY_ORACLE_URL) return { silent: false, diverged: false };
+  try {
+    var r = await fetch(PRIMARY_ORACLE_URL + "/health", { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    var d = await r.json();
+    primaryLastSeen = Date.now();
+    primarySilentCycles = 0;
+    var primaryBlock = d.fleet ? d.fleet.block : null;
+    var primaryHealthy = d.fleet ? d.fleet.healthy : 0;
+    return { silent: false, diverged: false, block: primaryBlock, healthy: primaryHealthy };
+  } catch(e) {
+    primarySilentCycles++;
+    log("  [validator] Primary oracle unreachable (" + primarySilentCycles + " cycles): " + e.message);
+    return { silent: primarySilentCycles >= 1, diverged: false };
+  }
+}
 const AGENT_NAME = "Demos Fleet Oracle";
 const AGENT_DESCRIPTION = "Autonomous health & stability oracle for the Demos Network. Monitors 7 nodes across 4 servers every 20 minutes. Publishes DAHR-attested alerts, daily summaries, and reputation scores. Public health API at /health.";
 const SUPERCOLONY_API = "https://www.supercolony.ai";
@@ -572,6 +594,14 @@ async function publish(demos, post, attestations) {
   if (!budget.ok) {
     logError("Publish BLOCKED by write budget (hourly=" + budget.hourly + "/" + HOURLY_PUBLISH_LIMIT + " daily=" + budget.daily + "/" + DAILY_PUBLISH_LIMIT + "): " + post.text.substring(0, 80));
     return false;
+  }
+  if (INSTANCE_ROLE === "validator") {
+    var primaryStatus = await checkPrimaryOracle();
+    if (!primaryStatus.silent) {
+      log("  [validator] Primary oracle active — suppressing publish");
+      return false;
+    }
+    log("  [validator] Primary oracle SILENT for " + primarySilentCycles + " cycles — taking over publishing");
   }
 
   var postData = {
@@ -1157,6 +1187,9 @@ function generatePrometheusMetrics(fleetData) {
         uptime: uptimeStats,
         activeIncidents: getActiveIncidentIds(),
         publicNodes: latestPublicNodes || [],
+        instanceRole: INSTANCE_ROLE,
+        primaryOracleUrl: PRIMARY_ORACLE_URL || null,
+        primarySilentCycles: primarySilentCycles,
         dahrEnabled: dahrAvailable === true,
         writeBudget: canPublish(), // FIX BUG 6: expose budget status
       };
