@@ -58,6 +58,7 @@ const MNEMONIC = process.env.DEMOS_MNEMONIC;
 const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
 const FALLBACK_RPCS = [RPC_URL, "http://193.77.44.160:53550", "http://193.77.50.180:53550"];
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
+const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "60000"); // 1 min monitoring, independent of publish interval
 const PROMETHEUS_URL = "http://127.0.0.1:19096";
 const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
@@ -2253,8 +2254,8 @@ async function main() {
   }
 
   await cycle();
-  setInterval(cycle, INTERVAL_MS);
-  log("\nNext check in " + (INTERVAL_MS / 1000 / 60) + " minutes. Agent running...\n");
+  setInterval(cycle, MONITOR_INTERVAL_MS);
+  log("\nMonitoring every " + (MONITOR_INTERVAL_MS / 1000 / 60) + " min, publishing every " + (INTERVAL_MS / 1000 / 60) + " min. Agent running...\n");
   await checkLatestVersion();
   setInterval(checkLatestVersion, 10 * 60 * 1000);
 }
