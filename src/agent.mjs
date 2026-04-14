@@ -578,13 +578,13 @@ async function perceive() {
 
   var n3Stale = secsSinceBlock.n3 != null ? secsSinceBlock.n3 : null;
   if (n3Stale != null && n3Stale > STALE_SECONDS_THRESHOLD) {
-    problems.push({ name: "CHAIN", issues: ["STALE(" + Math.round(n3Stale) + "s since last block)"] });
+    if (cycleCount > 2) problems.push({ name: "CHAIN", issues: ["STALE(" + Math.round(n3Stale) + "s since last block)"] });
     log("  !! CHAIN: stale " + Math.round(n3Stale) + "s since last block");
   }
 
   if (highestBlock != null && previousState.lastBlockHeight != null) {
     if (highestBlock <= previousState.lastBlockHeight) {
-      problems.push({ name: "CHAIN", issues: ["BLOCK_STALL(no new blocks since last cycle)"] });
+      if (cycleCount > 2) problems.push({ name: "CHAIN", issues: ["BLOCK_STALL(no new blocks since last cycle)"] });
       log("  !! CHAIN: block height unchanged since last cycle");
     }
   }
