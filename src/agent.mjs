@@ -2258,6 +2258,13 @@ async function main() {
   await cycle();
   setInterval(cycle, MONITOR_INTERVAL_MS);
   log("\nMonitoring every " + (MONITOR_INTERVAL_MS / 1000 / 60) + " min, publishing every " + (INTERVAL_MS / 1000 / 60) + " min. Agent running...\n");
+  // Resolve any stale chain incidents from previous session on startup
+  try {
+    if (sharedDb) {
+      var staleCount = sharedDb.run("UPDATE incidents SET status='resolved', resolved_at=datetime('now') WHERE status='active' AND affected_nodes LIKE '%CHAIN%'").changes;
+      if (staleCount > 0) log("  Startup: resolved " + staleCount + " stale chain incident(s) from previous session");
+    }
+  } catch(e) { log("  Startup cleanup error: " + e.message); }
   await checkLatestVersion();
   setInterval(checkLatestVersion, 10 * 60 * 1000);
 }
