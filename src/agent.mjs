@@ -298,7 +298,7 @@ function getRecommendation(data) {
   var offline = data.nodeReports.filter(function(n) { return n.issues && n.issues.some(function(i) { return i === "OFFLINE"; }); }).length;
   var chainOk = !data.problems || data.problems.filter(function(p) { return p.name === "CHAIN"; }).length === 0;
   if (healthy === total && chainOk) {
-    return { recommendation: "SAFE", safe_to_propose: true, confidence: "high", reason: healthy + "/" + total + " nodes synced, no issues detected" };
+    return { recommendation: "SAFE", safe_to_propose: true, confidence: "high", reason: "Network stable, no issues detected" };
   }
   if (healthy >= Math.ceil(total * 0.7) && offline < 3) {
     return { recommendation: "CAUTION", safe_to_propose: true, confidence: "medium", reason: healthy + "/" + total + " healthy, minor issues present" };
@@ -400,7 +400,7 @@ function generateDecision(data, stalenessSeconds, signals) {
     affected = ["nodes"];
   } else if (healthy === total) {
     status = "stable"; risk_level = "low";
-    reason = "All " + total + " nodes synced, zero active incidents, low divergence";
+    reason = "Network stable — reference nodes synced, zero active incidents";
     affected = [];
   } else {
     status = "recovering"; risk_level = "medium";
@@ -536,7 +536,7 @@ function generateSignals(data, stalenessSeconds) {
   // All healthy (fleet only — public node signals don't affect this)
   var fleetSignals = signals.filter(function(s) { return s.type !== "public_node_offline" && s.type !== "public_network_block"; });
   if (fleetSignals.length === 0) {
-    signals.unshift({ type: "all_healthy", severity: "info", nodes: [], value: onlineNodes.length, message: onlineNodes.length + "/" + total + " nodes online, synced, no issues" });
+    signals.unshift({ type: "all_healthy", severity: "info", nodes: [], value: onlineNodes.length, message: "All public nodes healthy, network in sync, no issues detected" });
   }
 
   return signals;
