@@ -102,7 +102,7 @@ async function checkPrimaryOracle() {
     return { silent: primarySilentCycles >= 1, diverged: false };
   }
 }
-const AGENT_NAME = "Demos Fleet Oracle";
+const AGENT_NAME = "Demos Network Oracle";
 const AGENT_DESCRIPTION = "Autonomous health & stability oracle for the Demos Network. Monitors 7 nodes across 4 servers every 20 minutes. Publishes DAHR-attested alerts, daily summaries, and reputation scores. Public health API at /health.";
 const SUPERCOLONY_API = "https://www.supercolony.ai";
 
@@ -110,7 +110,7 @@ const SUPERCOLONY_API = "https://www.supercolony.ai";
 const HISTORY_FILE = join(LOG_DIR, "history.json");
 const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
 
-var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fleet Oracle API</title>' +
+var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — API</title>' +
 '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#cbd5e1;padding:2rem;max-width:860px;margin:0 auto;line-height:1.5}' +
 'h1{color:#22d3ee;margin-bottom:4px;font-size:1.6rem}.sub{color:#64748b;margin-bottom:1.5rem;font-size:.9rem}' +
 'h2{color:#38bdf8;margin:1.2rem 0 .4rem;font-size:1rem;border-bottom:1px solid #1e293b;padding-bottom:4px}' +
@@ -118,26 +118,27 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fleet O
 '.e b{color:#f59e0b}.e span{color:#94a3b8;display:block;font-size:.82rem;margin-top:2px}' +
 'code{background:#0f172a;padding:1px 5px;border-radius:3px;font-size:.85rem}' +
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
-'<h1>Demos Fleet Oracle</h1>' +
-'<p class="sub">Autonomous health oracle monitoring 7 validator nodes every 20 min<br>' +
-'Wallet: <code>' + AGENT_WALLET + '</code> &middot; v6.3</p>' +
-'<h2>Core</h2>' +
-'<div class="e"><b>GET /health</b><span>Full fleet snapshot: node status, blocks, TPS, reputation, public RPCs, versions</span></div>' +
-'<div class="e"><b>GET /self</b><span>Agent introspection: uptime, DEM balance, write budget, active RPC, version</span></div>' +
+'<h1>Demos Network Oracle</h1>' +
+'<p class="sub">Public network intelligence for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes attested health data on-chain via SuperColony.<br>' +
+'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v6.9 &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
+'<h2>Network</h2>' +
+'<div class="e"><b>GET /health</b><span>Full network snapshot — decision, scores, network_agreement, signals_grouped, public nodes, incidents</span></div>' +
+'<div class="e"><b>GET /organism</b><span>Lightweight machine-readable network state — optimized for agent consumption</span></div>' +
+'<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
+'<div class="e"><b>GET /incidents</b><span>Network incident log with severity, duration, and affected components</span></div>' +
+'<h2>Validators</h2>' +
+'<div class="e"><b>GET /peers</b><span>Discovered validators — identity, connection, block, first seen</span></div>' +
 '<div class="e"><b>GET /reputation</b><span>Per-node reputation scores (0-100) over 24h window</span></div>' +
-'<h2>Data</h2>' +
-'<div class="e"><b>GET /history</b><span>Last 24h of fleet data points (JSON)</span></div>' +
-'<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export historical data as CSV. Optional from/to (Unix ms)</span></div>' +
-'<div class="e"><b>GET /peers</b><span>Fleet peers + discovered non-fleet validators</span></div>' +
-'<h2>Monitoring</h2>' +
+'<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
+'<h2>History</h2>' +
+'<div class="e"><b>GET /history</b><span>Last 72 health cycles as JSON</span></div>' +
+'<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Optional from/to filters (Unix ms)</span></div>' +
+'<h2>Integration</h2>' +
 '<div class="e"><b>GET /federate</b><span>Prometheus metrics endpoint for scraping</span></div>' +
 '<div class="e"><b>GET /federate/config</b><span>Prometheus scrape_config snippet</span></div>' +
-'<div class="e"><b>GET /badge</b><span>SVG status badge — embeddable in READMEs and dashboards</span></div>' +
-'<h2>Marketplace &amp; Consensus</h2>' +
-'<div class="e"><b>GET /marketplace</b><span>Marketplace stats: total queries, revenue, daily limits</span></div>' +
-'<div class="e"><b>GET /marketplace/queries?limit=N</b><span>Recent marketplace query history</span></div>' +
-'<div class="e"><b>GET /consensus</b><span>Multi-agent consensus state and participation guide</span></div>' +
-'<footer>All endpoints return JSON unless noted. Data refreshes every 20 minutes.</footer></body></html>';
+'<div class="e"><b>GET /badge</b><span>SVG network status badge — embeddable in READMEs and dashboards</span></div>' +
+'<div class="e"><b>GET /version</b><span>Running agent version vs latest GitHub commit</span></div>' +
+'<footer>All endpoints return JSON unless noted. Monitoring interval: 1 min. Publishing interval: 20 min. Oracle is strictly watch-only — observe, interpret, summarize risk.</footer></body></html>';
 
 // FIX BUG 6: Write budget constants (SuperColony rate limits)
 const DAILY_PUBLISH_LIMIT = 15;
@@ -1540,7 +1541,7 @@ function generatePrometheusMetrics(fleetData) {
         wallet: AGENT_WALLET,
         version: "6.8",
         fleet_size: FLEET_SIZE,
-        nodes: latestHealthData ? latestHealthData.nodeReports || [] : [],
+        // nodes: removed from public API — fleet data is in reference layer only
         timestamp: new Date().toISOString(),
         cycleCount: cycleCount,
         lastCycleAt: staleness.lastCycleAt, // FIX BUG 7
@@ -1550,7 +1551,6 @@ function generatePrometheusMetrics(fleetData) {
           healthy: latestHealthData.nodeReports ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
           block: latestHealthData.chain ? latestHealthData.chain.block : null,
           tps: latestHealthData.chain ? latestHealthData.chain.tps : null,
-          nodes: latestHealthData.nodeReports || [],
           nodeVersions: nodeVersions,
         } : null,
         recommendation: getRecommendation(latestHealthData),
@@ -1617,7 +1617,7 @@ function generatePrometheusMetrics(fleetData) {
       }
     } else if (req.url === "/federate" || req.url === "/metrics") {
       var fleetData = {
-        nodes: latestHealthData ? latestHealthData.nodeReports || [] : [],
+        // nodes: removed from public API — fleet data is in reference layer only
         nodesOnline: latestHealthData && latestHealthData.nodeReports ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
         blockHeight: latestHealthData && latestHealthData.chain ? latestHealthData.chain.block : 0,
         tps: latestHealthData && latestHealthData.chain ? latestHealthData.chain.tps : 0,
@@ -1658,7 +1658,7 @@ function generatePrometheusMetrics(fleetData) {
       var selfBudget = canPublish();
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify({
-        agent: "Demos Fleet Oracle",
+        agent: "Demos Network Oracle",
         version: "6.8",
         uptimeSeconds: Math.round(process.uptime()),
         lastCycleAt: latestHealthData ? latestHealthData.timestamp : null,
