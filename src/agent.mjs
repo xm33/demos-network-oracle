@@ -1653,7 +1653,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
 <div class="grid" id="nodes"></div>
 <div class="metrics" id="metrics"></div>
-<div id="signals-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Network signals</h2><div id="signals-list">Loading...</div></div><div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div id="rep-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Reputation scores (24h)</h2><div id="rep-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
+<div id="decision-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🧠 Network Intelligence</h2><div id="decision-status">Loading...</div></div><div id="signals-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Network signals</h2><div id="signals-list">Loading...</div></div><div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2><div id="sentinel-status">Loading...</div></div><div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2><div id="pub-list">Loading...</div></div><div id="rep-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px"><h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Reputation scores (24h)</h2><div id="rep-list">Loading...</div></div><div class="sla"><h2>Node SLA — uptime</h2><table><thead><tr><th>Node</th><th>Block</th><th>Uptime</th><th></th></tr></thead><tbody id="sla-body"></tbody></table></div>
 <div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
 <div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
 <div class="footer">Demos Fleet Oracle v6.8 &bull; ${INSTANCE_ROLE.toUpperCase()} &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
@@ -1738,6 +1738,24 @@ async function refresh(){
     drawChart(Array.isArray(hd)?hd:(hd.history||[]));
   }catch(e){}
   try{
+    var db=document.getElementById("decision-status");
+    if(db&&d.decision){
+      var dec=d.decision;
+      var sc=d.scores||{};
+      var statusCol=dec.status==="stable"?"#3fb950":dec.status==="recovering"?"#58a6ff":dec.status==="degraded"?"#d29922":"#f85149";
+      var riskCol=dec.risk_level==="low"?"#3fb950":dec.risk_level==="medium"?"#d29922":"#f85149";
+      var html='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Status</div><div style="font-size:1.1em;font-weight:bold;color:'+statusCol+'">'+dec.status.toUpperCase()+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Risk</div><div style="font-size:1.1em;font-weight:bold;color:'+riskCol+'">'+dec.risk_level.toUpperCase()+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Confidence</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(Math.round(dec.confidence*100))+'%</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Net Health</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(sc.network_health||"?")+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Stability</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(sc.stability||"?")+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Partition Risk</div><div style="font-size:1.1em;font-weight:bold;color:'+(sc.partition_risk>30?"#f85149":sc.partition_risk>10?"#d29922":"#3fb950")+'">'+(sc.partition_risk||0)+'</div></div>';
+      html+='</div>';
+      html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+dec.reason+'</div>';
+      html+='<div style="font-size:0.75em;color:#484f58;margin-top:6px">Valid until: '+new Date(dec.valid_until).toLocaleTimeString()+'</div>';
+      db.innerHTML=html;
+    }
     var sl=document.getElementById("signals-list");
     if(sl&&d.signals&&d.signals.length>0){
       var sevColor={"info":"#58a6ff","warning":"#d29922","critical":"#f85149"};
