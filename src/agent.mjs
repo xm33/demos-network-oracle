@@ -1856,9 +1856,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
   <span style="color:#3fb950;font-weight:600">&#10003; DAHR Attested</span>
   <span style="display:flex;align-items:center;gap:5px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:3px 8px;font-size:0.78em">powered by <img src="https://framerusercontent.com/assets/IyyrITqCg67NykDbX6dibaTrhfA.svg" height="14" style="vertical-align:middle;filter:brightness(10)"></span>
   <span style="color:#444">|</span>
-  <a href="/health" style="color:#58a6ff">/health</a>
-  <a href="/organism" style="color:#58a6ff">/organism</a>
-  <a href="/incidents" style="color:#58a6ff">/incidents</a>
+  <a href="/docs" style="color:#58a6ff">Docs</a>
   <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a>
 </div>
 <script>
