@@ -427,13 +427,13 @@ function generateDecision(data, stalenessSeconds, signals) {
     status = "unstable"; risk_level = "high";
     reason = offline + "/" + total + " nodes offline — majority unreachable";
     affected = ["network", "nodes"];
-  } else if (offline > 0 || criticalSignals.length > 0) {
+  } else if (offline > 1 || criticalSignals.length > 0) {
     status = "degraded"; risk_level = "medium";
     reason = offline + " node(s) offline, " + criticalSignals.length + " critical signal(s)";
     affected = ["nodes"];
-  } else if (warningSignals.length > 0 || blockSpread > 10) {
-    status = "degraded"; risk_level = "low";
-    reason = warningSignals.length + " warning signal(s), block spread " + blockSpread;
+  } else if (offline === 1 || warningSignals.length > 0 || blockSpread > 10) {
+    status = "stable"; risk_level = "low";
+    reason = "Network stable, " + (offline === 1 ? "1 node offline" : warningSignals.length + " warning(s)");
     affected = ["nodes"];
   } else if (healthy === total) {
     status = "stable"; risk_level = "low";
