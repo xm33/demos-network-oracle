@@ -1837,6 +1837,8 @@ function drawChart(hist){
   if(t0)ctx.fillText(t0.toLocaleTimeString(),PAD,H-2);
   if(t1){ctx.textAlign="right";ctx.fillText(t1.toLocaleTimeString(),W-4,H-2);}
 }
+var FLEET_NODES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
+function isFleetIncident(inc) { return inc.affectedNodes && inc.affectedNodes.length > 0 && inc.affectedNodes.every(function(n){ return FLEET_NODES.includes(n); }); }
 async function refresh(){
   try{
     var r=await fetch("/health");var d=await r.json();
@@ -2009,8 +2011,6 @@ async function refresh(){
   }catch(e){}
   try{
     var ir=await fetch("/incidents?limit=10");var id=await ir.json();
-    var FLEET_NODES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
-    function isFleetIncident(inc) { return inc.affectedNodes && inc.affectedNodes.length > 0 && inc.affectedNodes.every(function(n){ return FLEET_NODES.includes(n); }); }
     var publicIncs = id.incidents ? id.incidents.filter(function(i){ return !isFleetIncident(i); }) : [];
     var fleetIncs = id.incidents ? id.incidents.filter(function(i){ return isFleetIncident(i); }) : [];
     var il=document.getElementById("inc-list");
