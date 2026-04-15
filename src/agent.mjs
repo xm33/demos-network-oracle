@@ -166,6 +166,8 @@ const PUBLIC_NODES = {
   "kyne-node2": { url: "http://node2.demos.sh:53550", identity: "0xc8bc5866fecf583bc1232f04fa54fd2c5a6f7c15b91c517ac60f468cdc0b8c82" },
   "kyne-node3": { url: "http://node3.demos.sh:53550", identity: "0x24c664d9ef529f798e979357c6a7a01088226eefe05cfdb77fb42841f771e156" },
   "kyne-node3b": { url: "http://node3.demos.sh:53540", identity: "0xcaeab45f01d6482c80b024e0332cbd8b483b47dde6533c330f244002b035ac59" },
+  "community-node1": { url: "http://107.131.170.202:53552", identity: "0x283ab24d052cfd8aa82b66780b6d88723e577697d718bada19dfcafcd64524ea" },
+  "community-node2": { url: "http://65.7.20.194:53552", identity: "0x036a053dd8b06aeef6b4a3cf2e0181c69947997fad0ab82e7beb9324448ec43d" },
 };
 const BLOCK_LAG_THRESHOLD = 3;
 const STALE_SECONDS_THRESHOLD = 120;
