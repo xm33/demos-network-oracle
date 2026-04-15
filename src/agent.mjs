@@ -313,8 +313,8 @@ function getRecommendation(data) {
   var healthy = data.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length;
   var total = data.nodeReports.length;
   var offline = data.nodeReports.filter(function(n) { return n.issues && n.issues.some(function(i) { return i === "OFFLINE"; }); }).length;
-  var chainOk = !data.problems || data.problems.filter(function(p) { return p.name === "CHAIN"; }).length === 0;
   var publicActiveIncs = getPublicActiveIncidentIds();
+  var chainOk = publicActiveIncs.length === 0;
   if (healthy === total && chainOk && publicActiveIncs.length === 0) {
     return { recommendation: "SAFE", safe_to_propose: true, confidence: "high", reason: "Network stable, no issues detected" };
   }
@@ -1551,6 +1551,7 @@ function generatePrometheusMetrics(fleetData) {
           healthy: latestHealthData.nodeReports ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
           block: latestHealthData.chain ? latestHealthData.chain.block : null,
           tps: latestHealthData.chain ? latestHealthData.chain.tps : null,
+          nodes: latestHealthData ? latestHealthData.nodeReports || [] : [],
           nodeVersions: nodeVersions,
         } : null,
         recommendation: getRecommendation(latestHealthData),
