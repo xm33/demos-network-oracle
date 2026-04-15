@@ -103,7 +103,7 @@ async function checkPrimaryOracle() {
   }
 }
 const AGENT_NAME = "Demos Network Oracle";
-const AGENT_DESCRIPTION = "Autonomous health & stability oracle for the Demos Network. Monitors 7 nodes across 4 servers every 20 minutes. Publishes DAHR-attested alerts, daily summaries, and reputation scores. Public health API at /health.";
+const AGENT_DESCRIPTION = "Public network intelligence oracle for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes DAHR-attested health data on-chain via SuperColony every 20 minutes. Public API at demos-oracle.com/health";
 const SUPERCOLONY_API = "https://www.supercolony.ai";
 
 // Historical data file (JSON-based, lightweight)
@@ -1846,12 +1846,13 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
   <span style="color:#58a6ff;font-weight:600">How we know</span> &nbsp;·&nbsp;
   Public network observed via <span id="hw-public-count">—</span> public nodes &nbsp;·&nbsp;
   Confidence anchored by <span id="hw-fleet-count">—</span> reference nodes &nbsp;·&nbsp;
-  Updated every 1 min &nbsp;·&nbsp;
+  Updated every 20s &nbsp;·&nbsp;
   Data quality: <span id="hw-quality">—</span> &nbsp;·&nbsp;
+  All observations <span style="color:#3fb950;font-weight:600">DAHR attested</span> on-chain via SuperColony &nbsp;·&nbsp;
   <a href="/docs" style="color:#58a6ff">Methodology</a>
 </div>
 
-<div class="footer">Demos Network Oracle v6.9 &bull; ${INSTANCE_ROLE.toUpperCase()} &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/organism" style="color:#58a6ff">/organism</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
+<div class="footer">Demos Network Oracle v6.9 &bull; ${INSTANCE_ROLE.toUpperCase()} &bull; DAHR Attested &bull; Powered by Demos &bull; Auto-refresh 20s &bull; <a href="/health" style="color:#58a6ff">/health</a> &bull; <a href="/organism" style="color:#58a6ff">/organism</a> &bull; <a href="/incidents" style="color:#58a6ff">/incidents</a> &bull; <a href="https://github.com/xm33/demos-fleet-oracle" style="color:#58a6ff">GitHub</a></div>
 <script>
 function drawChart(hist){
   var canvas=document.getElementById("blk-chart");
