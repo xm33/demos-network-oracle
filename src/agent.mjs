@@ -2012,9 +2012,14 @@ async function refresh(){
     var ir=await fetch("/incidents?limit=10");var id=await ir.json();
     var il=document.getElementById("inc-list");
     if(!id.incidents||id.incidents.length===0){il.innerHTML='<div style="color:#8b949e">No incidents recorded</div>';return;}
-    il.innerHTML="";id.incidents.forEach(function(inc){
+    il.innerHTML="";
+    var MAX_INC=5;var incShown=0;
+    id.incidents.forEach(function(inc){
+      if(incShown>=MAX_INC)return;
       il.innerHTML+='<div class="inc"><span class="id">'+inc.id+'</span> <span class="sev '+inc.severity+'">'+inc.severity.toUpperCase()+'</span> '+inc.description+' <span style="color:#8b949e">'+(inc.status==="active"?"\u23F3 active":"\u2705 resolved in "+(inc.duration_seconds||"?")+"s")+'</span></div>';
+      incShown++;
     });
+    if(id.incidents.length>MAX_INC){il.innerHTML+='<div style="margin-top:8px;font-size:0.82em"><a href="/incidents" style="color:#58a6ff">View all '+id.incidents.length+' incidents →</a></div>';}
   }catch(e){}
 }
 refresh();setInterval(refresh,20000);
