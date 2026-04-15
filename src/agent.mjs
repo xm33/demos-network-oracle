@@ -1273,6 +1273,47 @@ let latestHealthData = null; // updated each cycle
 let latestPublicNodes = []; // updated each cycle
 let latestVersionData = { running: "6.8", latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
 let signalAlertDedup = {}; // { "signal_type_nodes": timestamp }
+let signalFirstSeen = {}; // { "signal_type": timestamp } — tracks when each signal type first appeared
+let signalPrevValue = {}; // { "signal_type": value } — tracks previous value for trend
+
+function groupSignals(signals) {
+  var now = Date.now();
+  var grouped = { critical: [], warning: [], info: [] };
+  for (var sig of signals) {
+    var key = sig.type + "_" + (sig.nodes || []).join(",");
+    // Track first seen
+    if (!signalFirstSeen[key]) signalFirstSeen[key] = now;
+    var firstSeen = new Date(signalFirstSeen[key]).toISOString();
+    var durationMin = Math.round((now - signalFirstSeen[key]) / 60000);
+    // Track trend
+    var prevVal = signalPrevValue[key];
+    var trend = "stable";
+    if (sig.value !== null && sig.value !== undefined && prevVal !== undefined) {
+      if (sig.type === "partition_risk" || sig.type === "block_lag" || sig.type === "block_divergence") {
+        trend = sig.value > prevVal ? "degrading" : sig.value < prevVal ? "improving" : "stable";
+      }
+    }
+    signalPrevValue[key] = sig.value;
+    var enriched = {
+      type: sig.type,
+      severity: sig.severity,
+      affected_nodes: sig.nodes || [],
+      value: sig.value,
+      message: sig.message,
+      first_seen: firstSeen,
+      duration_min: durationMin,
+      trend: trend
+    };
+    var bucket = sig.severity === "critical" ? "critical" : sig.severity === "warning" ? "warning" : "info";
+    grouped[bucket].push(enriched);
+  }
+  // Clear first_seen for signals that are no longer active
+  var activeKeys = new Set(signals.map(function(s) { return s.type + "_" + (s.nodes || []).join(","); }));
+  for (var k in signalFirstSeen) {
+    if (!activeKeys.has(k)) delete signalFirstSeen[k];
+  }
+  return grouped;
+}
 
 async function checkLatestVersion() {
   try {
@@ -1400,6 +1441,7 @@ function generatePrometheusMetrics(fleetData) {
         discoveredPeers: Object.keys(discoveredPeers).length,
         uptime: uptimeStats,
         signals: generateSignals(latestHealthData, getStaleness()),
+        signals_grouped: groupSignals(generateSignals(latestHealthData, getStaleness())),
         decision: generateDecision(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
         scores: generateScores(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
         activeIncidents: getActiveIncidentIds(),
