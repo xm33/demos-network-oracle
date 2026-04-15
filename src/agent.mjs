@@ -1550,6 +1550,30 @@ function generatePrometheusMetrics(fleetData) {
         demBalance: lastKnownBalance,
         endpoints: ["/health", "/self", "/docs", "/dashboard", "/reputation", "/peers", "/history", "/history/export", "/federate", "/badge", "/marketplace", "/consensus", "/incidents"]
       }, null, 2));
+    } else if (req.url === "/organism") {
+      var sigs = generateSignals(latestHealthData, getStaleness());
+      var dec = generateDecision(latestHealthData, getStaleness(), sigs);
+      var sc = generateScores(latestHealthData, getStaleness(), sigs);
+      var criticalSigs = sigs.filter(function(s) { return s.severity === "critical"; });
+      var unstableNodes = latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status !== "HEALTHY"; }).map(function(n) { return n.name; }) : [];
+      var organism = {
+        network_status: dec.status,
+        trend: "stable",
+        network_health: sc.network_health,
+        stability: sc.stability,
+        risk_level: dec.risk_level,
+        confidence: dec.confidence,
+        data_quality: sc.data_confidence >= 90 ? "high" : sc.data_confidence >= 60 ? "medium" : "low",
+        active_incidents: getActiveIncidentIds().length,
+        critical_signals: criticalSigs.length,
+        unstable_nodes: unstableNodes,
+        fleet_size: FLEET_SIZE,
+        fleet_healthy: latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
+        valid_until: dec.valid_until,
+        last_updated: dec.last_updated
+      };
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(organism, null, 2));
     } else if (req.url === "/version") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(latestVersionData, null, 2));
