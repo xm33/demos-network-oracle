@@ -173,21 +173,24 @@ const PUBLIC_NODES = {
     identity: "0xc8bc5866fecf583bc1232f04fa54fd2c5a6f7c15b91c517ac60f468cdc0b8c82",
     source_type: "public",
     trust_tier: "verified",
-    operator: "Kynesys"
+    operator: "Kynesys",
+    joined_at: "2026-04-14"
   },
   "kyne-node3": {
     url: "http://node3.demos.sh:53550",
     identity: "0x24c664d9ef529f798e979357c6a7a01088226eefe05cfdb77fb42841f771e156",
     source_type: "public",
     trust_tier: "verified",
-    operator: "Kynesys"
+    operator: "Kynesys",
+    joined_at: "2026-04-14"
   },
   "kyne-node3b": {
     url: "http://node3.demos.sh:53540",
     identity: "0xcaeab45f01d6482c80b024e0332cbd8b483b47dde6533c330f244002b035ac59",
     source_type: "public",
     trust_tier: "verified",
-    operator: "Kynesys"
+    operator: "Kynesys",
+    joined_at: "2026-04-14"
   },
   // Community nodes — manually approved by CypherX33
   "community-node1": {
@@ -195,14 +198,16 @@ const PUBLIC_NODES = {
     identity: "0x283ab24d052cfd8aa82b66780b6d88723e577697d718bada19dfcafcd64524ea",
     source_type: "community",
     trust_tier: "community_submitted",
-    operator: "Community"
+    operator: "Community",
+    joined_at: "2026-04-15"
   },
   "community-node2": {
     url: "http://65.7.20.194:53552",
     identity: "0x036a053dd8b06aeef6b4a3cf2e0181c69947997fad0ab82e7beb9324448ec43d",
     source_type: "community",
     trust_tier: "community_submitted",
-    operator: "Community"
+    operator: "Community",
+    joined_at: "2026-04-15"
   },
 };
 const BLOCK_LAG_THRESHOLD = 3;
@@ -307,6 +312,19 @@ function getRecommendation(data) {
 }
 
 // Load incident counter from DB on startup
+function getValidatorGrowth() {
+  if (!sharedDb) return { today: 0, week: 0, total: 0 };
+  try {
+    var now = Date.now();
+    var dayAgo = now - 86400000;
+    var weekAgo = now - 604800000;
+    var total = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries").get().c;
+    var today = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries WHERE first_seen > ?").get(dayAgo).c;
+    var week = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries WHERE first_seen > ?").get(weekAgo).c;
+    return { today: today, week: week, total: total };
+  } catch(e) { return { today: 0, week: 0, total: 0 }; }
+}
+
 function generateNetworkAgreement(fleetData, publicNodes) {
   // Network agreement is calculated from PUBLIC nodes only.
   // Fleet nodes run on a separate testnet chain and are NOT included here.
@@ -1341,10 +1359,15 @@ function discoverValidators(infoData) {
       };
       newPeers.push(identity.substring(0, 16) + "...");
       log("  Discovery: new peer " + identity.substring(0, 16) + "... via " + (peer.connection ? peer.connection.string : "?"));
+      // Persist to DB
+      if (sharedDb) { try { sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection) VALUES (?, ?, ?, ?)", [identity, Date.now(), Date.now(), peer.connection ? peer.connection.string : "unknown"]); } catch(e) {} }
+      // Persist to DB
+      if (sharedDb) { try { sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection) VALUES (?, ?, ?, ?)", [identity, Date.now(), Date.now(), peer.connection ? peer.connection.string : "unknown"]); } catch(e) {} }
     } else {
       discoveredPeers[identity].lastSeen = Date.now();
       discoveredPeers[identity].online = peer.status ? peer.status.online : false;
       discoveredPeers[identity].block = peer.sync ? peer.sync.block : null;
+      if (sharedDb) { try { sharedDb.run("UPDATE validator_discoveries SET last_seen=?, online=? WHERE identity=?", [Date.now(), peer.status ? (peer.status.online ? 1 : 0) : 0, identity]); } catch(e) {} }
     }
   }
 
@@ -1528,6 +1551,7 @@ function generatePrometheusMetrics(fleetData) {
         decision: generateDecision(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
         scores: generateScores(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
         network_agreement: generateNetworkAgreement(latestHealthData, latestPublicNodes),
+        validator_growth: getValidatorGrowth(),
         activeIncidents: getActiveIncidentIds(),
         publicNodes: latestPublicNodes || [],
         instanceRole: INSTANCE_ROLE,
@@ -1896,6 +1920,15 @@ async function refresh(){
       } else {
         html+='<div style="font-size:0.82em;color:#3fb950;margin-top:4px">✅ All public nodes aligned with network head</div>';
       }
+      if(d.validator_growth){
+        var vg=d.validator_growth;
+        html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid #21262d;display:flex;gap:16px;flex-wrap:wrap">';
+        html+='<span style="font-size:0.8em;color:#8b949e">Validator discovery: </span>';
+        html+='<span style="font-size:0.8em;color:#c9d1d9">+'+vg.today+' today</span>';
+        html+='<span style="font-size:0.8em;color:#c9d1d9">+'+vg.week+' this week</span>';
+        html+='<span style="font-size:0.8em;color:#58a6ff">'+vg.total+' total discovered</span>';
+        html+='</div>';
+      }
       agBox.innerHTML=html;
     }
 
@@ -2215,6 +2248,15 @@ async function main() {
     alerts TEXT NOT NULL DEFAULT '[]'
   )`);
   log("  Shared SQLite: " + dbPath + " (incidents table ready)");
+
+  // Validator discovery tracking table
+  sharedDb.run(`CREATE TABLE IF NOT EXISTS validator_discoveries (
+    identity TEXT PRIMARY KEY,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    connection TEXT,
+    online INTEGER DEFAULT 1
+  )`);
 
   // v6.4: Load incident counter from DB
   loadIncidentCounter();
