@@ -162,13 +162,48 @@ const EXPECTED_FLEET = {
 const NODE_NAMES = Object.keys(EXPECTED_FLEET);
 const FLEET_SIZE = NODE_NAMES.length;
 
+// Node registry — separated by source type and trust tier
+// source_type: "public" | "community" | "discovered"
+// trust_tier: "verified" | "community_submitted" | "auto_discovered"
+
 const PUBLIC_NODES = {
-  "kyne-node2": { url: "http://node2.demos.sh:53550", identity: "0xc8bc5866fecf583bc1232f04fa54fd2c5a6f7c15b91c517ac60f468cdc0b8c82" },
-  "kyne-node3": { url: "http://node3.demos.sh:53550", identity: "0x24c664d9ef529f798e979357c6a7a01088226eefe05cfdb77fb42841f771e156" },
-  "kyne-node3b": { url: "http://node3.demos.sh:53540", identity: "0xcaeab45f01d6482c80b024e0332cbd8b483b47dde6533c330f244002b035ac59" },
-  // Community validator nodes — manually approved
-  "community-node1": { url: "http://107.131.170.202:53552", identity: "0x283ab24d052cfd8aa82b66780b6d88723e577697d718bada19dfcafcd64524ea" },
-  "community-node2": { url: "http://65.7.20.194:53552", identity: "0x036a053dd8b06aeef6b4a3cf2e0181c69947997fad0ab82e7beb9324448ec43d" },
+  // Kynesys public nodes — verified, known operators
+  "kyne-node2": {
+    url: "http://node2.demos.sh:53550",
+    identity: "0xc8bc5866fecf583bc1232f04fa54fd2c5a6f7c15b91c517ac60f468cdc0b8c82",
+    source_type: "public",
+    trust_tier: "verified",
+    operator: "Kynesys"
+  },
+  "kyne-node3": {
+    url: "http://node3.demos.sh:53550",
+    identity: "0x24c664d9ef529f798e979357c6a7a01088226eefe05cfdb77fb42841f771e156",
+    source_type: "public",
+    trust_tier: "verified",
+    operator: "Kynesys"
+  },
+  "kyne-node3b": {
+    url: "http://node3.demos.sh:53540",
+    identity: "0xcaeab45f01d6482c80b024e0332cbd8b483b47dde6533c330f244002b035ac59",
+    source_type: "public",
+    trust_tier: "verified",
+    operator: "Kynesys"
+  },
+  // Community nodes — manually approved by CypherX33
+  "community-node1": {
+    url: "http://107.131.170.202:53552",
+    identity: "0x283ab24d052cfd8aa82b66780b6d88723e577697d718bada19dfcafcd64524ea",
+    source_type: "community",
+    trust_tier: "community_submitted",
+    operator: "Community"
+  },
+  "community-node2": {
+    url: "http://65.7.20.194:53552",
+    identity: "0x036a053dd8b06aeef6b4a3cf2e0181c69947997fad0ab82e7beb9324448ec43d",
+    source_type: "community",
+    trust_tier: "community_submitted",
+    operator: "Community"
+  },
 };
 const BLOCK_LAG_THRESHOLD = 3;
 const STALE_SECONDS_THRESHOLD = 120;
@@ -272,6 +307,51 @@ function getRecommendation(data) {
 }
 
 // Load incident counter from DB on startup
+function generateNetworkAgreement(fleetData, publicNodes) {
+  // Network agreement is calculated from PUBLIC nodes only.
+  // Fleet nodes run on a separate testnet chain and are NOT included here.
+  // Fleet data is used separately for oracle confidence scoring only.
+  var allBlocks = [];
+
+  if (publicNodes) {
+    publicNodes.forEach(function(n) {
+      if (n.block && n.ok) allBlocks.push({ name: n.name, block: n.block, source: n.source_type || "public" });
+    });
+  }
+
+  if (allBlocks.length === 0) return { status: "unknown", block_spread: 0, median_block: null, max_block: null, aligned_nodes: 0, outlier_nodes: [], total_nodes: 0, agreement_ratio: 0 };
+
+  var blocks = allBlocks.map(function(n) { return n.block; }).sort(function(a,b) { return a-b; });
+  var maxBlock = blocks[blocks.length - 1];
+  var minBlock = blocks[0];
+  var medianBlock = blocks[Math.floor(blocks.length / 2)];
+  var blockSpread = maxBlock - minBlock;
+
+  // Nodes within 10 blocks of median are "aligned"
+  var ALIGNMENT_THRESHOLD = 10;
+  var aligned = allBlocks.filter(function(n) { return Math.abs(n.block - medianBlock) <= ALIGNMENT_THRESHOLD; });
+  var outliers = allBlocks.filter(function(n) { return Math.abs(n.block - medianBlock) > ALIGNMENT_THRESHOLD; });
+  var agreementRatio = Math.round((aligned.length / allBlocks.length) * 100);
+
+  var status = "unknown";
+  if (agreementRatio >= 90) status = "strong";
+  else if (agreementRatio >= 70) status = "moderate";
+  else if (agreementRatio >= 50) status = "weak";
+  else status = "diverged";
+
+  return {
+    status: status,
+    block_spread: blockSpread,
+    median_block: medianBlock,
+    max_block: maxBlock,
+    min_block: minBlock,
+    aligned_nodes: aligned.length,
+    outlier_nodes: outliers.map(function(n) { return { name: n.name, block: n.block, lag: maxBlock - n.block }; }),
+    total_nodes: allBlocks.length,
+    agreement_ratio: agreementRatio
+  };
+}
+
 function generateDecision(data, stalenessSeconds, signals) {
   if (!data || !data.nodeReports) {
     return { status: "uncertain", trend: "unknown", confidence: 0.0, risk_level: "high", reason: "No fleet data available", affected_components: ["data"], valid_until: new Date(Date.now() + 60000).toISOString(), last_updated: new Date().toISOString() };
@@ -980,14 +1060,14 @@ async function probePublicNodes() {
           block = data.peerlist[0].sync.block;
         }
         var identityMatch = data.identity === node.identity;
-        results.push({ name: name, ok: true, latencyMs: latencyMs, block: block, version: data.version || "?", peers: data.peerlist ? data.peerlist.length : 0, identityMatch: identityMatch });
+        results.push({ name: name, ok: true, latencyMs: latencyMs, block: block, version: data.version || "?", peers: data.peerlist ? data.peerlist.length : 0, identityMatch: identityMatch, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
         log("  PublicNode " + name + ": OK " + latencyMs + "ms block=" + (block||"?") + " peers=" + (data.peerlist?data.peerlist.length:0));
       } else {
-        results.push({ name: name, ok: false, error: "HTTP " + res.status });
+        results.push({ name: name, ok: false, error: "HTTP " + res.status, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
         log("  PublicNode " + name + ": FAIL HTTP " + res.status);
       }
     } catch(err) {
-      results.push({ name: name, ok: false, error: err.name === "TimeoutError" ? "Timeout" : err.message });
+      results.push({ name: name, ok: false, error: err.name === "TimeoutError" ? "Timeout" : err.message, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
       log("  PublicNode " + name + ": FAIL " + err.message);
     }
   }
@@ -1447,6 +1527,7 @@ function generatePrometheusMetrics(fleetData) {
         signals_grouped: groupSignals(generateSignals(latestHealthData, getStaleness())),
         decision: generateDecision(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
         scores: generateScores(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
+        network_agreement: generateNetworkAgreement(latestHealthData, latestPublicNodes),
         activeIncidents: getActiveIncidentIds(),
         publicNodes: latestPublicNodes || [],
         instanceRole: INSTANCE_ROLE,
@@ -1559,6 +1640,7 @@ function generatePrometheusMetrics(fleetData) {
       var sc = generateScores(latestHealthData, getStaleness(), sigs);
       var criticalSigs = sigs.filter(function(s) { return s.severity === "critical"; });
       var unstableNodes = latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status !== "HEALTHY"; }).map(function(n) { return n.name; }) : [];
+      var netAgree = generateNetworkAgreement(latestHealthData, latestPublicNodes);
       var organism = {
         network_status: dec.status,
         trend: "stable",
@@ -1572,6 +1654,10 @@ function generatePrometheusMetrics(fleetData) {
         unstable_nodes: unstableNodes,
         fleet_size: FLEET_SIZE,
         fleet_healthy: latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
+        network_agreement: netAgree.status,
+        public_nodes_total: netAgree.total_nodes,
+        public_nodes_aligned: netAgree.aligned_nodes,
+        public_block_spread: netAgree.block_spread,
         valid_until: dec.valid_until,
         last_updated: dec.last_updated
       };
