@@ -290,6 +290,17 @@ function getActiveIncidentIds() {
   return Object.values(activeIncidents).map(function(i) { return i.id; });
 }
 
+var FLEET_NODE_NAMES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
+function getPublicActiveIncidentIds() {
+  return Object.values(activeIncidents).filter(function(i) {
+    // Exclude fleet chain incidents from public count
+    if (i.description && (i.description.indexOf("Fleet reference") === 0 || i.description === "Chain-level issue detected")) return false;
+    // Exclude fleet node incidents
+    if (i.affectedNodes && i.affectedNodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); })) return false;
+    return true;
+  }).map(function(i) { return i.id; });
+}
+
 function determineSeverity(offlineCount, chainIssues, lagCount) {
   if (offlineCount >= 3 || chainIssues > 0) return "critical";
   if (offlineCount >= 1 || lagCount >= 3) return "warning";
@@ -302,7 +313,8 @@ function getRecommendation(data) {
   var total = data.nodeReports.length;
   var offline = data.nodeReports.filter(function(n) { return n.issues && n.issues.some(function(i) { return i === "OFFLINE"; }); }).length;
   var chainOk = !data.problems || data.problems.filter(function(p) { return p.name === "CHAIN"; }).length === 0;
-  if (healthy === total && chainOk) {
+  var publicActiveIncs = getPublicActiveIncidentIds();
+  if (healthy === total && chainOk && publicActiveIncs.length === 0) {
     return { recommendation: "SAFE", safe_to_propose: true, confidence: "high", reason: "Network stable, no issues detected" };
   }
   if (healthy >= Math.ceil(total * 0.7) && offline < 3) {
@@ -1552,7 +1564,7 @@ function generatePrometheusMetrics(fleetData) {
         scores: generateScores(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
         network_agreement: generateNetworkAgreement(latestHealthData, latestPublicNodes),
         validator_growth: getValidatorGrowth(),
-        activeIncidents: getActiveIncidentIds(),
+        activeIncidents: getPublicActiveIncidentIds(),
         publicNodes: latestPublicNodes || [],
         instanceRole: INSTANCE_ROLE,
         dahrEnabled: dahrAvailable === true,
@@ -1673,7 +1685,7 @@ function generatePrometheusMetrics(fleetData) {
         risk_level: dec.risk_level,
         confidence: dec.confidence,
         data_quality: sc.data_confidence >= 90 ? "high" : sc.data_confidence >= 60 ? "medium" : "low",
-        active_incidents: getActiveIncidentIds().length,
+        active_incidents: getPublicActiveIncidentIds().length,
         critical_signals: criticalSigs.length,
         unstable_nodes: unstableNodes,
         fleet_size: FLEET_SIZE,
