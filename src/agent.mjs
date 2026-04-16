@@ -643,7 +643,7 @@ function computeCanonicalState() {
 
   var summary;
   if (status === "unknown") summary = "Insufficient data — fewer than 2 public nodes reachable";
-  else if (status === "stable" && publicIncidentCount === 0) summary = pubReachable + "/" + pubTotal + " public nodes synced, no active incidents";
+  else if (status === "stable" && publicIncidentCount === 0) summary = "Network stable; " + pubReachable + "/" + pubTotal + " public nodes currently synced";
   else if (status === "degraded") {
     var offCount = pubTotal - pubReachable;
     summary = offCount > 0 ? offCount + " of " + pubTotal + " public node(s) offline, agreement " + agreement.state : publicIncidentCount + " active incident(s), agreement " + agreement.state;
