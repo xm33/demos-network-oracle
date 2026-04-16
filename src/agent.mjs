@@ -130,6 +130,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /peers</b><span>Discovered validators — identity, connection, block, first seen</span></div>' +
 '<div class="e"><b>GET /reputation</b><span>Per-node reputation scores (0-100) over 24h window</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
+'<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 truth model, data sources, limitations</span></div>' +
 '<h2>History</h2>' +
 '<div class="e"><b>GET /history</b><span>Last 72 health cycles as JSON</span></div>' +
 '<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Optional from/to filters (Unix ms)</span></div>' +
@@ -144,6 +145,9 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 const DAILY_PUBLISH_LIMIT = 15;
 const HOURLY_PUBLISH_LIMIT = 5;
 let publishTimestamps = []; // rolling window of publish times
+
+var METHODOLOGY_HTML = "";
+try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
 if (!MNEMONIC) {
   logError("DEMOS_MNEMONIC is required. Set it in .env");
@@ -1821,7 +1825,7 @@ function generatePrometheusMetrics(fleetData) {
         wallet: AGENT_WALLET,
         activeRpc: activeRpcUrl,
         demBalance: lastKnownBalance,
-        endpoints: ["/organism", "/health", "/dashboard", "/incidents", "/peers", "/reputation", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
+        endpoints: ["/organism", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/reputation", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
       }, null, 2));
     } else if (req.url === "/organism") {
       var canonical = computeCanonicalState();
@@ -1847,6 +1851,9 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML);
+    } else if (req.url === "/methodology") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(METHODOLOGY_HTML);
     } else if (req.url === "/badge") {
       var bCanonical = computeCanonicalState();
       var bStatus = bCanonical.status;
@@ -1991,7 +1998,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
   Confidence anchored by <span id="hw-fleet-count">—</span> reference nodes &nbsp;·&nbsp;
   Updated every 20s &nbsp;·&nbsp;
   Data quality: <span id="hw-quality">—</span> &nbsp;·&nbsp;
-  <a href="/docs" style="color:#58a6ff">Methodology</a>
+  <a href="/methodology" style="color:#58a6ff">Methodology</a>
 </div>
 
 <div class="footer" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
