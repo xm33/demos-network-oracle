@@ -219,12 +219,12 @@ async function fetchData() {
       if(!el)return;
       var v=org[k]||'\u2014';
       el.textContent=v.toUpperCase();
-      el.style.color=cardColor(v);
+      el.style.color=signalColor(v);
     });
     var ag=health.agreement||{};
     var agS=document.getElementById('ag-state');
     agS.textContent=(ag.state||'\u2014').toUpperCase();
-    agS.style.color=cardColor(ag.state);
+    agS.style.color=signalColor(ag.state);
     document.getElementById('ag-aligned').textContent=(ag.aligned_nodes!=null?ag.aligned_nodes:'\u2014')+' / '+(ag.total_nodes!=null?ag.total_nodes:'\u2014');
     document.getElementById('ag-spread').textContent=ag.block_spread!=null?ag.block_spread.toLocaleString():'\u2014';
     document.getElementById('ag-median').textContent=ag.median_block!=null?ag.median_block.toLocaleString():'\u2014';
