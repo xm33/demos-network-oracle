@@ -514,7 +514,7 @@ function computeCanonicalState() {
       if (alignedCount === blocks.length && blockSpread <= 2) agState = "strong";
       else if (alignedCount >= Math.ceil(blocks.length * 0.7)) agState = "moderate";
       else agState = "weak";
-      agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: pubTotal, median_block: medianBlock, block_spread: blockSpread };
+      agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: pubTotal, median_block: medianBlock, block_spread: blockSpread, max_block: blocks[blocks.length - 1], min_block: blocks[0] };
     }
   }
 
@@ -1999,51 +1999,48 @@ function isFleetIncident(inc) {
 async function refresh(){
   try{
     var r=await fetch("/health");var d=await r.json();
-    var pubBlock = (d.network_agreement&&d.network_agreement.max_block) || "?";
-    var pubTotal = (d.network_agreement&&d.network_agreement.total_nodes) || "?";
-    var pubAligned = (d.network_agreement&&d.network_agreement.aligned_nodes) || "?";
+    var pubBlock = (d.agreement&&(d.agreement.max_block||d.agreement.median_block)) || "?";
+    var pubTotal = (d.agreement&&d.agreement.total_nodes) || "?";
+    var pubAligned = (d.agreement&&d.agreement.aligned_nodes) || "?";
     document.getElementById("updated").textContent="Block "+pubBlock+
       " | "+pubAligned+"/"+pubTotal+" public nodes | Updated "+new Date(d.timestamp).toLocaleTimeString()+
-      " | Staleness "+d.stalenessSeconds+"s";
-    var rec=d.recommendation||{};
+      " | Staleness "+(d.staleness_seconds||0)+"s";
     var re=document.getElementById("rec");
-    re.textContent=rec.recommendation||"?";
-    re.className="rec "+(rec.recommendation==="SAFE"?"safe":rec.recommendation==="CAUTION"?"caution":rec.recommendation==="UNSAFE"?"unsafe":"unknown");
-    document.getElementById("rec-reason").textContent=(rec.safe_to_propose?"Safe to propose":"NOT safe to propose")+" — "+(rec.reason||"")+" (confidence: "+(rec.confidence||"?")+")";
+    re.textContent=(d.status||"unknown").toUpperCase();
+    re.className="rec "+(d.status==="stable"?"safe":d.status==="degraded"?"caution":d.status==="unstable"?"unsafe":"unknown");
+    document.getElementById("rec-reason").textContent=(d.reason||"")+" · Risk: "+(d.risk||"?").toUpperCase()+" · Confidence: "+(d.confidence||"?").toUpperCase();
     var ng=document.getElementById("nodes");ng.innerHTML="";
-    if(d.fleet&&d.fleet.nodes){d.fleet.nodes.forEach(function(n){
+    if(d.reference&&d.reference.fleet_nodes){d.reference.fleet_nodes.forEach(function(n){
       var cls=n.status==="HEALTHY"?"healthy":"unhealthy";
       ng.innerHTML+='<div class="node '+cls+'"><h3>'+n.name+'</h3><div class="status">'+(n.status==="HEALTHY"?"\u2705":"\u274C")+" "+n.status+'</div><div class="block">Block '+(n.blockHeight||"?")+'</div></div>';
     });}
     var mg=document.getElementById("metrics");mg.innerHTML="";
     // Summary cards — public network focused only
-    if(d.network_agreement){
-      var na=d.network_agreement;
-      var agCol=na.status==="strong"?"#3fb950":na.status==="moderate"?"#d29922":"#f85149";
-      mg.innerHTML+='<div class="metric"><div class="label">Network Block</div><div class="value">'+(na.max_block||"?")+'</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Agreement</div><div class="value" style="color:'+agCol+'">'+na.status.toUpperCase()+'</div></div>';
+    if(d.agreement){
+      var na=d.agreement;
+      var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
+      mg.innerHTML+='<div class="metric"><div class="label">Network Block</div><div class="value">'+(na.max_block||na.median_block||"?")+'</div></div>';
+      mg.innerHTML+='<div class="metric"><div class="label">Agreement</div><div class="value" style="color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Public Nodes</div><div class="value">'+na.aligned_nodes+'/'+na.total_nodes+' online</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Block Spread</div><div class="value" style="color:'+(na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+na.block_spread+'</div></div>';
     }
-    if(d.decision){
-      var dec=d.decision;
-      var riskCol=dec.risk_level==="low"?"#3fb950":dec.risk_level==="medium"?"#d29922":"#f85149";
-      mg.innerHTML+='<div class="metric"><div class="label">Risk Level</div><div class="value" style="color:'+riskCol+'">'+dec.risk_level.toUpperCase()+'</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Confidence</div><div class="value">'+(Math.round(dec.confidence*100))+'%</div></div>';
-    }
-    mg.innerHTML+='<div class="metric"><div class="label">Active Incidents</div><div class="value">'+((d.activeIncidents&&d.activeIncidents.length)||0)+'</div></div>';
+    var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
+    mg.innerHTML+='<div class="metric"><div class="label">Risk</div><div class="value" style="color:'+riskCol+'">'+d.risk.toUpperCase()+'</div></div>';
+    var confCol=d.confidence==="clear"?"#3fb950":"#d29922";
+    mg.innerHTML+='<div class="metric"><div class="label">Confidence</div><div class="value" style="color:'+confCol+'">'+d.confidence.toUpperCase()+'</div></div>';
+    mg.innerHTML+='<div class="metric"><div class="label">Active Incidents</div><div class="value">'+d.active_incidents+'</div></div>';
 
     // Network agreement panel
     var agBox=document.getElementById("agreement-status");
-    if(agBox&&d.network_agreement){
-      var na=d.network_agreement;
-      var agCol=na.status==="strong"?"#3fb950":na.status==="moderate"?"#d29922":"#f85149";
+    if(agBox&&d.agreement){
+      var na=d.agreement;
+      var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
       var html='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+na.status.toUpperCase()+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Aligned</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+na.aligned_nodes+'/'+na.total_nodes+'</div></div>';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Median Block</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(na.median_block||"?")+'</div></div>';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Block Spread</div><div style="font-size:1.1em;font-weight:bold;color:'+(na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+na.block_spread+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement %</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+na.agreement_ratio+'%</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement %</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+(na.total_nodes>0?Math.round(na.aligned_nodes/na.total_nodes*100):0)+'%</div></div>';
       html+='</div>';
       if(na.outlier_nodes&&na.outlier_nodes.length>0){
         html+='<div style="font-size:0.82em;color:#d29922;margin-top:4px">⚠ Outliers: '+na.outlier_nodes.map(function(o){return o.name+' ('+o.block+', lag '+o.lag+')'}).join(', ')+'</div>';
@@ -2066,12 +2063,12 @@ async function refresh(){
     var hwPublic=document.getElementById("hw-public-count");
     var hwFleet=document.getElementById("hw-fleet-count");
     var hwQuality=document.getElementById("hw-quality");
-    if(hwPublic&&d.network_agreement) hwPublic.textContent=d.network_agreement.total_nodes;
-    if(hwFleet&&d.fleet) hwFleet.textContent=d.fleet.size;
-    if(hwQuality&&d.scores) hwQuality.textContent=d.scores.data_confidence+'%';
+    if(hwPublic&&d.agreement) hwPublic.textContent=d.agreement.total_nodes;
+    if(hwFleet&&d.reference) hwFleet.textContent=d.reference.fleet_size;
+    if(hwQuality&&d.data_quality) hwQuality.textContent=d.data_quality.toUpperCase();
     var sb=document.getElementById("sla-body");sb.innerHTML="";
-    var up=d.uptime||{};
-    if(d.fleet&&d.fleet.nodes){d.fleet.nodes.forEach(function(n){
+    var up=(d.reference&&d.reference.uptime)||{};
+    if(d.reference&&d.reference.fleet_nodes){d.reference.fleet_nodes.forEach(function(n){
       var u=up[n.name]||{healthy:0,total:0};
       var pct=u.total>0?Math.round(u.healthy/u.total*100):null;
       var pctStr=pct!==null?pct+"%":"—";
@@ -2086,19 +2083,17 @@ async function refresh(){
   }catch(e){}
   try{
     var db=document.getElementById("decision-status");
-    if(db&&d.decision){
-      var dec=d.decision;
-      var sc=d.scores||{};
-      var statusCol=dec.status==="stable"?"#3fb950":dec.status==="recovering"?"#58a6ff":dec.status==="degraded"?"#d29922":"#f85149";
-      var riskCol=dec.risk_level==="low"?"#3fb950":dec.risk_level==="medium"?"#d29922":"#f85149";
+    if(db&&d.status){
+      var statusCol=d.status==="stable"?"#3fb950":d.status==="degraded"?"#d29922":d.status==="unstable"?"#f85149":"#8b949e";
+      var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
       var html='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Status</div><div style="font-size:1.1em;font-weight:bold;color:'+statusCol+'">'+dec.status.toUpperCase()+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Risk</div><div style="font-size:1.1em;font-weight:bold;color:'+riskCol+'">'+dec.risk_level.toUpperCase()+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Confidence</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(Math.round(dec.confidence*100))+'%</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Partition Risk</div><div style="font-size:1.1em;font-weight:bold;color:'+(sc.partition_risk>30?"#f85149":sc.partition_risk>10?"#d29922":"#3fb950")+'">'+(sc.partition_risk||0)+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Status</div><div style="font-size:1.1em;font-weight:bold;color:'+statusCol+'">'+d.status.toUpperCase()+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Risk</div><div style="font-size:1.1em;font-weight:bold;color:'+riskCol+'">'+d.risk.toUpperCase()+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Confidence</div><div style="font-size:1.1em;font-weight:bold;color:'+(d.confidence==="clear"?"#3fb950":"#d29922")+'">'+d.confidence.toUpperCase()+'</div></div>';
+      var dqCol=d.data_quality==="sufficient"?"#3fb950":"#d29922";
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Data Quality</div><div style="font-size:1.1em;font-weight:bold;color:'+dqCol+'">'+d.data_quality.toUpperCase()+'</div></div>';
       html+='</div>';
-      html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+dec.reason+'</div>';
-      html+='<div style="font-size:0.75em;color:#484f58;margin-top:6px">Valid until: '+new Date(dec.valid_until).toLocaleTimeString()+'</div>';
+      html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+(d.reason||'')+'</div>';
       db.innerHTML=html;
     }
     // Filter signals — only show public/network signals on main page
