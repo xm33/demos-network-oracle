@@ -1642,41 +1642,13 @@ function generatePrometheusMetrics(fleetData) {
         staleness_seconds: canonical.staleness_seconds,
         last_updated: canonical.last_updated,
         api_version: canonical.api_version,
+        // === Derived ===
         reason: healthDecision.reason,
-        agent: AGENT_NAME,
-        description: "Autonomous health oracle for the Demos Network. Monitors 7 validator nodes + public network nodes every 20min. Provides machine-readable signals, incidents, reputation scores, and on-chain attested health reports via SuperColony.",
-        wallet: AGENT_WALLET,
-        version: "6.8",
-        fleet_size: FLEET_SIZE,
-        // nodes: removed from public API — fleet data is in reference layer only
-        timestamp: new Date().toISOString(),
-        cycleCount: cycleCount,
-        lastCycleAt: staleness.lastCycleAt, // FIX BUG 7
-        stalenessSeconds: staleness.stalenessSeconds, // FIX BUG 7
-        fleet: latestHealthData ? {
-          size: FLEET_SIZE,
-          healthy: latestHealthData.nodeReports ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
-          block: latestHealthData.chain ? latestHealthData.chain.block : null,
-          tps: latestHealthData.chain ? latestHealthData.chain.tps : null,
-          nodes: latestHealthData ? latestHealthData.nodeReports || [] : [],
-          nodeVersions: nodeVersions,
-        } : null,
-        recommendation: getRecommendation(latestHealthData),
-        publicRpcs: publicRpcStats,
-        reputationScores: history.length > 0 ? calculateReputationScores() : null,
-        discoveredPeers: Object.keys(discoveredPeers).length,
-        uptime: uptimeStats,
-        signals: generateSignals(latestHealthData, getStaleness()),
-        signals_grouped: groupSignals(generateSignals(latestHealthData, getStaleness())),
-        decision: generateDecision(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
-        scores: generateScores(latestHealthData, getStaleness(), generateSignals(latestHealthData, getStaleness())),
+        publicNodes: latestPublicNodes || [],
+        signals_grouped: groupSignals(healthSignals),
         network_agreement: generateNetworkAgreement(latestHealthData, latestPublicNodes),
         validator_growth: getValidatorGrowth(),
-        activeIncidents: getPublicActiveIncidentIds(),
-        publicNodes: latestPublicNodes || [],
-        instanceRole: INSTANCE_ROLE,
-        dahrEnabled: dahrAvailable === true,
-        writeBudget: canPublish(), // FIX BUG 6: expose budget status
+        discoveredPeers: Object.keys(discoveredPeers).length,
         reference: {
           fleet_size: FLEET_SIZE,
           fleet_healthy: latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
@@ -2007,7 +1979,7 @@ async function refresh(){
     var pubTotal = (d.agreement&&d.agreement.total_nodes) || "?";
     var pubAligned = (d.agreement&&d.agreement.aligned_nodes) || "?";
     document.getElementById("updated").textContent="Block "+pubBlock+
-      " | "+pubAligned+"/"+pubTotal+" public nodes | Updated "+new Date(d.timestamp).toLocaleTimeString()+
+      " | "+pubAligned+"/"+pubTotal+" public nodes | Updated "+new Date(d.last_updated).toLocaleTimeString()+
       " | Staleness "+(d.staleness_seconds||0)+"s";
     var re=document.getElementById("rec");
     re.textContent=(d.status||"unknown").toUpperCase();
