@@ -1645,6 +1645,8 @@ function generatePrometheusMetrics(fleetData) {
         // === Derived ===
         reason: healthDecision.reason,
         publicNodes: latestPublicNodes || [],
+        signals: healthSignals,
+        signals: healthSignals,
         signals_grouped: groupSignals(healthSignals),
         network_agreement: generateNetworkAgreement(latestHealthData, latestPublicNodes),
         validator_growth: getValidatorGrowth(),
