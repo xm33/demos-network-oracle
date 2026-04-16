@@ -332,7 +332,10 @@ function getRecommendation(data) {
 
 // Load incident counter from DB on startup
 function getValidatorGrowth() {
-  if (!sharedDb) return { today: 0, week: 0, total: 0, online: 0, synced: 0, monitored: Object.keys(PUBLIC_NODES).length };
+  var result = { today: 0, week: 0, total: 0, online: 0, synced: 0, monitored: Object.keys(PUBLIC_NODES).length, network_head: 0, validators: [] };
+  var pubOnline = (latestPublicNodes || []).filter(function(n) { return n.ok && n.block; });
+  if (pubOnline.length > 0) result.network_head = Math.max.apply(null, pubOnline.map(function(n) { return n.block; }));
+  if (!sharedDb) return result;
   try {
     var now = Date.now();
     var dayAgo = now - 86400000;
@@ -340,6 +343,9 @@ function getValidatorGrowth() {
     var total = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries").get().c;
     var today = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries WHERE first_seen > ?").get(dayAgo).c;
     var week = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries WHERE first_seen > ?").get(weekAgo).c;
+    result.total = total;
+    result.today = today;
+    result.week = week;
 
     // Live state from discovered peers
     var peers = Object.values(discoveredPeers || {});
@@ -352,12 +358,35 @@ function getValidatorGrowth() {
       var pubBlocks = pubOnline.map(function(n) { return n.block; });
       networkHead = Math.max.apply(null, pubBlocks);
     }
-    var syncedCount = peers.filter(function(p) { return p.online && p.block && networkHead > 0 && (networkHead - p.block) < 100; }).length;
-
-    var monitored = Object.keys(PUBLIC_NODES).length;
-
-    return { today: today, week: week, total: total, online: onlineCount, synced: syncedCount, monitored: monitored };
-  } catch(e) { return { today: 0, week: 0, total: 0, online: 0, synced: 0, monitored: Object.keys(PUBLIC_NODES).length }; }
+    var syncedCount = 0;
+    var dbRows = sharedDb.query("SELECT identity, first_seen, connection FROM validator_discoveries ORDER BY first_seen").all();
+    var validators = [];
+    for (var vi = 0; vi < dbRows.length; vi++) {
+      var row = dbRows[vi];
+      var identity = row.identity;
+      var isMonitored = !!PUBLIC_NODE_IDENTITIES[identity];
+      var display = (row.connection || "unknown").replace("http://", "");
+      var block = null, online = false;
+      if (isMonitored) {
+        var nodeName = PUBLIC_NODE_IDENTITIES[identity];
+        display = nodeName;
+        var pubNode = (latestPublicNodes || []).find(function(n) { return n.name === nodeName; });
+        if (pubNode) { block = pubNode.block || null; online = pubNode.ok || false; }
+      } else if (discoveredPeers[identity]) {
+        block = discoveredPeers[identity].block || null;
+        online = discoveredPeers[identity].online || false;
+      }
+      var lag = (block && result.network_head > 0) ? result.network_head - block : null;
+      var syncPct = (block && result.network_head > 0) ? Math.round((block / result.network_head) * 1000) / 10 : 0;
+      validators.push({ display: display, block: block, lag: lag, sync_pct: syncPct, online: online, monitored: isMonitored, first_seen_hours_ago: Math.round((now - row.first_seen) / 3600000) });
+      if (online) result.online++;
+      if (online && lag !== null && lag < 100) syncedCount++;
+    }
+    validators.sort(function(a, b) { if (a.monitored !== b.monitored) return a.monitored ? -1 : 1; return (b.sync_pct || 0) - (a.sync_pct || 0); });
+    result.validators = validators;
+    result.synced = syncedCount;
+    return result;
+  } catch(e) { return result; }
 }
 
 function generateNetworkAgreement(fleetData, publicNodes) {
@@ -1893,6 +1922,12 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
   <div id="agreement-status">Loading...</div>
 </div>
 
+<!-- SECTION 2b: Network Growth -->
+<div id="growth-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
+  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">\ud83d\udcc8 Network Growth</h2>
+  <div id="growth-status">Loading...</div>
+</div>
+
 <!-- SECTION 3: Public network nodes -->
 <div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
   <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2>
@@ -2041,18 +2076,6 @@ async function refresh(){
       } else {
         html+='<div style="font-size:0.82em;color:#3fb950;margin-top:4px">✅ All public nodes aligned with network head</div>';
       }
-      if(d.validator_growth){
-        var vg=d.validator_growth;
-        html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid #21262d;display:flex;gap:16px;flex-wrap:wrap">';
-        html+='<span style="font-size:0.8em;color:#8b949e">Validators: </span>';
-        html+='<span style="font-size:0.8em;color:#c9d1d9">+'+vg.today+' today</span>';
-        html+='<span style="font-size:0.8em;color:#c9d1d9">+'+vg.week+' this week</span>';
-        html+='<span style="font-size:0.8em;color:#58a6ff">'+vg.total+' discovered</span>';
-        html+='<span style="font-size:0.8em;color:#3fb950">'+vg.online+' online</span>';
-        html+='<span style="font-size:0.8em;color:'+(vg.synced===vg.online?'#3fb950':'#d29922')+'">'+vg.synced+' synced</span>';
-        html+='<span style="font-size:0.8em;color:#58a6ff">'+vg.monitored+' monitored</span>';
-        html+='</div>';
-      }
       agBox.innerHTML=html;
     }
 
@@ -2063,6 +2086,32 @@ async function refresh(){
     if(hwPublic&&d.agreement) hwPublic.textContent=d.agreement.total_nodes;
     if(hwFleet&&d.reference) hwFleet.textContent=d.reference.fleet_size;
     if(hwQuality&&d.data_quality) hwQuality.textContent=d.data_quality.toUpperCase();
+    var gb=document.getElementById("growth-status");
+    if(gb&&d.validator_growth){
+      var vg=d.validator_growth;
+      var gh='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Discovered</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.total+'</div></div>';
+      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Online</div><div style="font-size:1.1em;font-weight:bold;color:#3fb950">'+vg.online+'</div></div>';
+      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Synced</div><div style="font-size:1.1em;font-weight:bold;color:'+(vg.synced>0?'#3fb950':'#d29922')+'">'+vg.synced+'</div></div>';
+      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Monitored</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.monitored+'</div></div>';
+      gh+='</div>';
+      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:12px">+'+vg.today+' today \u00b7 +'+vg.week+' this week</div>';
+      if(vg.validators&&vg.validators.length>0){
+        gh+='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Validator</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Sync</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Status</th><th style="color:#8b949e;text-align:right;padding:4px 8px;border-bottom:1px solid #21262d">Since</th></tr></thead><tbody>';
+        vg.validators.forEach(function(v){
+          var syncCol=v.sync_pct>=99.9?'#3fb950':v.sync_pct>=90?'#d29922':'#f85149';
+          var statusIcon=v.monitored?'\u2705 monitored':v.sync_pct>=99.9?'\u2705 ready':v.sync_pct>=50?'\ud83d\udd04 catching up':'\ud83d\udd04 syncing';
+          var since=v.first_seen_hours_ago<24?v.first_seen_hours_ago+'h ago':Math.round(v.first_seen_hours_ago/24)+'d ago';
+          gh+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+v.display+'</b></td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(v.block?v.block.toLocaleString():'?')+'</td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;color:'+syncCol+'">'+v.sync_pct+'%</td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+statusIcon+'</td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;text-align:right;color:#8b949e">'+since+'</td></tr>';
+        });
+        gh+='</tbody></table>';
+      }
+      gb.innerHTML=gh;
+    }
     var sb=document.getElementById("sla-body");sb.innerHTML="";
     var up=(d.reference&&d.reference.uptime)||{};
     if(d.reference&&d.reference.fleet_nodes){d.reference.fleet_nodes.forEach(function(n){
