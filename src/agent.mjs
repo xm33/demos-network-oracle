@@ -617,6 +617,35 @@ function computeCanonicalState() {
   return { status: status, trend: trend, risk: risk, data_quality: data_quality, confidence: confidence, agreement: agreement, active_incidents: publicIncidentCount, max_incident_severity: max_incident_severity, summary: summary, staleness_seconds: stalenessSeconds, last_updated: new Date().toISOString(), api_version: "1.0" };
 }
 
+// M3: Record public node observation snapshot
+function recordPublicNodeHistory() {
+  if (!sharedDb) return;
+  try {
+    var canonical = computeCanonicalState();
+    var nodes = (latestPublicNodes || []).map(function(n) {
+      return { name: n.name, ok: n.ok || false, block: n.block || null, latency: n.latencyMs || null };
+    });
+    sharedDb.run(
+      "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        Date.now(),
+        canonical.status,
+        canonical.risk,
+        canonical.confidence,
+        canonical.data_quality,
+        canonical.agreement.state,
+        canonical.agreement.median_block,
+        canonical.agreement.block_spread,
+        canonical.agreement.total_nodes,
+        nodes.filter(function(n) { return n.ok; }).length,
+        JSON.stringify(nodes)
+      ]
+    );
+    var cutoff = Date.now() - 7 * 86400000;
+    sharedDb.run("DELETE FROM public_node_history WHERE ts < ?", [cutoff]);
+  } catch(e) { log("  [history] Public node history write error: " + e.message); }
+}
+
 function generateSignals(data, stalenessSeconds) {
   var signals = [];
   if (!data || !data.nodeReports) {
@@ -2456,6 +2485,23 @@ async function main() {
     online INTEGER DEFAULT 1
   )`);
 
+  // M3: Public node history — per-cycle observation snapshots
+  sharedDb.run(`CREATE TABLE IF NOT EXISTS public_node_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    risk TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    data_quality TEXT NOT NULL,
+    agreement_state TEXT NOT NULL,
+    median_block INTEGER,
+    block_spread INTEGER,
+    nodes_total INTEGER NOT NULL,
+    nodes_reachable INTEGER NOT NULL,
+    node_states TEXT NOT NULL
+  )`);
+  log("  Public node history table ready");
+
   // v6.4: Load incident counter from DB
   loadIncidentCounter();
   log("  Incident counter: " + incidentCounter);
@@ -2560,6 +2606,9 @@ async function main() {
       var cycleAttestations = publicRpcProbe.attestations;
       var publicNodeResults = await probePublicNodes();
       latestPublicNodes = publicNodeResults;
+
+      // M3: Record public node observation snapshot
+      recordPublicNodeHistory();
 
       // --- Check explorer (every cycle, lightweight) ---
       var explorerResult = await checkExplorer();
