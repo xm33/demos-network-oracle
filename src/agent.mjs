@@ -146,6 +146,8 @@ const DAILY_PUBLISH_LIMIT = 15;
 const HOURLY_PUBLISH_LIMIT = 5;
 let publishTimestamps = []; // rolling window of publish times
 
+var HOMEPAGE_HTML = "";
+try { HOMEPAGE_HTML = readFileSync("homepage.html", "utf8"); } catch(e) { HOMEPAGE_HTML = "<html><body><h1>Homepage not found</h1></body></html>"; }
 var METHODOLOGY_HTML = "";
 try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
@@ -1914,6 +1916,9 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML);
+    } else if (req.url === "/home") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(HOMEPAGE_HTML);
     } else if (req.url === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);
