@@ -1621,7 +1621,24 @@ function generatePrometheusMetrics(fleetData) {
 
     if (req.url === "/health" || req.url === "/") {
       var staleness = getStaleness(); // FIX BUG 7
+      var canonical = computeCanonicalState();
+      var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
+      var healthDecision = generateDecision(latestHealthData, staleness.stalenessSeconds, healthSignals);
+      var healthScores = generateScores(latestHealthData, staleness.stalenessSeconds, healthSignals);
+      var healthRec = getRecommendation(latestHealthData);
       var payload = {
+        status: canonical.status,
+        trend: canonical.trend,
+        risk: canonical.risk,
+        data_quality: canonical.data_quality,
+        confidence: canonical.confidence,
+        agreement: canonical.agreement,
+        active_incidents: canonical.active_incidents,
+        max_incident_severity: canonical.max_incident_severity,
+        staleness_seconds: canonical.staleness_seconds,
+        last_updated: canonical.last_updated,
+        api_version: canonical.api_version,
+        reason: healthDecision.reason,
         agent: AGENT_NAME,
         description: "Autonomous health oracle for the Demos Network. Monitors 7 validator nodes + public network nodes every 20min. Provides machine-readable signals, incidents, reputation scores, and on-chain attested health reports via SuperColony.",
         wallet: AGENT_WALLET,
@@ -1656,6 +1673,24 @@ function generatePrometheusMetrics(fleetData) {
         instanceRole: INSTANCE_ROLE,
         dahrEnabled: dahrAvailable === true,
         writeBudget: canPublish(), // FIX BUG 6: expose budget status
+        reference: {
+          fleet_size: FLEET_SIZE,
+          fleet_healthy: latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
+          fleet_nodes: latestHealthData ? latestHealthData.nodeReports || [] : [],
+          fleet_incidents: Object.values(activeIncidents).filter(function(i) {
+            if (i.description && (i.description.indexOf("Fleet reference") === 0 || i.description === "Chain-level issue detected")) return true;
+            if (i.affectedNodes && i.affectedNodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); })) return true;
+            return false;
+          }).map(function(i) { return { id: i.id, severity: i.severity, description: i.description, startedAt: i.startedAt }; }),
+          node_versions: nodeVersions,
+          reputation_scores: history.length > 0 ? calculateReputationScores() : null,
+          uptime: uptimeStats,
+        },
+        legacy: {
+          recommendation: healthRec,
+          decision: healthDecision,
+          scores: healthScores,
+        },
       };
       res.writeHead(200);
       res.end(JSON.stringify(payload, null, 2));
