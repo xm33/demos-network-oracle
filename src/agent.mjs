@@ -596,13 +596,13 @@ function computeCanonicalState() {
   var status;
   if (data_quality === "insufficient") status = "unknown";
   else if (max_incident_severity === "critical" || agreement.state === "weak" || (pubTotal > 0 && pubReachable <= Math.floor(pubTotal * 0.5))) status = "unstable";
-  else if (max_incident_severity === "warning" || agreement.state === "moderate" || (pubTotal > 2 && pubTotal - pubReachable > 1)) status = "degraded";
+  else if (max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
   else status = "stable";
 
   var risk;
   if (status === "unknown") risk = "elevated";
   else if (status === "unstable" || max_incident_severity === "critical" || agreement.state === "weak") risk = "high";
-  else if (status === "degraded" || max_incident_severity === "warning" || confidence === "uncertain" || agreement.state === "moderate") risk = "elevated";
+  else if (status === "degraded" || max_incident_severity === "warning" || confidence === "uncertain" || agreement.state === "moderate" || (pubTotal > 2 && pubTotal - pubReachable > 1)) risk = "elevated";
   else risk = "low";
 
   // M4: Trend computation from public node history
