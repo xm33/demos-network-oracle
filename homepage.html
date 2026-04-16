@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demos Network Oracle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --border: #1f1f1f;
+  --text: #a3a3a3;
+  --text-bright: #ffffff;
+  --brand: #2B36D9;
+  --stable: #00DAFF;
+  --degraded: #CA2800;
+  --unstable: #EF4444;
+  --improving: #10B981;
+  --unknown: #6b7280;
+  --mono: 'Source Code Pro', monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+
+.navbar { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:48px; border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:100; }
+.navbar-brand { font-family:var(--mono); font-weight:700; font-size:14px; letter-spacing:3px; color:var(--brand); }
+.navbar-links { display:flex; align-items:center; gap:20px; }
+.navbar-links a { font-size:12px; font-weight:500; color:var(--text); text-decoration:none; letter-spacing:0.5px; text-transform:uppercase; transition:color 0.2s; }
+.navbar-links a:hover { color:var(--text-bright); }
+.nav-pill { font-family:var(--mono); font-size:11px; font-weight:600; padding:3px 10px; border-radius:3px; letter-spacing:1px; margin-left:8px; }
+
+.main { max-width:960px; margin:0 auto; padding:0 24px; }
+
+.hero { padding:48px 0 32px; border-bottom:1px solid var(--border); }
+.hero-label { font-size:12px; font-weight:500; color:var(--brand); letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
+.hero-status { font-family:var(--mono); font-size:48px; font-weight:700; letter-spacing:2px; line-height:1.1; margin-bottom:16px; }
+.hero-meta { font-size:13px; color:var(--text); margin-bottom:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.hero-meta .sep { color:#333; }
+.hero-meta .val { font-family:var(--mono); font-weight:600; font-size:12px; }
+.hero-summary { font-family:var(--mono); font-size:13px; color:var(--text); margin-top:12px; opacity:0.8; }
+.hero-staleness { font-size:12px; color:var(--text); margin-top:8px; font-family:var(--mono); opacity:0.5; }
+
+.section { padding:28px 0; border-bottom:1px solid var(--border); }
+.section-title { font-size:11px; font-weight:600; color:var(--brand); letter-spacing:2px; text-transform:uppercase; margin-bottom:16px; }
+
+.cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; }
+.card-label { font-size:11px; font-weight:500; color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; }
+.card-value { font-family:var(--mono); font-size:20px; font-weight:700; letter-spacing:1px; }
+
+.agreement-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.ag-item { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px; }
+.ag-label { font-size:10px; font-weight:500; color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+.ag-value { font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-bright); }
+
+.vtable { width:100%; border-collapse:collapse; font-size:13px; }
+.vtable th { font-size:10px; font-weight:600; color:var(--text); letter-spacing:1px; text-transform:uppercase; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+.vtable td { padding:10px; border-bottom:1px solid #181818; font-family:var(--mono); font-size:12px; }
+.vtable tr:hover { background:#0d0d0d; }
+.status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
+.dot-online { background:var(--improving); }
+.dot-offline { background:var(--unstable); }
+
+.summary-text { font-family:var(--mono); font-size:14px; color:var(--text); line-height:1.6; opacity:0.85; }
+
+.inc-count { font-family:var(--mono); font-size:28px; font-weight:700; margin-bottom:4px; }
+.inc-label { font-size:12px; color:var(--text); }
+.inc-list { margin-top:12px; }
+.inc-item { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--degraded); border-radius:0 4px 4px 0; padding:10px 14px; margin-bottom:8px; font-size:13px; }
+.inc-item.critical { border-left-color:var(--unstable); }
+
+.api-endpoints { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.api-link { font-family:var(--mono); font-size:13px; color:var(--stable); text-decoration:none; padding:6px 12px; border:1px solid var(--border); border-radius:4px; transition:border-color 0.2s; }
+.api-link:hover { border-color:var(--stable); }
+.api-example { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--text); overflow-x:auto; white-space:pre; }
+
+.footer { padding:24px 0; text-align:center; font-size:11px; color:var(--text); }
+.footer a { color:var(--text); text-decoration:none; }
+.footer a:hover { color:var(--brand); }
+
+.loading { color:var(--text); font-family:var(--mono); font-size:13px; }
+
+@media (max-width:640px) {
+  .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
+  .hero-status { font-size:32px; }
+  .navbar-links a { font-size:10px; }
+  .navbar-links { gap:12px; }
+}
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">ORACLE</div>
+  <div class="navbar-links">
+    <a href="#overview">Overview</a>
+    <a href="#nodes">Nodes</a>
+    <a href="#incidents">Incidents</a>
+    <a href="/methodology">Methodology</a>
+    <a href="/docs">API</a>
+    <span id="nav-pill" class="nav-pill">—</span>
+  </div>
+</nav>
+<div class="main">
+  <section class="hero" id="overview">
+    <div class="hero-label">Demos Network</div>
+    <div id="hero-status" class="hero-status loading">Loading...</div>
+    <div id="hero-meta" class="hero-meta"></div>
+    <div id="hero-summary" class="hero-summary"></div>
+    <div id="hero-staleness" class="hero-staleness"></div>
+  </section>
+  <section class="section">
+    <div class="section-title">Core State</div>
+    <div class="cards">
+      <div class="card"><div class="card-label">Status</div><div id="card-status" class="card-value loading">—</div></div>
+      <div class="card"><div class="card-label">Trend</div><div id="card-trend" class="card-value loading">—</div></div>
+      <div class="card"><div class="card-label">Risk</div><div id="card-risk" class="card-value loading">—</div></div>
+      <div class="card"><div class="card-label">Confidence</div><div id="card-confidence" class="card-value loading">—</div></div>
+    </div>
+  </section>
+  <section class="section">
+    <div class="section-title">Agreement</div>
+    <div class="agreement-grid">
+      <div class="ag-item"><div class="ag-label">State</div><div id="ag-state" class="ag-value">—</div></div>
+      <div class="ag-item"><div class="ag-label">Aligned</div><div id="ag-aligned" class="ag-value">—</div></div>
+      <div class="ag-item"><div class="ag-label">Block Spread</div><div id="ag-spread" class="ag-value">—</div></div>
+      <div class="ag-item"><div class="ag-label">Median Block</div><div id="ag-median" class="ag-value">—</div></div>
+    </div>
+  </section>
+  <section class="section" id="nodes">
+    <div class="section-title">Public Validators</div>
+    <table class="vtable">
+      <thead><tr><th>Node</th><th>Status</th><th>Block</th><th>Lag</th><th>Latency</th></tr></thead>
+      <tbody id="vtable-body"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+    </table>
+  </section>
+  <section class="section">
+    <div class="section-title">Network Summary</div>
+    <div id="net-summary" class="summary-text loading">Loading...</div>
+  </section>
+  <section class="section" id="incidents">
+    <div class="section-title">Incidents</div>
+    <div id="inc-count" class="inc-count">—</div>
+    <div class="inc-label">active incidents</div>
+    <div id="inc-list" class="inc-list"></div>
+  </section>
+  <section class="section">
+    <div class="section-title">API</div>
+    <div class="api-endpoints">
+      <a href="/organism" class="api-link">/organism</a>
+      <a href="/health" class="api-link">/health</a>
+      <a href="/incidents" class="api-link">/incidents</a>
+    </div>
+    <div id="api-example" class="api-example loading">Loading...</div>
+  </section>
+</div>
+<div class="footer">
+  Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a>
+</div>
+<script>
+function colorFor(v) {
+  var m = {
+    stable:'var(--stable)', degraded:'var(--degraded)', unstable:'var(--unstable)', unknown:'var(--unknown)',
+    low:'var(--stable)', elevated:'var(--degraded)', high:'var(--unstable)',
+    clear:'var(--stable)', uncertain:'var(--degraded)',
+    sufficient:'var(--stable)', insufficient:'var(--degraded)',
+    improving:'var(--improving)', worsening:'var(--unstable)',
+    strong:'var(--stable)', moderate:'var(--degraded)', weak:'var(--unstable)'
+  };
+  return m[(v||'').toLowerCase()] || 'var(--text)';
+}
+function pillBg(s) {
+  var v=(s||'').toLowerCase();
+  if(v==='stable') return '#002a33';
+  if(v==='degraded') return '#2a0800';
+  if(v==='unstable') return '#3b0e0e';
+  return '#1f1f1f';
+}
+function setColored(id,value) {
+  var el=document.getElementById(id);
+  if(!el)return;
+  var v=value||'—';
+  el.textContent=v.toUpperCase();
+  el.style.color=colorFor(v);
+  el.classList.remove('loading');
+}
+async function fetchData() {
+  try {
+    var [orgRes,healthRes]=await Promise.all([fetch('/organism'),fetch('/health')]);
+    var org=await orgRes.json(), health=await healthRes.json();
+    var pill=document.getElementById('nav-pill');
+    pill.textContent=(org.status||'—').toUpperCase();
+    pill.style.color=colorFor(org.status);
+    pill.style.background=pillBg(org.status);
+    var hs=document.getElementById('hero-status');
+    hs.textContent=(org.status||'—').toUpperCase();
+    hs.style.color=colorFor(org.status);
+    hs.classList.remove('loading');
+    document.getElementById('hero-meta').innerHTML=
+      'Risk: <span class="val" style="color:'+colorFor(org.risk)+'">'+(org.risk||'—').toUpperCase()+'</span>'+
+      '<span class="sep">·</span>Confidence: <span class="val" style="color:'+colorFor(org.confidence)+'">'+(org.confidence||'—').toUpperCase()+'</span>'+
+      '<span class="sep">·</span>Data: <span class="val" style="color:'+colorFor(org.data_quality)+'">'+(org.data_quality||'—').toUpperCase()+'</span>';
+    document.getElementById('hero-summary').textContent=org.summary||'';
+    document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'—');
+    setColored('card-status',org.status);
+    setColored('card-trend',org.trend);
+    setColored('card-risk',org.risk);
+    setColored('card-confidence',org.confidence);
+    var ag=health.agreement||{};
+    var agS=document.getElementById('ag-state');
+    agS.textContent=(ag.state||'—').toUpperCase();
+    agS.style.color=colorFor(ag.state);
+    document.getElementById('ag-aligned').textContent=(ag.aligned_nodes!=null?ag.aligned_nodes:'—')+' / '+(ag.total_nodes!=null?ag.total_nodes:'—');
+    document.getElementById('ag-spread').textContent=ag.block_spread!=null?ag.block_spread.toLocaleString():'—';
+    document.getElementById('ag-median').textContent=ag.median_block!=null?ag.median_block.toLocaleString():'—';
+    var nodes=health.publicNodes||[], median=ag.median_block||0, tbody=document.getElementById('vtable-body');
+    if(nodes.length===0){ tbody.innerHTML='<tr><td colspan="5" style="color:var(--text)">No public nodes</td></tr>'; }
+    else {
+      var h='';
+      nodes.forEach(function(n){
+        var online=n.ok||n.status==='HEALTHY';
+        var lag=(n.block&&median)?Math.abs(median-n.block):null;
+        h+='<tr><td style="color:var(--text-bright)">'+(n.name||'—')+'</td>'+
+          '<td><span class="status-dot '+(online?'dot-online':'dot-offline')+'"></span>'+(online?'online':'offline')+'</td>'+
+          '<td>'+(n.block?n.block.toLocaleString():'—')+'</td>'+
+          '<td style="color:'+(lag===0?'var(--text)':lag!=null&&lag>10?'var(--degraded)':'var(--text)')+'">'+
+          (lag!=null?(lag===0?'±0':'+'+lag):'—')+'</td>'+
+          '<td style="color:var(--text)">'+(n.latencyMs!=null?n.latencyMs+'ms':'—')+'</td></tr>';
+      });
+      tbody.innerHTML=h;
+    }
+    var sumEl=document.getElementById('net-summary');
+    sumEl.textContent=org.summary||'No summary available';
+    sumEl.classList.remove('loading');
+    var incCount=document.getElementById('inc-count');
+    incCount.textContent=org.active_incidents!=null?org.active_incidents:'—';
+    incCount.style.color=org.active_incidents>0?'var(--degraded)':'var(--text)';
+    var incList=document.getElementById('inc-list');
+    if(org.active_incidents>0&&health.signals_grouped){
+      var items=(health.signals_grouped.critical||[]).concat(health.signals_grouped.warning||[]);
+      var ih='';
+      items.slice(0,5).forEach(function(s){ ih+='<div class="inc-item '+(s.severity||'')+'">'+
+        (s.message||s.type||'Unknown')+'</div>'; });
+      incList.innerHTML=ih;
+    } else { incList.innerHTML=''; }
+    document.getElementById('api-example').textContent='GET /organism\n\n'+JSON.stringify(org,null,2);
+  } catch(err) {
+    document.getElementById('hero-status').textContent='ERROR';
+    document.getElementById('hero-status').style.color='var(--unstable)';
+  }
+}
+fetchData();
+setInterval(fetchData,20000);
+</script>
+</body>
+</html>
