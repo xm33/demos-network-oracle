@@ -5,14 +5,14 @@
 <title>Demos Network Oracle</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg: #0a0a0a;
   --surface: #111111;
   --border: #1f1f1f;
-  --text: #9ca3af;
-  --text-bright: #ffffff;
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
   --brand: #2B36D9;
   --stable: #2dd4a0;
   --degraded: #CA2800;
@@ -23,117 +23,156 @@
   --sans: 'Inter', system-ui, sans-serif;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary); min-height:100vh; -webkit-font-smoothing:antialiased; }
 
+/* NAVBAR */
 .navbar { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:48px; border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:100; }
+.navbar-left { display:flex; align-items:center; gap:24px; }
+.navbar-right { display:flex; align-items:center; gap:12px; }
 .navbar-brand { font-family:var(--mono); font-weight:700; font-size:14px; letter-spacing:3px; color:var(--brand); }
-.navbar-links { display:flex; align-items:center; gap:20px; }
-.navbar-links a { font-size:12px; font-weight:500; color:var(--text); text-decoration:none; letter-spacing:0.5px; text-transform:uppercase; transition:color 0.2s; }
-.navbar-links a:hover { color:var(--text-bright); }
-.nav-pill { font-family:var(--mono); font-size:11px; font-weight:600; padding:3px 10px; border-radius:3px; letter-spacing:1px; margin-left:8px; }
+.nav-links { display:flex; align-items:center; gap:20px; }
+.nav-links a { font-size:12px; font-weight:500; color:var(--text-secondary); text-decoration:none; letter-spacing:0.5px; text-transform:uppercase; transition:color 0.2s; }
+.nav-links a:hover { color:var(--text-primary); }
+.nav-pill { font-family:var(--mono); font-size:11px; font-weight:600; padding:3px 10px; border-radius:3px; letter-spacing:1px; }
+.demos-brand-btn { display:inline-flex; align-items:center; gap:8px; padding:6px 14px; background:#0b0f1a; border:1px solid rgba(43,54,217,0.45); border-radius:8px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
+.demos-brand-btn:hover { background:#0d1220; border-color:rgba(43,54,217,0.7); }
+.dbtn-prefix { font-size:11px; font-weight:400; color:var(--text-secondary); }
+.dbtn-logo { height:16px; width:auto; }
+.dbtn-wordmark { font-size:12px; font-weight:600; letter-spacing:0.08em; }
 
 .main { max-width:960px; margin:0 auto; padding:0 24px; }
 
-.hero { padding:40px 0 28px; border-bottom:1px solid var(--border); }
-.hero-label { font-size:12px; font-weight:600; color:#d1d5db; letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
-.hero-status { font-family:var(--mono); font-size:48px; font-weight:700; letter-spacing:2px; line-height:1.1; margin-bottom:16px; }
-.hero-meta { font-size:14px; color:#d1d5db; margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.hero-meta .sep { color:#555; }
-.hero-meta .val { font-family:var(--mono); font-weight:700; font-size:13px; }
-.hero-summary { font-family:var(--mono); font-size:14px; color:#d1d5db; margin-top:12px; }
-.hero-staleness { font-size:12px; color:var(--text); margin-top:8px; font-family:var(--mono); opacity:0.7; }
+/* HERO */
+.hero { padding:28px 0 24px; border-bottom:1px solid var(--border); }
+.oracle-kicker { font-size:13px; color:#d1d5db; letter-spacing:0.06em; margin-bottom:8px; font-family:var(--sans); font-weight:400; }
+.oracle-status { font-family:var(--mono); font-size:32px; font-weight:600; letter-spacing:-0.02em; line-height:1.05; margin-bottom:12px; color:var(--text-primary); }
+.oracle-trustline { font-size:14px; line-height:1.4; color:var(--text-secondary); margin-bottom:8px; display:flex; gap:0; align-items:center; flex-wrap:wrap; }
+.tl-label { color:var(--text-secondary); }
+.tl-value { color:var(--text-primary); font-weight:500; font-family:var(--mono); font-size:13px; margin-left:4px; }
+.tl-sep { color:var(--text-secondary); padding:0 8px; opacity:0.5; }
+.hero-summary { font-family:var(--mono); font-size:13px; color:var(--text-secondary); margin-top:12px; opacity:0.8; }
+.oracle-staleness { font-size:12px; color:var(--text-secondary); opacity:0.78; margin-top:4px; font-family:var(--mono); }
 
+/* SECTIONS */
 .section { padding:24px 0; border-bottom:1px solid var(--border); }
-.section-title { font-size:11px; font-weight:600; color:var(--text); letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; }
+.section-title { font-size:11px; font-weight:600; color:var(--text-secondary); letter-spacing:2px; text-transform:uppercase; margin-bottom:12px; }
 
+/* SIGNAL CARDS */
 .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-.card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; }
-.card-label { font-size:11px; font-weight:500; color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; }
-.card-value { font-family:var(--mono); font-size:20px; font-weight:700; letter-spacing:1px; color:var(--text-bright); }
+.signal-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 16px; display:flex; flex-direction:column; gap:4px; }
+.signal-value { font-family:var(--mono); font-size:18px; line-height:1.2; font-weight:500; color:var(--text-primary); }
+.signal-label { font-size:12px; line-height:1.3; color:var(--text-secondary); text-transform:lowercase; }
 
+/* AGREEMENT */
 .agreement-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-.ag-item { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px; }
-.ag-label { font-size:10px; font-weight:500; color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
-.ag-value { font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-bright); }
+.ag-item { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 16px; display:flex; flex-direction:column; gap:4px; }
+.ag-value { font-family:var(--mono); font-size:16px; font-weight:500; color:var(--text-primary); }
+.ag-label { font-size:12px; color:var(--text-secondary); text-transform:lowercase; }
 
+/* GROWTH CARDS */
 .growth-cards { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
-.growth-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 16px; text-align:center; min-width:80px; }
-.growth-card .gc-label { font-size:10px; color:var(--text); letter-spacing:1px; text-transform:uppercase; }
-.growth-card .gc-value { font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-bright); margin-top:2px; }
-.growth-sub { font-size:12px; color:var(--text); margin-bottom:14px; font-family:var(--mono); }
+.growth-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 16px; text-align:center; min-width:80px; display:flex; flex-direction:column; gap:4px; }
+.gc-value { font-family:var(--mono); font-size:16px; font-weight:500; color:var(--text-primary); }
+.gc-label { font-size:10px; color:var(--text-secondary); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+.growth-sub { font-size:12px; color:var(--text-secondary); margin-bottom:12px; font-family:var(--mono); opacity:0.6; }
 
+/* VALIDATOR TABLE */
 .vtable { width:100%; border-collapse:collapse; font-size:13px; }
-.vtable th { font-size:10px; font-weight:600; color:var(--text); letter-spacing:1px; text-transform:uppercase; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
-.vtable td { padding:10px; border-bottom:1px solid #151515; font-family:var(--mono); font-size:12px; color:var(--text-bright); }
+.vtable th { font-size:10px; font-weight:600; color:var(--text-secondary); letter-spacing:1px; text-transform:uppercase; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+.vtable td { padding:8px 10px; border-bottom:1px solid #151515; font-family:var(--mono); font-size:12px; color:var(--text-primary); }
 .vtable tr:hover { background:#0d0d0d; }
 .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
 .dot-online { background:var(--improving); }
 .dot-offline { background:var(--unstable); }
 .dot-syncing { background:var(--unknown); }
-.sync-col { text-align:right; }
 
-.inc-count { font-family:var(--mono); font-size:28px; font-weight:700; margin-bottom:4px; color:var(--text-bright); }
-.inc-label { font-size:12px; color:var(--text); }
+/* INCIDENTS */
+.inc-count { font-family:var(--mono); font-size:28px; font-weight:700; margin-bottom:4px; color:var(--text-primary); }
+.inc-label { font-size:12px; color:var(--text-secondary); }
 .inc-list { margin-top:12px; }
 .inc-item { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--degraded); border-radius:0 4px 4px 0; padding:10px 14px; margin-bottom:8px; font-size:13px; }
 .inc-item.critical { border-left-color:var(--unstable); }
 
+/* API */
 .api-endpoints { display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
-.api-link { font-family:var(--mono); font-size:13px; color:var(--text-bright); text-decoration:none; padding:6px 12px; border:1px solid var(--border); border-radius:4px; transition:border-color 0.2s; }
+.api-link { font-family:var(--mono); font-size:13px; color:var(--text-primary); text-decoration:none; padding:6px 12px; border:1px solid var(--border); border-radius:4px; transition:border-color 0.2s; }
 .api-link:hover { border-color:#444; }
-.api-example { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--text); overflow-x:auto; white-space:pre; }
+.api-example { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--text-secondary); overflow-x:auto; white-space:pre; }
 
-.footer { padding:20px 0; text-align:center; font-size:11px; color:var(--text); line-height:1.8; }
-.footer a { color:var(--text); text-decoration:none; }
-.footer a:hover { color:var(--text-bright); }
-.footer .eco { margin-top:4px; opacity:0.6; }
+/* FOOTER */
+.footer { padding:24px 0; text-align:center; font-size:11px; color:var(--text-secondary); line-height:1.8; }
+.footer a { color:var(--text-secondary); text-decoration:none; }
+.footer a:hover { color:var(--text-primary); }
+.oracle-ecosystem { display:flex; gap:8px; justify-content:center; margin-bottom:0; flex-wrap:wrap; align-items:center; font-size:11px; opacity:0.6; }
+.oracle-ecosystem a { color:inherit; text-decoration:none; }
+.oracle-ecosystem a:hover { opacity:1; text-decoration:underline; }
 
-.loading { color:var(--text); font-family:var(--mono); font-size:13px; }
+.live-badge { display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:11px; font-weight:600; color:var(--improving); letter-spacing:1px; margin-right:12px; padding:3px 8px; background:#0a1a14; border-radius:3px; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:var(--improving); animation:livepulse 2s ease-in-out infinite; }
+@keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.demos-btn { display:inline-flex; align-items:center; gap:8px; background:#111827; border:1px solid #2a3040; border-radius:8px; padding:10px 20px; font-family:var(--sans); font-size:13px; font-weight:600; color:var(--text-primary); letter-spacing:1.2px; text-decoration:none; transition:all 0.2s; }
+.demos-btn:hover { border-color:#4a5568; background:#1a2234; }
+.demos-logo { font-weight:700; font-size:16px; opacity:0.8; }
+.eco-btn { display:inline-flex; align-items:center; background:#111827; border:1px solid #2a3040; border-radius:8px; padding:10px 18px; font-family:var(--sans); font-size:12px; font-weight:500; color:#d1d5db; letter-spacing:0.5px; text-decoration:none; transition:all 0.2s; }
+.eco-btn:hover { border-color:#4a5568; color:var(--text-primary); background:#1a2234; }
+.footer-meta { margin-top:12px; font-size:11px; opacity:0.45; }
+.loading { color:var(--text-secondary); font-family:var(--mono); font-size:13px; }
 
 @media (max-width:640px) {
   .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
-  .hero-status { font-size:32px; }
+  .oracle-status { font-size:24px; }
   .navbar-links a { font-size:10px; }
   .navbar-links { gap:12px; }
+  .oracle-trustline { font-size:13px; }
 }
 </style>
 </head>
 <body>
 <nav class="navbar">
-  <div class="navbar-brand">ORACLE</div>
-  <div class="navbar-links">
-    <a href="#overview">Overview</a>
-    <a href="#validators">Nodes</a>
-    <a href="#incidents">Incidents</a>
-    <a href="/methodology">Methodology</a>
-    <a href="/docs">API</a>
+  <div class="navbar-left">
+    <span class="navbar-brand">ORACLE</span>
+    <div class="nav-links">
+      <a href="#overview">Overview</a>
+      <a href="#validators">Nodes</a>
+      <a href="#incidents">Incidents</a>
+      <a href="/methodology">Methodology</a>
+      <a href="/docs">API</a>
+    </div>
+  </div>
+  <div class="navbar-right">
+    <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     <span id="nav-pill" class="nav-pill">—</span>
+    <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
+      <span class="dbtn-prefix">powered by</span>
+      <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="none" stroke="#fff" stroke-width="3"/></svg>
+      <span class="dbtn-wordmark">DEMOS</span>
+    </a>
   </div>
 </nav>
 <div class="main">
   <section class="hero" id="overview">
-    <div class="hero-label">Demos Network Oracle</div>
-    <div id="hero-status" class="hero-status loading">Loading...</div>
-    <div id="hero-meta" class="hero-meta"></div>
+    <div class="oracle-kicker">Demos Network Oracle</div>
+    <div id="hero-status" class="oracle-status loading">Loading...</div>
+    <div id="hero-trustline" class="oracle-trustline"></div>
     <div id="hero-summary" class="hero-summary"></div>
-    <div id="hero-staleness" class="hero-staleness"></div>
+    <div id="hero-staleness" class="oracle-staleness"></div>
   </section>
   <section class="section">
     <div class="section-title">Core State</div>
     <div class="cards">
-      <div class="card"><div class="card-label">Trend</div><div id="card-trend" class="card-value">—</div></div>
-      <div class="card"><div class="card-label">Risk</div><div id="card-risk" class="card-value">—</div></div>
-      <div class="card"><div class="card-label">Confidence</div><div id="card-confidence" class="card-value">—</div></div>
-      <div class="card"><div class="card-label">Data Quality</div><div id="card-dq" class="card-value">—</div></div>
+      <div class="signal-card"><div id="card-trend" class="signal-value">—</div><div class="signal-label">trend</div></div>
+      <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div></div>
+      <div class="signal-card"><div id="card-confidence" class="signal-value">—</div><div class="signal-label">confidence</div></div>
+      <div class="signal-card"><div id="card-dq" class="signal-value">—</div><div class="signal-label">data quality</div></div>
     </div>
   </section>
   <section class="section">
     <div class="section-title">Agreement</div>
     <div class="agreement-grid">
-      <div class="ag-item"><div class="ag-label">State</div><div id="ag-state" class="ag-value">—</div></div>
-      <div class="ag-item"><div class="ag-label">Aligned</div><div id="ag-aligned" class="ag-value">—</div></div>
-      <div class="ag-item"><div class="ag-label">Block Spread</div><div id="ag-spread" class="ag-value">—</div></div>
-      <div class="ag-item"><div class="ag-label">Median Block</div><div id="ag-median" class="ag-value">—</div></div>
+      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">state</div></div>
+      <div class="ag-item"><div id="ag-aligned" class="ag-value">—</div><div class="ag-label">aligned</div></div>
+      <div class="ag-item"><div id="ag-spread" class="ag-value">—</div><div class="ag-label">block spread</div></div>
+      <div class="ag-item"><div id="ag-median" class="ag-value">—</div><div class="ag-label">median block</div></div>
     </div>
   </section>
   <section class="section" id="validators">
@@ -162,21 +201,16 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   </section>
 </div>
 <div class="footer">
-  Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a>
-  <div class="eco"><a href="https://demos.sh">demos.sh</a> · <a href="https://scan.demos.sh">Scan</a> · <a href="https://faucet.demos.sh">Faucet</a></div>
+  <div class="oracle-ecosystem">
+    <a href="https://demos.sh">demos.sh</a>
+    <span>·</span>
+    <a href="https://scan.demos.sh">Scan</a>
+    <span>·</span>
+    <a href="https://faucet.demos.sh">Faucet</a>
+  </div>
+  <div class="footer-meta">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a></div>
 </div>
 <script>
-function cardColor(v) {
-  var abnormal = {
-    degraded:'var(--degraded)',unstable:'var(--unstable)',
-    elevated:'var(--degraded)',high:'var(--unstable)',
-    uncertain:'var(--degraded)',insufficient:'var(--degraded)',
-    improving:'var(--improving)',worsening:'var(--unstable)',
-    moderate:'var(--degraded)',weak:'var(--unstable)',
-    unknown:'var(--unknown)'
-  };
-  return abnormal[(v||'').toLowerCase()] || 'var(--text-bright)';
-}
 function signalColor(v) {
   var m = {
     stable:'var(--stable)',degraded:'var(--degraded)',unstable:'var(--unstable)',unknown:'var(--unknown)',
@@ -186,73 +220,108 @@ function signalColor(v) {
     improving:'var(--improving)',worsening:'var(--unstable)',
     strong:'var(--stable)',moderate:'var(--degraded)',weak:'var(--unstable)'
   };
-  return m[(v||'').toLowerCase()] || 'var(--text-bright)';
+  return m[(v||'').toLowerCase()] || 'var(--text-primary)';
+}
+function cardColor(v) {
+  var abnormal = {
+    degraded:'var(--degraded)',unstable:'var(--unstable)',
+    elevated:'var(--degraded)',high:'var(--unstable)',
+    uncertain:'var(--degraded)',insufficient:'var(--degraded)',
+    improving:'var(--improving)',worsening:'var(--unstable)',
+    moderate:'var(--degraded)',weak:'var(--unstable)',
+    unknown:'var(--unknown)'
+  };
+  return abnormal[(v||'').toLowerCase()] || 'var(--text-primary)';
 }
 function pillBg(s) {
   var v=(s||'').toLowerCase();
-  if(v==='stable') return '#002a33';
+  if(v==='stable') return '#0a2a22';
   if(v==='degraded') return '#2a0800';
   if(v==='unstable') return '#3b0e0e';
   return '#1f1f1f';
+}
+function statusColor(v) {
+  var s=(v||'').toLowerCase();
+  if(s==='stable') return 'var(--stable)';
+  if(s==='degraded') return 'var(--degraded)';
+  if(s==='unstable') return 'var(--unstable)';
+  return 'var(--text-secondary)';
 }
 async function fetchData() {
   try {
     var [orgRes,healthRes]=await Promise.all([fetch('/organism'),fetch('/health')]);
     var org=await orgRes.json(),health=await healthRes.json();
+
+    // Nav pill
     var pill=document.getElementById('nav-pill');
-    pill.textContent=(org.status||'—').toUpperCase();
+    pill.textContent=(org.status||'\u2014').toUpperCase();
     pill.style.color=signalColor(org.status);
     pill.style.background=pillBg(org.status);
+
+    // Hero status
     var hs=document.getElementById('hero-status');
-    hs.textContent=(org.status||'—').toUpperCase();
-    hs.style.color=signalColor(org.status);
+    hs.textContent=(org.status||'\u2014').toUpperCase();
+    hs.style.color=statusColor(org.status);
     hs.classList.remove('loading');
-    document.getElementById('hero-meta').innerHTML=
-      'Risk: <span class="val" style="color:'+cardColor(org.risk)+'">'+(org.risk||'—').toUpperCase()+'</span>'+
-      '<span class="sep">\u00b7</span>Confidence: <span class="val" style="color:'+cardColor(org.confidence)+'">'+(org.confidence||'—').toUpperCase()+'</span>'+
-      '<span class="sep">\u00b7</span>Data: <span class="val" style="color:'+cardColor(org.data_quality)+'">'+(org.data_quality||'—').toUpperCase()+'</span>';
+
+    // Trust line with incidents inline
+    var incVal=org.active_incidents!=null?org.active_incidents:'\u2014';
+    var incColor=org.active_incidents>0?'var(--degraded)':'var(--text-primary)';
+    var incWeight=org.active_incidents>0?'700':'500';
+    document.getElementById('hero-trustline').innerHTML=
+      '<span class="tl-label">risk:</span><span class="tl-value" style="color:'+cardColor(org.risk)+'">'+(org.risk||'\u2014').toLowerCase()+'</span>'+
+      '<span class="tl-sep">\u00b7</span>'+
+      '<span class="tl-label">confidence:</span><span class="tl-value" style="color:'+cardColor(org.confidence)+'">'+(org.confidence||'\u2014').toLowerCase()+'</span>'+
+      '<span class="tl-sep">\u00b7</span>'+
+      '<span class="tl-label">data:</span><span class="tl-value" style="color:'+cardColor(org.data_quality)+'">'+(org.data_quality||'\u2014').toLowerCase()+'</span>'+
+      '<span class="tl-sep">\u00b7</span>'+
+      '<span class="tl-label">incidents:</span><span class="tl-value" style="color:'+incColor+';font-weight:'+incWeight+'">'+incVal+'</span>';
+
     document.getElementById('hero-summary').textContent=org.summary||'';
     document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
+
+    // Cards — value above label, color only when abnormal
     var cardMap={trend:'card-trend',risk:'card-risk',confidence:'card-confidence',data_quality:'card-dq'};
     Object.keys(cardMap).forEach(function(k){
       var el=document.getElementById(cardMap[k]);
       if(!el)return;
       var v=org[k]||'\u2014';
-      el.textContent=v.toUpperCase();
+      el.textContent=v.toLowerCase();
       el.style.color=signalColor(v);
     });
+
+    // Agreement — value above label
     var ag=health.agreement||{};
     var agS=document.getElementById('ag-state');
-    agS.textContent=(ag.state||'\u2014').toUpperCase();
+    agS.textContent=(ag.state||'\u2014').toLowerCase();
     agS.style.color=signalColor(ag.state);
     document.getElementById('ag-aligned').textContent=(ag.aligned_nodes!=null?ag.aligned_nodes:'\u2014')+' / '+(ag.total_nodes!=null?ag.total_nodes:'\u2014');
     document.getElementById('ag-spread').textContent=ag.block_spread!=null?ag.block_spread.toLocaleString():'\u2014';
     document.getElementById('ag-median').textContent=ag.median_block!=null?ag.median_block.toLocaleString():'\u2014';
 
-    // Validators section with growth cards + unified table
+    // Growth cards
     var vg=health.validator_growth||{};
     var gc=document.getElementById('growth-cards');
     gc.innerHTML=
-      '<div class="growth-card"><div class="gc-label">Discovered</div><div class="gc-value">'+(vg.total||0)+'</div></div>'+
-      '<div class="growth-card"><div class="gc-label">Online</div><div class="gc-value">'+(vg.online||0)+'</div></div>'+
-      '<div class="growth-card"><div class="gc-label">Synced</div><div class="gc-value">'+(vg.synced||0)+'</div></div>'+
-      '<div class="growth-card"><div class="gc-label">Monitored</div><div class="gc-value">'+(vg.monitored||0)+'</div></div>';
-    document.getElementById('growth-sub').textContent='+'+
-      (vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week';
+      '<div class="growth-card"><div class="gc-value">'+(vg.total||0)+'</div><div class="gc-label">Discovered</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.online||0)+'</div><div class="gc-label">Online</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.synced||0)+'</div><div class="gc-label">Synced</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
+    document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week';
 
-    // Unified validator table: monitored nodes + unmonitored discovered
+    // Unified validator table
     var validators=vg.validators||[];
     var nodes=health.publicNodes||[];
     var median=ag.median_block||0;
     var tbody=document.getElementById('vtable-body');
     if(validators.length===0&&nodes.length===0){
       tbody.innerHTML='<tr><td colspan="5">No validators</td></tr>';
-    } else if(validators.length>0) {
+    } else if(validators.length>0){
       var h='';
       validators.forEach(function(v){
         var dotClass=v.monitored?(v.online?'dot-online':'dot-offline'):'dot-syncing';
         var statusText=v.monitored?(v.online?'online':'offline'):(v.sync_pct>=99.9?'ready':v.sync_pct>=50?'catching up':'syncing');
-        var syncColor=v.sync_pct>=99.9?'var(--improving)':v.sync_pct>=90?'var(--text)':v.sync_pct>=50?'var(--degraded)':'var(--unstable)';
+        var syncColor=v.sync_pct>=99.9?'var(--improving)':v.sync_pct>=90?'var(--text-primary)':v.sync_pct>=50?'var(--degraded)':'var(--unstable)';
         var latency='';
         if(v.monitored){
           var pn=nodes.find(function(n){return n.name===v.display;});
@@ -267,9 +336,10 @@ async function fetchData() {
       tbody.innerHTML=h;
     }
 
+    // Incidents
     var incCount=document.getElementById('inc-count');
     incCount.textContent=org.active_incidents!=null?org.active_incidents:'\u2014';
-    incCount.style.color=org.active_incidents>0?'var(--degraded)':'var(--text-bright)';
+    incCount.style.color=org.active_incidents>0?'var(--degraded)':'var(--text-primary)';
     var incList=document.getElementById('inc-list');
     if(org.active_incidents>0&&health.signals_grouped){
       var items=(health.signals_grouped.critical||[]).concat(health.signals_grouped.warning||[]);
@@ -278,6 +348,8 @@ async function fetchData() {
         (s.message||s.type||'Unknown')+'</div>';});
       incList.innerHTML=ih;
     }else{incList.innerHTML='';}
+
+    // API
     document.getElementById('api-example').textContent='GET /organism\n\n'+JSON.stringify(org,null,2);
   }catch(err){
     document.getElementById('hero-status').textContent='ERROR';
