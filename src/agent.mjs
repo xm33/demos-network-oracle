@@ -130,6 +130,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /peers</b><span>Discovered validators — identity, connection, block, first seen</span></div>' +
 '<div class="e"><b>GET /reputation</b><span>Per-node reputation scores (0-100) over 24h window</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
+'<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
 '<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 truth model, data sources, limitations</span></div>' +
 '<h2>History</h2>' +
 '<div class="e"><b>GET /history</b><span>Last 72 health cycles as JSON</span></div>' +
@@ -148,6 +149,8 @@ let publishTimestamps = []; // rolling window of publish times
 
 var HOMEPAGE_HTML = "";
 try { HOMEPAGE_HTML = readFileSync("homepage.html", "utf8"); } catch(e) { HOMEPAGE_HTML = "<html><body><h1>Homepage not found</h1></body></html>"; }
+var AGENT_GUIDE_HTML = "";
+try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
 var METHODOLOGY_HTML = "";
 try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
@@ -1915,9 +1918,12 @@ function generatePrometheusMetrics(fleetData) {
         wallet: AGENT_WALLET,
         activeRpc: activeRpcUrl,
         demBalance: lastKnownBalance,
-        endpoints: ["/organism", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/reputation", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
+        agent_ready: true,
+        primary_endpoint: "/organism",
+        endpoints: ["/organism", "/agent", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/reputation", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
       }, null, 2));
     } else if (req.url === "/organism") {
+      // M5: Cache header for agent consumption
       var canonical = computeCanonicalState();
       var organism = {
         status: canonical.status,
@@ -1933,7 +1939,7 @@ function generatePrometheusMetrics(fleetData) {
         last_updated: canonical.last_updated,
         api_version: canonical.api_version
       };
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(organism, null, 2));
     } else if (req.url === "/version") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -1944,6 +1950,9 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/home") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(HOMEPAGE_HTML);
+    } else if (req.url === "/agent") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(AGENT_GUIDE_HTML);
     } else if (req.url === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);

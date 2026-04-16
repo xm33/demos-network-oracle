@@ -271,6 +271,8 @@ async function fetchData() {
     hs.textContent=(org.status||'\u2014').toUpperCase();
     hs.style.color=statusColor(org.status);
     hs.classList.remove('loading');
+    var lb=document.querySelector('.oracle-hero-live');
+    if(lb){lb.innerHTML='<span class="hero-dot"></span>ORACLE LIVE';lb.style.borderColor='rgba(34,197,94,0.2)';}
 
     // Trust line with incidents inline
     var incVal=org.active_incidents!=null?org.active_incidents:'\u2014';
@@ -360,8 +362,12 @@ async function fetchData() {
     // API
     document.getElementById('api-example').textContent='GET /organism\n\n'+JSON.stringify(org,null,2);
   }catch(err){
-    document.getElementById('hero-status').textContent='ERROR';
-    document.getElementById('hero-status').style.color='var(--unstable)';
+    document.getElementById('hero-status').textContent='OFFLINE';
+    document.getElementById('hero-status').style.color='var(--unknown)';
+    var lb=document.querySelector('.oracle-hero-live');
+    if(lb){lb.innerHTML='<span class="hero-dot" style="background:var(--unknown)"></span>ORACLE OFFLINE';lb.style.borderColor='rgba(107,114,128,0.2)';}
+    var pill=document.getElementById('nav-pill');
+    if(pill){pill.textContent='OFFLINE';pill.style.color='var(--unknown)';pill.style.background='#1f1f1f';}
   }
 }
 fetchData();
