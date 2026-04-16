@@ -1765,7 +1765,7 @@ function generatePrometheusMetrics(fleetData) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "application/json");
 
-    if (req.url === "/health" || req.url === "/") {
+    if (req.url === "/health") {
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
       var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
@@ -1947,7 +1947,12 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML);
+    } else if (req.url === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(HOMEPAGE_HTML);
     } else if (req.url === "/home") {
+      res.writeHead(301, { "Location": "/" });
+      res.end();
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(HOMEPAGE_HTML);
     } else if (req.url === "/agent") {
