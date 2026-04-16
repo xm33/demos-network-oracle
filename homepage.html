@@ -11,13 +11,13 @@
   --bg: #0a0a0a;
   --surface: #111111;
   --border: #1f1f1f;
-  --text: #a3a3a3;
+  --text: #9ca3af;
   --text-bright: #ffffff;
   --brand: #2B36D9;
-  --stable: #00DAFF;
+  --stable: #2dd4a0;
   --degraded: #CA2800;
   --unstable: #EF4444;
-  --improving: #10B981;
+  --improving: #22c55e;
   --unknown: #6b7280;
   --mono: 'Source Code Pro', monospace;
   --sans: 'Inter', system-ui, sans-serif;
@@ -34,17 +34,17 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 
 .main { max-width:960px; margin:0 auto; padding:0 24px; }
 
-.hero { padding:48px 0 32px; border-bottom:1px solid var(--border); }
-.hero-label { font-size:12px; font-weight:500; color:var(--text); letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
+.hero { padding:40px 0 28px; border-bottom:1px solid var(--border); }
+.hero-label { font-size:12px; font-weight:600; color:#d1d5db; letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
 .hero-status { font-family:var(--mono); font-size:48px; font-weight:700; letter-spacing:2px; line-height:1.1; margin-bottom:16px; }
-.hero-meta { font-size:13px; color:var(--text); margin-bottom:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-.hero-meta .sep { color:#333; }
-.hero-meta .val { font-family:var(--mono); font-weight:600; font-size:12px; }
-.hero-summary { font-family:var(--mono); font-size:13px; color:var(--text); margin-top:12px; }
-.hero-staleness { font-size:12px; color:var(--text); margin-top:8px; font-family:var(--mono); opacity:0.4; }
+.hero-meta { font-size:14px; color:#d1d5db; margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.hero-meta .sep { color:#555; }
+.hero-meta .val { font-family:var(--mono); font-weight:700; font-size:13px; }
+.hero-summary { font-family:var(--mono); font-size:14px; color:#d1d5db; margin-top:12px; }
+.hero-staleness { font-size:12px; color:var(--text); margin-top:8px; font-family:var(--mono); opacity:0.7; }
 
-.section { padding:28px 0; border-bottom:1px solid var(--border); }
-.section-title { font-size:11px; font-weight:600; color:var(--text); letter-spacing:2px; text-transform:uppercase; margin-bottom:16px; }
+.section { padding:24px 0; border-bottom:1px solid var(--border); }
+.section-title { font-size:11px; font-weight:600; color:var(--text); letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; }
 
 .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
 .card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; }
@@ -56,6 +56,12 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 .ag-label { font-size:10px; font-weight:500; color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
 .ag-value { font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-bright); }
 
+.growth-cards { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.growth-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 16px; text-align:center; min-width:80px; }
+.growth-card .gc-label { font-size:10px; color:var(--text); letter-spacing:1px; text-transform:uppercase; }
+.growth-card .gc-value { font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-bright); margin-top:2px; }
+.growth-sub { font-size:12px; color:var(--text); margin-bottom:14px; font-family:var(--mono); }
+
 .vtable { width:100%; border-collapse:collapse; font-size:13px; }
 .vtable th { font-size:10px; font-weight:600; color:var(--text); letter-spacing:1px; text-transform:uppercase; text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
 .vtable td { padding:10px; border-bottom:1px solid #151515; font-family:var(--mono); font-size:12px; color:var(--text-bright); }
@@ -63,8 +69,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
 .dot-online { background:var(--improving); }
 .dot-offline { background:var(--unstable); }
-
-.summary-text { font-family:var(--mono); font-size:14px; color:var(--text); line-height:1.6; }
+.dot-syncing { background:var(--unknown); }
+.sync-col { text-align:right; }
 
 .inc-count { font-family:var(--mono); font-size:28px; font-weight:700; margin-bottom:4px; color:var(--text-bright); }
 .inc-label { font-size:12px; color:var(--text); }
@@ -72,14 +78,15 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 .inc-item { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--degraded); border-radius:0 4px 4px 0; padding:10px 14px; margin-bottom:8px; font-size:13px; }
 .inc-item.critical { border-left-color:var(--unstable); }
 
-.api-endpoints { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.api-endpoints { display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
 .api-link { font-family:var(--mono); font-size:13px; color:var(--text-bright); text-decoration:none; padding:6px 12px; border:1px solid var(--border); border-radius:4px; transition:border-color 0.2s; }
 .api-link:hover { border-color:#444; }
 .api-example { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--text); overflow-x:auto; white-space:pre; }
 
-.footer { padding:24px 0; text-align:center; font-size:11px; color:var(--text); }
+.footer { padding:20px 0; text-align:center; font-size:11px; color:var(--text); line-height:1.8; }
 .footer a { color:var(--text); text-decoration:none; }
 .footer a:hover { color:var(--text-bright); }
+.footer .eco { margin-top:4px; opacity:0.6; }
 
 .loading { color:var(--text); font-family:var(--mono); font-size:13px; }
 
@@ -96,7 +103,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   <div class="navbar-brand">ORACLE</div>
   <div class="navbar-links">
     <a href="#overview">Overview</a>
-    <a href="#nodes">Nodes</a>
+    <a href="#validators">Nodes</a>
     <a href="#incidents">Incidents</a>
     <a href="/methodology">Methodology</a>
     <a href="/docs">API</a>
@@ -105,7 +112,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 </nav>
 <div class="main">
   <section class="hero" id="overview">
-    <div class="hero-label">Demos Network</div>
+    <div class="hero-label">Demos Network Oracle</div>
     <div id="hero-status" class="hero-status loading">Loading...</div>
     <div id="hero-meta" class="hero-meta"></div>
     <div id="hero-summary" class="hero-summary"></div>
@@ -114,10 +121,10 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
   <section class="section">
     <div class="section-title">Core State</div>
     <div class="cards">
-      <div class="card"><div class="card-label">Status</div><div id="card-status" class="card-value">—</div></div>
       <div class="card"><div class="card-label">Trend</div><div id="card-trend" class="card-value">—</div></div>
       <div class="card"><div class="card-label">Risk</div><div id="card-risk" class="card-value">—</div></div>
       <div class="card"><div class="card-label">Confidence</div><div id="card-confidence" class="card-value">—</div></div>
+      <div class="card"><div class="card-label">Data Quality</div><div id="card-dq" class="card-value">—</div></div>
     </div>
   </section>
   <section class="section">
@@ -129,16 +136,14 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
       <div class="ag-item"><div class="ag-label">Median Block</div><div id="ag-median" class="ag-value">—</div></div>
     </div>
   </section>
-  <section class="section" id="nodes">
-    <div class="section-title">Public Validators</div>
+  <section class="section" id="validators">
+    <div class="section-title">Validators</div>
+    <div id="growth-cards" class="growth-cards"></div>
+    <div id="growth-sub" class="growth-sub"></div>
     <table class="vtable">
-      <thead><tr><th>Node</th><th>Status</th><th>Block</th><th>Lag</th><th>Latency</th></tr></thead>
+      <thead><tr><th>Node</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th></tr></thead>
       <tbody id="vtable-body"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
     </table>
-  </section>
-  <section class="section">
-    <div class="section-title">Network Summary</div>
-    <div id="net-summary" class="summary-text loading">Loading...</div>
   </section>
   <section class="section" id="incidents">
     <div class="section-title">Incidents</div>
@@ -158,34 +163,31 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 </div>
 <div class="footer">
   Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a>
+  <div class="eco"><a href="https://demos.sh">demos.sh</a> · <a href="https://scan.demos.sh">Scan</a> · <a href="https://faucet.demos.sh">Faucet</a></div>
 </div>
 <script>
-// Signal color — ONLY for states that need attention
-function signalColor(v) {
-  var m = {
-    stable:'var(--stable)', degraded:'var(--degraded)', unstable:'var(--unstable)',
-    low:'var(--stable)', elevated:'var(--degraded)', high:'var(--unstable)',
-    clear:'var(--stable)', uncertain:'var(--degraded)',
-    sufficient:'var(--stable)', insufficient:'var(--degraded)',
-    improving:'var(--improving)', worsening:'var(--unstable)',
-    strong:'var(--stable)', moderate:'var(--degraded)', weak:'var(--unstable)'
-  };
-  return m[(v||'').toLowerCase()] || 'var(--text-bright)';
-}
-
-// Color only when NOT normal — normal states stay white
 function cardColor(v) {
   var abnormal = {
-    degraded:'var(--degraded)', unstable:'var(--unstable)',
-    elevated:'var(--degraded)', high:'var(--unstable)',
-    uncertain:'var(--degraded)',
-    insufficient:'var(--degraded)',
-    improving:'var(--improving)', worsening:'var(--unstable)',
-    moderate:'var(--degraded)', weak:'var(--unstable)'
+    degraded:'var(--degraded)',unstable:'var(--unstable)',
+    elevated:'var(--degraded)',high:'var(--unstable)',
+    uncertain:'var(--degraded)',insufficient:'var(--degraded)',
+    improving:'var(--improving)',worsening:'var(--unstable)',
+    moderate:'var(--degraded)',weak:'var(--unstable)',
+    unknown:'var(--unknown)'
   };
   return abnormal[(v||'').toLowerCase()] || 'var(--text-bright)';
 }
-
+function signalColor(v) {
+  var m = {
+    stable:'var(--stable)',degraded:'var(--degraded)',unstable:'var(--unstable)',unknown:'var(--unknown)',
+    low:'var(--stable)',elevated:'var(--degraded)',high:'var(--unstable)',
+    clear:'var(--stable)',uncertain:'var(--degraded)',
+    sufficient:'var(--stable)',insufficient:'var(--degraded)',
+    improving:'var(--improving)',worsening:'var(--unstable)',
+    strong:'var(--stable)',moderate:'var(--degraded)',weak:'var(--unstable)'
+  };
+  return m[(v||'').toLowerCase()] || 'var(--text-bright)';
+}
 function pillBg(s) {
   var v=(s||'').toLowerCase();
   if(v==='stable') return '#002a33';
@@ -193,43 +195,32 @@ function pillBg(s) {
   if(v==='unstable') return '#3b0e0e';
   return '#1f1f1f';
 }
-
 async function fetchData() {
   try {
     var [orgRes,healthRes]=await Promise.all([fetch('/organism'),fetch('/health')]);
-    var org=await orgRes.json(), health=await healthRes.json();
-
-    // Nav pill — always colored (it's the live signal)
+    var org=await orgRes.json(),health=await healthRes.json();
     var pill=document.getElementById('nav-pill');
     pill.textContent=(org.status||'—').toUpperCase();
     pill.style.color=signalColor(org.status);
     pill.style.background=pillBg(org.status);
-
-    // Hero status — the ONE big colored element
     var hs=document.getElementById('hero-status');
     hs.textContent=(org.status||'—').toUpperCase();
     hs.style.color=signalColor(org.status);
     hs.classList.remove('loading');
-
-    // Hero meta — white labels, only values colored when abnormal
     document.getElementById('hero-meta').innerHTML=
       'Risk: <span class="val" style="color:'+cardColor(org.risk)+'">'+(org.risk||'—').toUpperCase()+'</span>'+
       '<span class="sep">\u00b7</span>Confidence: <span class="val" style="color:'+cardColor(org.confidence)+'">'+(org.confidence||'—').toUpperCase()+'</span>'+
       '<span class="sep">\u00b7</span>Data: <span class="val" style="color:'+cardColor(org.data_quality)+'">'+(org.data_quality||'—').toUpperCase()+'</span>';
-
     document.getElementById('hero-summary').textContent=org.summary||'';
     document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
-
-    // Cards — white by default, colored only when abnormal
-    ['status','trend','risk','confidence'].forEach(function(k){
-      var el=document.getElementById('card-'+k);
-      if(!el) return;
+    var cardMap={trend:'card-trend',risk:'card-risk',confidence:'card-confidence',data_quality:'card-dq'};
+    Object.keys(cardMap).forEach(function(k){
+      var el=document.getElementById(cardMap[k]);
+      if(!el)return;
       var v=org[k]||'\u2014';
       el.textContent=v.toUpperCase();
       el.style.color=cardColor(v);
     });
-
-    // Agreement — only state gets color
     var ag=health.agreement||{};
     var agS=document.getElementById('ag-state');
     agS.textContent=(ag.state||'\u2014').toUpperCase();
@@ -238,45 +229,57 @@ async function fetchData() {
     document.getElementById('ag-spread').textContent=ag.block_spread!=null?ag.block_spread.toLocaleString():'\u2014';
     document.getElementById('ag-median').textContent=ag.median_block!=null?ag.median_block.toLocaleString():'\u2014';
 
-    // Validators — monochrome except status dots
-    var nodes=health.publicNodes||[], median=ag.median_block||0, tbody=document.getElementById('vtable-body');
-    if(nodes.length===0){ tbody.innerHTML='<tr><td colspan="5">No public nodes</td></tr>'; }
-    else {
+    // Validators section with growth cards + unified table
+    var vg=health.validator_growth||{};
+    var gc=document.getElementById('growth-cards');
+    gc.innerHTML=
+      '<div class="growth-card"><div class="gc-label">Discovered</div><div class="gc-value">'+(vg.total||0)+'</div></div>'+
+      '<div class="growth-card"><div class="gc-label">Online</div><div class="gc-value">'+(vg.online||0)+'</div></div>'+
+      '<div class="growth-card"><div class="gc-label">Synced</div><div class="gc-value">'+(vg.synced||0)+'</div></div>'+
+      '<div class="growth-card"><div class="gc-label">Monitored</div><div class="gc-value">'+(vg.monitored||0)+'</div></div>';
+    document.getElementById('growth-sub').textContent='+'+
+      (vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week';
+
+    // Unified validator table: monitored nodes + unmonitored discovered
+    var validators=vg.validators||[];
+    var nodes=health.publicNodes||[];
+    var median=ag.median_block||0;
+    var tbody=document.getElementById('vtable-body');
+    if(validators.length===0&&nodes.length===0){
+      tbody.innerHTML='<tr><td colspan="5">No validators</td></tr>';
+    } else if(validators.length>0) {
       var h='';
-      nodes.forEach(function(n){
-        var online=n.ok||n.status==='HEALTHY';
-        var lag=(n.block&&median)?Math.abs(median-n.block):null;
-        h+='<tr><td>'+(n.name||'\u2014')+'</td>'+
-          '<td><span class="status-dot '+(online?'dot-online':'dot-offline')+'"></span>'+(online?'online':'offline')+'</td>'+
-          '<td>'+(n.block?n.block.toLocaleString():'\u2014')+'</td>'+
-          '<td>'+(lag!=null?(lag===0?'\u00b10':'+'+lag):'\u2014')+'</td>'+
-          '<td>'+(n.latencyMs!=null?n.latencyMs+'ms':'\u2014')+'</td></tr>';
+      validators.forEach(function(v){
+        var dotClass=v.monitored?(v.online?'dot-online':'dot-offline'):'dot-syncing';
+        var statusText=v.monitored?(v.online?'online':'offline'):(v.sync_pct>=99.9?'ready':v.sync_pct>=50?'catching up':'syncing');
+        var syncColor=v.sync_pct>=99.9?'var(--improving)':v.sync_pct>=90?'var(--text)':v.sync_pct>=50?'var(--degraded)':'var(--unstable)';
+        var latency='';
+        if(v.monitored){
+          var pn=nodes.find(function(n){return n.name===v.display;});
+          latency=pn&&pn.latencyMs!=null?pn.latencyMs+'ms':'\u2014';
+        } else { latency='\u2014'; }
+        h+='<tr><td>'+(v.display||'\u2014')+'</td>'+
+          '<td><span class="status-dot '+dotClass+'"></span>'+statusText+'</td>'+
+          '<td>'+(v.block?v.block.toLocaleString():'\u2014')+'</td>'+
+          '<td style="color:'+syncColor+'">'+v.sync_pct+'%</td>'+
+          '<td>'+latency+'</td></tr>';
       });
       tbody.innerHTML=h;
     }
 
-    // Summary
-    var sumEl=document.getElementById('net-summary');
-    sumEl.textContent=org.summary||'No summary available';
-    sumEl.classList.remove('loading');
-
-    // Incidents — count white unless active
     var incCount=document.getElementById('inc-count');
     incCount.textContent=org.active_incidents!=null?org.active_incidents:'\u2014';
     incCount.style.color=org.active_incidents>0?'var(--degraded)':'var(--text-bright)';
-
     var incList=document.getElementById('inc-list');
     if(org.active_incidents>0&&health.signals_grouped){
       var items=(health.signals_grouped.critical||[]).concat(health.signals_grouped.warning||[]);
       var ih='';
-      items.slice(0,5).forEach(function(s){ ih+='<div class="inc-item '+(s.severity||'')+'">'+
-        (s.message||s.type||'Unknown')+'</div>'; });
+      items.slice(0,5).forEach(function(s){ih+='<div class="inc-item '+(s.severity||'')+'">'+
+        (s.message||s.type||'Unknown')+'</div>';});
       incList.innerHTML=ih;
-    } else { incList.innerHTML=''; }
-
-    // API example
+    }else{incList.innerHTML='';}
     document.getElementById('api-example').textContent='GET /organism\n\n'+JSON.stringify(org,null,2);
-  } catch(err) {
+  }catch(err){
     document.getElementById('hero-status').textContent='ERROR';
     document.getElementById('hero-status').style.color='var(--unstable)';
   }
