@@ -149,6 +149,8 @@ let publishTimestamps = []; // rolling window of publish times
 
 var HOMEPAGE_HTML = "";
 try { HOMEPAGE_HTML = readFileSync("homepage.html", "utf8"); } catch(e) { HOMEPAGE_HTML = "<html><body><h1>Homepage not found</h1></body></html>"; }
+var SUBMIT_HTML = "";
+try { SUBMIT_HTML = readFileSync("submit.html", "utf8"); } catch(e) { SUBMIT_HTML = "<html><body><h1>Submit page not found</h1></body></html>"; }
 var AGENT_GUIDE_HTML = "";
 try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
 var METHODOLOGY_HTML = "";
@@ -2008,6 +2010,70 @@ function generatePrometheusMetrics(fleetData) {
       res.end();
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(HOMEPAGE_HTML);
+    } else if (req.url === "/submit" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(SUBMIT_HTML);
+    } else if (req.url === "/submit" && req.method === "POST") {
+      var body = "";
+      req.on("data", function(chunk) { body += chunk; });
+      req.on("end", function() {
+        try {
+          var params = new URLSearchParams(body);
+          var host = (params.get("host") || "").trim();
+          var port = parseInt(params.get("port") || "53552", 10);
+          var operator = (params.get("operator") || "").trim();
+          var blocked = ["localhost","127.0.0.1","0.0.0.0","10.","192.168.","172.16.","172.17.","172.18.","172.19.","172.20.","172.21.","172.22.","172.23.","172.24.","172.25.","172.26.","172.27.","172.28.","172.29.","172.30.","172.31."];
+          var isBlocked = blocked.some(function(b){ return host.indexOf(b) === 0; });
+          if (isBlocked) { res.writeHead(400); res.end(JSON.stringify({error:"private or local addresses not allowed"})); return; }
+          if (!host || !operator) { res.writeHead(400); res.end(JSON.stringify({error:"host and operator required"})); return; }
+          if (sharedDb) {
+            var existing = sharedDb.query("SELECT id FROM submissions WHERE host=? AND port=?").get(host, port);
+            if (existing) { res.writeHead(409); res.end(JSON.stringify({error:"already submitted"})); return; }
+            sharedDb.run("INSERT INTO submissions (host, port, operator, submitted_at) VALUES (?, ?, ?, ?)", host, port, operator, Date.now());
+            // Auto-probe
+            (async function() {
+              try {
+                var probeRes = await fetch("http://" + host + ":" + port + "/info", { signal: AbortSignal.timeout(5000) });
+                if (probeRes.ok) {
+                  var probeData = await probeRes.json();
+                  var block = probeData.peerlist && probeData.peerlist[0] && probeData.peerlist[0].sync ? probeData.peerlist[0].sync.block : null;
+                  sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='probed_ok' WHERE host=? AND port=?", block, probeData.identity || null, host, port);
+                  log("[m7] Probe OK: " + host + ":" + port + " block=" + block);
+                } else {
+                  sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed' WHERE host=? AND port=?", host, port);
+                  log("[m7] Probe FAIL: " + host + ":" + port + " HTTP " + probeRes.status);
+                }
+              } catch(probeErr) {
+                sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed' WHERE host=? AND port=?", host, port);
+                log("[m7] Probe FAIL: " + host + ":" + port + " " + probeErr.message);
+              }
+            })();
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ok:true, message:"Submission received. The Oracle will probe your node."}));
+        } catch(err) { res.writeHead(500); res.end(JSON.stringify({error:err.message})); }
+      });
+    } else if (req.url === "/submissions") {
+      var remoteIP = req.socket.remoteAddress;
+      if (remoteIP !== "127.0.0.1" && remoteIP !== "::1" && remoteIP !== "::ffff:127.0.0.1") { res.writeHead(403); res.end(JSON.stringify({error:"localhost only"})); return; }
+      if (!sharedDb) { res.writeHead(200); res.end("[]"); return; }
+      var rows = sharedDb.query("SELECT * FROM submissions ORDER BY submitted_at DESC").all();
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(rows, null, 2));
+    } else if (req.url && req.url.indexOf("/approve?id=") === 0) {
+      var remoteIP2 = req.socket.remoteAddress;
+      if (remoteIP2 !== "127.0.0.1" && remoteIP2 !== "::1" && remoteIP2 !== "::ffff:127.0.0.1") { res.writeHead(403); res.end(JSON.stringify({error:"localhost only"})); return; }
+      var approveId = parseInt(req.url.split("id=")[1], 10);
+      if (!sharedDb || !approveId) { res.writeHead(400); res.end(JSON.stringify({error:"invalid id"})); return; }
+      var sub = sharedDb.query("SELECT * FROM submissions WHERE id=?").get(approveId);
+      if (!sub) { res.writeHead(404); res.end(JSON.stringify({error:"not found"})); return; }
+      if (sub.status === "approved") { res.writeHead(200); res.end(JSON.stringify({ok:true, message:"already approved"})); return; }
+      var nodeName = "community-node" + (Object.keys(PUBLIC_NODES).filter(function(k){return k.indexOf("community-")===0;}).length + 1);
+      PUBLIC_NODES[nodeName] = { url: "http://" + sub.host + ":" + sub.port, identity: sub.probe_identity || "unknown", source_type: "community", trust_tier: "community_submitted", operator: sub.operator, joined_at: new Date().toISOString().split("T")[0] };
+      sharedDb.run("UPDATE submissions SET status='approved', reviewed_at=? WHERE id=?", Date.now(), approveId);
+      log("[m7] Approved: " + nodeName + " = " + sub.host + ":" + sub.port + " (" + sub.operator + ")");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ok:true, node_name: nodeName, message:"Node approved and added to monitoring"}));
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
@@ -2632,6 +2698,8 @@ async function main() {
     node_states TEXT NOT NULL
   )`);
   log("  Public node history table ready");
+  sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER)");
+  log("  Submissions table ready");
 
   // v6.4: Load incident counter from DB
   loadIncidentCounter();

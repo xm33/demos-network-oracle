@@ -1,0 +1,94 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — Submit Node</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#2dd4a0;--mono:'Source Code Pro',monospace;--sans:'Inter',system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}
+main{max-width:620px;margin:0 auto;padding:28px 24px 80px}
+h1{font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-0.03em;margin:0 0 4px}
+.sub{color:var(--text-secondary);margin-bottom:28px;font-size:14px}
+label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin:16px 0 6px;text-transform:uppercase;letter-spacing:0.5px}
+input{width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-family:var(--mono);font-size:14px;outline:none}
+input:focus{border-color:var(--improving)}
+.hint{font-size:11px;color:var(--text-secondary);opacity:0.7;margin-top:4px}
+button{margin-top:24px;padding:10px 24px;background:var(--improving);color:#000;border:none;border-radius:8px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;width:100%}
+button:hover{opacity:0.9}
+button:disabled{opacity:0.4;cursor:not-allowed}
+.result{margin-top:16px;padding:12px 14px;border-radius:10px;font-size:13px;display:none}
+.result.ok{background:rgba(45,212,160,0.1);border:1px solid rgba(45,212,160,0.2);color:var(--improving)}
+.result.err{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#EF4444}
+.note{margin:24px 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text-secondary);font-size:12px;line-height:1.6}
+.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(10,10,10,0.88);border-bottom:1px solid var(--border)}
+.doc-nav-inner{max-width:620px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:14px}
+.doc-nav-brand{color:var(--text-primary);text-decoration:none;font-family:var(--mono);font-size:12px;letter-spacing:0.04em;font-weight:600}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px}
+.doc-nav-link:hover{color:var(--text-primary)}
+.doc-nav-sep{width:1px;height:14px;background:var(--border)}
+</style></head><body>
+<nav class="doc-nav">
+  <div class="doc-nav-inner">
+    <div class="doc-nav-left"><a href="/" class="doc-nav-brand">ORACLE</a></div>
+    <div class="doc-nav-right">
+      <a href="/" class="doc-nav-link">Home</a>
+      <span class="doc-nav-sep"></span>
+      <a href="/agent" class="doc-nav-link">Agent</a>
+      <span class="doc-nav-sep"></span>
+      <a href="/methodology" class="doc-nav-link">Methodology</a>
+    </div>
+  </div>
+</nav>
+<main>
+<h1>Submit Your Node</h1>
+<p class="sub">Add your Demos validator to Oracle monitoring. Submissions are reviewed manually.</p>
+
+<div>
+  <label>Host / IP address</label>
+  <input id="host" type="text" placeholder="123.45.67.89" autocomplete="off">
+  <div class="hint">Your node's public IP address</div>
+</div>
+
+<div>
+  <label>Port</label>
+  <input id="port" type="number" value="53552" placeholder="53552">
+  <div class="hint">Default Demos port is 53552</div>
+</div>
+
+<div>
+  <label>Operator name</label>
+  <input id="operator" type="text" placeholder="Your name or handle" autocomplete="off">
+  <div class="hint">How you want to be identified</div>
+</div>
+
+<div class="note">
+  Submission does not guarantee inclusion. The Oracle will probe your endpoint to verify it responds.
+  After manual review, approved nodes join monitoring without restart.
+  Inclusion does not imply endorsement or certification.
+</div>
+
+<button id="btn" onclick="submitNode()">Submit Node</button>
+<div id="result" class="result"></div>
+
+<script>
+async function submitNode(){
+  var btn=document.getElementById('btn');
+  var res=document.getElementById('result');
+  var host=document.getElementById('host').value.trim();
+  var port=document.getElementById('port').value.trim()||'53552';
+  var operator=document.getElementById('operator').value.trim();
+  if(!host||!operator){res.className='result err';res.style.display='block';res.textContent='Host and operator name are required.';return;}
+  btn.disabled=true;btn.textContent='Submitting...';
+  try{
+    var r=await fetch('/submit',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'host='+encodeURIComponent(host)+'&port='+encodeURIComponent(port)+'&operator='+encodeURIComponent(operator)});
+    var d=await r.json();
+    if(r.ok){res.className='result ok';res.textContent=d.message||'Submitted successfully.';}
+    else{res.className='result err';res.textContent=d.error||'Submission failed.';}
+  }catch(err){res.className='result err';res.textContent='Network error: '+err.message;}
+  res.style.display='block';btn.disabled=false;btn.textContent='Submit Node';
+}
+</script>
+</main>
+</body></html>
