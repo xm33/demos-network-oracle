@@ -90,3 +90,15 @@ if state['data_quality'] == 'insufficient':
 
 <footer>Demos Network Oracle · API v1.0 · <a href="/organism">/organism</a> · <a href="/health">/health</a> · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a></footer>
 </body></html>
+<script>
+document.querySelectorAll('.val').forEach(function(el){
+  var v = el.textContent.trim().toLowerCase();
+  var green = ['stable','low','clear','sufficient','strong','improving','info','none'];
+  var orange = ['degraded','elevated','uncertain','insufficient','moderate','warning'];
+  var red = ['unstable','high','worsening','weak','critical'];
+  if (green.indexOf(v) !== -1) el.style.color = '#2dd4a0';
+  else if (orange.indexOf(v) !== -1) el.style.color = '#d97706';
+  else if (red.indexOf(v) !== -1) el.style.color = '#EF4444';
+  else el.style.color = '#98a2b3';
+});
+</script>
