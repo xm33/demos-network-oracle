@@ -49,6 +49,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .oracle-kicker { font-size:12px; color:var(--text-secondary); opacity:0.62; letter-spacing:0.01em; font-family:var(--sans); }
 .oracle-hero-live { font-size:10px; font-family:var(--mono); padding:4px 9px; border:1px solid rgba(34,197,94,0.16); border-radius:999px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:5px; letter-spacing:0.45px; }
 .hero-dot { width:5px; height:5px; border-radius:50%; background:var(--improving); opacity:0.8; }
+.oracle-hero-submit { font-size:10px; font-family:var(--mono); padding:3px 9px; border:1px solid rgba(255,255,255,0.15); border-radius:999px; color:rgba(255,255,255,0.7); text-decoration:none; letter-spacing:0.04em; transition:all 0.2s; }
+.oracle-hero-submit:hover { color:var(--improving); border-color:rgba(45,212,160,0.3); }
 .oracle-status { font-family:var(--mono); font-size:36px; font-weight:600; letter-spacing:-0.03em; line-height:1.02; margin-bottom:16px; color:var(--text-primary); }
 .oracle-trustline { font-size:14px; line-height:1.5; color:var(--text-secondary); margin-bottom:0; display:flex; gap:0; align-items:center; flex-wrap:wrap; }
 .tl-label { color:var(--text-secondary); }
@@ -169,7 +171,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   <section class="hero" id="overview">
     <div class="oracle-kicker-row">
       <span class="oracle-kicker">Demos Network Oracle</span>
-      <span class="oracle-hero-live"><span class="hero-dot"></span>ORACLE LIVE</span>
+      <span class="oracle-hero-live"><span class="hero-dot"></span>ORACLE LIVE</span><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a>
     </div>
     <div id="hero-status" class="oracle-status loading">Loading...</div>
     <div id="hero-trustline" class="oracle-trustline"></div>
@@ -195,7 +197,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     </div>
   </section>
   <section class="section" id="validators">
-    <div class="section-title">Network View</div>
+    <div class="api-section-head"><div class="section-title" style="margin-bottom:0">Network View</div><a href="/submit" class="api-publish-link">submit your node</a></div>
     <div id="growth-cards" class="growth-cards"></div>
     <div id="growth-sub" class="growth-sub"></div>
     <table class="vtable">
@@ -241,6 +243,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
       <a href="https://scan.demos.sh">Scan</a>
       <span>·</span>
       <a href="https://faucet.demos.sh">Faucet</a>
+      <span>·</span>
+      <a href="/submit">Submit Node</a>
     </div>
     <div class="footer-meta">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a></div>
   </div>
