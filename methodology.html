@@ -104,6 +104,28 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #1e293b;color:#4755
 <p>• <b>Status</b> describes whether the chain is functioning now.<br>• <b>Risk</b> describes how fragile that observed state is.<br>• <b>Agreement</b> measures alignment among currently reachable public nodes.<br>• <b>Discovered but offline nodes</b> reduce redundancy and coverage, but do not count as disagreement.</p>
 <p>This prevents low public node reachability from being misread as immediate chain instability. A network can be <span class="val">stable</span> with <span class="val">elevated</span> risk — meaning: the chain works, but resilience is reduced.</p>
 
+<h2>Explanation Layer</h2>
+<p>The Oracle provides explanatory fields alongside its categorical assessments. These fields are intended to improve interpretability for human readers and machine consumers.</p>
+<h3>status_reason</h3>
+<p>Explains the primary observed basis for the current status. Example: <span class="val">Blocks advancing; reachable nodes aligned</span></p>
+<h3>risk_factors</h3>
+<p>Lists active observed contributors to current network fragility or reduced resilience. This array may be empty when no material risk factors are currently detected.</p>
+<h3>agreement_reason</h3>
+<p>Describes the current reachable-node alignment basis used in the agreement assessment. Example: <span class="val">3/3 reachable nodes within 25 blocks of median (spread: 0)</span></p>
+<p>These explanatory fields summarize current observed conditions. They do not constitute guarantees, certification, or operational advice.</p>
+
+<h2>Historical Metrics</h2>
+<p>The Oracle displays rolling historical metrics derived from its own observation cycles over the current history window.</p>
+<p><span class="val">uptime_7d</span> — percentage of observed cycles in which the node was reachable.</p>
+<p><span class="val">avg_latency_7d</span> — average response latency across successful observed cycles.</p>
+<p>These historical metrics are observational summaries only. They do not constitute endorsement, certification, or recommendation of any validator or operator. Early values should be interpreted cautiously until sufficient history has accumulated. Historical metrics do not change the canonical truth model unless explicitly stated.</p>
+<div class="note">Rolling observed history. Early values may refine over time.</div>
+
+<h2>Scope and Limits</h2>
+<p>The Oracle is a watch-only observability system. It summarizes observed network conditions and historical measurements but does not provide financial, operational, legal, or governance advice.</p>
+<p>Inclusion of a validator in Oracle outputs does not imply endorsement, approval, or certification.</p>
+<p>Oracle outputs are based on externally observable signals available during each measurement cycle. Public endpoint availability, temporary network conditions, or incomplete visibility may affect results. Outputs should be interpreted as structured observed assessments, not guarantees of present or future validator behavior.</p>
+
 <h2>Understanding Uncertainty</h2>
 <p>The Oracle treats uncertainty as a first-class output. On a young testnet with small, evolving node coverage, partial visibility is a normal operating condition — not an error.</p>
 <p>The Oracle starts from caution and earns stronger claims through sustained observation. It prefers honest uncertainty over artificial precision.</p>

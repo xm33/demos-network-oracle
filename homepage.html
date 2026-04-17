@@ -182,7 +182,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   <section class="section">
     <div class="section-title">Agreement</div>
     <div class="agreement-grid">
-      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">state</div></div>
+      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">state</div><div id="ag-reason" style="display:none;margin-top:4px;font-size:10px;color:var(--text-secondary);font-family:var(--mono);line-height:1.4"></div></div>
       <div class="ag-item"><div id="ag-aligned" class="ag-value">—</div><div class="ag-label">aligned</div></div>
       <div class="ag-item"><div id="ag-spread" class="ag-value">—</div><div class="ag-label">block spread</div></div>
       <div class="ag-item"><div id="ag-median" class="ag-value">—</div><div class="ag-label">median block</div></div>
@@ -316,6 +316,7 @@ async function fetchData() {
     document.getElementById('ag-aligned').textContent=(ag.aligned_nodes!=null?ag.aligned_nodes:'\u2014')+' / '+(ag.total_nodes!=null?ag.total_nodes:'\u2014');
     document.getElementById('ag-spread').textContent=ag.block_spread!=null?ag.block_spread.toLocaleString():'\u2014';
     document.getElementById('ag-median').textContent=ag.median_block!=null?ag.median_block.toLocaleString():'\u2014';
+    var agR=document.getElementById("ag-reason");if(agR&&health.agreement_reason){agR.textContent=health.agreement_reason;agR.style.display="block";}
 
     // Growth cards
     var vg=health.validator_growth||{};
