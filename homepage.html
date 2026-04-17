@@ -43,12 +43,12 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .main { max-width:980px; margin:0 auto; padding:0 28px; }
 
 /* HERO */
-.hero { padding:44px 0 32px; border-bottom:1px solid var(--border); }
+.hero { padding:48px 0 36px; border-bottom:1px solid var(--border); }
 .oracle-kicker-row { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 .oracle-kicker { font-size:12px; color:var(--text-secondary); opacity:0.62; letter-spacing:0.01em; font-family:var(--sans); }
 .oracle-hero-live { font-size:10px; font-family:var(--mono); padding:4px 9px; border:1px solid rgba(34,197,94,0.16); border-radius:999px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:5px; letter-spacing:0.45px; }
 .hero-dot { width:5px; height:5px; border-radius:50%; background:var(--improving); opacity:0.8; }
-.oracle-status { font-family:var(--mono); font-size:36px; font-weight:600; letter-spacing:-0.03em; line-height:1.02; margin-bottom:14px; color:var(--text-primary); }
+.oracle-status { font-family:var(--mono); font-size:36px; font-weight:600; letter-spacing:-0.03em; line-height:1.02; margin-bottom:16px; color:var(--text-primary); }
 .oracle-trustline { font-size:14px; line-height:1.5; color:var(--text-secondary); margin-bottom:0; display:flex; gap:0; align-items:center; flex-wrap:wrap; }
 .tl-label { color:var(--text-secondary); }
 .tl-value { color:var(--text-primary); font-weight:500; font-family:var(--mono); font-size:13px; margin-left:4px; }
@@ -174,7 +174,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <div class="section-title">Core State</div>
     <div class="cards">
       <div class="signal-card"><div id="card-trend" class="signal-value">—</div><div class="signal-label">trend</div></div>
-      <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div><div id="risk-factors" style="display:none;margin-top:4px;font-size:10px;color:var(--text-secondary);font-family:var(--mono);line-height:1.4"></div></div>
+      <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div><div id="risk-factors" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
       <div class="signal-card"><div id="card-confidence" class="signal-value">—</div><div class="signal-label">confidence</div></div>
       <div class="signal-card"><div id="card-dq" class="signal-value">—</div><div class="signal-label">data quality</div></div>
     </div>
@@ -182,7 +182,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   <section class="section">
     <div class="section-title">Agreement</div>
     <div class="agreement-grid">
-      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">state</div><div id="ag-reason" style="display:none;margin-top:4px;font-size:10px;color:var(--text-secondary);font-family:var(--mono);line-height:1.4"></div></div>
+      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">state</div><div id="ag-reason" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
       <div class="ag-item"><div id="ag-aligned" class="ag-value">—</div><div class="ag-label">aligned</div></div>
       <div class="ag-item"><div id="ag-spread" class="ag-value">—</div><div class="ag-label">block spread</div></div>
       <div class="ag-item"><div id="ag-median" class="ag-value">—</div><div class="ag-label">median block</div></div>
@@ -214,9 +214,20 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <div id="api-example" class="api-example loading">Loading...</div>
   </section>
 </div>
-<div class="footer">
-  <div class="oracle-ecosystem">
-    <a href="https://demos.sh">demos.sh</a>
+  </section>
+
+  <section class="section">
+    <div class="section-title">Trust</div>
+    <div class="cards">
+      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Public</div><div class="signal-label">Reads publicly observable validator signals and rolling history.</div></div>
+      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Explicit</div><div class="signal-label">Status, risk, agreement, and uncertainty follow published methodology.</div></div>
+      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Impartial</div><div class="signal-label">Watch-only. No advice, no endorsement, no hidden scoring.</div></div>
+      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Attested</div><div class="signal-label">Published via SuperColony to strengthen provenance and verification.</div></div>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono);line-height:1.5">Oracle outputs are structured observed assessments, not guarantees of present or future validator behavior.</div>
+  </section>
+
+  <section class="section">
     <span>·</span>
     <a href="https://scan.demos.sh">Scan</a>
     <span>·</span>
