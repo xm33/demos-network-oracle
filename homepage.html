@@ -174,7 +174,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <div class="section-title">Core State</div>
     <div class="cards">
       <div class="signal-card"><div id="card-trend" class="signal-value">—</div><div class="signal-label">trend</div></div>
-      <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div></div>
+      <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div><div id="risk-factors" style="display:none;margin-top:4px;font-size:10px;color:var(--text-secondary);font-family:var(--mono);line-height:1.4"></div></div>
       <div class="signal-card"><div id="card-confidence" class="signal-value">—</div><div class="signal-label">confidence</div></div>
       <div class="signal-card"><div id="card-dq" class="signal-value">—</div><div class="signal-label">data quality</div></div>
     </div>
@@ -293,7 +293,7 @@ async function fetchData() {
       '<span class="tl-sep">\u00b7</span>'+
       '<span class="tl-label">incidents:</span><span class="tl-value" style="color:'+incColor+';font-weight:'+incWeight+'">'+incVal+'</span>';
 
-    document.getElementById('hero-summary').textContent=org.summary||'';
+    document.getElementById('hero-summary').textContent=org.status_reason||org.summary||'';
     document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
 
     // Cards — value above label, color only when abnormal
@@ -305,6 +305,8 @@ async function fetchData() {
       el.textContent=v.toLowerCase();
       el.style.color=signalColor(v);
     });
+    var rfEl=document.getElementById("risk-factors");
+    if(rfEl&&health.risk_factors&&health.risk_factors.length>0){rfEl.textContent=health.risk_factors.join(" · ");rfEl.style.display="block";}else if(rfEl){rfEl.style.display="none";}
 
     // Agreement — value above label
     var ag=health.agreement||{};
