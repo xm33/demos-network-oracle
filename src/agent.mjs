@@ -587,12 +587,12 @@ function computeCanonicalState() {
       var medianBlock = blocks[Math.floor(blocks.length / 2)];
       var blockSpread = blocks[blocks.length - 1] - blocks[0];
       var alignedCount = 0;
-      for (var ai = 0; ai < blocks.length; ai++) { if (Math.abs(blocks[ai] - medianBlock) <= 10) alignedCount++; }
+      for (var ai = 0; ai < blocks.length; ai++) { if (Math.abs(blocks[ai] - medianBlock) <= 25) alignedCount++; }
       var agState;
-      if (alignedCount === blocks.length && blockSpread <= 2) agState = "strong";
-      else if (alignedCount >= Math.ceil(blocks.length * 0.7)) agState = "moderate";
+      if (alignedCount === blocks.length && blockSpread <= 20) agState = "strong";
+      else if (alignedCount >= Math.ceil(blocks.length * 0.6)) agState = "moderate";
       else agState = "weak";
-      agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: pubTotal, median_block: medianBlock, block_spread: blockSpread, max_block: blocks[blocks.length - 1], min_block: blocks[0] };
+      agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: blocks.length, median_block: medianBlock, block_spread: blockSpread, max_block: blocks[blocks.length - 1], min_block: blocks[0] };
     }
   }
 
