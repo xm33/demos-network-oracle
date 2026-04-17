@@ -32,6 +32,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #1e293b;color:#4755
 <tr><td><b>Incidents</b></td><td>What specific problems are active?</td><td><span class="val">info · warning · critical</span></td></tr>
 </tbody></table>
 <h3>Status</h3>
+<p>Status describes current network operability — whether the chain is functioning right now. It is not a direct measure of network size or validator count.</p>
 <p><span class="val">stable</span> — The network is operating normally. Public nodes are online, synced, and in agreement. No active incidents at warning or critical severity. At current network size, one offline node with strong agreement is still considered stable — this is normal testnet behavior, not impairment.</p>
 <p><span class="val">degraded</span> — The network is working but impaired. Multiple nodes may be offline, agreement may be weakened, or warning-level incidents are active.</p>
 <p><span class="val">unstable</span> — Serious impairment. Critical incidents are active, agreement is weak, or a majority of public nodes are unreachable.</p>
@@ -52,7 +53,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #1e293b;color:#4755
 <p><span class="val">clear</span> — Signals are consistent and unambiguous. <span class="val">uncertain</span> — Signals conflict or are ambiguous. Status and risk are still published, but should be consumed with caution.</p>
 <div class="note"><b>Data quality ≠ confidence.</b> "I can't see enough" is a data quality problem. "What I see is contradictory" is a confidence problem. A network can have sufficient data quality but uncertain confidence (full visibility, conflicting data) — or insufficient data quality but clear confidence (limited data, but what's visible is consistent).</div>
 <h3>Agreement</h3>
-<p>Agreement measures whether the public validators are producing a coherent, shared chain. It is derived from public node block heights — specifically, how many nodes are within a tight block range of the median.</p>
+<p>Agreement measures whether the public validators are producing a coherent, shared chain. It is computed only from <b>reachable public nodes with valid block observations</b>. Offline or unreachable discovered nodes do not count as disagreement, because they cannot currently participate in observed consensus. Agreement is derived from block heights of reachable nodes — specifically, how many are within 25 blocks of the median.</p>
 <p><span class="val">strong</span> — All or nearly all observed public nodes are aligned. <span class="val">moderate</span> — Most agree, but some divergence exists. <span class="val">weak</span> — Significant divergence. <span class="val">unknown</span> — Fewer than two public nodes are reachable.</p>
 <p>The Oracle publishes the underlying data alongside the label: aligned node count, total node count, median block height, and block spread. At current network size, calculated percentages would be misleadingly precise, so the Oracle publishes counts instead.</p>
 <h3>Incidents</h3>
@@ -98,6 +99,11 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #1e293b;color:#4755
 <h3>How separation is enforced</h3>
 <p>In the API: fleet data appears only under a namespaced <code>reference</code> key in <code>/health</code>. The compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
 <p>In the dashboard: public data is presented first. Fleet data is in a collapsed "Reference Layer" section, clearly labeled.</p>
+<h2>Interpretation Model</h2>
+<p>The Oracle separates <b>operability</b> from <b>resilience</b>:</p>
+<p>• <b>Status</b> describes whether the chain is functioning now.<br>• <b>Risk</b> describes how fragile that observed state is.<br>• <b>Agreement</b> measures alignment among currently reachable public nodes.<br>• <b>Discovered but offline nodes</b> reduce redundancy and coverage, but do not count as disagreement.</p>
+<p>This prevents low public node reachability from being misread as immediate chain instability. A network can be <span class="val">stable</span> with <span class="val">elevated</span> risk — meaning: the chain works, but resilience is reduced.</p>
+
 <h2>Understanding Uncertainty</h2>
 <p>The Oracle treats uncertainty as a first-class output. On a young testnet with small, evolving node coverage, partial visibility is a normal operating condition — not an error.</p>
 <p>The Oracle starts from caution and earns stronger claims through sustained observation. It prefers honest uncertainty over artificial precision.</p>
