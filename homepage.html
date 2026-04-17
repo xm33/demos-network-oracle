@@ -193,9 +193,10 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <div id="growth-cards" class="growth-cards"></div>
     <div id="growth-sub" class="growth-sub"></div>
     <table class="vtable">
-      <thead><tr><th>Validator</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th></tr></thead>
-      <tbody id="vtable-body"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+      <thead><tr><th>Validator</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th><th>Uptime (obs.)</th></tr></thead>
+      <tbody id="vtable-body"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
     </table>
+    <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono)">Rolling observed history. Early values may refine over time.</div>
   </section>
   <section class="section" id="incidents">
     <div class="section-title">Incidents</div>
@@ -330,7 +331,7 @@ async function fetchData() {
     var median=ag.median_block||0;
     var tbody=document.getElementById('vtable-body');
     if(validators.length===0&&nodes.length===0){
-      tbody.innerHTML='<tr><td colspan="5">No validators</td></tr>';
+      tbody.innerHTML='<tr><td colspan="6">No validators</td></tr>';
     } else if(validators.length>0){
       var h='';
       validators.forEach(function(v){
@@ -342,11 +343,14 @@ async function fetchData() {
           var pn=nodes.find(function(n){return n.name===v.display;});
           latency=pn&&pn.latencyMs!=null?pn.latencyMs+'ms':'\u2014';
         } else { latency='\u2014'; }
+        var uptimeText='\u2014';var uptimeColor='var(--text-secondary)';
+        if(v.uptime_7d!=null){uptimeText=v.uptime_7d+'%';uptimeColor=v.uptime_7d>=95?'var(--improving)':v.uptime_7d>=70?'var(--degraded)':'var(--unstable)';}
         h+='<tr><td>'+(v.display||'\u2014')+'</td>'+
           '<td><span class="status-dot '+dotClass+'"></span>'+statusText+'</td>'+
           '<td>'+(v.block?v.block.toLocaleString():'\u2014')+'</td>'+
           '<td style="color:'+syncColor+'">'+v.sync_pct+'%</td>'+
-          '<td>'+latency+'</td></tr>';
+          '<td>'+latency+'</td>'+
+          '<td style="color:'+uptimeColor+'">'+uptimeText+'</td></tr>';
       });
       tbody.innerHTML=h;
     }
