@@ -2044,15 +2044,16 @@ function generatePrometheusMetrics(fleetData) {
                 if (probeRes.ok) {
                   var probeData = await probeRes.json();
                   var block = probeData.peerlist && probeData.peerlist[0] && probeData.peerlist[0].sync ? probeData.peerlist[0].sync.block : null;
-                  sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='probed_ok' WHERE host=? AND port=?", block, probeData.identity || null, host, port);
+                  sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='probed_ok', probe_error=NULL WHERE host=? AND port=?", block, probeData.identity || null, host, port);
                   log("[m7] Probe OK: " + host + ":" + port + " block=" + block);
                 } else {
-                  sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed' WHERE host=? AND port=?", host, port);
+                  sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error='http_' + probeRes.status WHERE host=? AND port=?", host, port);
                   log("[m7] Probe FAIL: " + host + ":" + port + " HTTP " + probeRes.status);
                 }
               } catch(probeErr) {
-                sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed' WHERE host=? AND port=?", host, port);
-                log("[m7] Probe FAIL: " + host + ":" + port + " " + probeErr.message);
+                var probeReason = "unknown"; var pmsg = (probeErr.message || "").toLowerCase(); if (pmsg.indexOf("timeout") !== -1) probeReason = "timeout"; else if (pmsg.indexOf("refused") !== -1) probeReason = "connection_refused"; else if (pmsg.indexOf("unable to connect") !== -1) probeReason = "connection_refused"; else if (pmsg.indexOf("dns") !== -1 || pmsg.indexOf("resolve") !== -1) probeReason = "dns_error"; else if (pmsg.indexOf("fetch") !== -1) probeReason = "fetch_failed";
+                sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error=? WHERE host=? AND port=?", probeReason, host, port);
+                log("[m7] Probe FAIL: " + host + ":" + port + " reason=" + probeReason + " " + probeErr.message);
               }
             })();
           }
@@ -2088,9 +2089,10 @@ function generatePrometheusMetrics(fleetData) {
       try {
         var totals = sharedDb.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='probed_ok' THEN 1 ELSE 0 END) AS probed_ok, SUM(CASE WHEN status='probed_failed' THEN 1 ELSE 0 END) AS probed_failed, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved FROM submissions").get() || {};
         var topPorts = sharedDb.query("SELECT port, COUNT(*) AS count FROM submissions GROUP BY port ORDER BY count DESC LIMIT 10").all();
-        var recent = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, submitted_at FROM submissions ORDER BY submitted_at DESC LIMIT 10").all();
+        var recent = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, probe_error, submitted_at FROM submissions ORDER BY submitted_at DESC LIMIT 10").all();
+        var failReasons = sharedDb.query("SELECT probe_error, COUNT(*) AS count FROM submissions WHERE status='probed_failed' AND probe_error IS NOT NULL GROUP BY probe_error ORDER BY count DESC LIMIT 10").all();
         res.writeHead(200, {"Content-Type":"application/json"});
-        res.end(JSON.stringify({total:totals.total||0, pending:totals.pending||0, probed_ok:totals.probed_ok||0, probed_failed:totals.probed_failed||0, approved:totals.approved||0, top_ports:topPorts, recent:recent}, null, 2));
+        res.end(JSON.stringify({total:totals.total||0, pending:totals.pending||0, probed_ok:totals.probed_ok||0, probed_failed:totals.probed_failed||0, approved:totals.approved||0, top_ports:topPorts, failure_reasons:failReasons, recent:recent}, null, 2));
       } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
@@ -2716,7 +2718,8 @@ async function main() {
     node_states TEXT NOT NULL
   )`);
   log("  Public node history table ready");
-  sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER)");
+  try { sharedDb.run("ALTER TABLE submissions ADD COLUMN probe_error TEXT"); } catch(e) {}
+    sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER)");
   log("  Submissions table ready");
 
   // v6.4: Load incident counter from DB
