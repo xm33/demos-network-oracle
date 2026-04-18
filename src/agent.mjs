@@ -10,6 +10,7 @@ import { initMarketplace, pollAndProcessQueries, getMarketplaceStats, getRecentQ
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 
 // --- Logging setup ---
+var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
 var LOG_DIR = process.env.LOG_DIR || "logs";
 try { mkdirSync(LOG_DIR, { recursive: true }); } catch(e) {}
 var LOG_FILE = join(LOG_DIR, "agent.log");
@@ -2059,17 +2060,17 @@ function generatePrometheusMetrics(fleetData) {
           res.end(JSON.stringify({ok:true, message:"Submission received. The Oracle will probe your node."}));
         } catch(err) { res.writeHead(500); res.end(JSON.stringify({error:err.message})); }
       });
-    } else if (req.url === "/submissions") {
-      var remoteIP = req.socket.remoteAddress;
-      if (remoteIP !== "127.0.0.1" && remoteIP !== "::1" && remoteIP !== "::ffff:127.0.0.1") { res.writeHead(403); res.end(JSON.stringify({error:"localhost only"})); return; }
+    } else if (req.url === "/submissions" || req.url.indexOf("/submissions?") === 0) {
+      var subUrl = new URL(req.url, "http://d"); var subTk = subUrl.searchParams.get("token");
+      if (subTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
       if (!sharedDb) { res.writeHead(200); res.end("[]"); return; }
       var rows = sharedDb.query("SELECT * FROM submissions ORDER BY submitted_at DESC").all();
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(rows, null, 2));
-    } else if (req.url && req.url.indexOf("/approve?id=") === 0) {
-      var remoteIP2 = req.socket.remoteAddress;
-      if (remoteIP2 !== "127.0.0.1" && remoteIP2 !== "::1" && remoteIP2 !== "::ffff:127.0.0.1") { res.writeHead(403); res.end(JSON.stringify({error:"localhost only"})); return; }
-      var approveId = parseInt(req.url.split("id=")[1], 10);
+    } else if (req.url && req.url.indexOf("/approve?") === 0) {
+      var appUrl = new URL(req.url, "http://d"); var appTk = appUrl.searchParams.get("token");
+      if (appTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
+      var approveId = parseInt(appUrl.searchParams.get("id"), 10);
       if (!sharedDb || !approveId) { res.writeHead(400); res.end(JSON.stringify({error:"invalid id"})); return; }
       var sub = sharedDb.query("SELECT * FROM submissions WHERE id=?").get(approveId);
       if (!sub) { res.writeHead(404); res.end(JSON.stringify({error:"not found"})); return; }
@@ -2080,6 +2081,17 @@ function generatePrometheusMetrics(fleetData) {
       log("[m7] Approved: " + nodeName + " = " + sub.host + ":" + sub.port + " (" + sub.operator + ")");
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ok:true, node_name: nodeName, message:"Node approved and added to monitoring"}));
+    } else if (req.url === "/submissions/summary" || req.url.indexOf("/submissions/summary?") === 0) {
+      var sumUrl = new URL(req.url, "http://d"); var sumTk = sumUrl.searchParams.get("token");
+      if (sumTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
+      if (!sharedDb) { res.writeHead(200, {"Content-Type":"application/json"}); res.end(JSON.stringify({total:0})); return; }
+      try {
+        var totals = sharedDb.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='probed_ok' THEN 1 ELSE 0 END) AS probed_ok, SUM(CASE WHEN status='probed_failed' THEN 1 ELSE 0 END) AS probed_failed, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved FROM submissions").get() || {};
+        var topPorts = sharedDb.query("SELECT port, COUNT(*) AS count FROM submissions GROUP BY port ORDER BY count DESC LIMIT 10").all();
+        var recent = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, submitted_at FROM submissions ORDER BY submitted_at DESC LIMIT 10").all();
+        res.writeHead(200, {"Content-Type":"application/json"});
+        res.end(JSON.stringify({total:totals.total||0, pending:totals.pending||0, probed_ok:totals.probed_ok||0, probed_failed:totals.probed_failed||0, approved:totals.approved||0, top_ports:topPorts, recent:recent}, null, 2));
+      } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);

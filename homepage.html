@@ -200,8 +200,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   <section class="section">
     <div class="section-title">Agreement</div>
     <div class="agreement-grid">
-      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">state</div><div id="ag-reason" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
-      <div class="ag-item"><div id="ag-aligned" class="ag-value">—</div><div class="ag-label">aligned</div></div>
+      <div class="ag-item"><div id="ag-state" class="ag-value">—</div><div class="ag-label">agreement</div><div id="ag-reason" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
+      <div class="ag-item"><div id="ag-aligned" class="ag-value">—</div><div class="ag-label">aligned nodes</div></div>
       <div class="ag-item"><div id="ag-spread" class="ag-value">—</div><div class="ag-label">block spread</div></div>
       <div class="ag-item"><div id="ag-median" class="ag-value">—</div><div class="ag-label">median block</div></div>
     </div>
@@ -358,8 +358,8 @@ async function fetchData() {
     var gc=document.getElementById('growth-cards');
     gc.innerHTML=
       '<div class="growth-card"><div class="gc-value">'+(vg.total||0)+'</div><div class="gc-label">Discovered</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.online||0)+'</div><div class="gc-label">Online</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.synced||0)+'</div><div class="gc-label">Synced</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.online||0)+'</div><div class="gc-label">Reachable</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.synced||0)+'</div><div class="gc-label">At Head</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
     document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week';
 
