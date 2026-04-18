@@ -49,9 +49,9 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 </nav>
 <main>
 <h1>How the Oracle Works</h1>
-<p class="sub">This page explains how the Demos Network Oracle makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
+<p class="sub">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
 <h2>What the Oracle Is</h2>
-<p>The Demos Network Oracle is a public observability layer for the Demos blockchain testnet. It watches the network's public validator nodes, measures whether they agree on the state of the chain, tracks specific problems, and publishes what it finds.</p>
+<p>The Demos Network Oracle (DNO) is a public observability layer for the Demos blockchain testnet. It watches the network's public validator nodes, measures whether they agree on the state of the chain, tracks specific problems, and publishes what it finds.</p>
 <p>The Oracle is strictly watch-only. It observes, interprets, and summarizes. It does not command validators, does not advise operators, and does not make predictions about what will happen next. It publishes network state as neutral facts. What anyone does with those facts is their decision.</p>
 <p>The Oracle is independent. It is not operated by the Demos core team. It does not control any downstream system. Any agent, builder, or person can consume its output and form their own conclusions.</p>
 <h2>What It Measures</h2>
@@ -199,6 +199,7 @@ Submit a node: <a href="/submit">/submit</a> — community validator onboarding.
 API version: <code>1.0</code></div>
 <footer>Demos Network Oracle · API v1.0 · <a href="/dashboard">Dashboard</a> · <a href="/docs">API Docs</a> · <a href="https://github.com/xm33/demos-fleet-oracle">GitHub</a></footer>
 </main>
+<div style="position:fixed;bottom:24px;right:24px;z-index:1;pointer-events:none;opacity:0.08"><svg width="64" height="64" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
 </body></html>
 <script>
 document.querySelectorAll('.val').forEach(function(el){

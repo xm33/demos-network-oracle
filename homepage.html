@@ -134,11 +134,20 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 @media (max-width:640px) {
   .main { padding:0 18px; }
   .navbar { padding:0 16px; height:auto; min-height:56px; flex-wrap:wrap; gap:10px; }
-  .navbar-left,.navbar-right { width:100%; justify-content:space-between; }
+  .navbar-left { width:100%; justify-content:space-between; }
+  .navbar-right { width:100%; justify-content:flex-end; gap:8px; }
+  .nav-links { display:none; }
   .nav-links { gap:12px; flex-wrap:wrap; }
   .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
   .oracle-status { font-size:26px; }
-  .oracle-trustline { font-size:13px; }
+  .oracle-trustline { font-size:12px; flex-direction:column; align-items:flex-start; }
+  .oracle-kicker-row { flex-wrap:wrap; gap:8px; }
+  .oracle-kicker { font-size:11px; }
+  .oracle-hero-submit { display:none; }
+  .dbtn-prefix { display:none; }
+  .dbtn-wordmark { font-size:11px; }
+  .demos-brand-btn { padding:0 10px; height:30px; }
+  .api-section-head { flex-direction:column; align-items:flex-start; gap:4px; }
   .growth-cards { gap:10px; }
   .growth-card { flex:1 1 calc(50% - 10px); min-width:unset; }
   .vtable { display:block; overflow-x:auto; }
@@ -411,5 +420,6 @@ async function fetchData() {
 fetchData();
 setInterval(fetchData,20000);
 </script>
+<div style="position:fixed;bottom:24px;right:24px;z-index:1;pointer-events:none;opacity:0.08"><svg width="64" height="64" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
 </body>
 </html>

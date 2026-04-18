@@ -63,6 +63,12 @@ button:disabled{opacity:0.4;cursor:not-allowed}
   <div class="hint">How you want to be identified</div>
 </div>
 
+<div style="margin:20px 0 0">
+  <label>Or get your node info via terminal</label>
+  <pre style="margin-top:6px">echo "IP: $(curl -s ifconfig.me)" && curl -s http://localhost:53552/info | jq '{identity, version, block: .peerlist[0].sync.block, peers: (.peerlist | length)}'</pre>
+  <div class="hint">Run this on your server, then paste the output in Telegram or fill the form above.</div>
+</div>
+
 <div class="note">
   Submission does not guarantee inclusion. The Oracle will probe your endpoint to verify it responds.
   After manual review, approved nodes join monitoring without restart.
