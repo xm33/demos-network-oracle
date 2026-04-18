@@ -88,23 +88,64 @@ curl -s http://localhost:53550/info | jq '{
 
 <button id="btn" onclick="submitNode()">Submit Node</button>
 <div id="result" class="result"></div>
+<div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
+  <label>Check submission status</label>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <input id="check-host" type="text" placeholder="IP address" style="flex:1">
+    <input id="check-port" type="number" value="53550" style="width:90px">
+    <button onclick="checkStatus()" style="width:auto;margin:0;padding:8px 14px;font-size:12px">Check</button>
+  </div>
+  <div id="status-result" class="result" style="margin-top:10px"></div>
+</div>
+<script>
+async function checkStatus(){
+  var h=document.getElementById('check-host').value.trim();
+  var p=document.getElementById('check-port').value.trim()||'53550';
+  var r=document.getElementById('status-result');
+  if(!h){r.className='result err';r.style.display='block';r.textContent='Enter an IP address.';return;}
+  r.style.display='block';r.className='result';r.style.borderColor='var(--border)';r.style.background='var(--surface)';r.style.color='var(--text-secondary)';r.textContent='Checking...';
+  try{
+    var res=await fetch('/submission/status?host='+encodeURIComponent(h)+'&port='+encodeURIComponent(p));
+    var d=await res.json();
+    if(d.status==='not_found'){r.className='result err';r.textContent='No submission found for '+h+':'+p;}
+    else if(d.status==='probed_ok'){r.className='result ok';r.innerHTML='<b>Probed successfully</b>'+(d.block?' \u2014 block '+Number(d.block).toLocaleString():'')+'<br><span style="font-size:12px;opacity:0.7">Pending manual review.</span>';}
+    else if(d.status==='approved'){r.className='result ok';r.innerHTML='<b>Approved</b>'+(d.node_name?' \u2014 monitored as '+d.node_name:'');}
+    else if(d.status==='duplicate'){r.className='result err';r.textContent='This node is already monitored by the Oracle.';}
+    else if(d.status==='probed_failed'){r.className='result err';r.innerHTML='<b>Probe failed: '+String(d.error||'unknown').replace(/_/g,' ')+'</b>';}
+    else{r.className='result';r.style.color='var(--text-secondary)';r.textContent='Status: '+d.status;}
+  }catch(err){r.className='result err';r.textContent='Error: '+err.message;}
+}
+</script>
 
 <script>
+var ERROR_HELP={connection_refused:'Port not open or wrong port. Check firewall and verify port matches your node config (default: 53550).',timeout:'Node not reachable (timed out after 5s). Check IP and port accessibility.',dns_error:'Could not resolve hostname. Check for typos.',fetch_failed:'Connection failed. Verify node is running and accessible.',unknown:'Unexpected error. Try again or check your node.'};
 async function submitNode(){
   var btn=document.getElementById('btn');
   var res=document.getElementById('result');
   var host=document.getElementById('host').value.trim();
-  var port=document.getElementById('port').value.trim()||'53552';
+  var port=document.getElementById('port').value.trim()||'53550';
   var operator=document.getElementById('operator').value.trim();
   if(!host||!operator){res.className='result err';res.style.display='block';res.textContent='Host and operator name are required.';return;}
-  btn.disabled=true;btn.textContent='Submitting...';
+  btn.disabled=true;btn.textContent='Probing your node...';
+  res.style.display='block';res.className='result';res.style.borderColor='var(--border)';res.style.background='var(--surface)';res.style.color='var(--text-secondary)';res.textContent='Connecting to '+host+':'+port+'...';
   try{
     var r=await fetch('/submit',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'host='+encodeURIComponent(host)+'&port='+encodeURIComponent(port)+'&operator='+encodeURIComponent(operator)});
     var d=await r.json();
-    if(r.ok){res.className='result ok';res.textContent=d.message||'Submitted successfully.';}
-    else{res.className='result err';res.textContent=d.error||'Submission failed.';}
+    if(!r.ok){
+      if(d.existing_status==='approved'){res.className='result ok';res.innerHTML='<b>Already approved</b><br><span style="font-size:12px">This node is already approved and monitored.</span>';}
+      else if(d.existing_status==='probed_ok'){res.className='result';res.style.color='var(--text-secondary)';res.innerHTML='<b>Already pending review</b><br><span style="font-size:12px">This submission passed probing and is awaiting manual review.</span>';}
+      else if(d.existing_status==='duplicate'){res.className='result err';res.innerHTML='<b>Already monitored</b><br><span style="font-size:12px">This node is already being observed by the Oracle.</span>';}
+      else{res.className='result err';res.textContent=d.error||'Submission failed.';}
+      btn.disabled=false;btn.textContent='Submit Node';return;
+    }
+    if(d.probe){
+      if(d.probe.status==='probed_ok'){res.className='result ok';res.innerHTML='<b>Probe successful</b> \u2014 block '+(d.probe.block?Number(d.probe.block).toLocaleString():'unknown')+'<br><span style="opacity:0.7;font-size:12px">Pending manual review. Your node will appear in monitoring after approval.</span>';}
+      else if(d.probe.status==='duplicate'){res.className='result err';res.innerHTML='<b>Already monitored</b><br><span style="font-size:12px">'+(d.probe.message||'This node is already observed by the Oracle.')+'</span>';}
+      else if(d.probe.status==='probed_failed'){var help=ERROR_HELP[d.probe.error]||ERROR_HELP['unknown'];res.className='result err';res.innerHTML='<b>Probe failed: '+String(d.probe.error||'unknown').replace(/_/g,' ')+'</b><br><span style="font-size:12px">'+help+'</span>';}
+      else{res.className='result ok';res.textContent='Submitted.';}
+    } else{res.className='result ok';res.textContent='Submitted.';}
   }catch(err){res.className='result err';res.textContent='Network error: '+err.message;}
-  res.style.display='block';btn.disabled=false;btn.textContent='Submit Node';
+  btn.disabled=false;btn.textContent='Submit Node';
 }
 </script>
 </main>

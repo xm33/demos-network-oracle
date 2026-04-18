@@ -2023,43 +2023,75 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/submit" && req.method === "POST") {
       var body = "";
       req.on("data", function(chunk) { body += chunk; });
-      req.on("end", function() {
+      req.on("end", async function() {
         try {
           var params = new URLSearchParams(body);
           var host = (params.get("host") || "").trim();
-          var port = parseInt(params.get("port") || "53552", 10);
+          var port = parseInt(params.get("port") || "53550", 10);
           var operator = (params.get("operator") || "").trim();
           var blocked = ["localhost","127.0.0.1","0.0.0.0","10.","192.168.","172.16.","172.17.","172.18.","172.19.","172.20.","172.21.","172.22.","172.23.","172.24.","172.25.","172.26.","172.27.","172.28.","172.29.","172.30.","172.31."];
           var isBlocked = blocked.some(function(b){ return host.indexOf(b) === 0; });
-          if (isBlocked) { res.writeHead(400); res.end(JSON.stringify({error:"private or local addresses not allowed"})); return; }
-          if (!host || !operator) { res.writeHead(400); res.end(JSON.stringify({error:"host and operator required"})); return; }
-          if (sharedDb) {
-            var existing = sharedDb.query("SELECT id FROM submissions WHERE host=? AND port=?").get(host, port);
-            if (existing) { res.writeHead(409); res.end(JSON.stringify({error:"already submitted"})); return; }
-            sharedDb.run("INSERT INTO submissions (host, port, operator, submitted_at) VALUES (?, ?, ?, ?)", host, port, operator, Date.now());
-            // Auto-probe
-            (async function() {
-              try {
-                var probeRes = await fetch("http://" + host + ":" + port + "/info", { signal: AbortSignal.timeout(5000) });
-                if (probeRes.ok) {
-                  var probeData = await probeRes.json();
-                  var block = probeData.peerlist && probeData.peerlist[0] && probeData.peerlist[0].sync ? probeData.peerlist[0].sync.block : null;
-                  sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='probed_ok', probe_error=NULL WHERE host=? AND port=?", block, probeData.identity || null, host, port);
-                  log("[m7] Probe OK: " + host + ":" + port + " block=" + block);
-                } else {
-                  sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error='http_' + probeRes.status WHERE host=? AND port=?", host, port);
-                  log("[m7] Probe FAIL: " + host + ":" + port + " HTTP " + probeRes.status);
-                }
-              } catch(probeErr) {
-                var probeReason = "unknown"; var pmsg = (probeErr.message || "").toLowerCase(); if (pmsg.indexOf("timeout") !== -1) probeReason = "timeout"; else if (pmsg.indexOf("refused") !== -1) probeReason = "connection_refused"; else if (pmsg.indexOf("unable to connect") !== -1) probeReason = "connection_refused"; else if (pmsg.indexOf("dns") !== -1 || pmsg.indexOf("resolve") !== -1) probeReason = "dns_error"; else if (pmsg.indexOf("fetch") !== -1) probeReason = "fetch_failed";
-                sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error=? WHERE host=? AND port=?", probeReason, host, port);
-                log("[m7] Probe FAIL: " + host + ":" + port + " reason=" + probeReason + " " + probeErr.message);
-              }
-            })();
+          if (isBlocked) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"private or local addresses not allowed"})); return; }
+          if (!host || !operator) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"host and operator required"})); return; }
+          if (!sharedDb) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"database not available"})); return; }
+          // Check existing — allow retry if probed_failed
+          var existing = sharedDb.query("SELECT id, status FROM submissions WHERE host=? AND port=? ORDER BY id DESC LIMIT 1").get(host, port);
+          var subId = null;
+          if (existing) {
+            if (existing.status === "probed_failed") {
+              sharedDb.run("UPDATE submissions SET operator=?, status='pending' WHERE id=?", operator, existing.id);
+              subId = existing.id;
+              log("[m10] Retry submission id=" + subId + " " + host + ":" + port);
+            } else {
+              res.writeHead(409, {"Content-Type":"application/json"});
+              res.end(JSON.stringify({error:"already submitted", existing_status: existing.status}));
+              return;
+            }
           }
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ok:true, message:"Submission received. The Oracle will probe your node."}));
-        } catch(err) { res.writeHead(500); res.end(JSON.stringify({error:err.message})); }
+          if (!subId) {
+            sharedDb.run("INSERT INTO submissions (host, port, operator, submitted_at) VALUES (?, ?, ?, ?)", host, port, operator, Date.now());
+            var row = sharedDb.query("SELECT id FROM submissions WHERE host=? AND port=? ORDER BY id DESC LIMIT 1").get(host, port);
+            subId = row ? row.id : null;
+          }
+          // Synchronous probe
+          var probeResult = {status: "probed_failed", error: "unknown"};
+          try {
+            var probeRes = await fetch("http://" + host + ":" + port + "/info", { signal: AbortSignal.timeout(5000) });
+            if (probeRes.ok) {
+              var probeData = await probeRes.json();
+              var block = probeData.peerlist && probeData.peerlist[0] && probeData.peerlist[0].sync ? probeData.peerlist[0].sync.block : null;
+              var identity = probeData.identity || null;
+              var subUrl = "http://" + host + ":" + port;
+              var dupUrl = Object.values(PUBLIC_NODES).some(function(n){ return n.url === subUrl; });
+              var dupIdentity = identity && Object.values(PUBLIC_NODES).some(function(n){ return n.identity === identity; });
+              if (dupUrl || dupIdentity) {
+                if (subId) sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='duplicate', probe_error=NULL WHERE id=?", block, identity, subId);
+                log("[m10] Duplicate: " + host + ":" + port);
+                probeResult = {status: "duplicate", block: block, message: "This node is already monitored by the Oracle."};
+              } else {
+                if (subId) sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='probed_ok', probe_error=NULL WHERE id=?", block, identity, subId);
+                log("[m10] Probe OK: " + host + ":" + port + " block=" + block);
+                probeResult = {status: "probed_ok", block: block};
+              }
+            } else {
+              var httpErr = "http_" + probeRes.status;
+              if (subId) sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error=? WHERE id=?", httpErr, subId);
+              log("[m10] Probe FAIL: " + host + ":" + port + " HTTP " + probeRes.status);
+              probeResult = {status: "probed_failed", error: httpErr};
+            }
+          } catch(probeErr) {
+            var probeReason = "unknown"; var pmsg = (probeErr.message || "").toLowerCase();
+            if (pmsg.indexOf("timeout") !== -1) probeReason = "timeout";
+            else if (pmsg.indexOf("refused") !== -1 || pmsg.indexOf("unable to connect") !== -1) probeReason = "connection_refused";
+            else if (pmsg.indexOf("dns") !== -1 || pmsg.indexOf("resolve") !== -1) probeReason = "dns_error";
+            else if (pmsg.indexOf("fetch") !== -1) probeReason = "fetch_failed";
+            if (subId) sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error=? WHERE id=?", probeReason, subId);
+            log("[m10] Probe FAIL: " + host + ":" + port + " reason=" + probeReason);
+            probeResult = {status: "probed_failed", error: probeReason};
+          }
+          res.writeHead(200, {"Content-Type":"application/json"});
+          res.end(JSON.stringify({ok: true, probe: probeResult}));
+        } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
       });
     } else if (req.url === "/submissions" || req.url.indexOf("/submissions?") === 0) {
       var subUrl = new URL(req.url, "http://d"); var subTk = subUrl.searchParams.get("token");
@@ -2102,6 +2134,23 @@ function generatePrometheusMetrics(fleetData) {
         res.writeHead(200, {"Content-Type":"application/json"});
         res.end(JSON.stringify({total:totals.total||0, pending:totals.pending||0, probed_ok:totals.probed_ok||0, probed_failed:totals.probed_failed||0, approved:totals.approved||0, top_ports:topPorts, failure_reasons:failReasons, recent:recent}, null, 2));
       } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
+    } else if (req.url && req.url.indexOf("/submission/status") === 0) {
+      var stUrl = new URL(req.url, "http://d");
+      var stHost = (stUrl.searchParams.get("host") || "").trim();
+      var stPort = parseInt(stUrl.searchParams.get("port") || "0", 10);
+      if (!stHost || !stPort) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({status:"error", message:"host and port required"})); return; }
+      if (!sharedDb) { res.writeHead(200, {"Content-Type":"application/json"}); res.end(JSON.stringify({status:"not_found"})); return; }
+      var stRow = sharedDb.query("SELECT status, probe_block, probe_error FROM submissions WHERE host=? AND port=? ORDER BY id DESC LIMIT 1").get(stHost, stPort);
+      if (!stRow) { res.writeHead(200, {"Content-Type":"application/json","Cache-Control":"public, max-age=10"}); res.end(JSON.stringify({status:"not_found", host:stHost, port:stPort})); return; }
+      var stResp = {status: stRow.status, host: stHost, port: stPort};
+      if (stRow.probe_block) stResp.block = stRow.probe_block;
+      if (stRow.probe_error) stResp.error = stRow.probe_error;
+      if (stRow.status === "approved") {
+        var nm = Object.keys(PUBLIC_NODES).find(function(k){ return PUBLIC_NODES[k].url === "http://" + stHost + ":" + stPort; });
+        if (nm) stResp.node_name = nm;
+      }
+      res.writeHead(200, {"Content-Type":"application/json","Cache-Control":"public, max-age=10"});
+      res.end(JSON.stringify(stResp));
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
