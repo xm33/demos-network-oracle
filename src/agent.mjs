@@ -2076,7 +2076,15 @@ function generatePrometheusMetrics(fleetData) {
       var sub = sharedDb.query("SELECT * FROM submissions WHERE id=?").get(approveId);
       if (!sub) { res.writeHead(404); res.end(JSON.stringify({error:"not found"})); return; }
       if (sub.status === "approved") { res.writeHead(200); res.end(JSON.stringify({ok:true, message:"already approved"})); return; }
-      var nodeName = "community-node" + (Object.keys(PUBLIC_NODES).filter(function(k){return k.indexOf("community-")===0;}).length + 1);
+      // Check duplicate identity
+      if (sub.probe_identity) {
+        var existingIdentity = Object.values(PUBLIC_NODES).some(function(n){ return n.identity === sub.probe_identity; });
+        if (existingIdentity) { res.writeHead(409, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"node with this identity already monitored"})); return; }
+      }
+      // Check duplicate URL
+      var existingUrl = Object.values(PUBLIC_NODES).some(function(n){ return n.url === "http://" + sub.host + ":" + sub.port; });
+      if (existingUrl) { res.writeHead(409, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"node at this address already monitored"})); return; }
+      var nodeName = "community-node-" + approveId;
       PUBLIC_NODES[nodeName] = { url: "http://" + sub.host + ":" + sub.port, identity: sub.probe_identity || "unknown", source_type: "community", trust_tier: "community_submitted", operator: sub.operator, joined_at: new Date().toISOString().split("T")[0] };
       sharedDb.run("UPDATE submissions SET status='approved', reviewed_at=? WHERE id=?", Date.now(), approveId);
       log("[m7] Approved: " + nodeName + " = " + sub.host + ":" + sub.port + " (" + sub.operator + ")");
@@ -2719,8 +2727,25 @@ async function main() {
   )`);
   log("  Public node history table ready");
   try { sharedDb.run("ALTER TABLE submissions ADD COLUMN probe_error TEXT"); } catch(e) {}
-    sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER)");
+    sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER, probe_error TEXT)");
   log("  Submissions table ready");
+  // M9: Reload approved submissions into PUBLIC_NODES
+  try {
+    var approved = sharedDb.query("SELECT * FROM submissions WHERE status='approved' ORDER BY id ASC").all();
+    var loadedCount = 0, skippedCount = 0;
+    for (var ai = 0; ai < approved.length; ai++) {
+      var sub = approved[ai];
+      var subUrl = "http://" + sub.host + ":" + sub.port;
+      var dupUrl = Object.values(PUBLIC_NODES).some(function(n){ return n.url === subUrl; });
+      var dupIdentity = sub.probe_identity && Object.values(PUBLIC_NODES).some(function(n){ return n.identity === sub.probe_identity; });
+      if (dupUrl || dupIdentity) { skippedCount++; continue; }
+      var nodeName = "community-node-" + sub.id;
+      PUBLIC_NODES[nodeName] = { url: subUrl, identity: sub.probe_identity || "unknown", source_type: "community", trust_tier: "community_submitted", operator: sub.operator, joined_at: new Date(sub.reviewed_at || sub.submitted_at).toISOString().split("T")[0] };
+      loadedCount++;
+      log("  Loaded approved node: " + nodeName + " = " + sub.host + ":" + sub.port);
+    }
+    log("  Approved submissions: " + loadedCount + " loaded, " + skippedCount + " skipped (duplicate)");
+  } catch(loadErr) { log("  Failed to load approved submissions: " + loadErr.message); }
 
   // v6.4: Load incident counter from DB
   loadIncidentCounter();
