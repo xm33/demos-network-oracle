@@ -2151,6 +2151,69 @@ function generatePrometheusMetrics(fleetData) {
       }
       res.writeHead(200, {"Content-Type":"application/json","Cache-Control":"public, max-age=10"});
       res.end(JSON.stringify(stResp));
+    } else if (req.url && req.url.indexOf("/admin/submissions") === 0) {
+      function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+      var adUrl = new URL(req.url, "http://d"); var adTk = adUrl.searchParams.get("token");
+      if (adTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"text/plain"}); res.end("403 Forbidden"); return; }
+      if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No database</h1>"); return; }
+      var totals = sharedDb.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status='probed_ok' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='probed_failed' THEN 1 ELSE 0 END) AS failed, SUM(CASE WHEN status='duplicate' THEN 1 ELSE 0 END) AS dup, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved FROM submissions").get() || {};
+      var failures = sharedDb.query("SELECT probe_error, COUNT(*) AS count FROM submissions WHERE status='probed_failed' AND probe_error IS NOT NULL GROUP BY probe_error ORDER BY count DESC").all();
+      var rows = sharedDb.query("SELECT id, host, port, operator, status, probe_block, probe_error, submitted_at FROM submissions ORDER BY id DESC LIMIT 50").all();
+      var tk = encodeURIComponent(adTk);
+      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO Admin</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>';
+      html += '*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Source Code Pro",monospace;background:#0a0a0a;color:#f5f5f5;padding:24px;max-width:1100px;margin:0 auto}';
+      html += 'h1{font-size:20px;margin-bottom:4px}';
+      html += '.sub{color:#98a2b3;font-size:12px;margin-bottom:24px}';
+      html += '.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}';
+      html += '.card{flex:1;min-width:120px;background:#101010;border:1px solid #1a1a1a;border-radius:10px;padding:14px}';
+      html += '.card-val{font-size:28px;font-weight:600;margin-bottom:2px}';
+      html += '.card-label{font-size:11px;color:#98a2b3;text-transform:uppercase;letter-spacing:0.5px}';
+      html += '.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}';
+      html += '.pill{font-size:11px;padding:3px 8px;border-radius:999px;background:#101010;border:1px solid #1a1a1a;color:#98a2b3}';
+      html += 'table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}';
+      html += 'th{text-align:left;padding:8px 10px;border-bottom:1px solid #1a1a1a;color:#98a2b3;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}';
+      html += 'td{padding:8px 10px;border-bottom:1px solid #1a1a1a}';
+      html += 'tr:hover{background:#101010}';
+      html += '.s-ok{color:#2dd4a0}.s-fail{color:#EF4444}.s-dup{color:#d97706}.s-approved{color:#2dd4a0;opacity:0.7}.s-pending{color:#98a2b3}';
+      html += '.btn{display:inline-block;padding:4px 10px;font-size:11px;background:#2dd4a0;color:#000;border-radius:6px;text-decoration:none;font-weight:600}';
+      html += '.btn:hover{opacity:0.85}';
+      html += '.muted{color:#98a2b3;font-size:11px}';
+      html += '@media(max-width:640px){.cards{flex-direction:column}table{font-size:11px}td,th{padding:6px}}';
+      html += '</style></head><body>';
+      html += '<h1>Submission Review</h1>';
+      html += '<div class="sub">Community node submissions, probe outcomes, and approval actions.</div>';
+      // Summary cards
+      html += '<div class="cards">';
+      html += '<div class="card"><div class="card-val">'+(totals.total||0)+'</div><div class="card-label">Total</div></div>';
+      html += '<div class="card"><div class="card-val s-ok">'+(totals.pending||0)+'</div><div class="card-label">Pending Review</div></div>';
+      html += '<div class="card"><div class="card-val s-fail">'+(totals.failed||0)+'</div><div class="card-label">Failed</div></div>';
+      html += '<div class="card"><div class="card-val s-dup">'+(totals.dup||0)+'</div><div class="card-label">Duplicate</div></div>';
+      html += '<div class="card"><div class="card-val s-approved">'+(totals.approved||0)+'</div><div class="card-label">Approved</div></div>';
+      html += '</div>';
+      // Failure reasons
+      if (failures.length > 0) {
+        html += '<div class="pills">';
+        for (var fi = 0; fi < failures.length; fi++) { html += '<span class="pill">' + esc(failures[fi].probe_error||"unknown") + ': ' + failures[fi].count + '</span>'; }
+        html += '</div>';
+      }
+      // Table
+      html += '<table><thead><tr><th>ID</th><th>Host</th><th>Port</th><th>Operator</th><th>Status</th><th>Block</th><th>Error</th><th>Action</th></tr></thead><tbody>';
+      for (var ri = 0; ri < rows.length; ri++) {
+        var r = rows[ri];
+        var sc = r.status === "probed_ok" ? "s-ok" : r.status === "probed_failed" ? "s-fail" : r.status === "duplicate" ? "s-dup" : r.status === "approved" ? "s-approved" : "s-pending";
+        var action = "";
+        if (r.status === "probed_ok") action = '<a class="btn" href="/approve?id=' + r.id + '&token=' + tk + '">Approve</a>';
+        else if (r.status === "approved") action = '<span class="muted">Approved</span>';
+        else if (r.status === "duplicate") action = '<span class="muted">Already monitored</span>';
+        else if (r.status === "probed_failed") action = '<span class="muted">Failed</span>';
+        else action = '<span class="muted">In progress</span>';
+        html += '<tr><td>' + r.id + '</td><td>' + esc(r.host) + '</td><td>' + r.port + '</td><td>' + esc(r.operator||"-") + '</td><td class="' + sc + '">' + esc(r.status) + '</td><td>' + (r.probe_block||"-") + '</td><td>' + esc(r.probe_error||"-") + '</td><td>' + action + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      html += '<div style="margin-top:24px;color:#98a2b3;font-size:11px;opacity:0.5">DNO Admin &middot; Token-protected &middot; Not public</div>';
+      html += '</body></html>';
+      res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
+      res.end(html);
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
