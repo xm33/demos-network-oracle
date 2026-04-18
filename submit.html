@@ -53,8 +53,8 @@ button:disabled{opacity:0.4;cursor:not-allowed}
 
 <div>
   <label>Port</label>
-  <input id="port" type="number" value="53552" placeholder="53552">
-  <div class="hint">Default Demos port is 53552</div>
+  <input id="port" type="number" value="53550" placeholder="53550">
+  <div class="hint">Default Demos port is 53550. Configurable via SERVER_PORT or -p flag.</div>
 </div>
 
 <div>
@@ -63,10 +63,21 @@ button:disabled{opacity:0.4;cursor:not-allowed}
   <div class="hint">How you want to be identified</div>
 </div>
 
-<div style="margin:20px 0 0">
+<div style="margin:24px 0 0">
   <label>Or get your node info via terminal</label>
-  <pre style="margin-top:6px">echo "IP: $(curl -s ifconfig.me)" && curl -s http://localhost:53552/info | jq '{identity, version, block: .peerlist[0].sync.block, peers: (.peerlist | length)}'</pre>
-  <div class="hint">Run this on your server, then paste the output in Telegram or fill the form above.</div>
+  <div style="margin-top:8px;position:relative">
+    <pre id="cmd-block" style="margin:0;padding:14px;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent.trim());this.style.borderColor='var(--improving)';setTimeout(function(){document.getElementById('cmd-block').style.borderColor='var(--border)'},1500)">echo "=== DEMOS NODE INFO ==="
+echo "IP: $(curl -s ifconfig.me)"
+echo "PORT: 53550"
+curl -s http://localhost:53550/info | jq '{
+  identity,
+  version,
+  block: .peerlist[0].sync.block,
+  peers: (.peerlist | length)
+}'</pre>
+    <div style="position:absolute;top:8px;right:10px;font-size:10px;color:var(--text-secondary);opacity:0.6;pointer-events:none">click to copy</div>
+  </div>
+  <div class="hint">Run this on your server and share the output. If your node uses a different port, replace 53550 with your port.</div>
 </div>
 
 <div class="note">
