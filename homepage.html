@@ -215,11 +215,22 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <div class="api-section-head"><div class="section-title" style="margin-bottom:0">Network View</div><a href="/submit" class="api-publish-link">submit your node</a></div>
     <div id="growth-cards" class="growth-cards"></div>
     <div id="growth-sub" class="growth-sub"></div>
+    <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Monitored Public Nodes</div>
+    <div style="font-size:11px;color:var(--text-secondary);opacity:0.6;margin-bottom:10px">Public validators currently included in the Oracle’s live observation set.</div>
     <table class="vtable">
-      <thead><tr><th>Validator</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th><th>Uptime (obs.)</th></tr></thead>
-      <tbody id="vtable-body"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+      <thead><tr><th>Validator</th><th>Source</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th><th>Uptime (obs.)</th></tr></thead>
+      <tbody id="vtable-body"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
     </table>
     <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono)">Rolling observed history. Early values may refine over time.</div>
+
+    <div id="discovered-section" style="display:none;margin-top:28px">
+      <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Discovered Validators</div>
+      <div style="font-size:11px;color:var(--text-secondary);opacity:0.6;margin-bottom:10px">Seen by the Oracle but not yet included in the monitored public set.</div>
+      <table class="vtable" style="opacity:0.65">
+        <thead><tr><th>Address</th><th>Status</th><th>Block</th><th>Sync</th></tr></thead>
+        <tbody id="discovered-body"></tbody>
+      </table>
+    </div>
   </section>
   <section class="section" id="incidents">
     <div class="section-title">Incidents</div>
@@ -265,6 +276,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   </div>
 </div>
 <script>
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
 function signalColor(v) {
   var m = {
     stable:'var(--stable)',degraded:'var(--degraded)',unstable:'var(--unstable)',unknown:'var(--unknown)',
@@ -368,27 +380,32 @@ async function fetchData() {
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
     document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week';
 
-    // Unified validator table
+    // Split: monitored vs discovered validators
     var validators=vg.validators||[];
     var nodes=health.publicNodes||[];
     var median=ag.median_block||0;
     var tbody=document.getElementById('vtable-body');
-    if(validators.length===0&&nodes.length===0){
-      tbody.innerHTML='<tr><td colspan="6">No validators</td></tr>';
-    } else if(validators.length>0){
+    var dbody=document.getElementById('discovered-body');
+    var dsection=document.getElementById('discovered-section');
+    var monitored=validators.filter(function(v){return v.monitored;});
+    var discovered=validators.filter(function(v){return !v.monitored;});
+    // Main table: monitored only
+    if(monitored.length===0){
+      tbody.innerHTML='<tr><td colspan="7">No monitored validators</td></tr>';
+    } else {
       var h='';
-      validators.forEach(function(v){
-        var dotClass=v.monitored?(v.online?'dot-online':'dot-offline'):'dot-syncing';
-        var statusText=v.monitored?(v.online?'online':'offline'):(v.sync_pct>=99.9?'ready':v.sync_pct>=50?'catching up':'syncing');
+      monitored.forEach(function(v){
+        var dotClass=v.online?'dot-online':'dot-offline';
+        var statusText=v.online?'online':'offline';
         var syncColor=v.sync_pct>=99.9?'var(--improving)':v.sync_pct>=90?'var(--text-primary)':v.sync_pct>=50?'var(--degraded)':'var(--unstable)';
-        var latency='';
-        if(v.monitored){
-          var pn=nodes.find(function(n){return n.name===v.display;});
-          latency=pn&&pn.latencyMs!=null?pn.latencyMs+'ms':'\u2014';
-        } else { latency='\u2014'; }
+        var pn=nodes.find(function(n){return n.name===v.display;});
+        var latency=pn&&pn.latencyMs!=null?pn.latencyMs+'ms':'\u2014';
         var uptimeText='\u2014';var uptimeColor='var(--text-secondary)';
         if(v.uptime_7d!=null){uptimeText=v.uptime_7d+'%';uptimeColor=v.uptime_7d>=95?'var(--improving)':v.uptime_7d>=70?'var(--degraded)':'var(--unstable)';}
-        h+='<tr><td>'+(v.display||'\u2014')+'</td>'+
+        var source=(v.display&&v.display.indexOf('community')===0)?'Community':'Kynesys';
+        var srcPill='<span style="display:inline-block;padding:1px 7px;border:1px solid var(--border);border-radius:999px;font-size:10px;color:var(--text-secondary)">'+source+'</span>';
+        h+='<tr><td>'+esc(v.display||'\u2014')+'</td>'+
+          '<td>'+srcPill+'</td>'+
           '<td><span class="status-dot '+dotClass+'"></span>'+statusText+'</td>'+
           '<td>'+(v.block?v.block.toLocaleString():'\u2014')+'</td>'+
           '<td style="color:'+syncColor+'">'+v.sync_pct+'%</td>'+
@@ -397,6 +414,20 @@ async function fetchData() {
       });
       tbody.innerHTML=h;
     }
+    // Discovered table: not yet monitored
+    if(discovered.length>0){
+      dsection.style.display='';
+      var dh='';
+      discovered.forEach(function(v){
+        var syncColor=v.sync_pct>=50?'var(--degraded)':'var(--unstable)';
+        if(v.sync_pct>=99.9) syncColor='var(--improving)';
+        dh+='<tr><td>'+esc(v.display||'\u2014')+'</td>'+
+          '<td><span class="status-dot dot-syncing"></span>syncing</td>'+
+          '<td>'+(v.block?v.block.toLocaleString():'\u2014')+'</td>'+
+          '<td style="color:'+syncColor+'">'+v.sync_pct+'%</td></tr>';
+      });
+      dbody.innerHTML=dh;
+    } else { dsection.style.display='none'; }
 
     // Incidents
     var incCount=document.getElementById('inc-count');
