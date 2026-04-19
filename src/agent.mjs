@@ -2257,7 +2257,39 @@ function generatePrometheusMetrics(fleetData) {
         h += '</div></td></tr>';
       }
       h += '</tbody></table>';
-      h += '<div style="margin-top:40px;padding-top:24px;border-top:1px solid var(--border)"><h2 style="font-family:var(--mono);font-size:16px;font-weight:600;margin:0 0 4px">Fleet Nodes</h2><p class="sub" style="margin-bottom:18px">Reference-only nodes operated by CypherX33, shown for transparency. These do not define canonical public truth.</p><table><thead><tr><th>Node</th><th>Host</th></tr></thead><tbody>';for(var fi=0,fk=Object.keys(EXPECTED_FLEET);fi<fk.length;fi++){var fname=fk[fi];h+='<tr><td>'+esc(fname)+'</td><td style="color:var(--text-secondary)">'+esc(EXPECTED_FLEET[fname].host)+':'+EXPECTED_FLEET[fname].port+'</td></tr>';}h+='</tbody></table></div>';h += '<footer>Demos Network Oracle &middot; Community nodes are not part of canonical network truth until approved. Inclusion does not imply endorsement. &middot; <a href="/">Home</a> &middot; <a href="/submit">Submit</a></footer>';
+      // Fleet diagnostics — read from cached health data
+      var fleetReports = {};
+      try {
+        if (latestHealthData && latestHealthData.nodeReports) {
+          for (var nri = 0; nri < latestHealthData.nodeReports.length; nri++) {
+            var nr = latestHealthData.nodeReports[nri];
+            fleetReports[nr.name] = nr;
+          }
+        }
+      } catch(e) {}
+      h += '<div style="margin-top:40px;padding-top:24px;border-top:1px solid var(--border)">';
+      h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Reference Fleet Diagnostics</h2>';
+      h += '<p class="sub" style="margin-bottom:18px">Reference-only nodes operated by CypherX33. Shown with live diagnostics from the Oracle\'s observation cycle. These do not define canonical public truth.</p>';
+      h += '<table><thead><tr><th>Node</th><th>Host</th><th>Status</th><th>Block</th></tr></thead><tbody>';
+      var fleetNames = Object.keys(EXPECTED_FLEET);
+      for (var fi = 0; fi < fleetNames.length; fi++) {
+        var fname = fleetNames[fi];
+        var fnode = EXPECTED_FLEET[fname];
+        var report = fleetReports[fname] || {};
+        var isHealthy = report.status === "HEALTHY";
+        var statusText = report.status ? String(report.status).toLowerCase() : "unknown";
+        var statusColor = isHealthy ? "#2dd4a0" : (report.status ? "#EF4444" : "#98a2b3");
+        var statusBg = isHealthy ? "rgba(45,212,160,0.08)" : (report.status ? "rgba(239,68,68,0.08)" : "rgba(152,162,179,0.08)");
+        h += '<tr>';
+        h += '<td>' + esc(fname) + '</td>';
+        h += '<td style="color:var(--text-secondary)">' + esc(fnode.host) + ':' + fnode.port + '</td>';
+        h += '<td><span class="pill" style="color:' + statusColor + ';background:' + statusBg + ';border-color:' + statusColor + '44">' + esc(statusText) + '</span></td>';
+        h += '<td>' + (report.blockHeight ? report.blockHeight.toLocaleString() : "\u2014") + '</td>';
+        h += '</tr>';
+      }
+      h += '</tbody></table>';
+      h += '</div>';
+      h += '<footer>Demos Network Oracle &middot; Community nodes are not part of canonical network truth until approved. Inclusion does not imply endorsement. &middot; <a href="/">Home</a> &middot; <a href="/submit">Submit</a></footer>';
       h += '</main></body></html>';
       res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
       res.end(h);
