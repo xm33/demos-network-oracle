@@ -2136,7 +2136,7 @@ function generatePrometheusMetrics(fleetData) {
       } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
     } else if (req.url === "/community") {
       if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
-      var rows = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, probe_error, probe_identity, submitted_at FROM submissions ORDER BY id DESC LIMIT 50").all();
+      var rows = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, probe_error, probe_identity, submitted_at FROM submissions WHERE status != 'probed_failed' ORDER BY id DESC LIMIT 50").all();
       // Get network head from latest public node data
       var netHead = 0;
       try { var pn = latestPublicNodes || []; for (var pi=0;pi<pn.length;pi++) { if (pn[pi].block && pn[pi].block > netHead) netHead = pn[pi].block; } } catch(e){}
