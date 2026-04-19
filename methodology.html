@@ -50,6 +50,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 </nav>
 <main>
 <h1>How the Oracle Works</h1>
+<p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Observing many signals. Resolving one truth.</p>
 <p class="sub">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
 <h2>What the Oracle Is</h2>
 <p>The Demos Network Oracle (DNO) is a public observability layer for the Demos blockchain testnet. It watches the network's public validator nodes, measures whether they agree on the state of the chain, tracks specific problems, and publishes what it finds.</p>
@@ -129,7 +130,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <h3>Public network (primary truth)</h3>
 <p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are validator nodes operated by independent parties: Kynesys (the protocol team) and manually approved community validators.</p>
 <h3>Reference fleet (internal context)</h3>
-<p>The Oracle operator (CypherX33) also runs a fleet of seven validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
+<p>The Oracle operator (XM33) also runs a fleet of seven validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
 <p>The fleet is a reference layer because it is operated by a single entity, may be on a different chain state than the public network, and its health does not represent public network health.</p>
 <h3>How separation is enforced</h3>
 <p>In the API: fleet data appears only under a namespaced <code>reference</code> key in <code>/health</code>. The compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
