@@ -191,8 +191,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
       <span class="oracle-hero-live"><span class="hero-dot"></span>ORACLE LIVE</span><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a>
     </div>
     <div id="hero-status" class="oracle-status loading">Loading...</div>
-    <div id="hero-trustline" class="oracle-trustline"></div>
     <div id="hero-summary" class="hero-summary"></div>
+    <div id="hero-trustline" class="oracle-trustline"></div>
     <div id="hero-staleness" class="oracle-staleness"></div>
   </section>
   <section class="section">
@@ -214,7 +214,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     </div>
   </section>
   <section class="section" id="validators">
-    <div class="api-section-head"><div class="section-title" style="margin-bottom:0">Network View</div><a href="/submit" class="api-publish-link">submit your node</a></div>
+    <div class="section-title">Network View</div>
     <div id="growth-cards" class="growth-cards"></div>
     <div id="growth-sub" class="growth-sub"></div>
     <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Monitored Public Nodes</div>
@@ -458,6 +458,6 @@ async function fetchData() {
 fetchData();
 setInterval(fetchData,20000);
 </script>
-<div style="position:fixed;bottom:24px;right:24px;z-index:1;pointer-events:none;opacity:0.12"><svg width="72" height="72" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
+<div style="position:fixed;bottom:24px;right:24px;z-index:1;pointer-events:none;opacity:0.16"><svg width="120" height="120" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
 </body>
 </html>
