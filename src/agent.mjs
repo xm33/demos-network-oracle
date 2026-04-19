@@ -2175,7 +2175,13 @@ function generatePrometheusMetrics(fleetData) {
         counts[stage] = (counts[stage]||0) + 1;
         var info = stageInfo(stage, r);
         var behind = (r.probe_block && netHead > 0) ? Math.max(0, netHead - r.probe_block) : null;
-        return { id:r.id, host:r.host, port:r.port, operator:r.operator, stage:stage, block:r.probe_block, behind:behind, error:r.probe_error, submitted_at:r.submitted_at, reason:info.reason, next_step:info.next_step };
+        var history = [];
+        if (r.host && sharedDb) {
+          try {
+            history = sharedDb.query("SELECT id, host, port, status, probe_error, submitted_at FROM submissions WHERE host = ? AND id != ? ORDER BY id DESC LIMIT 10").all(r.host, r.id);
+          } catch(e) { history = []; }
+        }
+        return { id:r.id, host:r.host, port:r.port, operator:r.operator, stage:stage, block:r.probe_block, behind:behind, error:r.probe_error, submitted_at:r.submitted_at, reason:info.reason, next_step:info.next_step, history:history };
       });
       var stageColors = { submitted:"#98a2b3", unreachable:"#EF4444", reachable:"#98a2b3", syncing:"#d97706", near_head:"#22c55e", ready:"#2dd4a0", approved:"#2dd4a0", duplicate:"#d97706" };
       var stageBg = { submitted:"rgba(152,162,179,0.08)", unreachable:"rgba(239,68,68,0.08)", reachable:"rgba(152,162,179,0.08)", syncing:"rgba(217,119,6,0.08)", near_head:"rgba(34,197,94,0.08)", ready:"rgba(45,212,160,0.08)", approved:"rgba(45,212,160,0.06)", duplicate:"rgba(217,119,6,0.08)" };
@@ -2254,6 +2260,18 @@ function generatePrometheusMetrics(fleetData) {
         if (r.error) h += '<b>Probe error:</b> ' + esc(r.error.replace(/_/g," ")) + '<br>';
         h += '<b>Submission ID:</b> ' + r.id + '<br>';
         h += '<b>Check status:</b> <a href="/submission/status?host=' + encodeURIComponent(r.host) + '&port=' + r.port + '">/submission/status</a>';
+        if (r.history && r.history.length > 0) {
+          h += '<br><br><b>Previous submissions for this host:</b><br>';
+          for (var hi = 0; hi < r.history.length; hi++) {
+            var hr = r.history[hi];
+            var hColor = hr.status === "probed_ok" || hr.status === "approved" ? "#2dd4a0" : hr.status === "duplicate" ? "#d97706" : "#EF4444";
+            var hTime = hr.submitted_at ? new Date(hr.submitted_at).toISOString().replace("T"," ").slice(0,16) + " UTC" : "\u2014";
+            h += '<span style="color:var(--text-secondary)">#' + hr.id + '</span> \u00b7 ' + esc(hr.host) + ':' + hr.port + ' \u00b7 <span style="color:' + hColor + '">' + esc(String(hr.status || "unknown").replace(/_/g," ")) + '</span>';
+            if (hr.probe_error) h += ' <span style="color:var(--text-secondary)">(' + esc(hr.probe_error.replace(/_/g," ")) + ')</span>';
+            h += ' <span style="color:var(--text-secondary)">\u00b7 ' + esc(hTime) + '</span>';
+            h += '<br>';
+          }
+        }
         h += '</div></td></tr>';
       }
       h += '</tbody></table>';
