@@ -208,7 +208,7 @@ const PUBLIC_NODES = {
     operator: "Kynesys",
     joined_at: "2026-04-14"
   },
-  // Community nodes — manually approved by CypherX33
+  // Community nodes — manually approved by XM33
   "community-node1": {
     url: "http://107.131.170.202:53552",
     identity: "0x283ab24d052cfd8aa82b66780b6d88723e577697d718bada19dfcafcd64524ea",
@@ -2227,7 +2227,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '</div></div></nav>';
       h += '<main>';
       h += '<h1>Community Node Onboarding</h1>';
-      h += '<p class="sub">Community validator nodes during onboarding and approval. <a href="/submit">Submit your node</a></p>';
+      h += '<div style="margin-bottom:18px"><a href="/submit" style="font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(43,54,217,0.40);background:rgba(43,54,217,0.12);border-radius:999px;color:#cfd4ff;text-decoration:none;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">OPEN: NODE SUBMISSION</a></div><p class="sub">Community validator nodes during onboarding and approval.</p>';
       // Summary
       h += '<div class="summary">';
       var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#22c55e"],["Ready",counts.ready||0,"#2dd4a0"],["Approved",counts.approved||0,"#2dd4a0"]];
@@ -2287,7 +2287,7 @@ function generatePrometheusMetrics(fleetData) {
       } catch(e) {}
       h += '<div style="margin-top:40px;padding-top:24px;border-top:1px solid var(--border)">';
       h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Reference Fleet Diagnostics</h2>';
-      h += '<p class="sub" style="margin-bottom:18px">Reference-only nodes operated by CypherX33. Shown with live diagnostics from the Oracle\'s observation cycle. These do not define canonical public truth.</p>';
+      h += '<p class="sub" style="margin-bottom:18px">Reference-only nodes operated by XM33. Shown with live diagnostics from the Oracle\'s observation cycle. These do not define canonical public truth.</p>';
       h += '<table><thead><tr><th>Node</th><th>Host</th><th>Status</th><th>Block</th></tr></thead><tbody>';
       var fleetNames = Object.keys(EXPECTED_FLEET);
       for (var fi = 0; fi < fleetNames.length; fi++) {
