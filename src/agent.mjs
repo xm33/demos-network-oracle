@@ -725,9 +725,16 @@ function computeCanonicalState() {
   }
   else if (status === "degraded") {
     var offCount = pubTotal - pubReachable;
-    summary = offCount > 0 ? offCount + " of " + pubTotal + " public node(s) offline, agreement " + agreement.state : publicIncidentCount + " active incident(s), agreement " + agreement.state;
-  } else if (status === "unstable") summary = "Network unstable — " + publicIncidentCount + " incident(s), agreement " + agreement.state;
-  else summary = pubReachable + "/" + pubTotal + " public nodes online";
+    if (offCount > 0) {
+      summary = "Network partially operable. " + offCount + " of " + pubTotal + " public node" + (offCount === 1 ? "" : "s") + " unreachable; agreement " + agreement.state + ".";
+    } else {
+      summary = "Network partially operable. " + publicIncidentCount + " active incident" + (publicIncidentCount === 1 ? "" : "s") + "; agreement " + agreement.state + ".";
+    }
+  } else if (status === "unstable") {
+    summary = "Network operability impaired. " + publicIncidentCount + " active incident" + (publicIncidentCount === 1 ? "" : "s") + "; agreement " + agreement.state + ".";
+  } else {
+    summary = "Network state unknown. " + pubReachable + " of " + pubTotal + " public nodes reachable.";
+  }
 
   var statusReason = "";
   if (status === "stable") statusReason = "Blocks advancing; reachable nodes aligned";
