@@ -640,6 +640,8 @@ function computeCanonicalState() {
   if (data_quality === "insufficient") {
     confidence = "uncertain";
     confidenceReason = "Insufficient reachable public nodes to cross-check";
+  } else if (pubReachable === 1) {
+    confidenceReason = "Single reachable public node — no cross-check performed";
   } else if (pubReachable >= 2) {
     var pubBlocks = pubOnline.map(function(n) { return n.block; }).filter(Boolean);
     if (pubBlocks.length >= 2 && Math.max.apply(null, pubBlocks) - Math.min.apply(null, pubBlocks) > 50) {
@@ -736,7 +738,6 @@ function computeCanonicalState() {
   if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("Only " + pubReachable + " of " + pubTotal + " public nodes reachable — limited cross-checking");
   if (max_incident_severity === "warning") riskFactors.push("warning-level incidents active");
   if (max_incident_severity === "critical") riskFactors.push("critical incidents active");
-  if (confidence === "uncertain") riskFactors.push("conflicting signals from observed nodes");
   if (agreement.state === "moderate") riskFactors.push("agreement is moderate, not strong");
   var agreementReason = "";
   if (agreement.state === "unknown") agreementReason = "Fewer than 2 reachable nodes";
