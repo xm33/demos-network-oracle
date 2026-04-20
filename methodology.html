@@ -79,7 +79,6 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <h3>Trend</h3>
 <p>Trend tells you whether the situation is getting better, holding steady, or getting worse, based on comparing the current observation against recent history. It is purely backward-looking — it describes what has changed, never what will change.</p>
 <p>Trend requires a minimum number of consecutive successful observations before it reports anything other than <span class="val">unknown</span>. After a restart or data gap, trend resets to <span class="val">unknown</span> until enough history accumulates.</p>
-<div class="warn">Trend currently defaults to <span class="val">unknown</span> because per-cycle public node history storage is not yet implemented. This will be enabled in a future update.</div>
 <h3>Risk</h3>
 <p>Risk describes how dangerous the current observed state is. It is a snapshot — it characterizes the present moment, not a forecast.</p>
 <p><span class="val">low</span> — No significant exposure. <span class="val">elevated</span> — Caution warranted. This does not mean danger is confirmed — it means conditions are not fully clear or not fully healthy. <span class="val">high</span> — The network is materially impaired.</p>
@@ -108,26 +107,6 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 5. Updates all API endpoints with the new state.</p>
 <p>Every 20 minutes, the Oracle publishes an attested summary on-chain via SuperColony.</p>
 <p>The canonical state computation is a single function that takes public node observations as input and produces all seven values as output. Fleet data never enters this function. The computation is deterministic — given the same observations, it always produces the same assessment.</p>
-<h2>State Model</h2>
-<p>The Oracle separates four independent concepts. These are distinct signals and should not be interpreted as interchangeable.</p>
-<h3>Status</h3>
-<p>Status describes current network operability — whether the network is usable right now.</p>
-<p><span class="val">stable</span> — network is live and functioning normally. <span class="val">degraded</span> — network is live but materially impaired. <span class="val">unstable</span> — network is unreliable or close to failure. <span class="val">unknown</span> — insufficient data to classify.</p>
-<p>Status reflects network condition, not observer coverage alone. Reduced node count affects risk, not status, unless operability is actually impacted.</p>
-<h3>Risk</h3>
-<p>Risk describes the current safety margin and resilience of the network.</p>
-<p><span class="val">low</span> — healthy margin. <span class="val">elevated</span> — reduced redundancy or thinner resilience. <span class="val">high</span> — fragile or unsafe conditions.</p>
-<p>A network can be <span class="val">stable</span> with <span class="val">elevated</span> risk. This means: the network is working, but resilience is reduced.</p>
-<h3>Confidence</h3>
-<p>Confidence describes how certain the Oracle is about its current assessment.</p>
-<p><span class="val">clear</span> — well-supported assessment. <span class="val">uncertain</span> — weakened by missing, sparse, or conflicting data.</p>
-<p>Confidence is about data quality, not network health.</p>
-<h3>Incidents</h3>
-<p>Incidents represent active, unresolved issues that currently affect the network.</p>
-<p><span class="val">0</span> — no active incidents. <span class="val">1+</span> — one or more open issues.</p>
-<p>Incidents reflect current unresolved problems, not all events that occurred earlier. Short-lived or recovered events may not appear if they are no longer active.</p>
-<div class="note"><b>Example:</b> status: stable · risk: elevated · confidence: clear · incidents: 0<br>Interpretation: The network is operational, but redundancy is reduced.</div>
-
 <h2>Public vs Reference Separation</h2>
 <p>This is the most important structural rule in the Oracle. It governs everything.</p>
 <h3>Public network (primary truth)</h3>
@@ -150,7 +129,9 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <h3>risk_factors</h3>
 <p>Lists active observed contributors to current network fragility or reduced resilience. This array may be empty when no material risk factors are currently detected.</p>
 <h3>agreement_reason</h3>
-<p>Describes the current reachable-node alignment basis used in the agreement assessment. Example: <span class="val">3/3 reachable nodes within 25 blocks of median (spread: 0)</span></p>
+<p>Describes the current reachable-node alignment basis used in the agreement assessment. Example: <span class="val">3 of 3 reachable nodes within ±25 blocks of median (spread: 0 blocks)</span></p>
+<h3>confidence_reason</h3>
+<p>Explains why confidence is <span class="val">clear</span> or <span class="val">uncertain</span>. Typical values: <span class="val">Observed public signals agree</span> (clear), <span class="val">Insufficient reachable public nodes to cross-check</span> (uncertain, single-node case), or <span class="val">Reachable public nodes report widely different block heights</span> (uncertain, divergent signals).</p>
 <p>These explanatory fields summarize current observed conditions. They do not constitute guarantees, certification, or operational advice.</p>
 
 <h2>Historical Metrics</h2>
@@ -171,7 +152,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <h3>Three kinds of uncertainty</h3>
 <p><b>Insufficient data.</b> The Oracle does not have enough information to form an assessment. Too few public nodes responded, or the Oracle just started and hasn't completed a full cycle yet. Effect: data quality → <span class="val">insufficient</span>, status → <span class="val">unknown</span>, risk → <span class="val">elevated</span>.</p>
 <p><b>Stale data.</b> The Oracle has data, but it may be too old to reflect current reality. Observation failures, network timeouts, or process interruptions can cause staleness. The Oracle always publishes how many seconds ago it last observed the network (<code>staleness_seconds</code>) so consumers can apply their own freshness judgment.</p>
-<p><b>Contradictory data.</b> The Oracle has fresh, sufficient data, but the signals conflict — nodes report different block heights, mixed health signals. This is often the most informative kind of uncertainty, because it frequently signals a real network event. Effect: confidence → <span class="val">uncertain</span>, but data quality remains <span class="val">sufficient</span>. The problem is in the network, not in the Oracle's ability to observe.</p>
+<p><b>Contradictory data.</b> The Oracle has fresh, sufficient data, but the signals conflict — nodes report different block heights, mixed health signals. This is often the most informative kind of uncertainty, because it frequently signals a real network event. A related variant: when only one public node is reachable, confidence is also <span class="val">uncertain</span> — not because signals conflict, but because there is no second source to cross-check against. Effect: confidence → <span class="val">uncertain</span>, but data quality remains <span class="val">sufficient</span>. The problem is in the network or in coverage, not in the Oracle's ability to observe.</p>
 <h3>The unknown contract</h3>
 <p>When the Oracle reports <span class="val">unknown</span>, <span class="val">insufficient</span>, or <span class="val">uncertain</span> for any field:</p>
 <p>1. The value is explicitly stated — never omitted, never null.<br>
@@ -180,7 +161,6 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <h2>Known Limitations</h2>
 <p>DEMOS is a young testnet. The Oracle is designed for this reality and makes no claims beyond what it can observe.</p>
 <p><b>Small public node set.</b> The Oracle currently monitors five public nodes (two Kynesys, three community). Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
-<p><b>Trend is unavailable.</b> Trend currently defaults to <span class="val">unknown</span> because per-cycle public node history is not yet stored. When this data foundation is built, trend will be computed automatically.</p>
 <p><b>Discovered but unmonitored validators.</b> The Oracle discovers new validators via peer list crawling. Some may be online but not yet added to formal monitoring. The Network Growth panel on the dashboard shows their sync progress. They are added to monitoring manually after reaching the network head.</p>
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
 <p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core truth model.</p>
@@ -189,12 +169,12 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <p>The dashboard at <a href="/dashboard">/dashboard</a> provides a visual overview. The banner shows current status with risk and confidence context. The Network Agreement panel shows whether validators agree. The Network Growth panel tracks validator discovery and sync progress.</p>
 <p>The <a href="/health">/health</a> endpoint provides full diagnostic data — canonical fields at the top level, derived data for detail, fleet data under <code>reference</code>, and deprecated fields under <code>legacy</code>.</p>
 <h3>For agents and automated consumers</h3>
-<p>The <a href="/organism">/organism</a> endpoint is the primary agent feed. It returns 12 flat fields with no nested objects and no fleet data. Every field is always present and never null.</p>
+<p>The <a href="/organism">/organism</a> endpoint is the primary agent feed. It returns 14 flat fields with no nested objects and no fleet data. Every field is always present and never null.</p>
 <p>The simplest consumption pattern is the <b>minimal triple</b>: read <code>status</code> + <code>risk</code> + <code>confidence</code>. These three fields give you the complete network picture in three values. Your agent decides what to do with them — the Oracle never tells you.</p>
 <p>For trust calibration: check <code>data_quality</code> before relying on the assessment. Check <code>staleness_seconds</code> to know how fresh the data is. If data quality is <span class="val">insufficient</span>, treat all other values with skepticism.</p>
 <p>For incident awareness: <code>active_incidents</code> gives the count, <code>max_incident_severity</code> tells you the worst active problem without needing to fetch the full incident list.</p>
 <div class="note"><b>API endpoints</b><br>
-Agent feed: <a href="/organism">/organism</a> — 12 fields, flat JSON, public-only, refreshes every 20 seconds.<br>
+Agent feed: <a href="/organism">/organism</a> — 14 fields, flat JSON, public-only, refreshes every 20 seconds.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived + reference + legacy.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope by default, <code>?scope=fleet</code> or <code>?scope=all</code> available.<br>
 API documentation: <a href="/docs">/docs</a><br>
