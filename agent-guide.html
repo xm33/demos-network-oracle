@@ -21,27 +21,30 @@ a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.
 a:hover{border-bottom-color:var(--improving)}
 a:hover{text-decoration:underline}
 footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6}
-.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(10,10,10,0.88);border-bottom:1px solid var(--border)}
-.doc-nav-inner{max-width:920px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:14px}
-.doc-nav-brand{color:var(--text-primary);text-decoration:none;font-family:var(--mono);font-size:12px;letter-spacing:0.04em;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center}
+.doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;justify-content:space-between}
+.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
+.doc-nav-brand{color:var(--brand,#2B36D9);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;text-transform:uppercase}
 .doc-nav-brand:hover{text-decoration:none;opacity:0.9}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px}
+.doc-logo{width:24px;height:24px;color:var(--text-primary)}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;text-transform:uppercase;transition:color 0.2s}
 .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-.doc-nav-sep{width:1px;height:14px;background:var(--border)}
-@media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:24px}h2{font-size:15px}.doc-nav-inner{padding:10px 16px}}
+.doc-nav-link.active{color:var(--text-primary)}
+@media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:24px}h2{font-size:15px}}
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:10px}.doc-nav-left,.doc-nav-right{gap:12px;flex-wrap:wrap}}
 </style></head><body>
 <nav class="doc-nav">
   <div class="doc-nav-inner">
     <div class="doc-nav-left">
-      <a href="/" class="doc-nav-brand"><svg style="width:22px;height:22px" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="20" r="3" fill="currentColor"/><circle cx="20" cy="70" r="3" fill="currentColor"/><circle cx="80" cy="70" r="3" fill="currentColor"/><circle cx="50" cy="50" r="4" fill="currentColor"/></svg>ORACLE</a>
+      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="20" r="3" fill="currentColor"/><circle cx="20" cy="70" r="3" fill="currentColor"/><circle cx="80" cy="70" r="3" fill="currentColor"/><circle cx="50" cy="50" r="4" fill="currentColor"/></svg>ORACLE</a>
     </div>
     <div class="doc-nav-right">
       <a href="/" class="doc-nav-link">Home</a>
-      <span class="doc-nav-sep"></span>
-      <a href="/agent" class="doc-nav-link" style="color:var(--text-primary)">Agent</a>
-      <span class="doc-nav-sep"></span>
+      <a href="/agent" class="doc-nav-link active">Agent</a>
       <a href="/methodology" class="doc-nav-link">Methodology</a>
+      <a href="/sources" class="doc-nav-link">Sources</a>
+      <a href="/submit" class="doc-nav-link">Submit</a>
+      <a href="/community" class="doc-nav-link">Community</a>
     </div>
   </div>
 </nav>
