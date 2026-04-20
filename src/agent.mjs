@@ -660,8 +660,8 @@ function computeCanonicalState() {
   // Do not degrade status only because some monitored nodes are offline
   var status;
   if (data_quality === "insufficient") status = "unknown";
-  else if (max_incident_severity === "critical" || agreement.state === "weak" || (pubTotal > 0 && pubReachable <= Math.floor(pubTotal * 0.5))) status = "unstable";
-  else if (max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
+  else if (max_incident_severity === "critical" || agreement.state === "weak") status = "unstable";
+  else if (pubReachable === 1 || max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
   else status = "stable";
 
   // Risk = resilience / safety margin
@@ -719,8 +719,8 @@ function computeCanonicalState() {
 
   var statusReason = "";
   if (status === "stable") statusReason = "Blocks advancing; reachable nodes aligned";
-  else if (status === "degraded") statusReason = max_incident_severity === "warning" ? "Warning-level incidents active" : "Agreement reduced among reachable nodes";
-  else if (status === "unstable") statusReason = pubReachable <= 1 ? "Too few reachable nodes to verify consensus" : agreement.state === "weak" ? "Significant disagreement among reachable nodes" : "Critical incidents active";
+  else if (status === "unstable") statusReason = agreement.state === "weak" ? "Significant disagreement among reachable nodes" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
+  else if (status === "degraded") statusReason = pubReachable <= 1 ? "Too few reachable nodes to verify consensus" : agreement.state === "weak" ? "Significant disagreement among reachable nodes" : "Critical incidents active";
   else statusReason = "Insufficient data to assess network state";
   var riskFactors = [];
   if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("reduced public node redundancy (" + pubReachable + "/" + pubTotal + " reachable)");
