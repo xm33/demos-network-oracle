@@ -2240,6 +2240,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '.oracle-hero-submit{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(255,255,255,0.15);border-radius:999px;color:rgba(255,255,255,0.7);text-decoration:none;letter-spacing:0.04em;transition:all 0.2s}';
       h += '.oracle-hero-submit:hover{color:var(--improving);border-color:rgba(45,212,160,0.3)}';
       h += 'footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:11px;opacity:0.5}';
+      h += '.table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}';
       h += '@media(max-width:720px){main{padding:20px 16px 64px}.summary{gap:8px}.sum-card{flex:1;min-width:60px}table{font-size:11px}td,th{padding:6px 8px}}';
       h += '</style></head><body>';
       // Nav
@@ -2266,7 +2267,7 @@ function generatePrometheusMetrics(fleetData) {
       // Network head info
       if (netHead > 0) h += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;font-family:var(--mono)">Network head: ' + netHead.toLocaleString() + '</div>';
       // Table
-      h += '<table><thead><tr><th>Node</th><th>Operator</th><th>Stage</th><th>Block</th><th>Behind</th><th>Details</th></tr></thead><tbody>';
+      h += '<div class="table-scroll"><table><thead><tr><th>Node</th><th>Operator</th><th>Stage</th><th>Block</th><th>Behind</th><th>Details</th></tr></thead><tbody>';
       if (enriched.length === 0) {
         h += '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No community submissions yet. <a href="/submit">Submit your node</a></td></tr>';
       }
@@ -2302,7 +2303,7 @@ function generatePrometheusMetrics(fleetData) {
         }
         h += '</div></td></tr>';
       }
-      h += '</tbody></table>';
+      h += '</tbody></table></div>';
       // Fleet diagnostics — read from cached health data
       var fleetReports = {};
       try {
@@ -2330,7 +2331,7 @@ function generatePrometheusMetrics(fleetData) {
       if (discoveredList.length === 0) {
         h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">No discovered validators at this time.</p>';
       } else {
-        h += '<table style="opacity:0.8"><thead><tr><th>Address</th><th>Status</th><th>Block</th><th>Sync</th></tr></thead><tbody>';
+        h += '<div class="table-scroll"><table style="opacity:0.8"><thead><tr><th>Address</th><th>Status</th><th>Block</th><th>Sync</th></tr></thead><tbody>';
         for (var dvi = 0; dvi < discoveredList.length; dvi++) {
           var dv = discoveredList[dvi];
           var dvOnline = dv.online === true;
@@ -2346,14 +2347,14 @@ function generatePrometheusMetrics(fleetData) {
           h += '<td style="color:' + dvSyncColor + '">' + dvSyncPct + '%</td>';
           h += '</tr>';
         }
-        h += '</tbody></table>';
+        h += '</tbody></table></div>';
       }
       h += '</div>';
 
       h += '<div style="margin-top:40px;padding-top:24px;border-top:1px solid var(--border)">';
       h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Reference Fleet Diagnostics</h2>';
       h += '<p class="sub" style="margin-bottom:18px">Reference-only nodes operated by XM33. Shown with live diagnostics from the Oracle\'s observation cycle. These do not define canonical public truth.</p>';
-      h += '<table><thead><tr><th>Node</th><th>Host</th><th>Status</th><th>Block</th></tr></thead><tbody>';
+      h += '<div class="table-scroll"><table><thead><tr><th>Node</th><th>Host</th><th>Status</th><th>Block</th></tr></thead><tbody>';
       var fleetNames = Object.keys(EXPECTED_FLEET);
       for (var fi = 0; fi < fleetNames.length; fi++) {
         var fname = fleetNames[fi];
@@ -2370,7 +2371,7 @@ function generatePrometheusMetrics(fleetData) {
         h += '<td>' + (report.blockHeight ? report.blockHeight.toLocaleString() : "\u2014") + '</td>';
         h += '</tr>';
       }
-      h += '</tbody></table>';
+      h += '</tbody></table></div>';
       h += '</div>';
       h += '<footer>Demos Network Oracle &middot; Community nodes are not part of canonical network truth until approved. Inclusion does not imply endorsement. &middot; <a href="/">Home</a> &middot; <a href="/submit">Submit</a></footer>';
       h += '</main></body></html>';
