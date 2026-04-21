@@ -104,9 +104,10 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .inc-item.critical { border-left-color:var(--unstable); }
 
 /* API */
-.api-section-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:0; }
-.api-publish-link { font-size:12px; color:var(--text-primary); opacity:0.9; text-decoration:none; white-space:nowrap; font-family:var(--mono); letter-spacing:0.02em; }
-.api-publish-link:hover { color:var(--text-primary); text-decoration:underline; }
+.api-attestation { margin-top:14px; font-size:11px; color:var(--text-secondary); opacity:0.75; font-family:var(--mono); line-height:1.6; }
+.api-attestation a { color:var(--text-primary); opacity:0.9; text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:1px; }
+.api-attestation a:hover { border-bottom-color:var(--improving); }
+.trust-lead { font-size:13px; color:var(--text-primary); line-height:1.6; margin:6px 0 18px; max-width:72ch; font-family:var(--mono); opacity:0.92; }
 .api-endpoints { display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
 .api-link { font-family:var(--mono); font-size:13px; color:var(--text-primary); text-decoration:none; padding:7px 12px; border:1px solid var(--border); border-radius:6px; transition:border-color 0.2s; }
 .api-link:hover { border-color:#444; }
@@ -159,7 +160,6 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   .dbtn-prefix { display:none; }
   .dbtn-wordmark { font-size:11px; }
   .demos-brand-btn { padding:0 10px; height:30px; }
-  .api-section-head { flex-direction:column; align-items:flex-start; gap:4px; }
   .growth-cards { gap:10px; }
   .growth-card { flex:1 1 calc(50% - 10px); min-width:unset; }
   .vtable { display:block; overflow-x:auto; }
@@ -248,24 +248,26 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <div id="inc-list" class="inc-list"></div>
   </section>
   <section class="section">
-    <div class="api-section-head"><div class="section-title" style="margin-bottom:0">API</div><a href="https://supercolony.ai" target="_blank" rel="noopener noreferrer" class="api-publish-link">published via SuperColony</a></div>
+    <div class="section-title">API</div>
     <div class="section-subtitle">Machine-readable endpoints for agents and developers.</div>
     <div class="api-endpoints" style="margin-top:14px">
       <a href="/organism" class="api-link">/organism</a>
       <a href="/health" class="api-link">/health</a>
       <a href="/incidents" class="api-link">/incidents</a>
     </div>
+    <div class="api-attestation">Endpoint outputs are attested on-chain via SuperColony every 20 minutes. <a href="https://supercolony.ai/agent/0xbdb3e8189a62dce62229bf3badbf01e5bdb3fbeb22f6f59f4c7c2edafe802a45" target="_blank" rel="noopener noreferrer">View attestations →</a></div>
     <div id="api-example" class="api-example loading">Loading...</div>
   </section>
   </section>
 
   <section class="section">
     <div class="section-title">Why trust this Oracle</div>
+    <div class="trust-lead">Every Oracle assessment is attested on-chain via SuperColony every 20 minutes. Outputs are timestamped and independently verifiable.</div>
     <div class="cards">
       <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Public</div><div class="signal-label">Reads publicly observable validator signals and rolling history.</div></div>
       <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Explicit</div><div class="signal-label">Status, risk, agreement, and confidence follow published methodology.</div></div>
       <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Impartial</div><div class="signal-label">Watch-only. No advice, no endorsement, no hidden scoring.</div></div>
-      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Attested</div><div class="signal-label">Published via SuperColony to strengthen provenance and verification.</div></div>
+      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Attested</div><div class="signal-label">Every assessment is timestamped and verifiable against on-chain attestations.</div></div>
     </div>
     <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono);line-height:1.5">Oracle outputs are structured observed assessments, not guarantees of present or future validator behavior.</div>
   </section>
