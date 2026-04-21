@@ -31,7 +31,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .navbar-left { display:flex; align-items:center; gap:28px; }
 .navbar-right { display:flex; align-items:center; gap:12px; }
 .navbar-brand { font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:2.6px; color:var(--brand); display:inline-flex; align-items:center; gap:8px; text-decoration:none; }
-.oracle-logo { width:28px; height:28px; color:var(--text-primary); }
+.oracle-logo { width:22px; height:22px; color:var(--text-primary); }
 .nav-links { display:flex; align-items:center; gap:18px; }
 .nav-links a { font-size:11px; font-weight:500; color:var(--text-secondary); text-decoration:none; letter-spacing:0.7px; text-transform:uppercase; transition:color 0.2s; }
 .nav-links a:hover { color:var(--text-primary); }
@@ -135,16 +135,21 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .footer-meta { margin-top:12px; font-size:11px; opacity:0.4; }
 .loading { color:var(--text-secondary); font-family:var(--mono); font-size:13px; }
 
+/* Watermark — anchored to document, not viewport */
+body { position:relative; }
+.watermark { position:absolute; bottom:72px; right:48px; width:120px; height:120px; opacity:0.10; pointer-events:none; z-index:0; }
+.watermark svg { width:100%; height:100%; display:block; }
+
 @media (max-width:640px) {
   .main { padding:0 18px; }
   .navbar { padding:0; height:auto; min-height:auto; }
   .navbar-inner { flex-wrap:wrap; gap:0; padding:8px 16px; align-items:center; }
   .navbar-left { width:auto; flex:1 1 auto; justify-content:flex-start; order:1; }
   .navbar-right { width:auto; flex:0 0 auto; justify-content:flex-end; gap:8px; order:2; }
-  .nav-links { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; width:100%; flex-basis:100%; order:3; margin-top:8px; }
+  .nav-links { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; width:100%; flex-basis:100%; order:3; margin-top:8px; }
   .nav-links a { text-align:center; padding:6px 4px; background:#0d0d0d; border:1px solid var(--border); border-radius:5px; font-size:9.5px; letter-spacing:0.4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .nav-links a:hover { border-color:#333; }
-  .nav-links a[href="#overview"] { display:none; }
+  .nav-live { display:none; }
   .demos-brand-btn { display:none; }
   .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
   .section-title { text-align:center; }
@@ -164,6 +169,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   .growth-cards { gap:10px; }
   .growth-card { flex:1 1 calc(50% - 10px); min-width:unset; }
   .vtable { display:block; overflow-x:auto; }
+  .watermark { width:88px; height:88px; right:24px; bottom:56px; opacity:0.08; }
 }
 </style>
 </head>
@@ -174,16 +180,13 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
     <a href="/" class="navbar-brand"><svg class="oracle-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="20" r="3" fill="currentColor"/><circle cx="20" cy="70" r="3" fill="currentColor"/><circle cx="80" cy="70" r="3" fill="currentColor"/><circle cx="50" cy="50" r="4" fill="currentColor"/></svg>ORACLE</a>
   </div>
   <div class="nav-links">
-    <a href="#overview">Overview</a>
-    <a href="#validators">Nodes</a>
-    <a href="#incidents">Incidents</a>
     <a href="/methodology">Methodology</a>
     <a href="/agent">Agent</a>
     <a href="/sources">Sources</a>
     <a href="/community">Community</a>
   </div>
   <div class="navbar-right">
-    <span id="nav-pill" class="nav-pill">—</span>
+    <span class="oracle-hero-live nav-live"><span class="hero-dot"></span>ORACLE LIVE</span>
     <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
       <span class="dbtn-prefix">powered by</span>
       <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
@@ -196,7 +199,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
   <section class="hero" id="overview">
     <div class="oracle-kicker-row">
       <span class="oracle-kicker">Demos Network Oracle — Observing many signals. Resolving one truth.</span>
-      <span class="oracle-hero-live"><span class="hero-dot"></span>ORACLE LIVE</span><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a>
+      <a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a>
     </div>
     <div id="hero-status" class="oracle-status loading">Loading...</div>
     <div id="hero-summary" class="hero-summary"></div>
@@ -323,12 +326,6 @@ async function fetchData() {
     var [orgRes,healthRes]=await Promise.all([fetch('/organism'),fetch('/health')]);
     var org=await orgRes.json(),health=await healthRes.json();
 
-    // Nav pill
-    var pill=document.getElementById('nav-pill');
-    pill.textContent=(org.status||'\u2014').toUpperCase();
-    pill.style.color=signalColor(org.status);
-    pill.style.background=pillBg(org.status);
-
     // Hero status
     var hs=document.getElementById('hero-status');
     hs.textContent=(org.status||'\u2014').toUpperCase();
@@ -437,13 +434,11 @@ async function fetchData() {
     document.getElementById('hero-status').style.color='var(--unknown)';
     var lb=document.querySelector('.oracle-hero-live');
     if(lb){lb.innerHTML='<span class="hero-dot" style="background:var(--unknown)"></span>ORACLE OFFLINE';lb.style.borderColor='rgba(107,114,128,0.2)';}
-    var pill=document.getElementById('nav-pill');
-    if(pill){pill.textContent='OFFLINE';pill.style.color='var(--unknown)';pill.style.background='#1f1f1f';}
   }
 }
 fetchData();
 setInterval(fetchData,20000);
 </script>
-<div style="position:fixed;bottom:24px;right:24px;z-index:1;pointer-events:none;opacity:0.16"><svg width="120" height="120" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
+<div class="watermark"><svg width="120" height="120" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
 </body>
 </html>
