@@ -2211,6 +2211,8 @@ function generatePrometheusMetrics(fleetData) {
       h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#2dd4a0;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
       h += '*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}';
       h += 'main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}';
+      h += '.noncanonical-banner{margin:0 0 28px;padding:14px 18px;background:#0f0f0f;border:1px solid #1f1f1f;border-left:3px solid #4a4a4a;color:#c9d1d9;font-size:13px;line-height:1.6;border-radius:4px}';
+      h += '.noncanonical-banner strong{color:#e8ece8;font-weight:600;margin-right:6px}';
       h += 'h1{font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-0.03em;margin:0 0 4px}';
       h += '.sub{color:var(--text-secondary);margin-bottom:28px;font-size:13px}';
       h += '.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}';
@@ -2261,6 +2263,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '<span class="nav-live"><span class="nav-live-dot"></span>ORACLE LIVE</span>';
       h += '</div></nav>';
       h += '<main>';
+      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are not canonical network truth until approved. Inclusion does not imply endorsement.</div>';
       h += '<h1>Community Node Onboarding</h1>';
       h += '<div style="margin-bottom:18px"><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a></div><p class="sub">Community validator nodes during onboarding and approval.</p>';
       // Summary
