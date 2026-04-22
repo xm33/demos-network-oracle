@@ -12,3 +12,5 @@ src/*.backup-*
 *.pre-*
 *.bak*
 *.bak-*
+demos-fleet-audit-report.md
+demos-fleet-audit-*.md
