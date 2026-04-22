@@ -1637,6 +1637,7 @@ async function probeDiscoveredFixnetNodes() {
       var connUrl = r.connection.replace(/\/$/, "");
       try {
         var resp = await fetch(connUrl + "/info", { signal: AbortSignal.timeout(5000) });
+        var latencyMs = Date.now() - probedAt;
         if (resp.ok) {
           var data = await resp.json();
           var selfBlock = null;
@@ -1645,20 +1646,20 @@ async function probeDiscoveredFixnetNodes() {
             if (self && self.sync) selfBlock = self.sync.block;
           }
           sharedDb.run(
-            "UPDATE fixnet_validator_discoveries SET online = 1, last_block = COALESCE(?, last_block), last_probed_at = ? WHERE identity = ?",
-            [selfBlock, probedAt, r.identity]
+            "UPDATE fixnet_validator_discoveries SET online = 1, last_block = COALESCE(?, last_block), last_probed_at = ?, last_latency_ms = ? WHERE identity = ?",
+            [selfBlock, probedAt, latencyMs, r.identity]
           );
-          return { ok: true, identity: r.identity, block: selfBlock };
+          return { ok: true, identity: r.identity, block: selfBlock, latencyMs: latencyMs };
         } else {
           sharedDb.run(
-            "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ? WHERE identity = ?",
+            "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
             [probedAt, r.identity]
           );
           return { ok: false, identity: r.identity, error: "HTTP " + resp.status };
         }
       } catch (e) {
         sharedDb.run(
-          "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ? WHERE identity = ?",
+          "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
           [probedAt, r.identity]
         );
         return { ok: false, identity: r.identity, error: e.message || String(e) };
@@ -1674,7 +1675,7 @@ async function probeDiscoveredFixnetNodes() {
   // Return fresh data (including just-updated rows) for use in UI/API payload
   try {
     var fresh = sharedDb.query(
-      "SELECT identity, connection, first_seen, last_seen, online, last_block, last_probed_at FROM fixnet_validator_discoveries ORDER BY last_seen DESC"
+      "SELECT identity, connection, first_seen, last_seen, online, last_block, last_probed_at, last_latency_ms FROM fixnet_validator_discoveries ORDER BY last_seen DESC"
     ).all();
     return (fresh || []).map(function(r) {
       return {
@@ -1682,6 +1683,7 @@ async function probeDiscoveredFixnetNodes() {
         connection: r.connection,
         online: r.online === 1 || r.online === true,
         block: r.last_block,
+        latencyMs: r.last_latency_ms,
         first_seen: r.first_seen,
         last_seen: r.last_seen,
         last_probed_at: r.last_probed_at,
@@ -2633,16 +2635,21 @@ function generatePrometheusMetrics(fleetData) {
         var fxAnchorN = fx.find(function(n){return n.source_type==="anchor"});
         var fxFleetN = fx.filter(function(n){return n.source_type==="fleet"});
         var fxNetHead = fxAnchorN && fxAnchorN.block ? fxAnchorN.block : 0;
-        // Monitored = our hardcoded 8 (anchor + fleet). Discovered shown separately when D>0.
-        var fxMonitoredN = fx.length;
-        var fxOnlineN = fx.filter(function(n){return n.ok}).length;
-        var fxAtHeadN = fx.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
+        // v7.3: counts span ALL visible table rows (monitored fx + discovered)
+        var fxTotalN = fx.length + fxDiscovered.length;
+        var fxMonitoredOnlineN = fx.filter(function(n){return n.ok}).length;
         var fxDiscoveredOnlineN = fxDiscovered.filter(function(n){return n.online}).length;
-        // Fleet sync stats for sync-note
-        var fxFleetAtHeadN = fxFleetN.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
-        var fxFleetSyncingN = fxFleetN.length - fxFleetAtHeadN;
-        var fxFleetLags = fxFleetN.filter(function(n){return n.block && fxNetHead>0}).map(function(n){return fxNetHead - n.block}).sort(function(a,b){return a-b});
-        var fxFleetMedianLag = fxFleetLags.length ? fxFleetLags[Math.floor(fxFleetLags.length/2)] : 0;
+        var fxOnlineN = fxMonitoredOnlineN + fxDiscoveredOnlineN;
+        var fxMonitoredAtHeadN = fx.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
+        var fxDiscoveredAtHeadN = fxDiscovered.filter(function(n){return n.online && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
+        var fxAtHeadN = fxMonitoredAtHeadN + fxDiscoveredAtHeadN;
+        // "Nodes syncing" stats — across all rows (anchor + fleet + discovered)
+        var fxAllSyncingRows = [].concat(fxFleetN, fxDiscovered.map(function(d){return {ok:d.online, block:d.block}}));
+        if (fxAnchorN) fxAllSyncingRows.unshift(fxAnchorN);
+        var fxAllAtHeadN = fxAllSyncingRows.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
+        var fxAllSyncingN = fxAllSyncingRows.length - fxAllAtHeadN;
+        var fxAllLags = fxAllSyncingRows.filter(function(n){return n.block && fxNetHead>0 && (fxNetHead - n.block) > 100}).map(function(n){return fxNetHead - n.block}).sort(function(a,b){return a-b});
+        var fxAllMedianLag = fxAllLags.length ? fxAllLags[Math.floor(fxAllLags.length/2)] : 0;
         // Updated-ago for section subtitle
         var fxAgoStr = "";
         if (fixnetObservedAt) {
@@ -2657,8 +2664,8 @@ function generatePrometheusMetrics(fleetData) {
         if (fxAgoStr) h += ' &nbsp;&middot;&nbsp; Updated ' + fxAgoStr;
         h += '</div>';
         h += '<div class="summary" style="margin-bottom:16px">';
-        h += '<div class="sum-card"><div class="sum-val">' + fxMonitoredN + '</div><div class="sum-label">Monitored</div></div>';
-        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxOnlineN===fxMonitoredN?"#2dd4a0":"#d97706") + '">' + fxOnlineN + '</div><div class="sum-label">Reachable</div></div>';
+        h += '<div class="sum-card"><div class="sum-val">' + fxTotalN + '</div><div class="sum-label">Nodes</div></div>';
+        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxOnlineN===fxTotalN?"#2dd4a0":"#d97706") + '">' + fxOnlineN + '</div><div class="sum-label">Reachable</div></div>';
         h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxAtHeadN>0?"#2dd4a0":"#98a2b3") + '">' + fxAtHeadN + '</div><div class="sum-label">At Head</div></div>';
         h += '<div class="sum-card"><div class="sum-val" style="font-size:14px">' + (fxNetHead?fxNetHead.toLocaleString():"\u2014") + '</div><div class="sum-label">Network Head</div></div>';
         if (fxDiscovered.length > 0) {
@@ -2673,7 +2680,7 @@ function generatePrometheusMetrics(fleetData) {
         }
 
         h += '<div class="table-scroll"><table><thead><tr>';
-        h += '<th>Validator</th><th>Source</th><th>Operator</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th>';
+        h += '<th>Validator</th><th>Source</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th>';
         h += '</tr></thead><tbody>';
 
         // Build ordered rows: Anchor, then Fleet (status then block desc), then Discovered (status then block desc)
@@ -2699,15 +2706,14 @@ function generatePrometheusMetrics(fleetData) {
           var isDisc = rowKind === "discovered";
 
           var srcColor = isAnchor ? "#2B36D9" : (isFleet ? "#98a2b3" : "#a78bfa");
-          var srcLabel = isAnchor ? "Kynesys" : (isFleet ? "Fleet" : "Discovered");
+          var srcLabel = isAnchor ? "Kynesys" : (isFleet ? "XM33" : "Discovered");
 
           // Status resolution: monitored uses .ok, discovered uses .online
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
           var statusColor = isOnline ? "#22c55e" : "#EF4444";
           var statusText = isOnline ? "online" : "offline";
 
-          // Operator
-          var operator = fn.operator || (isDisc ? "\u2014" : "Unknown");
+
 
           // Block
           var block = fn.block || fn.last_block || null;
@@ -2715,7 +2721,8 @@ function generatePrometheusMetrics(fleetData) {
           var syncColor = syncPct !== null && syncPct >= 90 ? "#22c55e" : (syncPct !== null && syncPct >= 10 ? "#d97706" : "#98a2b3");
 
           // Latency (only meaningful for monitored; discovered has no current-cycle latency)
-          var latencyStr = isDisc ? "\u2014" : (fn.latencyMs != null ? fn.latencyMs + "ms" : "\u2014");
+          // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
+          var latencyStr = (fn.latencyMs != null) ? (fn.latencyMs + "ms") : "\u2014";
 
           // Validator cell: name + sub-line identity.
           var nameLabel = isDisc ? ("discovered-" + (fn.identity ? fn.identity.substring(fn.identity.length-4) : "????")) : fn.name;
@@ -2727,8 +2734,6 @@ function generatePrometheusMetrics(fleetData) {
           h += '<div style="font-family:var(--mono);color:var(--text-secondary);font-size:10px;margin-top:2px;opacity:0.7">' + esc(truncId(identity)) + '</div></td>';
           // Source
           h += '<td><span class="pill" style="color:'+srcColor+';border-color:'+srcColor+'44">' + srcLabel + '</span></td>';
-          // Operator
-          h += '<td style="color:var(--text-secondary)">' + esc(operator) + '</td>';
           // Status
           h += '<td><span style="color:'+statusColor+'">\u25cf</span> ' + statusText + '</td>';
           // Block
@@ -2741,19 +2746,19 @@ function generatePrometheusMetrics(fleetData) {
         }
         h += '</tbody></table></div>';
 
-        // Fleet syncing note — threshold: any fleet lag > 100 blocks
-        if (fxFleetSyncingN > 0) {
-          var medianLagStr = fxFleetMedianLag > 1000 ? (Math.round(fxFleetMedianLag/1000).toLocaleString() + 'k') : fxFleetMedianLag.toLocaleString();
+        // v7.3: "Nodes syncing" — across ALL rows (anchor + fleet + discovered)
+        if (fxAllSyncingN > 0) {
+          var medianLagStr = fxAllMedianLag > 1000 ? (Math.round(fxAllMedianLag/1000).toLocaleString() + 'k') : fxAllMedianLag.toLocaleString();
           h += '<p class="sub" style="margin-top:10px;font-size:11px">';
-          h += 'Fleet syncing \u2014 ' + fxFleetAtHeadN + ' of ' + fxFleetN.length + ' at head, ';
-          h += fxFleetSyncingN + ' catching up (median lag: ' + medianLagStr + ' blocks).';
+          h += 'Nodes syncing \u2014 ' + fxAllAtHeadN + ' of ' + fxAllSyncingRows.length + ' at head, ';
+          h += fxAllSyncingN + ' catching up (median lag: ' + medianLagStr + ' blocks).';
           h += '</p>';
         }
         h += '</section><hr style="border:none;border-top:1px solid var(--border);margin:24px 0">';
       }
       // --- end Fleet Fixnet section ---
 
-      h += '<div style="margin-bottom:18px"><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a></div><p class="sub">Community validator nodes during onboarding and approval.</p>';
+      h += '<p class="sub">Community validator nodes during onboarding and approval.</p>';
       // Summary
       h += '<div class="summary">';
       var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#22c55e"],["Ready",counts.ready||0,"#2dd4a0"],["Approved",counts.approved||0,"#2dd4a0"]];
@@ -2822,7 +2827,9 @@ function generatePrometheusMetrics(fleetData) {
           discoveredList = vgrow.validators.filter(function(v){ return !v.monitored; });
         }
       } catch(e) { discoveredList = []; }
-      h += '<div style="margin-top:40px;padding-top:24px;border-top:1px solid var(--border)">';
+      // v7.3: OPEN: NODE SUBMISSION CTA pill above Discovered Validators
+      h += '<div style="margin-top:32px;margin-bottom:8px"><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a></div>';
+      h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
       h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Discovered Validators</h2>';
       h += '<p class="sub" style="margin-bottom:18px">Validators the Oracle has seen via peer crawling but has not yet formally added to monitoring. Shown here for transparency; added to the monitored set manually once they reach the network head. Not community-submitted.</p>';
       if (discoveredList.length === 0) {
@@ -3548,9 +3555,12 @@ async function main() {
     connection TEXT,
     online INTEGER DEFAULT 0,
     last_block INTEGER,
-    last_probed_at INTEGER
+    last_probed_at INTEGER,
+    last_latency_ms INTEGER
   )`);
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_fxd_last_seen ON fixnet_validator_discoveries(last_seen)`);
+  // v7.3: idempotent migration for databases created before last_latency_ms existed
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN last_latency_ms INTEGER"); } catch(e) { /* column exists */ }
 
   // v7.2: startup cleanup — remove fixnet discoveries not seen in last 7 days
   try {
