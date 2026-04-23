@@ -2760,7 +2760,7 @@ function generatePrometheusMetrics(fleetData) {
           // Block
           var block = fn.block || fn.last_block || null;
           var syncPct = (block && fxNetHead > 0) ? Math.round((block / fxNetHead) * 1000) / 10 : null;
-          var syncColor = syncPct !== null && syncPct >= 90 ? "#22c55e" : (syncPct !== null && syncPct >= 10 ? "#d97706" : "#98a2b3");
+          var syncColor = syncPct === null ? "#98a2b3" : (syncPct >= 95 ? "#2dd4a0" : (syncPct >= 80 ? "#d97706" : "#EF4444")); var syncOpacity = (syncPct !== null && syncPct >= 95 && syncPct < 100) ? ";opacity:0.55" : "";
 
           // Latency (only meaningful for monitored; discovered has no current-cycle latency)
           // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
@@ -2781,7 +2781,7 @@ function generatePrometheusMetrics(fleetData) {
           // Block
           h += '<td>' + (block ? block.toLocaleString() : "\u2014") + '</td>';
           // Sync
-          h += '<td' + (syncPct !== null ? ' style="color:'+syncColor+'"' : '') + '>' + (syncPct !== null ? syncPct + "%" : "\u2014") + '</td>';
+          h += '<td' + (syncPct !== null ? ' style="color:'+syncColor+syncOpacity+'"' : '') + '>' + (syncPct !== null ? syncPct + "%" : "\u2014") + '</td>';
           // Latency
           h += '<td>' + latencyStr + '</td>';
           h += '</tr>';
@@ -3250,8 +3250,8 @@ async function refresh(){
       if(vg.validators&&vg.validators.length>0){
         gh+='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Validator</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Sync</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Status</th><th style="color:#8b949e;text-align:right;padding:4px 8px;border-bottom:1px solid #21262d">Since</th></tr></thead><tbody>';
         vg.validators.forEach(function(v){
-          var syncCol=v.sync_pct>=99.9?'#3fb950':v.sync_pct>=90?'#d29922':'#f85149';
-          var statusIcon=v.monitored?'\u2705 monitored':v.sync_pct>=99.9?'\u2705 ready':v.sync_pct>=50?'\ud83d\udd04 catching up':'\ud83d\udd04 syncing';
+          var syncCol=v.sync_pct>=95?'#2dd4a0':v.sync_pct>=80?'#d97706':'#EF4444';
+          var statusIcon=v.monitored?'\u2705 monitored':v.sync_pct>=95?'\u2705 ready':v.sync_pct>=80?'\ud83d\udd04 catching up':'\ud83d\udd04 syncing';
           var since=v.first_seen_hours_ago<24?v.first_seen_hours_ago+'h ago':Math.round(v.first_seen_hours_ago/24)+'d ago';
           gh+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+v.display+'</b></td>';
           gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(v.block?v.block.toLocaleString():'?')+'</td>';
