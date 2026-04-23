@@ -2648,10 +2648,10 @@ function generatePrometheusMetrics(fleetData) {
       h += '.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}';
       h += '.nav-live{font-size:10px;font-family:var(--mono);padding:4px 9px;border:1px solid rgba(34,197,94,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}';
       h += '.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#22c55e;opacity:0.8}';
-      h += '@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-inner > .nav-live{flex:0 0 auto;order:2;margin-left:auto;font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px}}';
+      h += '@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-inner > .nav-live{flex:0 0 auto;order:2;margin-left:auto;font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}';
       h += '.oracle-hero-submit{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(255,255,255,0.15);border-radius:999px;color:rgba(255,255,255,0.7);text-decoration:none;letter-spacing:0.04em;transition:all 0.2s}';
       h += '.oracle-hero-submit:hover{color:var(--improving);border-color:rgba(45,212,160,0.3)}';
-      h += 'footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:11px;opacity:0.5;text-align:center}';
+      h += 'footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:11px;opacity:0.5;text-align:center}.xm33-dot{display:none}';
       h += '.table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}';
       h += '@media(max-width:720px){main{padding:20px 16px 64px}.summary{gap:8px}.sum-card{flex:1;min-width:88px;padding:10px 10px}.sum-label{font-size:9px;letter-spacing:0.2px}table{font-size:11px}td,th{padding:6px 8px}}';
       h += '</style></head><body>';
@@ -2897,7 +2897,7 @@ function generatePrometheusMetrics(fleetData) {
       }
       h += '</div>';
 
-      h += '<footer>Demos Network Oracle &middot; API v1.0 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> &middot; Built by XM33</footer>';
+      h += '<footer>Demos Network Oracle &middot; API v1.0 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>';
       h += '</main></body></html>';
       res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
       res.end(h);

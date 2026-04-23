@@ -127,6 +127,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .eco-btn:hover { border-color:#4a5568; color:var(--text-primary); background:#1a2234; }
 .footer-inner { max-width:980px; width:100%; margin:0 auto; padding:0 28px; }
 .footer-meta { margin-top:12px; font-size:11px; opacity:0.4; }
+.xm33-dot { display:none; }
 .loading { color:var(--text-secondary); font-family:var(--mono); font-size:13px; }
 
 /* Watermark — anchored to document, not viewport */
@@ -147,6 +148,9 @@ body { position:relative; }
   .nav-live { display:inline-flex; font-size:9px; padding:3px 7px; letter-spacing:0.3px; }
   .demos-brand-btn { display:none; }
   .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
+  .xm33-sep { display:none; }
+  .xm33-block { display:block; }
+  .xm33-dot { display:inline; }
   .section-title { text-align:center; }
   .ag-sub { display:block; font-size:10px; color:var(--text-secondary); opacity:0.7; font-family:var(--mono); margin-top:6px; line-height:1.3; }
   .hero { text-align:center; }
@@ -270,7 +274,7 @@ body { position:relative; }
       <span>·</span>
       <a href="https://mint.demos.sh" target="_blank" rel="noopener noreferrer">Mint Demos Node NFT</a>
     </div>
-    <div class="footer-meta">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> · Built by XM33</div>
+    <div class="footer-meta">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a><span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></div>
   </div>
 </div>
 <script>
