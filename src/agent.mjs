@@ -339,6 +339,14 @@ let versionMismatchAlerted = false;
 let activeIncidents = {};   // { "n4,n6": { id: "INC-001", ... } }
 let incidentCounter = 0;    // auto-increment
 
+// --- Incident reconciliation boundary (added 2026-04-24) ---
+// Only incidents started at/after this timestamp are rehydrated into activeIncidents
+// on startup and evaluated by per-cycle reconciliation. This deliberately excludes
+// pre-fixnet-migration incidents and migration-era cohort (INC-245..256 from
+// 2026-04-22) which remain as historical DB artifacts pending a separate
+// retention/cleanup decision.
+const INCIDENT_RECONCILIATION_START_AT = "2026-04-23T12:00:00.000Z";
+
 function getNextIncidentId() {
   incidentCounter++;
   return "INC-" + String(incidentCounter).padStart(3, "0");
@@ -386,6 +394,17 @@ function resolveIncident(key, block) {
     sharedDb.prepare("UPDATE incidents SET status=?, resolved_at=?, duration_seconds=?, resolved_block=?, alerts=? WHERE id=?")
       .run("resolved", now, duration, block || 0, JSON.stringify(inc.alerts), inc.id);
   } catch(e) { log("  [incidents] DB update error: " + e.message); }
+  // Sweep orphaned duplicate active rows with same affected_nodes within reconciliation boundary
+  // (these are DB rows that pre-dated rehydration and shared the same in-memory key)
+  try {
+    var affectedJson = JSON.stringify(inc.affectedNodes);
+    var dupResult = sharedDb.prepare(
+      "UPDATE incidents SET status=?, resolved_at=?, resolved_block=?, duration_seconds=(strftime('%s', ?) - strftime('%s', started_at)) WHERE status=? AND affected_nodes=? AND started_at >= ? AND id != ?"
+    ).run("resolved", now, block || 0, now, "active", affectedJson, INCIDENT_RECONCILIATION_START_AT, inc.id);
+    if (dupResult.changes > 0) {
+      log("  [incidents] Swept " + dupResult.changes + " duplicate active row(s) for " + inc.id + " (affected=" + affectedJson + ")");
+    }
+  } catch(e) { log("  [incidents] Duplicate sweep error: " + e.message); }
   log("  [incidents] Resolved " + inc.id + " after " + duration + "s");
   delete activeIncidents[key];
 }
@@ -3580,6 +3599,39 @@ async function main() {
   )`);
   log("  Shared SQLite: " + dbPath + " (incidents table ready)");
 
+  // --- Rehydrate activeIncidents from DB (bug fix: previously started empty on every restart) ---
+  try {
+    var rehydrateRows = sharedDb.prepare(
+      "SELECT id, status, severity, started_at, resolved_at, duration_seconds, affected_nodes, description, detected_block, resolved_block, alerts FROM incidents WHERE status='active' AND started_at >= ?"
+    ).all(INCIDENT_RECONCILIATION_START_AT);
+    var rehydrated = 0;
+    for (var rr of rehydrateRows) {
+      try {
+        var affectedNodes = JSON.parse(rr.affected_nodes);
+        var key = affectedNodes.slice().sort().join(",");
+        activeIncidents[key] = {
+          id: rr.id,
+          status: rr.status,
+          severity: rr.severity,
+          startedAt: rr.started_at,
+          resolvedAt: rr.resolved_at,
+          durationSeconds: rr.duration_seconds,
+          affectedNodes: affectedNodes,
+          description: rr.description,
+          detectedBlock: rr.detected_block,
+          resolvedBlock: rr.resolved_block,
+          alerts: JSON.parse(rr.alerts || "[]")
+        };
+        rehydrated++;
+      } catch(rerr) {
+        log("  [incident-rehydrate] skipping " + rr.id + ": parse error " + rerr.message);
+      }
+    }
+    log("  [incident-rehydrate] Rehydrated " + rehydrated + " active incidents from DB (boundary: " + INCIDENT_RECONCILIATION_START_AT + ")");
+  } catch(e) {
+    log("  [incident-rehydrate] ERROR: " + e.message);
+  }
+
   // Validator discovery tracking table
   sharedDb.run(`CREATE TABLE IF NOT EXISTS validator_discoveries (
     identity TEXT PRIMARY KEY,
@@ -4093,6 +4145,78 @@ async function main() {
       // Replace data.problems with only confirmed ones, then compose and publish
       data.problems = confirmedProblems;
 
+      // --- Per-cycle incident reconciliation (bug fix: state-driven resolve, not only transition-triggered) ---
+      // For each active incident, check if its condition is still true in this cycle.
+      // If not, resolve it. Conservative: missing data = KEEP ACTIVE.
+      try {
+        var reconcileBlock = data.chain ? data.chain.block : null;
+        var chainStillProblem = confirmedProblems.some(function(p) { return p.name === "CHAIN"; });
+        var chainCheckable = !!(data && data.chain);
+        var nodeReportsAvail = !!(data && data.nodeReports && data.nodeReports.length > 0);
+        var nodeStatusMap = {};
+        if (nodeReportsAvail) {
+          for (var nri = 0; nri < data.nodeReports.length; nri++) {
+            var nrpt = data.nodeReports[nri];
+            if (nrpt && nrpt.name) nodeStatusMap[nrpt.name] = nrpt.status;
+          }
+        }
+        var confirmedNamesSet = {};
+        for (var cpi = 0; cpi < confirmedProblems.length; cpi++) {
+          var cpn = confirmedProblems[cpi];
+          if (cpn && cpn.name) confirmedNamesSet[cpn.name] = true;
+        }
+        var reconcileKeys = Object.keys(activeIncidents);
+        for (var rki = 0; rki < reconcileKeys.length; rki++) {
+          var recKey = reconcileKeys[rki];
+          var recInc = activeIncidents[recKey];
+          if (!recInc || !recInc.affectedNodes) continue;
+          var affected = recInc.affectedNodes;
+          var isChain = affected.indexOf("CHAIN") !== -1;
+          if (isChain) {
+            if (!chainCheckable) {
+              log("[incident-reconcile] skipping " + recInc.id + " reason=\"data.chain missing this cycle\"");
+              continue;
+            }
+            if (chainStillProblem) {
+              log("[incident-reconcile] skipping " + recInc.id + " reason=\"CHAIN still in confirmedProblems\"");
+              continue;
+            }
+            log("[incident-reconcile] resolving " + recInc.id + " type=CHAIN key=" + recKey + " reason=\"no confirmed CHAIN problem in current cycle\" block=" + reconcileBlock);
+            resolveIncident(recKey, reconcileBlock);
+          } else {
+            if (!nodeReportsAvail) {
+              log("[incident-reconcile] skipping " + recInc.id + " reason=\"data.nodeReports missing/empty\"");
+              continue;
+            }
+            var allHealthy = true;
+            var anyMissing = false;
+            var anyInConfirmed = false;
+            for (var ani = 0; ani < affected.length; ani++) {
+              var aNode = affected[ani];
+              if (!(aNode in nodeStatusMap)) { anyMissing = true; break; }
+              if (nodeStatusMap[aNode] !== "HEALTHY") { allHealthy = false; break; }
+              if (confirmedNamesSet[aNode]) { anyInConfirmed = true; break; }
+            }
+            if (anyMissing) {
+              log("[incident-reconcile] skipping " + recInc.id + " reason=\"node absent from nodeReports: " + affected.join(",") + "\"");
+              continue;
+            }
+            if (!allHealthy) {
+              log("[incident-reconcile] skipping " + recInc.id + " reason=\"not all nodes HEALTHY: " + affected.join(",") + "\"");
+              continue;
+            }
+            if (anyInConfirmed) {
+              log("[incident-reconcile] skipping " + recInc.id + " reason=\"node still in confirmedProblems: " + affected.join(",") + "\"");
+              continue;
+            }
+            log("[incident-reconcile] resolving " + recInc.id + " type=node key=" + recKey + " reason=\"all nodes HEALTHY and absent from confirmedProblems\" block=" + reconcileBlock);
+            resolveIncident(recKey, reconcileBlock);
+          }
+        }
+      } catch(recErr) {
+        log("[incident-reconcile] ERROR: " + recErr.message);
+      }
+
       // Alert deduplication: don't repeat identical alerts
       var alertSig = confirmedProblems.map(function(p) { return p.name + ":" + p.issues.sort().join(","); }).sort().join("|");
       var now = Date.now();
@@ -4132,13 +4256,7 @@ async function main() {
   await cycle();
   setInterval(cycle, MONITOR_INTERVAL_MS);
   log("\nMonitoring every " + (MONITOR_INTERVAL_MS / 1000 / 60) + " min, publishing every " + (INTERVAL_MS / 1000 / 60) + " min. Agent running...\n");
-  // Resolve any stale chain incidents from previous session on startup
-  try {
-    if (sharedDb) {
-      var staleCount = sharedDb.run("UPDATE incidents SET status='resolved', resolved_at=datetime('now') WHERE status='active' AND affected_nodes LIKE '%CHAIN%'").changes;
-      if (staleCount > 0) log("  Startup: resolved " + staleCount + " stale chain incident(s) from previous session");
-    }
-  } catch(e) { log("  Startup cleanup error: " + e.message); }
+  // (Removed 2026-04-24: old stale-CHAIN startup SQL replaced by rehydrate+reconcile pattern)
   await checkLatestVersion();
   setInterval(checkLatestVersion, 10 * 60 * 1000);
 }
