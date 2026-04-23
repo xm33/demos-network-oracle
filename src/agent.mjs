@@ -886,7 +886,7 @@ function recordPublicNodeHistory() {
   try {
     var canonical = computeCanonicalState();
     var nodes = (latestPublicNodes || []).map(function(n) {
-      return { name: n.name, ok: n.ok || false, block: n.block || null, latency: n.latencyMs || null };
+      return { name: n.name, identity: n.identity || null, ok: n.ok || false, block: n.block || null, latency: n.latencyMs || null };
     });
     sharedDb.run(
       "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1521,14 +1521,14 @@ async function probePublicNodes() {
           block = data.peerlist[0].sync.block;
         }
         var identityMatch = data.identity === node.identity;
-        results.push({ name: name, ok: true, latencyMs: latencyMs, block: block, version: data.version || "?", peers: data.peerlist ? data.peerlist.length : 0, identityMatch: identityMatch, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
+        results.push({ name: name, identity: node.identity, ok: true, latencyMs: latencyMs, block: block, version: data.version || "?", peers: data.peerlist ? data.peerlist.length : 0, identityMatch: identityMatch, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
         log("  PublicNode " + name + ": OK " + latencyMs + "ms block=" + (block||"?") + " peers=" + (data.peerlist?data.peerlist.length:0));
       } else {
-        results.push({ name: name, ok: false, error: "HTTP " + res.status, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
+        results.push({ name: name, identity: node.identity, ok: false, error: "HTTP " + res.status, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
         log("  PublicNode " + name + ": FAIL HTTP " + res.status);
       }
     } catch(err) {
-      results.push({ name: name, ok: false, error: err.name === "TimeoutError" ? "Timeout" : err.message, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
+      results.push({ name: name, identity: node.identity, ok: false, error: err.name === "TimeoutError" ? "Timeout" : err.message, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
       log("  PublicNode " + name + ": FAIL " + err.message);
     }
   }
