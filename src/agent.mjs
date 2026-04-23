@@ -3634,6 +3634,26 @@ async function main() {
   try { sharedDb.run("ALTER TABLE submissions ADD COLUMN probe_error TEXT"); } catch(e) {}
     sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER, probe_error TEXT)");
   log("  Submissions table ready");
+
+  // node_metadata — identity-keyed registry (architecture memo Evolution B, Stage 1)
+  // Populated once by scripts/populate-node-metadata.js; no runtime code reads from this yet.
+  sharedDb.run(`CREATE TABLE IF NOT EXISTS node_metadata (
+    identity_hash         TEXT PRIMARY KEY,
+    canonical_name        TEXT,
+    operator_claim        TEXT,
+    operator_verification TEXT,
+    seed_node             INTEGER DEFAULT 0,
+    source_chain          TEXT NOT NULL CHECK (source_chain IN ('testnet', 'fixnet', 'devnet', 'mainnet')),
+    current_url           TEXT,
+    previous_urls         TEXT,
+    tags                  TEXT,
+    notes                 TEXT,
+    created_at            INTEGER NOT NULL,
+    updated_at            INTEGER NOT NULL
+  )`);
+  sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_metadata_chain ON node_metadata(source_chain)`);
+  sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_metadata_seed ON node_metadata(seed_node)`);
+  log("  Node metadata table ready");
   // M9: Reload approved submissions into PUBLIC_NODES
   try {
     var approved = sharedDb.query("SELECT * FROM submissions WHERE status='approved' ORDER BY id ASC").all();
