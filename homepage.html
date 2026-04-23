@@ -17,7 +17,7 @@
   --stable: #2dd4a0;
   --degraded: #d97706;
   --unstable: #EF4444;
-  --improving: #22c55e;
+  --improving: #2dd4a0;
   --unknown: #6b7280;
   --mono: 'Source Code Pro', monospace;
   --sans: 'Inter', system-ui, sans-serif;
@@ -379,18 +379,18 @@ async function fetchData() {
       monitored.forEach(function(v){
         var dotClass=v.online?'dot-online':'dot-offline';
         var statusText=v.online?'online':'offline';
-        var syncColor=v.sync_pct>=99.9?'var(--improving)':v.sync_pct>=90?'var(--text-primary)':v.sync_pct>=50?'var(--degraded)':'var(--unstable)';
+        var syncColor=v.sync_pct>=95?'var(--stable)':v.sync_pct>=80?'var(--degraded)':'var(--unstable)';var syncOpacity=(v.sync_pct>=95&&v.sync_pct<100)?';opacity:0.55':'';
         var pn=nodes.find(function(n){return n.name===v.display;});
         var latency=pn&&pn.latencyMs!=null?pn.latencyMs+'ms':'\u2014';
         var uptimeText='\u2014';var uptimeColor='var(--text-secondary)';
-        if(v.uptime_7d!=null){uptimeText=v.uptime_7d+'%';uptimeColor=v.uptime_7d>=95?'var(--improving)':v.uptime_7d>=70?'var(--degraded)':'var(--unstable)';}
+        if(v.uptime_7d!=null){uptimeText=v.uptime_7d+'%';uptimeColor=v.uptime_7d>=95?'var(--stable)':v.uptime_7d>=80?'var(--degraded)':'var(--unstable)';}
         var source=(v.display&&v.display.indexOf('community')===0)?'Community':'Kynesys';
         var srcPill='<span style="display:inline-block;padding:1px 7px;border:1px solid var(--border);border-radius:999px;font-size:10px;color:var(--text-secondary)">'+source+'</span>';
         h+='<tr><td>'+esc(v.display||'\u2014')+'</td>'+
           '<td>'+srcPill+'</td>'+
           '<td><span class="status-dot '+dotClass+'"></span>'+statusText+'</td>'+
           '<td>'+(v.block?v.block.toLocaleString():'\u2014')+'</td>'+
-          '<td style="color:'+syncColor+'">'+v.sync_pct+'%</td>'+
+          '<td style="color:'+syncColor+syncOpacity+'">'+v.sync_pct+'%</td>'+
           '<td>'+latency+'</td>'+
           '<td style="color:'+uptimeColor+'">'+uptimeText+'</td></tr>';
       });
