@@ -20,7 +20,7 @@ pre{background:var(--surface);border:1px solid var(--border);border-radius:10px;
 a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}
 a:hover{border-bottom-color:var(--improving)}
 a:hover{text-decoration:underline}
-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}
+footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
 .doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center}
 .doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
 .doc-nav-left{order:1}
@@ -39,7 +39,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
 .doc-nav-link.active{color:var(--text-primary)}
 @media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:24px}h2{font-size:15px}}
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-inner > .nav-live{flex:0 0 auto;order:2;margin-left:auto;font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px}}
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-inner > .nav-live{flex:0 0 auto;order:2;margin-left:auto;font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-dot{display:inline}}
 </style></head><body>
 <nav class="doc-nav">
   <div class="doc-nav-inner">
@@ -134,7 +134,7 @@ if state['data_quality'] == 'insufficient':
 <h2>Design Principle</h2>
 <div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes network truth. Your agent interprets it.</div>
 
-<footer>Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> · Built by XM33</footer>
+<footer>Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> · Built by XM33<span class="xm33-dot"> ·</span></footer>
 </body></html>
 </main>
 <script>

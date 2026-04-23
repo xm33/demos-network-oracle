@@ -36,8 +36,8 @@ button:disabled{opacity:0.4;cursor:not-allowed}
 .doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
 .nav-live{font-size:10px;font-family:var(--mono);padding:4px 9px;border:1px solid rgba(34,197,94,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
 .nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--improving,#22c55e);opacity:0.8}
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-inner > .nav-live{flex:0 0 auto;order:2;margin-left:auto;font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px}}
-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-inner > .nav-live{flex:0 0 auto;order:2;margin-left:auto;font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-dot{display:inline}}
+footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
 </style></head><body>
 <nav class="doc-nav">
   <div class="doc-nav-inner">
@@ -160,6 +160,6 @@ async function submitNode(){
   btn.disabled=false;btn.textContent='Submit Node';
 }
 </script>
-<footer>Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> · Built by XM33</footer>
+<footer>Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> · Built by XM33<span class="xm33-dot"> &middot;</span></footer>
 </main>
 </body></html>
