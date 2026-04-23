@@ -192,7 +192,7 @@ body { position:relative; }
   <section class="hero" id="overview">
     <div class="oracle-kicker-row">
       <span class="oracle-kicker">Demos Network Oracle — Observing many signals. Resolving one truth.</span>
-      <a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a>
+      <a href="https://mint.demos.sh" target="_blank" rel="noopener noreferrer" class="oracle-hero-submit">MINT DEMOS NODE NFT</a>
     </div>
     <div id="hero-status" class="oracle-status loading">Loading...</div>
     <div id="hero-summary" class="hero-summary"></div>
@@ -268,7 +268,7 @@ body { position:relative; }
       <span>·</span>
       <a href="https://faucet.demos.sh">Faucet</a>
       <span>·</span>
-      <a href="/submit">Submit Node</a>
+      <a href="https://mint.demos.sh" target="_blank" rel="noopener noreferrer">Mint Demos Node NFT</a>
     </div>
     <div class="footer-meta">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> · Built by XM33</div>
   </div>
@@ -353,12 +353,13 @@ async function fetchData() {
     // Growth cards
     var vg=health.validator_growth||{};
     var gc=document.getElementById('growth-cards');
+    // v7.4: summary cards now reflect MONITORED set specifically (not mixed counts)
     gc.innerHTML=
-      '<div class="growth-card"><div class="gc-value">'+(vg.total||0)+'</div><div class="gc-label">Discovered</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.online||0)+'</div><div class="gc-label">Reachable</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.synced||0)+'</div><div class="gc-label">At Head</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">Discovered</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.monitored_online||0)+'</div><div class="gc-label">Reachable</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.monitored_at_head||0)+'</div><div class="gc-label">At Head</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
-    document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week';
+    document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week \u00b7 +'+(vg.month||0)+' this month';
 
     // Validators: render monitored only (discovered lives on /community)
     var validators=vg.validators||[];

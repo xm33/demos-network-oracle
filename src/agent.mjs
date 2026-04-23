@@ -432,7 +432,15 @@ function getRecommendation(data) {
 
 // Load incident counter from DB on startup
 function getValidatorGrowth() {
-  var result = { today: 0, week: 0, total: 0, online: 0, synced: 0, monitored: Object.keys(PUBLIC_NODES).length, network_head: 0, validators: [] };
+  var result = {
+    today: 0, week: 0, month: 0, total: 0,
+    online: 0, synced: 0,
+    monitored: Object.keys(PUBLIC_NODES).length,
+    monitored_online: 0, monitored_at_head: 0,
+    discovered: 0, discovered_online: 0,
+    network_head: 0,
+    validators: []
+  };
   var pubOnline = (latestPublicNodes || []).filter(function(n) { return n.ok && n.block; });
   if (pubOnline.length > 0) result.network_head = Math.max.apply(null, pubOnline.map(function(n) { return n.block; }));
   if (!sharedDb) return result;
@@ -440,47 +448,81 @@ function getValidatorGrowth() {
     var now = Date.now();
     var dayAgo = now - 86400000;
     var weekAgo = now - 604800000;
-    var total = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries").get().c;
-    var today = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries WHERE first_seen > ?").get(dayAgo).c;
-    var week = sharedDb.query("SELECT COUNT(*) as c FROM validator_discoveries WHERE first_seen > ?").get(weekAgo).c;
-    result.total = total;
-    result.today = today;
-    result.week = week;
+    var monthAgo = now - 2592000000; // 30 days
+    // v7.4: counts from validator_discoveries EXCLUDING monitored identities (clean discovered count)
+    // Filter in JS — simpler than parameterized NOT IN, and the row count is small
+    var allRows = sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all();
+    var discRows = allRows.filter(function(r) {
+      if (PUBLIC_NODE_IDENTITIES[r.identity]) return false;
+      if (FIXNET_NODE_IDENTITIES[r.identity]) return false;
+      return true;
+    });
+    result.total = discRows.length;
+    result.today = discRows.filter(function(r){ return r.first_seen > dayAgo }).length;
+    result.week = discRows.filter(function(r){ return r.first_seen > weekAgo }).length;
+    result.month = discRows.filter(function(r){ return r.first_seen > monthAgo }).length;
+    result.discovered = discRows.length;
 
-    // Live state from discovered peers
-    var peers = Object.values(discoveredPeers || {});
-    var onlineCount = peers.filter(function(p) { return p.online; }).length;
-
-    // Synced = within 100 blocks of public network head
-    var pubOnline = (latestPublicNodes || []).filter(function(n) { return n.ok && n.block; });
-    var networkHead = 0;
-    if (pubOnline.length > 0) {
-      var pubBlocks = pubOnline.map(function(n) { return n.block; });
-      networkHead = Math.max.apply(null, pubBlocks);
-    }
     var syncedCount = 0;
-    var dbRows = sharedDb.query("SELECT identity, first_seen, connection FROM validator_discoveries ORDER BY first_seen").all();
     var validators = [];
+
+    // v7.4 Pass 1: Emit ALL monitored nodes (from PUBLIC_NODES), regardless of DB state.
+    // Ensures kyne-node3b etc. always appear even if they never got peer-crawled.
+    var pubIdToName = {};
+    for (var pn in PUBLIC_NODES) { pubIdToName[PUBLIC_NODES[pn].identity] = pn; }
+    var monitoredFirstSeen = {};
+    try {
+      var monRows = sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all();
+      for (var mri = 0; mri < monRows.length; mri++) { monitoredFirstSeen[monRows[mri].identity] = monRows[mri].first_seen; }
+    } catch(ee){}
+    for (var pnName in PUBLIC_NODES) {
+      var pnDef = PUBLIC_NODES[pnName];
+      var pnLive = (latestPublicNodes || []).find(function(n){ return n.name === pnName; });
+      var block = pnLive && pnLive.block ? pnLive.block : null;
+      var online = pnLive ? !!pnLive.ok : false;
+      var lag = (block && result.network_head > 0) ? result.network_head - block : null;
+      var syncPct = (block && result.network_head > 0) ? Math.round((block / result.network_head) * 1000) / 10 : 0;
+      var fs = monitoredFirstSeen[pnDef.identity] || now;
+      validators.push({
+        display: pnName,
+        identity: pnDef.identity,
+        block: block,
+        lag: lag,
+        sync_pct: syncPct,
+        online: online,
+        monitored: true,
+        first_seen_hours_ago: Math.round((now - fs) / 3600000)
+      });
+      if (online) { result.online++; result.monitored_online++; }
+      if (online && lag !== null && lag < 100) { syncedCount++; result.monitored_at_head++; }
+    }
+
+    // v7.4 Pass 2: Iterate DB for DISCOVERED-only rows (exclude monitored identities)
+    var dbRows = sharedDb.query("SELECT identity, first_seen, connection FROM validator_discoveries ORDER BY first_seen").all();
     for (var vi = 0; vi < dbRows.length; vi++) {
       var row = dbRows[vi];
       var identity = row.identity;
-      if (FIXNET_NODE_IDENTITIES[identity]) continue; // skip fixnet nodes (different network)
-      var isMonitored = !!PUBLIC_NODE_IDENTITIES[identity];
+      if (FIXNET_NODE_IDENTITIES[identity]) continue;
+      if (PUBLIC_NODE_IDENTITIES[identity]) continue; // skip monitored (already pushed in Pass 1)
       var display = (row.connection || "unknown").replace("http://", "");
       var block = null, online = false;
-      if (isMonitored) {
-        var nodeName = PUBLIC_NODE_IDENTITIES[identity];
-        display = nodeName;
-        var pubNode = (latestPublicNodes || []).find(function(n) { return n.name === nodeName; });
-        if (pubNode) { block = pubNode.block || null; online = pubNode.ok || false; }
-      } else if (discoveredPeers[identity]) {
+      if (discoveredPeers[identity]) {
         block = discoveredPeers[identity].block || null;
         online = discoveredPeers[identity].online || false;
       }
       var lag = (block && result.network_head > 0) ? result.network_head - block : null;
       var syncPct = (block && result.network_head > 0) ? Math.round((block / result.network_head) * 1000) / 10 : 0;
-      validators.push({ display: display, block: block, lag: lag, sync_pct: syncPct, online: online, monitored: isMonitored, first_seen_hours_ago: Math.round((now - row.first_seen) / 3600000) });
-      if (online) result.online++;
+      validators.push({
+        display: display,
+        identity: identity,
+        block: block,
+        lag: lag,
+        sync_pct: syncPct,
+        online: online,
+        monitored: false,
+        first_seen_hours_ago: Math.round((now - row.first_seen) / 3600000)
+      });
+      if (online) { result.online++; result.discovered_online++; }
       if (online && lag !== null && lag < 100) syncedCount++;
     }
     // M6: Historical reliability from public_node_history
