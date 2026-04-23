@@ -2709,7 +2709,7 @@ function generatePrometheusMetrics(fleetData) {
         h += '<div class="sum-card"><div class="sum-val">' + fxTotalN + '</div><div class="sum-label">Nodes</div></div>';
         h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxOnlineN===fxTotalN?"#2dd4a0":"#d97706") + '">' + fxOnlineN + '</div><div class="sum-label">Reachable</div></div>';
         h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxAtHeadN>0?"#2dd4a0":"#98a2b3") + '">' + fxAtHeadN + '</div><div class="sum-label">At Head</div></div>';
-        h += '<div class="sum-card"><div class="sum-val" style="font-size:14px">' + (fxNetHead?fxNetHead.toLocaleString():"\u2014") + '</div><div class="sum-label">Network Head</div></div>';
+        h += '<div class="sum-card"><div class="sum-val">' + (fxNetHead?fxNetHead.toLocaleString():"\u2014") + '</div><div class="sum-label">Network Head</div></div>';
         if (fxDiscovered.length > 0) {
           h += '<div class="sum-card"><div class="sum-val" style="color:#a78bfa">' + fxDiscovered.length + '</div><div class="sum-label">Discovered</div></div>';
         }
