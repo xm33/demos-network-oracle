@@ -105,6 +105,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <p>Incidents are discrete, named events — a specific node going offline, a chain stall, a detected partition. They have a severity (<span class="val">info</span>, <span class="val">warning</span>, <span class="val">critical</span>) and a lifecycle (opened → active → resolved).</p>
 <p>General conditions like "the network is slow" are not incidents — they are captured by status, risk, and agreement. Incidents point to specific, identifiable problems.</p>
 <p>Severity is assessed relative to current network size. One node going offline in a set of five is more significant than in a set of fifty.</p>
+<div class="note">Incidents are state-driven and persist across restarts. The Oracle reconciles each active incident against current observations every cycle, rather than relying only on transition events. A consequence: an incident may remain active for extended periods when the underlying condition does not resolve — for example, a block-stall may be detected and kept active even while all nodes remain individually healthy and reachable. "All nodes healthy" does not always mean "the network is producing blocks."</div>
 <h2>How It Works</h2>
 <p>The Oracle runs a continuous observation cycle. Every 20 seconds, it:</p>
 <p>1. Polls each known public validator node — checks reachability, block height, sync status, and peer count.<br>

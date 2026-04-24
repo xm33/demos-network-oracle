@@ -93,7 +93,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
     <span class="layer-title">Public Network</span>
   </div>
   <p class="layer-desc">Public validator nodes used to determine network status, agreement, and risk. These are the primary truth sources. All canonical assessments are derived exclusively from this layer.</p>
-  <div class="layer-detail">Includes: Kynesys-operated nodes, approved community validators</div>
+  <div class="layer-detail">Includes: Kynesys-operated public validators (kyne-node2, kyne-node3, kyne-node3b), approved community validators</div>
 </div>
 
 <div class="layer-card">
@@ -102,7 +102,16 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
     <span class="layer-title">Fleet</span>
   </div>
   <p class="layer-desc">Internally operated validator nodes used to anchor and validate observations. The fleet provides an infrastructure health baseline and serves as a trust signal for Oracle reliability. Fleet data never influences public status, risk, or agreement.</p>
-  <div class="layer-detail">Operated by: XM33 &middot; Not part of canonical network view</div>
+  <div class="layer-detail">Operated by: XM33 &middot; Includes the Kynesys anchor node &middot; Not part of canonical network view</div>
+</div>
+
+<div class="layer-card">
+  <div class="layer-header">
+    <span class="layer-badge reference">Reference</span>
+    <span class="layer-title">Discovered Peers (Fixnet)</span>
+  </div>
+  <p class="layer-desc">Validators observed via peerlist crawling from the Kynesys anchor. These peers are actively probed for reachability, block height, and latency, but are not part of the canonical truth surface. Their role is to expand network visibility beyond the monitored set without introducing trust assumptions.</p>
+  <div class="layer-detail">Discovered via: anchor peerlist crawl &middot; Not part of canonical network view</div>
 </div>
 
 <div class="layer-card">
