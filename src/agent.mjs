@@ -3656,6 +3656,17 @@ async function main() {
   // v7.3: idempotent migration for databases created before last_latency_ms existed
   try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN last_latency_ms INTEGER"); } catch(e) { /* column exists */ }
 
+  // Stage 3a: idempotent schema additions for per-peer stability tracking
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN observed_cycles INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN stable_cycles INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN current_stable_streak INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN first_stable_at INTEGER"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN last_stable_at INTEGER"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN last_flap_at INTEGER"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN head_miss_count INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN probe_fail_count INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN unevaluated_cycles INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }
+
   // v7.2: startup cleanup — remove fixnet discoveries not seen in last 7 days
   try {
     var cutoff7d = Date.now() - (7 * 24 * 60 * 60 * 1000);
