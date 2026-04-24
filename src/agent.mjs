@@ -414,6 +414,15 @@ function getActiveIncidentIds() {
 }
 
 var FLEET_NODE_NAMES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
+
+// Operator labels for discovered fixnet peers (self-identified to the Oracle operator).
+// Key: first 10 chars of identity (e.g. "0xd9409b0d"). Value: display name.
+// Adding a name here does NOT promote the peer into the canonical truth surface —
+// it's a cosmetic label shown in the fixnet source column instead of "Discovered".
+// Trust basis is operator-chat self-identification, not cryptographic proof.
+var FIXNET_DISCOVERED_OPERATORS = {
+  "0xd9409b0d": "Walter"
+};
 function getPublicActiveIncidentIds() {
   return Object.values(activeIncidents).filter(function(i) {
     // Exclude fleet chain incidents from public count
@@ -2766,8 +2775,16 @@ function generatePrometheusMetrics(fleetData) {
           var isFleet = rowKind === "fleet";
           var isDisc = rowKind === "discovered";
 
+          // Named operator lookup for discovered fixnet peers (cosmetic label, no trust change)
+          var discoveredLabel = "Discovered";
+          if (isDisc && fxRows[fxi].data && fxRows[fxi].data.identity) {
+            var idPrefix = fxRows[fxi].data.identity.substring(0, 10);
+            if (FIXNET_DISCOVERED_OPERATORS[idPrefix]) {
+              discoveredLabel = FIXNET_DISCOVERED_OPERATORS[idPrefix];
+            }
+          }
           var srcColor = isAnchor ? "#2B36D9" : (isFleet ? "#98a2b3" : "#a78bfa");
-          var srcLabel = isAnchor ? "Kynesys" : (isFleet ? "XM33" : "Discovered");
+          var srcLabel = isAnchor ? "Kynesys" : (isFleet ? "XM33" : discoveredLabel);
 
           // Status resolution: monitored uses .ok, discovered uses .online
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
