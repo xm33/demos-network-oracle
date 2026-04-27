@@ -99,20 +99,11 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <div class="layer-card">
   <div class="layer-header">
     <span class="layer-badge reference">Reference</span>
-    <span class="layer-title">Fleet</span>
+    <span class="layer-title">Discovered (Fixnet)</span>
   </div>
-  <p class="layer-desc">Internally operated validator nodes used to anchor and validate observations. The fleet provides an infrastructure health baseline and serves as a trust signal for Oracle reliability. Fleet data never influences public status, risk, or agreement.</p>
-  <div class="layer-detail">Operated by: XM33 &middot; Includes the Kynesys anchor node &middot; Not part of canonical network view</div>
-</div>
-
-<div class="layer-card">
-  <div class="layer-header">
-    <span class="layer-badge reference">Reference</span>
-    <span class="layer-title">Discovered Peers (Fixnet)</span>
-  </div>
-  <p class="layer-desc">Validators observed via peerlist crawling from the Kynesys anchor. These peers are actively probed for reachability, block height, and latency, but are not part of the canonical truth surface. Their role is to expand network visibility beyond the monitored set without introducing trust assumptions.</p>
-  <div class="layer-detail">Discovered via: anchor peerlist crawl &middot; Not part of canonical network view</div>
-  <div class="layer-detail">Some discovered peers may display an operator name if the operator has self-identified. Naming is cosmetic and does not imply promotion or approval.</div>
+  <p class="layer-desc">All fixnet validators except the Kynesys anchor are treated as discovered observations. This includes the XM33-operated fleet, self-identified community operators (e.g. Walter), and anonymous peers surfaced via the anchor&apos;s peerlist. Discovered data is probed for reachability, block height, and latency, but does not influence canonical status, risk, or agreement.</p>
+  <div class="layer-detail">Trust origin on fixnet: the Kynesys anchor only &middot; All other fixnet sources are observed</div>
+  <div class="layer-detail">Operator names appear in the Validator column when operators have self-identified. Naming is cosmetic and does not imply promotion, approval, or elevated trust.</div>
 </div>
 
 <div class="layer-card">

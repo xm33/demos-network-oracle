@@ -2775,16 +2775,10 @@ function generatePrometheusMetrics(fleetData) {
           var isFleet = rowKind === "fleet";
           var isDisc = rowKind === "discovered";
 
-          // Named operator lookup for discovered fixnet peers (cosmetic label, no trust change)
-          var discoveredLabel = "Discovered";
-          if (isDisc && fxRows[fxi].data && fxRows[fxi].data.identity) {
-            var idPrefix = fxRows[fxi].data.identity.substring(0, 10);
-            if (FIXNET_DISCOVERED_OPERATORS[idPrefix]) {
-              discoveredLabel = FIXNET_DISCOVERED_OPERATORS[idPrefix];
-            }
-          }
-          var srcColor = isAnchor ? "#2B36D9" : (isFleet ? "#98a2b3" : "#a78bfa");
-          var srcLabel = isAnchor ? "Kynesys" : (isFleet ? "XM33" : discoveredLabel);
+          // Trust tier: Kynesys anchor = trust origin, everything else = observed/discovered.
+          // Operator names (if any) move to the Validator column, not the Source column.
+          var srcColor = isAnchor ? "#2B36D9" : "#a78bfa";
+          var srcLabel = isAnchor ? "Kynesys" : "Discovered";
 
           // Status resolution: monitored uses .ok, discovered uses .online
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
@@ -2802,8 +2796,26 @@ function generatePrometheusMetrics(fleetData) {
           // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
           var latencyStr = (fn.latencyMs != null) ? (fn.latencyMs + "ms") : "\u2014";
 
-          // Validator cell: name + sub-line identity.
-          var nameLabel = isDisc ? ("discovered-" + (fn.identity ? fn.identity.substring(fn.identity.length-4) : "????")) : fn.name;
+          // Validator cell: prefer operator/human names.
+          //  - Anchor: "Kynesys Anchor"
+          //  - Fleet:  "XM33 - <nodeId>" (e.g. "XM33 - n1") stripping the "fleet-" prefix
+          //  - Discovered + named operator (FIXNET_DISCOVERED_OPERATORS match): operator name (e.g. "Walter")
+          //  - Discovered + unnamed: "discovered-<last4 of identity>"
+          var nameLabel;
+          if (isAnchor) {
+            nameLabel = "Kynesys Anchor";
+          } else if (isFleet) {
+            var fleetSuffix = (fn.name && fn.name.indexOf("fleet-") === 0) ? fn.name.substring(6) : fn.name;
+            nameLabel = "XM33 - " + fleetSuffix;
+          } else {
+            // discovered
+            var opName = null;
+            if (fn.identity) {
+              var idPfx = fn.identity.substring(0, 10);
+              if (FIXNET_DISCOVERED_OPERATORS[idPfx]) opName = FIXNET_DISCOVERED_OPERATORS[idPfx];
+            }
+            nameLabel = opName || ("discovered-" + (fn.identity ? fn.identity.substring(fn.identity.length-4) : "????"));
+          }
           var identity = fn.identity || "";
 
           h += '<tr>';
