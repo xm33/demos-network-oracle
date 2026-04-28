@@ -945,12 +945,15 @@ function generateSignals(data, stalenessSeconds) {
   }
   var nodes = data.nodeReports;
   var total = nodes.length;
+  // Signal filters must respect nodeReports tri-state fields:
+  // true = observed-good, false = observed-bad, null/undefined = unknown.
+  // Unknown state must never emit a signal. See producer contract ~line 1163.
   var onlineNodes = nodes.filter(function(n) { return n.online; });
-  var offlineNodes = nodes.filter(function(n) { return !n.online; });
+  var offlineNodes = nodes.filter(function(n) { return n.online === false; });
   var lagNodes = nodes.filter(function(n) { return n.issues && n.issues.some(function(i) { return i.indexOf("BLOCK_LAG") !== -1; }); });
-  var mismatchNodes = nodes.filter(function(n) { return !n.identityMatch; });
-  var notReadyNodes = nodes.filter(function(n) { return n.online && !n.ready; });
-  var notSyncedNodes = nodes.filter(function(n) { return !n.syncOk; });
+  var mismatchNodes = nodes.filter(function(n) { return n.identityMatch === false; });
+  var notReadyNodes = nodes.filter(function(n) { return n.online === true && n.ready === false; });
+  var notSyncedNodes = nodes.filter(function(n) { return n.syncOk === false; });
   var maxBlock = Math.max.apply(null, nodes.map(function(n) { return n.blockHeight || 0; }));
   var minBlock = Math.min.apply(null, nodes.filter(function(n) { return n.blockHeight; }).map(function(n) { return n.blockHeight; }));
 
@@ -971,7 +974,7 @@ function generateSignals(data, stalenessSeconds) {
 
   // Identity mismatch
   if (mismatchNodes.length > 0) {
-    signals.push({ type: "identity_mismatch", severity: "critical", nodes: mismatchNodes.map(function(n) { return n.name; }), value: mismatchNodes.length, message: mismatchNodes.map(function(n) { return n.name; }).join(", ") + " identity mismatch — possible hijack" });
+    signals.push({ type: "identity_mismatch", severity: "critical", nodes: mismatchNodes.map(function(n) { return n.name; }), value: mismatchNodes.length, message: mismatchNodes.map(function(n) { return n.name; }).join(", ") + " identity mismatch — declared identity does not match observed identity" });
   }
 
   // Not ready
@@ -1160,6 +1163,14 @@ async function perceive() {
   var nodeReports = [];
   var blockHeights = {};
 
+  // ---------------------------------------------------------------------------
+  // TRI-STATE CONTRACT for nodeReports fields (online, ready, syncOk, identityMatch):
+  //   true  = compared/observed and confirmed-good
+  //   false = compared/observed and confirmed-bad
+  //   null  = unknown / could not determine (e.g., NOT_IN_PEERLIST, LOCAL_INFO_UNREACHABLE)
+  // INVARIANT: consumers must NEVER alarm on unknown (null). Only confirmed-false may emit a signal.
+  // See generateSignals() (~line 940). Bug history: identity_mismatch false-positives, fix 2026-04-28.
+  // ---------------------------------------------------------------------------
   for (var ni = 0; ni < NODE_NAMES.length; ni++) {
     var name = NODE_NAMES[ni];
     var expected = EXPECTED_FLEET[name];
