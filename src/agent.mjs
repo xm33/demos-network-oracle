@@ -1469,6 +1469,13 @@ async function dahrAttest(demos, url, method) {
   // Check if DAHR is available on this SDK version
   if (dahrAvailable === false) return null;
 
+  // D40 Option B: standby validators skip DAHR attestation while the primary Oracle is alive.
+  // No-op on primary (INSTANCE_ROLE !== "validator"). Standbys take over attestation only on failover.
+  if (INSTANCE_ROLE === "validator") {
+    var ps = await checkPrimaryOracle();
+    if (!ps.silent) return null;
+  }
+
   try {
     if (!demos.web2 || typeof demos.web2.createDahr !== "function") {
       if (dahrAvailable === null) {
