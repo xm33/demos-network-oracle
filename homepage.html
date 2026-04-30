@@ -73,6 +73,17 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .ag-value { font-family:var(--mono); font-size:16px; font-weight:500; color:var(--text-primary); }
 .ag-label { font-size:12px; color:var(--text-secondary); text-transform:lowercase; }
 
+/* LAST 24H */
+.last24-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+.last24-item { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:6px; }
+.last24-value { font-family:var(--mono); font-size:16px; font-weight:500; color:var(--text-primary); line-height:1.3; }
+.last24-label { font-size:12px; color:var(--text-secondary); text-transform:lowercase; }
+.last24-coverage { font-size:11px; color:var(--text-secondary); opacity:0.65; font-family:var(--mono); margin-top:8px; }
+.last24-insufficient { font-size:13px; color:var(--text-secondary); font-style:italic; padding:14px 0; }
+@media (max-width:600px) {
+  .last24-grid { grid-template-columns:1fr; }
+}
+
 /* GROWTH CARDS */
 .growth-cards { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
 .growth-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px; text-align:center; min-width:92px; display:flex; flex-direction:column; gap:4px; }
@@ -221,6 +232,12 @@ body { position:relative; }
       <div class="ag-item" title="Reference height across reachable nodes"><div id="ag-median" class="ag-value">—</div><div class="ag-label">median block</div><div class="ag-sub">reference height</div></div>
     </div>
   </section>
+  <section class="section" id="last-24h">
+    <div class="section-title">Last 24 Hours</div>
+    <div class="section-subtitle">Aggregate observation from the most recent 24 hours of probe cycles. Public-network only.</div>
+    <div id="last24-grid" class="last24-grid"></div>
+    <div id="last24-coverage" class="last24-coverage"></div>
+  </section>
   <section class="section" id="validators">
     <div class="section-title">Network View</div>
     <div id="growth-cards" class="growth-cards"></div>
@@ -353,6 +370,53 @@ async function fetchData() {
     document.getElementById('ag-median').textContent=ag.median_block!=null?ag.median_block.toLocaleString():'\u2014';
     var agR=document.getElementById("ag-reason");if(agR&&health.agreement_reason){agR.textContent=health.agreement_reason;agR.style.display="block";}
     var cR=document.getElementById("card-confidence-reason");if(cR&&health.confidence_reason){cR.textContent=health.confidence_reason;cR.style.display="block";}
+
+
+    // Last 24h
+    var last24 = org.last_24h;
+    var l24Grid = document.getElementById('last24-grid');
+    var l24Cov = document.getElementById('last24-coverage');
+    if (l24Grid && last24) {
+      if (!last24.sufficient) {
+        l24Grid.innerHTML = '<div class="last24-insufficient">' + esc(last24.message || 'Insufficient observation in the last 24 hours.') + '</div>';
+        if (l24Cov) l24Cov.textContent = '';
+      } else {
+        var l24Items = [];
+        var nodesLine = last24.peak_set
+          ? 'typically ' + last24.typical_set_size + ', peak ' + last24.peak_set.size
+          : String(last24.typical_set_size);
+        l24Items.push(['public nodes observed', nodesLine, 'var(--text-primary)']);
+        if (last24.peak_set) {
+          var peakLine = last24.peak_set.size + ' nodes observed; ' +
+                         (Math.round(last24.peak_set.avg_reachable * 10) / 10).toFixed(1) +
+                         ' reachable on average across ' + last24.peak_set.cycles + ' cycles';
+          l24Items.push(['peak observation window', peakLine, 'var(--text-primary)']);
+        }
+        var cmState = last24.chain_movement && last24.chain_movement.state || 'unknown';
+        var cmCol = cmState === 'normal' ? 'var(--stable)'
+                  : cmState === 'interrupted' ? 'var(--degraded)'
+                  : 'var(--unknown)';
+        l24Items.push(['chain movement', cmState, cmCol]);
+        var nsLine = last24.longest_non_stable_minutes > 0
+          ? last24.longest_non_stable_minutes + 'm'
+          : 'none observed';
+        l24Items.push(['longest non-stable interval', nsLine, 'var(--text-primary)']);
+        var incCount = last24.active_critical_public_incidents || 0;
+        var incCol = incCount > 0 ? 'var(--unstable)' : 'var(--stable)';
+        l24Items.push(['active critical public incidents', String(incCount), incCol]);
+        var l24h = '';
+        l24Items.forEach(function(it) {
+          l24h += '<div class="last24-item"><div class="last24-value" style="color:' + it[2] + '">' +
+            esc(it[1]) + '</div><div class="last24-label">' + esc(it[0]) + '</div></div>';
+        });
+        l24Grid.innerHTML = l24h;
+        if (l24Cov) {
+          l24Cov.textContent = last24.coverage_pct >= 99.0
+            ? 'coverage 24/24h'
+            : 'coverage ' + last24.coverage_pct + '% of window';
+        }
+      }
+    }
 
     // Growth cards
     var vg=health.validator_growth||{};
