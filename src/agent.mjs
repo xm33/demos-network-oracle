@@ -62,6 +62,7 @@ const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
 const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
 const PROMETHEUS_URL = "http://127.0.0.1:19096";
 const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
+const LOCAL_NODE_NAME = process.env.LOCAL_NODE_NAME || "n3";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
@@ -177,6 +178,12 @@ const EXPECTED_FLEET = {
 
 const NODE_NAMES = Object.keys(EXPECTED_FLEET);
 const FLEET_SIZE = NODE_NAMES.length;
+
+// D43: validate LOCAL_NODE_NAME early. Fail loud if misconfigured.
+if (!EXPECTED_FLEET[LOCAL_NODE_NAME]) {
+  console.error("[FATAL] Invalid LOCAL_NODE_NAME=" + LOCAL_NODE_NAME + ". Must be one of: " + Object.keys(EXPECTED_FLEET).join(", "));
+  process.exit(1);
+}
 
 // Node registry — separated by source type and trust tier
 // source_type: "public" | "community" | "discovered"
@@ -1141,17 +1148,17 @@ async function perceive() {
     log("  LOCAL /info FAILED: " + localInfoResult.error);
     return {
       skip: false, type: "ALERT",
-      nodeReports: [{ name: "n3", status: "UNHEALTHY", issues: ["LOCAL_INFO_UNREACHABLE"] }],
+      nodeReports: [{ name: LOCAL_NODE_NAME, status: "UNHEALTHY", issues: ["LOCAL_INFO_UNREACHABLE"] }],
       chain: { block: null, onlineCount: 0, readyCount: 0, syncedCount: 0, tps: null },
-      problems: [{ name: "n3", issues: ["LOCAL_INFO_UNREACHABLE"] }],
+      problems: [{ name: LOCAL_NODE_NAME, issues: ["LOCAL_INFO_UNREACHABLE"] }],
     };
   }
 
   var info = localInfoResult.data;
-  log("  n3 /info OK (" + localInfoResult.latencyMs + "ms) version " + info.version + " " + info.version_name);
-  nodeVersions.n3 = { version: info.version || null, versionName: info.version_name || null };
+  log("  " + LOCAL_NODE_NAME + " /info OK (" + localInfoResult.latencyMs + "ms) version " + info.version + " " + info.version_name);
+  nodeVersions[LOCAL_NODE_NAME] = { version: info.version || null, versionName: info.version_name || null };
 
-  var n3IdentityOk = info.identity === EXPECTED_FLEET.n3.identity;
+  var localIdentityOk = info.identity === EXPECTED_FLEET[LOCAL_NODE_NAME].identity;
 
   var peerByConn = {};
   for (var j = 0; j < (info.peerlist || []).length; j++) {
@@ -1182,8 +1189,8 @@ async function perceive() {
     var ready = null;
     var identityMatch = null;
 
-    if (name === "n3") {
-      identityMatch = n3IdentityOk;
+    if (name === LOCAL_NODE_NAME) {
+      identityMatch = localIdentityOk;
       online = true;
       ready = true;
       var firstPeer = info.peerlist && info.peerlist[0];
@@ -3569,7 +3576,7 @@ async function checkBalance(demos) {
 
 async function probeFleetVersions() {
   log("  Probing fleet node versions...");
-  var probes = NODE_NAMES.filter(function(n) { return n !== "n3"; }).map(function(name) {
+  var probes = NODE_NAMES.filter(function(n) { return n !== LOCAL_NODE_NAME; }).map(function(name) {
     var url = expectedConnStr(name) + "/info";
     return fetchInfo(url).then(function(result) {
       if (result.ok && result.data) {
