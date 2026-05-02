@@ -452,7 +452,10 @@ var FLEET_NODE_NAMES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
 // it's a cosmetic label shown in the fixnet source column instead of "Discovered".
 // Trust basis is operator-chat self-identification, not cryptographic proof.
 var FIXNET_DISCOVERED_OPERATORS = {
-  "0xd9409b0d": "Walter"
+  "0xd9409b0d": "Walter",
+  "0xf5abbb44": "R1",
+  "0x25aa62f3": "R2",
+  "0xc4abb72d": "R3"
 };
 function getPublicActiveIncidentIds() {
   return Object.values(activeIncidents).filter(function(i) {
