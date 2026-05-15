@@ -26,9 +26,8 @@ var MAX_LOG_BACKUPS = 3;
 // ============================================================================
 
 // Fleet identification for incident scope inference (no scope column in schema).
-// Includes two decommissioned nodes (m3, n9) that still appear in legacy client JS.
-// Treating them as fleet prevents accidental public classification. Update list
-// when client JS is cleaned up — m3 and n9 may rejoin fleet later.
+// All 9 fleet members listed: n9 + m3 onboarded 2026-05-05 (see drift register).
+// Used to filter incidents into fleet vs public scope.
 var FLEET_NODES_24H = new Set(['n1','n2','n3','n4','n5','n6','m1','m3','n9']);
 
 // Chain movement thresholds — env-overridable for live-chain migration tuning.
@@ -84,7 +83,7 @@ const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
 const FALLBACK_RPCS = [RPC_URL, "http://193.77.44.160:53550", "http://193.77.50.180:53550"];
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
 const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
-const PROMETHEUS_URL = "http://127.0.0.1:19096";
+const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://127.0.0.1:9091";
 const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
 const LOCAL_NODE_NAME = process.env.LOCAL_NODE_NAME || "n3";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
@@ -130,7 +129,7 @@ async function checkPrimaryOracle() {
 }
 const AGENT_NAME = "Demos Network Oracle";
 const AGENT_DESCRIPTION = "Public network intelligence oracle for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes DAHR-attested health data on-chain via SuperColony every 20 minutes. Public API at demos-oracle.com/health";
-const SUPERCOLONY_API = "https://www.supercolony.ai";
+const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 
 // Historical data file (JSON-based, lightweight)
 const HISTORY_FILE = join(LOG_DIR, "history.json");
@@ -198,6 +197,8 @@ const EXPECTED_FLEET = {
   n5: { side: "A", port: 53550, host: "193.77.50.180",  identity: "0x95cbd7147cf09dc46d91cd6ae8f2912ae0f597fac9c61d0b0c347a46374af80f" },
   n6: { side: "B", port: 54550, host: "193.77.169.106", identity: "0x3ab3365e67583a89968082475816cf2f16f8f9a3b936a38513493d0c6b69f768" },
   m1: { side: "A", port: 53550, host: "82.192.52.254",  identity: "0x56b46be173e20f540401d079811e5b524903a197ae5d07824d0e70a22ee6e591" },
+  n9: { side: "C", port: 55550, host: "193.77.50.180",  identity: "0x2e288105c9e73ae974a0a54c528ebce4fc43551c4918ff4430449211d6563f23" },
+  m3: { side: "A", port: 53550, host: "193.95.249.97",  identity: "0x5cfc9fa3c038a16b5261a111ff681439bcbcbdfce31a926358c441d702ac971c" },
 };
 
 const NODE_NAMES = Object.keys(EXPECTED_FLEET);
@@ -335,6 +336,24 @@ const FIXNET_NODES = {
     trust_tier: "verified",
     operator: "XM33",
     joined_at: "2026-04-22"
+  },
+  "fleet-n9": {
+    url: "http://193.77.50.180:55550",
+    host: "193.77.50.180",
+    identity: "0x2e288105c9e73ae974a0a54c528ebce4fc43551c4918ff4430449211d6563f23",
+    source_type: "fleet",
+    trust_tier: "verified",
+    operator: "XM33",
+    joined_at: "2026-05-05"
+  },
+  "fleet-m3": {
+    url: "http://193.95.249.97:53550",
+    host: "193.95.249.97",
+    identity: "0x5cfc9fa3c038a16b5261a111ff681439bcbcbdfce31a926358c441d702ac971c",
+    source_type: "fleet",
+    trust_tier: "verified",
+    operator: "XM33",
+    joined_at: "2026-05-05"
   }
 };
 
