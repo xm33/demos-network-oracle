@@ -1,16 +1,31 @@
-node_modules/
-logs/
-*.db
+# Secrets
 .env
-*.backup
-*.log
+.env.*
 .supercolony-marketplace-token.json
-src/*.pre-v6.4
-src/*.backup-*
 
-# Patch-script backup files
-*.pre-*
+# Commerce internal data (private-source protection)
+data/commerce-registry.json
+data/commerce-last-check.json
+
+# Runtime
+logs/
+node_modules/
+
+# Backups
 *.bak*
-*.bak-*
-demos-fleet-audit-report.md
-demos-fleet-audit-*.md
+*.pre-*
+
+# Build artifacts
+package-lock.json
+
+# Fleet/operational docs (belong in private repo)
+demos-fleet-*.md
+demos-oracle-handoff-*.md
+demos-drift-*.md
+demos-stage*.md
+demos-phase*.md
+demos-runbook*.md
+demos-session*.md
+dno-*.md
+apply-*.py
+phase-*.patch
