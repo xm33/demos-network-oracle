@@ -54,6 +54,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .oracle-hero-submit:hover { color:var(--improving); border-color:rgba(45,212,160,0.3); }
 .oracle-status { font-family:var(--mono); font-size:36px; font-weight:600; letter-spacing:-0.03em; line-height:1.02; margin-bottom:16px; color:var(--text-primary); }
 .hero-summary { font-family:var(--mono); font-size:13px; color:var(--text-secondary); margin-top:14px; opacity:0.82; max-width:72ch; }
+.oracle-observability-banner { font-family:var(--mono); font-size:12px; color:var(--text-secondary); margin-top:14px; padding:12px 16px; border:1px solid rgba(217,119,6,0.25); border-radius:8px; background:rgba(217,119,6,0.06); max-width:72ch; line-height:1.5; display:none; }
+.oracle-observability-banner a { color:var(--text-secondary); text-decoration:underline; text-underline-offset:2px; }
 .oracle-staleness { font-size:12px; color:var(--text-secondary); opacity:0.7; margin-top:8px; font-family:var(--mono); }
 
 /* SECTIONS */
@@ -214,6 +216,7 @@ body { position:relative; }
     </div>
     <div id="hero-status" class="oracle-status loading">Loading...</div>
     <div id="hero-summary" class="hero-summary"></div>
+    <div id="observability-banner" class="oracle-observability-banner"></div>
     <div id="hero-staleness" class="oracle-staleness"></div>
   </section>
   <section class="section">
@@ -335,6 +338,17 @@ async function fetchData() {
 
     document.getElementById('hero-summary').textContent=org.status_reason||org.summary||'';
     document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
+
+    // Observability banner — shows only when public nodes insufficient
+    var banner=document.getElementById('observability-banner');
+    if(banner){
+      if(org.data_quality==='insufficient'){
+        banner.innerHTML='Network observability is limited during the Demos fixnet upgrade. The Oracle\u2019s monitored public nodes are temporarily unreachable. <a href="/fixnet/health">Fleet reference nodes</a> confirm the network is operational.';
+        banner.style.display='block';
+      } else {
+        banner.style.display='none';
+      }
+    }
 
     // Cards — value above label, color only when abnormal
     var cardMap={trend:'card-trend',risk:'card-risk',confidence:'card-confidence',data_quality:'card-dq'};
