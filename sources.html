@@ -116,6 +116,11 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
   <div class="layer-detail">Submitted via: <a href="/submit">/submit</a> &middot; Tracked at: <a href="/community">/community</a> &middot; Manual approval required</div>
 </div>
 
+<h2>Commerce Infrastructure Sources (Layer 2)</h2>
+<p>The Oracle monitors the public API endpoints of independent attestation authorities as a separate Layer 2 service. These authorities include organizations like GLEIF, FINRA, the ECB, and FedRAMP. The Oracle probes these endpoints every 5 minutes to assess reachability and responsiveness.</p>
+<p>Commerce observation is architecturally separate from network truth. It uses different code, a different process, and a different output file. Commerce data never influences the canonical network assessments (status, trend, risk, agreement, confidence, data quality).</p>
+<p><a href="/commerce/methodology">Commerce Methodology</a> · <a href="/commerce">Commerce Overview</a> · <a href="/commerce/observations">Observations API</a></p>
+
 <h2>Separation Rules</h2>
 <p>Public status, risk, trend, agreement, confidence, and data quality are computed from public node data only. Fleet data is used internally as a reference layer and does not influence public assessments. Community nodes, once approved, become part of the canonical public set.</p>
 
@@ -127,6 +132,8 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
   <a href="/incidents" class="ep">/incidents</a>
   <a href="/peers" class="ep">/peers</a>
   <a href="/badge" class="ep">/badge</a>
+  <a href="/commerce" class="ep">/commerce</a>
+  <a href="/commerce/observations" class="ep">/commerce/observations</a>
   <a href="/self" class="ep">/self</a>
 </div>
 

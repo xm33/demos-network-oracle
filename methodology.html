@@ -121,7 +121,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <h3>Public network (primary truth)</h3>
 <p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are validator nodes operated by independent parties: Kynesys (the protocol team) and manually approved community validators.</p>
 <h3>Reference fleet (internal context)</h3>
-<p>The Oracle operator (XM33) also runs a fleet of seven validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
+<p>The Oracle operator (XM33) also runs a fleet of nine validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
 <p>The fleet is a reference layer because it is operated by a single entity, may be on a different chain state than the public network, and its health does not represent public network health.</p>
 <h3>How separation is enforced</h3>
 <p>In the API: fleet data appears only under a namespaced <code>reference</code> key in <code>/health</code>. The compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
@@ -204,12 +204,20 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <p>The simplest consumption pattern is the <b>minimal triple</b>: read <code>status</code> + <code>risk</code> + <code>confidence</code>. These three fields give you the complete network picture in three values. Your agent decides what to do with them — the Oracle never tells you.</p>
 <p>For trust calibration: check <code>data_quality</code> before relying on the assessment. Check <code>staleness_seconds</code> to know how fresh the data is. If data quality is <span class="val">insufficient</span>, treat all other values with skepticism.</p>
 <p>For incident awareness: <code>active_incidents</code> gives the count, <code>max_incident_severity</code> tells you the worst active problem without needing to fetch the full incident list.</p>
+<h2>Commerce Infrastructure Observation (Layer 2)</h2>
+<p>The Oracle also monitors the public API endpoints of independent attestation authorities used by the Demos agent commerce protocol. This observation runs as a separate service with its own cycle, output, and methodology. Commerce observation results never influence the canonical network assessments described above.</p>
+<p>Commerce infrastructure observation is Layer 2 — architecturally separate from the Layer 1 network truth model. Different code, different process, different output. The seven concepts above (status, trend, risk, data quality, confidence, agreement, incidents) are derived exclusively from public validator nodes and are never affected by commerce data.</p>
+<p>The Demos agent commerce protocol is currently in development on testnet. The authority endpoints monitored are production public APIs operated by independent third parties.</p>
+<p>Full details: <a href="/commerce/methodology">Commerce Methodology</a> · <a href="/commerce">Commerce Overview</a></p>
+
 <div class="note"><b>API endpoints</b><br>
 Agent feed: <a href="/organism">/organism</a> — 14 fields, flat JSON, public-only, refreshes every 20 seconds.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived + reference + legacy.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope by default, <code>?scope=fleet</code> or <code>?scope=all</code> available.<br>
 API documentation: <a href="/docs">/docs</a><br>
 Agent guide: <a href="/agent">/agent</a><br>
+Commerce overview: <a href="/commerce">/commerce</a> — infrastructure reachability observation (Layer 2).<br>
+Commerce methodology: <a href="/commerce/methodology">/commerce/methodology</a><br>
 Oracle sources: <a href="/sources">/sources</a> — where truth comes from.<br>
 Submit a node: <a href="/submit">/submit</a> — community validator onboarding.<br>
 Onboarding pipeline: <a href="/community">/community</a> — submitted nodes and onboarding progress.<br>
