@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commerce Infrastructure — Demos Network Oracle</title>
+<style>
+:root { --bg:#0a0a0a; --surface:#101010; --border:#1a1a1a; --text:#e5e7eb; --text-secondary:#98a2b3; --improving:rgba(45,212,160,1); --mono:'Source Code Pro',monospace; --sans:Inter,system-ui,sans-serif; --brand:#2B36D9; }
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6;}
+.container{max-width:980px;margin:0 auto;padding:0 24px;}
+
+/* Navbar */
+.navbar{padding:16px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);}
+.nav-brand svg{width:30px;height:30px;}
+.nav-title{font-family:var(--mono);font-size:13px;letter-spacing:0.12em;font-weight:500;}
+.nav-live{font-size:10px;font-family:var(--mono);padding:4px 9px;border:1px solid rgba(45,212,160,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px;}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8;}
+.nav-links{margin-left:auto;display:flex;gap:16px;font-family:var(--mono);font-size:11px;}
+.nav-links a{color:var(--text-secondary);text-decoration:none;letter-spacing:0.04em;}
+.nav-links a:hover{color:var(--improving);}
+
+/* Content */
+.hero{padding:48px 0 36px;border-bottom:1px solid var(--border);}
+.page-kicker{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:12px;}
+.page-title{font-family:var(--sans);font-size:28px;font-weight:600;margin-bottom:14px;}
+.page-intro{font-family:var(--mono);font-size:13px;color:var(--text-secondary);max-width:72ch;line-height:1.7;}
+.testnet-badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:3px 10px;border:1px solid rgba(217,119,6,0.3);border-radius:999px;color:rgba(217,119,6,0.9);margin-top:14px;letter-spacing:0.06em;}
+
+.section{padding:32px 0;border-bottom:1px solid var(--border);}
+.section-title{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:18px;}
+
+/* Status cards */
+.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+.status-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;}
+.status-card .label{font-family:var(--mono);font-size:10px;color:var(--text-secondary);letter-spacing:0.08em;margin-bottom:6px;}
+.status-card .value{font-family:var(--mono);font-size:16px;font-weight:500;}
+
+/* Authority list */
+.authority-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;}
+.authority-table th{text-align:left;padding:8px 12px;color:var(--text-secondary);font-size:10px;letter-spacing:0.08em;border-bottom:1px solid var(--border);}
+.authority-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
+.authority-table .state-healthy{color:var(--improving);}
+.authority-table .state-degraded{color:rgba(217,119,6,1);}
+.authority-table .state-unavailable{color:#EF4444;}
+.authority-table .state-unknown{color:var(--text-secondary);}
+
+/* Disclaimer */
+.disclaimer{font-family:var(--mono);font-size:11px;color:var(--text-secondary);padding:20px;border:1px solid var(--border);border-radius:8px;margin-top:24px;line-height:1.7;background:var(--surface);}
+
+/* Footer */
+.footer{padding:24px 0;font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.6;}
+
+.loading{opacity:0.4;font-style:italic;}
+
+@media(max-width:640px){
+  .page-title{font-size:22px;}
+  .status-grid{grid-template-columns:1fr;}
+  .authority-table{font-size:11px;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <nav class="navbar">
+    <a href="/" class="nav-brand">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/><line x1="20" y1="75" x2="50" y2="50" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/><line x1="80" y1="75" x2="50" y2="50" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/><line x1="50" y1="15" x2="50" y2="50" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/><circle cx="20" cy="75" r="3" fill="rgba(255,255,255,0.35)"/><circle cx="80" cy="75" r="3" fill="rgba(255,255,255,0.35)"/><circle cx="50" cy="15" r="3" fill="rgba(255,255,255,0.35)"/><circle cx="50" cy="50" r="4" fill="white"/></svg>
+      <span class="nav-title">ORACLE</span>
+    </a>
+    <span class="nav-live"><span class="nav-dot"></span>COMMERCE</span>
+    <div class="nav-links">
+      <a href="/">Network</a>
+      <a href="/commerce/methodology">Methodology</a>
+      <a href="/sources">Sources</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="page-kicker">COMMERCE INFRASTRUCTURE OBSERVABILITY</div>
+    <h1 class="page-title">Attestation Authority Reachability</h1>
+    <p class="page-intro">
+      The Oracle monitors the public endpoints of attestation authorities used by the Demos agent commerce protocol. It probes these endpoints every 5 minutes and reports whether they are reachable, responsive, and returning expected data.
+    </p>
+    <div class="testnet-badge">TESTNET OBSERVATION</div>
+  </section>
+
+  <section class="section">
+    <div class="section-title">OVERALL STATE</div>
+    <div class="status-grid">
+      <div class="status-card">
+        <div class="label">OBSERVABILITY</div>
+        <div class="value loading" id="obs-state">Loading...</div>
+      </div>
+      <div class="status-card">
+        <div class="label">DATA QUALITY</div>
+        <div class="value loading" id="obs-dq">—</div>
+      </div>
+      <div class="status-card">
+        <div class="label">CONFIDENCE</div>
+        <div class="value loading" id="obs-conf">—</div>
+      </div>
+      <div class="status-card">
+        <div class="label">AUTHORITIES OBSERVED</div>
+        <div class="value loading" id="obs-count">—</div>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.7;" id="obs-updated"></div>
+  </section>
+
+  <section class="section">
+    <div class="section-title">AUTHORITY REACHABILITY</div>
+    <table class="authority-table">
+      <thead>
+        <tr><th>AUTHORITY</th><th>CATEGORY</th><th>STATE</th><th>FRESHNESS</th><th>OBSERVED</th></tr>
+      </thead>
+      <tbody id="auth-table-body">
+        <tr><td colspan="5" class="loading">Loading...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <div class="section-title">WHAT THIS IS NOT</div>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:1.7;max-width:72ch;">
+      This page shows infrastructure reachability — whether the public API endpoints that the Demos commerce protocol depends on are responding. It does not certify counterparties, verify commerce claims, provide legal advice, or recommend transactions. The commerce protocol is in development on testnet. Commerce observations do not influence the Oracle's canonical network assessments.
+    </p>
+  </section>
+
+  <div class="disclaimer">
+    <strong>Disclaimer:</strong> The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification. The Oracle does not verify commerce claims, certify legal compliance, or recommend transactions. Commerce observation is Layer 2 — it does not influence Layer 1 canonical network truth (<a href="/" style="color:var(--text-secondary);">/organism</a>).
+    <br><br>
+    <a href="/commerce/methodology" style="color:var(--text-secondary);">How commerce observation works →</a>
+  </div>
+
+  <div class="footer">
+    <a href="https://demos.sh" style="color:var(--text-secondary);text-decoration:none;">demos.sh</a> · <a href="/" style="color:var(--text-secondary);text-decoration:none;">Oracle</a> · Built by XM33
+  </div>
+</div>
+
+<script>
+(async function(){
+  try {
+    var res = await fetch('/commerce/observations');
+    var d = await res.json();
+
+    // Overall state
+    var stateEl = document.getElementById('obs-state');
+    stateEl.textContent = (d.commerce_observability_state || 'unknown').toUpperCase();
+    stateEl.classList.remove('loading');
+    if (d.commerce_observability_state === 'healthy') stateEl.style.color = 'rgba(45,212,160,1)';
+    else if (d.commerce_observability_state === 'degraded') stateEl.style.color = 'rgba(217,119,6,1)';
+    else if (d.commerce_observability_state === 'unavailable') stateEl.style.color = '#EF4444';
+    else stateEl.style.color = 'var(--text-secondary)';
+
+    var dqEl = document.getElementById('obs-dq');
+    dqEl.textContent = d.data_quality || '—';
+    dqEl.classList.remove('loading');
+
+    var confEl = document.getElementById('obs-conf');
+    confEl.textContent = d.confidence || '—';
+    confEl.classList.remove('loading');
+
+    var countEl = document.getElementById('obs-count');
+    countEl.textContent = (d.authorities_healthy || 0) + ' / ' + (d.authorities_observed || 0) + ' healthy';
+    countEl.classList.remove('loading');
+
+    if (d.generated_at) {
+      var ago = Math.round((Date.now() - new Date(d.generated_at).getTime()) / 1000);
+      document.getElementById('obs-updated').textContent = 'Updated ' + ago + 's ago';
+    }
+
+    // Authority table
+    if (d.authorities && d.authorities.length > 0) {
+      var tbody = document.getElementById('auth-table-body');
+      tbody.innerHTML = '';
+      d.authorities.forEach(function(a) {
+        var stateClass = 'state-' + (a.reachability || 'unknown');
+        var obsTime = a.observed_at ? new Date(a.observed_at).toLocaleTimeString() : '—';
+        tbody.innerHTML += '<tr>' +
+          '<td>' + (a.name || a.authority_id) + '</td>' +
+          '<td>' + (a.category || '—') + '</td>' +
+          '<td class="' + stateClass + '">' + (a.reachability || 'unknown') + '</td>' +
+          '<td>' + (a.freshness || '—') + '</td>' +
+          '<td>' + obsTime + '</td>' +
+          '</tr>';
+      });
+    }
+  } catch(e) {
+    document.getElementById('obs-state').textContent = 'UNAVAILABLE';
+    document.getElementById('obs-state').classList.remove('loading');
+    document.getElementById('obs-state').style.color = 'var(--text-secondary)';
+  }
+})();
+</script>
+</body>
+</html>

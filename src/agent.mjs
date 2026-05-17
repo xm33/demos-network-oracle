@@ -184,6 +184,62 @@ try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { 
 var METHODOLOGY_HTML = "";
 try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
+var COMMERCE_HTML = "";
+try { COMMERCE_HTML = readFileSync("commerce.html", "utf8"); } catch(e) { COMMERCE_HTML = "<html><body><h1>Commerce page not found</h1></body></html>"; }
+
+var COMMERCE_METHODOLOGY_HTML = "";
+try { COMMERCE_METHODOLOGY_HTML = readFileSync("commerce-methodology.html", "utf8"); } catch(e) { COMMERCE_METHODOLOGY_HTML = "<html><body><h1>Commerce methodology not found</h1></body></html>"; }
+
+// ─── Commerce Sanitization (Layer 2 → public projection) ────
+function buildPublicCommerceObservation() {
+  try {
+    var raw = JSON.parse(readFileSync("data/commerce-last-check.json", "utf8"));
+    var auths = (raw.authorities || []).filter(function(a) { return a.configured; }).map(function(a) {
+      return {
+        authority_id: a.authority_id,
+        name: a.name,
+        category: (a.path_type || "").toLowerCase(),
+        reachability: a.reachability,
+        freshness: a.freshness,
+        observed_at: a.observed_at
+      };
+    });
+    return {
+      layer: "commerce_intelligence",
+      network_context: "testnet",
+      observation_scope: "public infrastructure reachability",
+      generated_at: raw.generated_at,
+      commerce_observability_state: raw.overall ? raw.overall.commerce_observability_state : "unknown",
+      data_quality: raw.overall ? raw.overall.data_quality : "insufficient",
+      confidence: raw.overall ? raw.overall.confidence : "uncertain",
+      authorities_observed: raw.overall ? raw.overall.active_probes : 0,
+      authorities_healthy: raw.overall ? raw.overall.active_probes_healthy : 0,
+      authorities: auths,
+      limits: {
+        observation_only: true,
+        not_certification: true,
+        not_legal_advice: true,
+        not_transaction_recommendation: true,
+        does_not_influence_layer_1: true
+      },
+      disclaimer: "The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification. The Oracle does not verify commerce claims, certify legal compliance, or recommend transactions."
+    };
+  } catch(e) {
+    return {
+      layer: "commerce_intelligence",
+      network_context: "testnet",
+      commerce_observability_state: "unknown",
+      data_quality: "insufficient",
+      confidence: "uncertain",
+      authorities_observed: 0,
+      authorities_healthy: 0,
+      authorities: [],
+      error: "Commerce observation data unavailable",
+      disclaimer: "The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification."
+    };
+  }
+}
+
 if (!MNEMONIC) {
   logError("DEMOS_MNEMONIC is required. Set it in .env");
   process.exit(1);
@@ -3330,6 +3386,27 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);
+    } else if (req.url === "/commerce") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(COMMERCE_HTML);
+    } else if (req.url === "/commerce/observations") {
+      var pubObs = buildPublicCommerceObservation();
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=30" });
+      res.end(JSON.stringify(pubObs, null, 2));
+    } else if (req.url === "/commerce/methodology") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(COMMERCE_METHODOLOGY_HTML);
+    } else if (req.url.startsWith("/private/commerce/status")) {
+      var pcUrl = new URL(req.url, "http://d"); var pcTk = pcUrl.searchParams.get("token");
+      if (pcTk !== process.env.DNO_ADMIN_TOKEN) { res.writeHead(401); res.end('{"error":"unauthorized"}'); return; }
+      try {
+        var rawCommerce = readFileSync("data/commerce-last-check.json", "utf8");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(rawCommerce);
+      } catch(e) {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end('{"error":"commerce-last-check.json not available","detail":"' + (e.message || 'unknown') + '"}');
+      }
     } else if (req.url === "/badge") {
       var bCanonical = computeCanonicalState();
       var bStatus = bCanonical.status;
