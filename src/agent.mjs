@@ -98,7 +98,7 @@ const EXPLORER_STATUS_URL = "https://scan.demos.network/status";
 const PUBLIC_PROBE_TIMEOUT_MS = 10000;
 
 // Daily summary: every 72 cycles = 24h at 20min intervals
-const DAILY_SUMMARY_CYCLES = 72;
+const DAILY_SUMMARY_CYCLES = 4320;
 
 // HTTP health endpoint
 const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8080");
