@@ -3211,7 +3211,7 @@ function generatePrometheusMetrics(fleetData) {
       // Network head info
       if (netHead > 0) h += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;font-family:var(--mono)">Network head: ' + netHead.toLocaleString() + '</div>';
       // Table
-      h += '<div class="table-scroll"><table><thead><tr><th>Node</th><th>Operator</th><th>Stage</th><th>Block</th><th>Behind</th><th>Details</th></tr></thead><tbody>';
+      h += '<div class="table-scroll"><table><thead><tr><th>Identity</th><th>Operator</th><th>Stage</th><th>Block</th><th>Behind</th><th>Details</th></tr></thead><tbody>';
       if (enriched.length === 0) {
         h += '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No community submissions yet. <a href="/submit">Submit your node</a></td></tr>';
       }
@@ -3220,7 +3220,7 @@ function generatePrometheusMetrics(fleetData) {
         var sc = stageColors[r.stage] || "#98a2b3";
         var sb = stageBg[r.stage] || "transparent";
         h += '<tr>';
-        h += '<td>' + esc(r.host) + ':' + r.port + '</td>';
+        h += '<td style="font-family:var(--mono);font-size:11px">' + (r.probe_identity ? esc(r.probe_identity.slice(0,14)) + '\u2026' : esc(r.host) + ':' + r.port) + '</td>';
         h += '<td>' + esc(r.operator||"—") + '</td>';
         h += '<td><span class="pill" style="color:'+sc+';background:'+sb+';border-color:'+sc+'44">' + esc(r.stage.replace(/_/g," ")) + '</span></td>';
         h += '<td>' + (r.block ? r.block.toLocaleString() : "—") + '</td>';
@@ -3544,7 +3544,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
       <div id="rep-list">Loading...</div>
     </div>
     <div class="sla"><h2>Node SLA — uptime</h2>
-      <table><thead><tr><th>Node</th><th>Block</th><th>Uptime</th><th></th></tr></thead>
+      <table><thead><tr><th>Identity</th><th>Block</th><th>Uptime</th><th></th></tr></thead>
       <tbody id="sla-body"></tbody></table>
     </div>
     <div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
