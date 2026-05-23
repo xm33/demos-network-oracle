@@ -3013,7 +3013,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '.toggle{cursor:pointer;color:var(--text-secondary);font-size:11px;text-decoration:underline}';
       h += '.toggle:hover{color:var(--text-primary)}';
       h += 'a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}a:hover{border-bottom-color:var(--improving)}';
-      h += '.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center}';
+      h += '.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);height:52px;display:flex;align-items:center}';
       h += '.doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}';
       h += '.doc-nav-left{order:1}';
       h += '.doc-nav-right{order:2;margin-left:auto}';
@@ -3026,7 +3026,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}';
       h += '.doc-nav-link[aria-current="page"]{opacity:0.5}';
       h += '.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}';
-      h += '.nav-live{font-size:10px;font-family:var(--mono);padding:4px 9px;border:1px solid rgba(45,212,160,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}';
+      h += '.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(45,212,160,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}';
       h += '.nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8}';
       h += '@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}';
       h += '.oracle-hero-submit{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(255,255,255,0.15);border-radius:999px;color:rgba(255,255,255,0.7);text-decoration:none;letter-spacing:0.04em;transition:all 0.2s}';
