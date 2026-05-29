@@ -25,7 +25,7 @@ a:hover{border-bottom-color:var(--improving)}
 a:hover{text-decoration:underline}
 code{font-family:var(--mono);color:var(--text-primary);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px}
 footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
-.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);height:52px;display:flex;align-items:center}
+.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:#101010;height:52px;display:flex;align-items:center}
 .doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
 .doc-nav-left{order:1}
 .doc-nav-right{order:2;margin-left:auto}
@@ -118,7 +118,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <p>The canonical state computation is a single function that takes public node observations as input and produces all seven values as output. Fleet data never enters this function. The computation is deterministic — given the same observations, it always produces the same assessment.</p>
 <h2>Public vs Reference Separation</h2>
 <p>This is the most important structural rule in the Oracle. It governs everything.</p>
-<h3>Public network (primary truth)</h3>
+<h3>Public network (primary observation)</h3>
 <p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are validator nodes operated by independent parties: Kynesys (the protocol team) and manually approved community validators.</p>
 <h3>Reference fleet (internal context)</h3>
 <p>The Oracle operator (XM33) also runs a fleet of nine validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
@@ -147,7 +147,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <p>The Oracle displays rolling historical metrics derived from its own observation cycles over the current history window.</p>
 <p><span class="val">uptime_7d</span> — percentage of observed cycles in which the node was reachable.</p>
 <p><span class="val">avg_latency_7d</span> — average response latency across successful observed cycles.</p>
-<p>These historical metrics are observational summaries only. They do not constitute endorsement, certification, or recommendation of any validator or operator. Early values should be interpreted cautiously until sufficient history has accumulated. Historical metrics do not change the canonical truth model unless explicitly stated.</p>
+<p>These historical metrics are observational summaries only. They do not constitute endorsement, certification, or recommendation of any validator or operator. Early values should be interpreted cautiously until sufficient history has accumulated. Historical metrics do not change the core assessment model unless explicitly stated.</p>
 <div class="note">Rolling observed history. Early values may refine over time.</div>
 
 
@@ -194,7 +194,7 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
 <p><b>Small public node set.</b> The Oracle currently monitors five public nodes (two Kynesys, three community). Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
 <p><b>Discovered but unmonitored validators.</b> The Oracle discovers new validators via peer list crawling. Some may be online but not yet added to formal monitoring. The Network Growth panel on the dashboard shows their sync progress. They are added to monitoring manually after reaching the network head.</p>
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
-<p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core truth model.</p>
+<p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core assessment model.</p>
 <h2>How to Use the Data</h2>
 <h3>For builders and operators</h3>
 <p>The dashboard at <a href="/dashboard">/dashboard</a> provides a visual overview. The banner shows current status with risk and confidence context. The Network Agreement panel shows whether validators agree. The Network Growth panel tracks validator discovery and sync progress.</p>
@@ -211,7 +211,7 @@ Incident log: <a href="/incidents">/incidents</a> — public scope by default, <
 API documentation: <a href="/docs">/docs</a><br>
 Agent guide: <a href="/agent">/agent</a><br>
 
-Oracle sources: <a href="/sources">/sources</a> — where truth comes from.<br>
+Oracle sources: <a href="/sources">/sources</a> — where observations come from.<br>
 Submit a node: <a href="/submit">/submit</a> — community validator onboarding.<br>
 Onboarding pipeline: <a href="/community">/community</a> — submitted nodes and onboarding progress.<br>
 API version: <code>1.0</code></div>

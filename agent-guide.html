@@ -22,7 +22,7 @@ a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.
 a:hover{border-bottom-color:var(--improving)}
 a:hover{text-decoration:underline}
 footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
-.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);height:52px;display:flex;align-items:center}
+.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:#101010;height:52px;display:flex;align-items:center}
 .doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
 .doc-nav-left{order:1}
 .doc-nav-right{order:2;margin-left:auto}
@@ -130,7 +130,7 @@ if state['data_quality'] == 'insufficient':
 <h2>Other Endpoints</h2>
 <p><code>/health</code> — full diagnostic with agreement details, public nodes, signals, reference data.</p>
 <p><code>/incidents</code> — incident log. Default scope: public. Use <code>?scope=all</code> for fleet.</p>
-<p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from network truth).</p>
+<p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from network assessment).</p>
 <p><code>/methodology</code> — how the Oracle makes assessments.</p>
 <p><code>/commerce/methodology</code> — how commerce observation works.</p>
 
@@ -254,7 +254,7 @@ GET /health    →  agreement details, node counts, signals
 GET /incidents →  specific active problems
 
 # Commerce: attestation authority reachability
-GET /commerce/observations  →  authority states (Layer 2, separate from network truth)</pre>
+GET /commerce/observations  →  authority states (Layer 2, separate from network assessment)</pre>
 
 <p><b>Important:</b> <code>/commerce/observations</code> is Layer 2 data. It reports whether attestation authority endpoints are reachable. It does not influence and is not influenced by the network assessment in <code>/organism</code>. These are independent observation layers.</p>
 
@@ -292,7 +292,7 @@ GET /commerce/observations  →  authority states (Layer 2, separate from networ
 <div class="note">All public endpoints return JSON with <code>Content-Type: application/json</code> and <code>Access-Control-Allow-Origin: *</code> (CORS enabled).</div>
 
 <h2>Design Principle</h2>
-<div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes network truth. Your agent interprets it.</div>
+<div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes network assessment. Your agent interprets it.</div>
 
 <footer>Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
 <div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div></body></html>

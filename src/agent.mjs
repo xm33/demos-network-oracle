@@ -147,7 +147,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<p class="sub">Public network intelligence for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes attested health data on-chain via SuperColony.<br>' +
 'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v6.9 &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
 '<h2>Network</h2>' +
-'<div class="e"><b>GET /health</b><span>Full network snapshot — canonical truth model, agreement, signals, public nodes, reference layer</span></div>' +
+'<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
 '<div class="e"><b>GET /organism</b><span>Compact public truth feed — 12 canonical fields, zero fleet data, optimized for agents</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
 '<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
@@ -157,7 +157,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
 '<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
-'<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 truth model, data sources, limitations</span></div>' +
+'<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 assessment model, data sources, limitations</span></div>' +
 '<h2>History</h2>' +
 '<div class="e"><b>GET /history</b><span>Last 72 health cycles as JSON</span></div>' +
 '<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Optional from/to filters (Unix ms)</span></div>' +
@@ -523,7 +523,7 @@ var FLEET_NODE_NAMES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
 
 // Operator labels for discovered fixnet peers (self-identified to the Oracle operator).
 // Key: first 10 chars of identity (e.g. "0xd9409b0d"). Value: display name.
-// Adding a name here does NOT promote the peer into the canonical truth surface —
+// Adding a name here does NOT promote the peer into the core assessment surface —
 // it's a cosmetic label shown in the fixnet source column instead of "Discovered".
 // Trust basis is operator-chat self-identification, not cryptographic proof.
 var FIXNET_DISCOVERED_OPERATORS = {
@@ -847,7 +847,7 @@ function generateScores(data, stalenessSeconds, signals) {
   };
 }
 
-// === Layer 2: Canonical truth model ===
+// === Layer 2: Canonical assessment model ===
 /**
  * Canonical State Model (v1.0)
  *
@@ -3013,7 +3013,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '.toggle{cursor:pointer;color:var(--text-secondary);font-size:11px;text-decoration:underline}';
       h += '.toggle:hover{color:var(--text-primary)}';
       h += 'a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}a:hover{border-bottom-color:var(--improving)}';
-      h += '.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(16,16,16,0.92);height:52px;display:flex;align-items:center}';
+      h += '.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:#101010;height:52px;display:flex;align-items:center}';
       h += '.doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}';
       h += '.doc-nav-left{order:1}';
       h += '.doc-nav-right{order:2;margin-left:auto}';
@@ -3049,7 +3049,7 @@ function generatePrometheusMetrics(fleetData) {
       
       h += '</div></nav>';
       h += '<main>';
-      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are not canonical network truth until approved. Inclusion does not imply endorsement.</div>';
+      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are not core network assessment until approved. Inclusion does not imply endorsement.</div>';
       h += '<h1>Community Node Onboarding</h1>';
 
       // --- Fleet Fixnet section (v7.2) ---
