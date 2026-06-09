@@ -5,7 +5,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='18' r='4' fill='%232B36D9'/%3E%3Ccircle cx='18' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='82' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='50' cy='50' r='5.5' fill='%232B36D9'/%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#2dd4a0;--degraded:#d97706;--unstable:#EF4444;--mono:'Source Code Pro',monospace;--sans:'Inter',system-ui,sans-serif}
+:root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--brand:#2B36D9;--accent:#2dd4a0;--warning:#d97706;--critical:#EF4444;--improving:var(--accent);--degraded:var(--warning);--unstable:var(--critical);--mono:'Source Code Pro',monospace;--sans:'Inter',system-ui,sans-serif}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}
 main{max-width:920px;margin:0 auto;padding:28px 24px 80px}
@@ -21,27 +21,33 @@ pre{background:var(--surface);border:1px solid var(--border);border-radius:10px;
 a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}
 a:hover{border-bottom-color:var(--improving)}
 a:hover{text-decoration:underline}
-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
-.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:#101010;height:52px;display:flex;align-items:center}
+footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
+.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
 .doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
 .doc-nav-left{order:1}
 .doc-nav-right{order:2;margin-left:auto}
 
 .doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-.doc-nav-brand{color:var(--brand,#2B36D9);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;text-transform:uppercase}
+.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;text-transform:uppercase}
 .doc-nav-brand:hover{text-decoration:none;opacity:0.9}
 
-.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(45,212,160,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-.nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8}
-.doc-nav-link[aria-current="page"]{opacity:0.5}
-.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
+.nav-live{font-size:10px;font-family:var(--mono);padding:4px 9px;border:1px solid rgba(45,212,160,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
+.nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:0.8}
+.doc-page--methodology .doc-nav-link[data-nav="methodology"]{opacity:0.5}
+.doc-page--methodology .doc-nav-link[data-nav="methodology"]:hover{opacity:0.8;text-decoration:none}
+.doc-page--agent .doc-nav-link[data-nav="agent"]{opacity:0.5}
+.doc-page--agent .doc-nav-link[data-nav="agent"]:hover{opacity:0.8;text-decoration:none}
+.doc-page--sources .doc-nav-link[data-nav="sources"]{opacity:0.5}
+.doc-page--sources .doc-nav-link[data-nav="sources"]:hover{opacity:0.8;text-decoration:none}
+.doc-page--community .doc-nav-link[data-nav="community"]{opacity:0.5}
+.doc-page--community .doc-nav-link[data-nav="community"]:hover{opacity:0.8;text-decoration:none}
 .doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;text-transform:uppercase;transition:color 0.2s}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s}
 .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
 .doc-nav-link.active{color:var(--text-primary)}
 @media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:24px}h2{font-size:15px}}
 @media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}
-.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body>
+.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body class="doc-page doc-page--agent">
 <nav class="doc-nav">
   <div class="doc-nav-inner">
     <div class="doc-nav-left">
@@ -49,16 +55,16 @@ footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color
       <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
     </div>
     <div class="doc-nav-right">
-      <a href="/methodology" class="doc-nav-link">Methodology</a>
-      <a href="/agent" class="doc-nav-link" aria-current="page">Agent</a>
-      <a href="/sources" class="doc-nav-link">Sources</a>
-      <a href="/community" class="doc-nav-link">Community</a>
+      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
+      <a href="/agent" class="doc-nav-link" data-nav="agent" aria-current="page">Agent</a>
+      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
+      <a href="/community" class="doc-nav-link" data-nav="community">Community</a>
     </div>
   </div>
 </nav>
 <main>
 <h1>Agent Guide</h1>
-<p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Many signals. One attested view.</p>
+<p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Observing many signals. Resolving one truth.</p>
 <p class="sub">How to consume the Demos Network Oracle as a machine agent.</p>
 
 <h2>Purpose</h2>
@@ -130,7 +136,7 @@ if state['data_quality'] == 'insufficient':
 <h2>Other Endpoints</h2>
 <p><code>/health</code> — full diagnostic with agreement details, public nodes, signals, reference data.</p>
 <p><code>/incidents</code> — incident log. Default scope: public. Use <code>?scope=all</code> for fleet.</p>
-<p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from network assessment).</p>
+<p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from network truth).</p>
 <p><code>/methodology</code> — how the Oracle makes assessments.</p>
 <p><code>/commerce/methodology</code> — how commerce observation works.</p>
 
@@ -254,7 +260,7 @@ GET /health    →  agreement details, node counts, signals
 GET /incidents →  specific active problems
 
 # Commerce: attestation authority reachability
-GET /commerce/observations  →  authority states (Layer 2, separate from network assessment)</pre>
+GET /commerce/observations  →  authority states (Layer 2, separate from network truth)</pre>
 
 <p><b>Important:</b> <code>/commerce/observations</code> is Layer 2 data. It reports whether attestation authority endpoints are reachable. It does not influence and is not influenced by the network assessment in <code>/organism</code>. These are independent observation layers.</p>
 
@@ -292,9 +298,9 @@ GET /commerce/observations  →  authority states (Layer 2, separate from networ
 <div class="note">All public endpoints return JSON with <code>Content-Type: application/json</code> and <code>Access-Control-Allow-Origin: *</code> (CORS enabled).</div>
 
 <h2>Design Principle</h2>
-<div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes network assessment. Your agent interprets it.</div>
+<div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes network truth. Your agent interprets it.</div>
 
-<footer>Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
+<footer class="doc-footer">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
 <div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div></body></html>
 </main>
 <script>
