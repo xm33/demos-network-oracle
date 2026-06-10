@@ -74,6 +74,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <h2>Endpoint</h2>
 <pre>GET /organism</pre>
 <p>Returns 17 top-level JSON fields. No fleet data. Every top-level field is always present and never null. Most fields are flat values; <code>risk_factors</code> is an array of strings and <code>last_24h</code> is a small summary object (fields inside it may be null while history accumulates). Refreshes every 20 seconds.</p>
+<p>Machine-readable contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema with stability guarantees (additive-only within api_version 1.x) and changelog. Validate your integration against it.</p>
 <pre>{
   "status": "unknown",
   "trend": "unknown",

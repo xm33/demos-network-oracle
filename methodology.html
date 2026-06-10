@@ -201,6 +201,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p><b>Discovered but unmonitored validators.</b> The Oracle discovers new validators via peer list crawling. Some may be online but not yet added to formal monitoring. The Network Growth panel on the dashboard shows their sync progress. They are added to monitoring manually after reaching the network head.</p>
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
 <p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core assessment model.</p>
+<p><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b></p>
 <h2>How to Use the Data</h2>
 <h3>For builders and operators</h3>
 <p>The dashboard at <a href="/dashboard">/dashboard</a> provides a visual overview. The banner shows current status with risk and confidence context. The Network Agreement panel shows whether validators agree. The Network Growth panel tracks validator discovery and sync progress.</p>
@@ -212,6 +213,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>For incident awareness: <code>active_incidents</code> gives the count, <code>max_incident_severity</code> tells you the worst active problem without needing to fetch the full incident list.</p>
 <div class="note"><b>API endpoints</b><br>
 Agent feed: <a href="/organism">/organism</a> — 17 fields, public-only, refreshes every 20 seconds.<br>
+Contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema, stability policy, changelog.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived + reference + legacy.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope by default, <code>?scope=fleet</code> or <code>?scope=all</code> available.<br>
 API documentation: <a href="/docs">/docs</a><br>

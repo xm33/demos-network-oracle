@@ -137,6 +137,8 @@ const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
 const PUBLIC_NODE_HISTORY_RETENTION_DAYS = Number(process.env.PUBLIC_NODE_HISTORY_RETENTION_DAYS || 365);
 const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === "1"; // Path 2 (2026-06-10): disabled by default - zero consumers, broken auth
 const CONSENSUS_ENABLED = process.env.CONSENSUS_ENABLED === "1";     // Path 2 (2026-06-10): disabled by default - zero reports ever received
+var ORGANISM_SCHEMA = '{"error":"schema file not loaded"}'; // Phase 1 contract
+try { ORGANISM_SCHEMA = readFileSync("organism.schema.json", "utf8"); } catch (e) { console.error("[schema] organism.schema.json not loaded: " + e.message); }
 
 var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — API</title>' +
 '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#cbd5e1;padding:2rem;max-width:860px;margin:0 auto;line-height:1.5}' +
@@ -152,6 +154,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
 '<div class="e"><b>GET /organism</b><span>Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
+'<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
 '<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
 '<h2>Validators</h2>' +
@@ -2691,8 +2694,11 @@ function generatePrometheusMetrics(fleetData) {
         demBalance: lastKnownBalance,
         agent_ready: true,
         primary_endpoint: "/organism",
-        endpoints: ["/organism", "/agent", "/sources", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
+        endpoints: ["/organism", "/organism/schema", "/agent", "/sources", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
       }, null, 2));
+    } else if (req.url === "/organism/schema") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
+      res.end(ORGANISM_SCHEMA);
     } else if (req.url === "/organism") {
       // M5: Cache header for agent consumption
       var canonical = computeCanonicalState();

@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://demos-oracle.com/organism/schema",
+  "title": "DNO /organism response",
+  "description": "Public core network assessment feed of the Demos Network Oracle (independent, watch-only). DNO informs context; it does not advise, predict, score, certify, or decide action. Honest-uncertainty values (unknown, insufficient, uncertain) are first-class states, not errors.\n\nSTABILITY: Within api_version 1.x the contract is additive-only. The 17 required top-level fields are guaranteed to remain present, non-null, and never renamed. Existing enum values on top-level fields will not be removed (new values may be added; consumers should treat unrecognized future enum values as non-fatal). Any change that removes a top-level field, renames a field, makes a required field nullable, or removes an existing enum value is a breaking change and will ship under api_version 2.0 with an x-changelog entry. The last_24h object is informative only — its internal fields may be null or absent while history accumulates and are not covered by the stability guarantee.",
+  "x-changelog": [
+    { "version": "1.0", "date": "2026-06-10", "change_type": "initial",
+      "notes": "Initial public contract. Testnet-era schema. 17 required top-level fields; all enums verified against source code." }
+  ],
+  "type": "object",
+  "required": ["status","trend","risk","data_quality","confidence","agreement","active_incidents","max_incident_severity","summary","status_reason","risk_factors","confidence_reason","agreement_reason","staleness_seconds","last_updated","api_version","last_24h"],
+  "additionalProperties": true,
+  "properties": {
+    "status":   { "enum": ["stable","degraded","unstable","unknown"], "description": "Network operability, not observer coverage." },
+    "trend":    { "enum": ["improving","stable","worsening","unknown"], "description": "Backward-looking direction of change." },
+    "risk":     { "enum": ["low","elevated","high"], "description": "Resilience / safety margin. By design, insufficient data (status=unknown) maps to risk=elevated: uncertainty resolves to a conservative posture rather than an unknown risk value." },
+    "data_quality": { "enum": ["sufficient","insufficient"], "description": "Observability. If insufficient, treat all other values with skepticism." },
+    "confidence":   { "enum": ["clear","uncertain"] },
+    "agreement":    { "enum": ["strong","moderate","weak","unknown"], "description": "Block-height alignment among reachable public nodes." },
+    "active_incidents": { "type": "integer", "minimum": 0 },
+    "max_incident_severity": { "enum": ["none","info","warning","critical"] },
+    "summary":           { "type": "string" },
+    "status_reason":     { "type": "string" },
+    "risk_factors":      { "type": "array", "items": { "type": "string" } },
+    "confidence_reason": { "type": "string" },
+    "agreement_reason":  { "type": "string" },
+    "staleness_seconds": { "type": "integer", "minimum": 0, "description": "Whole seconds since last observation cycle; use for freshness judgment." },
+    "last_updated":      { "type": "string", "format": "date-time" },
+    "api_version":       { "const": "1.0" },
+    "last_24h": {
+      "type": "object",
+      "description": "Rolling 24h observability summary. Informative tier: inner fields may be null or absent while history accumulates.",
+      "properties": {
+        "sufficient":      { "type": "boolean" },
+        "coverage_pct":    { "type": ["number","null"], "minimum": 0 },
+        "observed_cycles": { "type": ["integer","null"], "minimum": 0 },
+        "expected_cycles": { "type": ["integer","null"], "minimum": 0 },
+        "typical_set_size":{ "type": ["integer","null"], "minimum": 0 },
+        "peak_set": { "oneOf": [ { "type": "null" }, { "type": "object",
+          "required": ["size","cycles","avg_reachable","pct_of_window"],
+          "properties": {
+            "size": {"type":"integer","minimum":0}, "cycles": {"type":"integer","minimum":0},
+            "avg_reachable": {"type":"number","minimum":0},
+            "pct_of_window": {"type":"number","minimum":0,"maximum":100} } } ] },
+        "chain_movement": { "type": "object", "required": ["state"],
+          "properties": {
+            "state": { "enum": ["unknown","normal","interrupted"] },
+            "reason": { "type": "string", "description": "Present on some non-normal states. Examples: no_data, insufficient_buckets, low_advance_ratio." },
+            "pct_advancing": { "type": "number" },
+            "longest_static_minutes": { "type": "number" },
+            "buckets": { "type": "integer" } } },
+        "longest_non_stable_minutes": { "type": ["number","null"], "minimum": 0 },
+        "active_critical_public_incidents": { "type": ["integer","null"], "minimum": 0 },
+        "computed_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
