@@ -2549,7 +2549,6 @@ function generatePrometheusMetrics(fleetData) {
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
       var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
-      var healthScores = generateScores(latestHealthData, staleness.stalenessSeconds, healthSignals);
       var payload = {
         status: canonical.status,
         trend: canonical.trend,
@@ -2568,7 +2567,6 @@ function generatePrometheusMetrics(fleetData) {
         confidence_reason: canonical.confidence_reason,
         agreement_reason: canonical.agreement_reason,
         // === Derived ===
-        reason: healthDecision.reason,
         publicNodes: latestPublicNodes || [],
         signals: healthSignals,
         signals: healthSignals,
