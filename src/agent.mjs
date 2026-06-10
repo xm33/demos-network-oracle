@@ -135,6 +135,8 @@ const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 const HISTORY_FILE = join(LOG_DIR, "history.json");
 const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
 const PUBLIC_NODE_HISTORY_RETENTION_DAYS = Number(process.env.PUBLIC_NODE_HISTORY_RETENTION_DAYS || 365);
+const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === "1"; // Path 2 (2026-06-10): disabled by default - zero consumers, broken auth
+const CONSENSUS_ENABLED = process.env.CONSENSUS_ENABLED === "1";     // Path 2 (2026-06-10): disabled by default - zero reports ever received
 
 var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — API</title>' +
 '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#cbd5e1;padding:2rem;max-width:860px;margin:0 auto;line-height:1.5}' +
@@ -154,7 +156,6 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
 '<h2>Validators</h2>' +
 '<div class="e"><b>GET /peers</b><span>Discovered validators — identity, connection, block, first seen</span></div>' +
-'<div class="e"><b>GET /reputation</b><span>Per-node reputation scores (0-100) over 24h window</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
 '<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
@@ -2497,14 +2498,12 @@ function generatePrometheusMetrics(fleetData) {
     const l = `node="${node.name||node.id}",host="${node.host||'unknown'}",side="${node.side||'unknown'}"`;
     nUp.push(`demos_node_up{${l}} ${node.online?1:0}`);
     nBlock.push(`demos_node_block_height{${l}} ${node.blockHeight||0}`);
-    nRep.push(`demos_node_reputation_score{${l}} ${node.reputationScore||0}`);
     nUptime.push(`demos_node_uptime_percent{${l}} ${node.uptimePercent||0}`);
     nSync.push(`demos_node_synced{${l}} ${node.synced?1:0}`);
     nExp.push(`demos_node_exporter_up{${l}} ${node.exporterUp?1:0}`);
   }
   metric('demos_node_up', 'Node online/offline', 'gauge', nUp);
   metric('demos_node_block_height', 'Node block height', 'gauge', nBlock);
-  metric('demos_node_reputation_score', 'Node reputation 0-100', 'gauge', nRep);
   metric('demos_node_uptime_percent', 'Node uptime pct', 'gauge', nUptime);
   metric('demos_node_synced', 'Node sync status', 'gauge', nSync);
   metric('demos_node_exporter_up', 'Exporter reachable', 'gauge', nExp);
@@ -2550,9 +2549,7 @@ function generatePrometheusMetrics(fleetData) {
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
       var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
-      var healthDecision = generateDecision(latestHealthData, staleness.stalenessSeconds, healthSignals);
       var healthScores = generateScores(latestHealthData, staleness.stalenessSeconds, healthSignals);
-      var healthRec = getRecommendation(latestHealthData);
       var payload = {
         status: canonical.status,
         trend: canonical.trend,
@@ -2589,22 +2586,12 @@ function generatePrometheusMetrics(fleetData) {
             return false;
           }).map(function(i) { return { id: i.id, severity: i.severity, description: i.description, startedAt: i.startedAt }; }),
           node_versions: nodeVersions,
-          reputation_scores: history.length > 0 ? calculateReputationScores() : null,
           uptime: uptimeStats,
         },
-        legacy: {
-          recommendation: healthRec,
-          decision: healthDecision,
-          scores: healthScores,
-        },
+        legacy: {},
       };
       res.writeHead(200);
       res.end(JSON.stringify(payload, null, 2));
-    } else if (req.url === "/reputation") {
-      var scores = calculateReputationScores();
-      var staleness = getStaleness(); // FIX BUG 7
-      res.writeHead(200);
-      res.end(JSON.stringify({ scores: scores, historyLength: history.length, window: "24h", lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds }, null, 2));
     } else if (req.url === "/peers") {
       var staleness = getStaleness(); // FIX BUG 7
       res.writeHead(200);
@@ -2706,7 +2693,7 @@ function generatePrometheusMetrics(fleetData) {
         demBalance: lastKnownBalance,
         agent_ready: true,
         primary_endpoint: "/organism",
-        endpoints: ["/organism", "/agent", "/sources", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/reputation", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
+        endpoints: ["/organism", "/agent", "/sources", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
       }, null, 2));
     } else if (req.url === "/organism") {
       // M5: Cache header for agent consumption
@@ -3541,8 +3528,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
       <div id="sentinel-status">Loading...</div>
     </div>
     <div id="rep-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-      <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Reputation scores (24h)</h2>
-      <div id="rep-list">Loading...</div>
+<!-- reputation panel removed: Path 2, 2026-06-10 -->
     </div>
     <div class="sla"><h2>Node SLA — uptime</h2>
       <table><thead><tr><th>Identity</th><th>Block</th><th>Uptime</th><th></th></tr></thead>
@@ -3812,7 +3798,7 @@ async function refresh(){
       sl.innerHTML=html;
     } else if(sl) { sl.innerHTML='<span style="color:#8b949e;font-size:0.85em">No signals yet</span>'; }
   }catch(e){}
-  try{
+  if(false){try{
     var rr=await fetch("/reputation");var rd=await rr.json();
     var rl=document.getElementById("rep-list");
     if(rl&&rd.scores){
@@ -3830,7 +3816,7 @@ async function refresh(){
       html+='</tbody></table><div style="font-size:0.75em;color:#484f58;margin-top:8px">Window: '+rd.window+' | '+rd.historyLength+' data points</div>';
       rl.innerHTML=html;
     }
-  }catch(e){}
+  }catch(e){}}
   try{
     var sr=await fetch("/sentinel");var sd=await sr.json();
     var sb=document.getElementById("sentinel-status");
@@ -4040,7 +4026,7 @@ async function main() {
   log("  Prometheus: " + PROMETHEUS_URL);
   log("  Demos RPC: " + RPC_URL);
   log("  Telegram: " + (TELEGRAM_BOT_TOKEN ? "ENABLED" : "DISABLED"));
-  log("  Features: reputation scoring, predictive alerts, anomaly detection, validator discovery");
+  log("  Features: anomaly detection, validator discovery, honest-uncertainty assessment");
   log("  Fixes: shared DB, write budget, staleness, atomic history, log rotation");
   log("===============================================================");
 
@@ -4242,14 +4228,14 @@ async function main() {
 
   // === v6.0: Marketplace init ===
   try {
-    initMarketplace(sharedDeps);
+    if (MARKETPLACE_ENABLED) initMarketplace(sharedDeps); else log("[marketplace] disabled (Path 2, 2026-06-10)");
   } catch (mktErr) {
     log("[marketplace] init failed (non-fatal): " + (mktErr.message || mktErr));
   }
 
   // === v6.1: Consensus Oracle init ===
   try {
-    initConsensus(sharedDeps);
+    if (CONSENSUS_ENABLED) initConsensus(sharedDeps); else log("[consensus] disabled (Path 2, 2026-06-10)");
   } catch (conErr) {
     log("[consensus] init failed (non-fatal): " + (conErr.message || conErr));
   }
@@ -4441,13 +4427,12 @@ async function main() {
           text: "Predictive Warning: " + trendAlerts.join(". ") + ".",
           confidence: 75,
         };
-        await publish(demos, trendPost, cycleAttestations);
         await sendTelegram("⚠️ <b>TREND WARNING</b>\n" + trendPost.text);
       }
 
       // === v6.0: Marketplace poll ===
       try {
-        var mktResult = await pollAndProcessQueries();
+        var mktResult = MARKETPLACE_ENABLED ? await pollAndProcessQueries() : { queriesFound: 0, queriesProcessed: 0, errors: [] };
         if (mktResult.queriesFound > 0 || mktResult.queriesProcessed > 0) {
           log("[marketplace] cycle: found=" + mktResult.queriesFound + " processed=" + mktResult.queriesProcessed + " errors=" + mktResult.errors.length);
         }
@@ -4457,7 +4442,7 @@ async function main() {
 
       // === v6.1: Consensus Oracle poll ===
       try {
-        var conResult = await pollAndProcessConsensus();
+        var conResult = CONSENSUS_ENABLED ? await pollAndProcessConsensus() : { reportsFound: 0, consensusPublished: false };
         if (conResult.reportsFound > 0 || conResult.consensusPublished) {
           log("[consensus] cycle: reports=" + conResult.reportsFound + " published=" + conResult.consensusPublished);
         }
@@ -4485,7 +4470,6 @@ async function main() {
         if (history.length >= 12) {
           var scores = calculateReputationScores();
           var leaderboardPost = composeLeaderboard(scores);
-          await publish(demos, leaderboardPost, cycleAttestations);
           await sendTelegram("🏆 <b>LEADERBOARD</b>\n" + leaderboardPost.text);
         }
 
@@ -4860,14 +4844,14 @@ pollTelegram().catch(function(err) {
 // === v6.0: Graceful shutdown ===
 process.on("SIGTERM", function() {
   log("[agent] SIGTERM — shutting down");
-  shutdownMarketplace();
+  if (MARKETPLACE_ENABLED) shutdownMarketplace();
   // FIX BUG 3: Close shared DB on shutdown
   if (sharedDb) { try { sharedDb.close(); log("[agent] shared DB closed"); } catch(e) {} }
   process.exit(0);
 });
 process.on("SIGINT", function() {
   log("[agent] SIGINT — shutting down");
-  shutdownMarketplace();
+  if (MARKETPLACE_ENABLED) shutdownMarketplace();
   // FIX BUG 3: Close shared DB on shutdown
   if (sharedDb) { try { sharedDb.close(); log("[agent] shared DB closed"); } catch(e) {} }
   process.exit(0);
