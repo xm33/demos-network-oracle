@@ -73,21 +73,40 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 
 <h2>Endpoint</h2>
 <pre>GET /organism</pre>
-<p>Returns 16 flat JSON fields. No nested objects. No fleet data. Every field is always present, never null. Refreshes every 20 seconds.</p>
+<p>Returns 17 top-level JSON fields. No fleet data. Every top-level field is always present and never null. Most fields are flat values; <code>risk_factors</code> is an array of strings and <code>last_24h</code> is a small summary object (fields inside it may be null while history accumulates). Refreshes every 20 seconds.</p>
 <pre>{
-  "status": "stable",
-  "trend": "stable",
+  "status": "unknown",
+  "trend": "unknown",
   "risk": "elevated",
-  "data_quality": "sufficient",
-  "confidence": "clear",
-  "agreement": "strong",
+  "data_quality": "insufficient",
+  "confidence": "uncertain",
+  "agreement": "unknown",
   "active_incidents": 0,
   "max_incident_severity": "none",
-  "summary": "Network stable; 3/5 public nodes currently synced",
-  "staleness_seconds": 4,
-  "last_updated": "2026-04-16T22:00:00.000Z",
-  "api_version": "1.0"
+  "summary": "Insufficient data — fewer than 2 public nodes reachable",
+  "status_reason": "Insufficient data to assess network state",
+  "risk_factors": [
+    "Only 1 of 5 public nodes reachable — limited cross-checking"
+  ],
+  "confidence_reason": "Insufficient reachable public nodes to cross-check",
+  "agreement_reason": "Fewer than 2 reachable nodes",
+  "staleness_seconds": 1,
+  "last_updated": "2026-06-10T08:28:38.773Z",
+  "api_version": "1.0",
+  "last_24h": {
+    "sufficient": true,
+    "coverage_pct": 99.9,
+    "observed_cycles": 4317,
+    "expected_cycles": 4320,
+    "typical_set_size": 5,
+    "peak_set": null,
+    "chain_movement": { "state": "unknown", "reason": "no_data" },
+    "longest_non_stable_minutes": 0,
+    "active_critical_public_incidents": 0,
+    "computed_at": "2026-06-10T08:28:38.773Z"
+  }
 }</pre>
+<p>This is a real captured response. Note the honest-uncertainty values (<span class="val">unknown</span>, <span class="val">insufficient</span>, <span class="val">uncertain</span>) — your parser must treat these as first-class states, not errors.</p>
 
 <h2>Field Meanings</h2>
 <p><code>status</code> — network operability. <span class="val">stable</span> <span class="val">degraded</span> <span class="val">unstable</span> <span class="val">unknown</span></p>
@@ -99,6 +118,11 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p><code>active_incidents</code> — count of current unresolved issues.</p>
 <p><code>max_incident_severity</code> — worst active incident: <span class="val">none</span> <span class="val">info</span> <span class="val">warning</span> <span class="val">critical</span></p>
 <p><code>staleness_seconds</code> — seconds since last observation. Use for freshness judgment.</p>
+<p><code>status_reason</code> — one-sentence explanation of the current status.</p>
+<p><code>risk_factors</code> — array of strings; the concrete observations behind the current risk level.</p>
+<p><code>confidence_reason</code> — why confidence is at its current state.</p>
+<p><code>agreement_reason</code> — why agreement is at its current state.</p>
+<p><code>last_24h</code> — rolling 24-hour observability summary (coverage, observed vs expected cycles, chain movement, incident counts). Fields inside it may be null while history accumulates.</p>
 
 <h2>The Minimal Triple</h2>
 <p>The simplest consumption pattern reads three fields:</p>
@@ -136,7 +160,7 @@ if state['data_quality'] == 'insufficient':
 <h2>Other Endpoints</h2>
 <p><code>/health</code> — full diagnostic with agreement details, public nodes, signals, reference data.</p>
 <p><code>/incidents</code> — incident log. Default scope: public. Use <code>?scope=all</code> for fleet.</p>
-<p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from network truth).</p>
+<p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from the core network assessment).</p>
 <p><code>/methodology</code> — how the Oracle makes assessments.</p>
 <p><code>/commerce/methodology</code> — how commerce observation works.</p>
 
@@ -260,7 +284,7 @@ GET /health    →  agreement details, node counts, signals
 GET /incidents →  specific active problems
 
 # Commerce: attestation authority reachability
-GET /commerce/observations  →  authority states (Layer 2, separate from network truth)</pre>
+GET /commerce/observations  →  authority states (Layer 2, separate from the core network assessment)</pre>
 
 <p><b>Important:</b> <code>/commerce/observations</code> is Layer 2 data. It reports whether attestation authority endpoints are reachable. It does not influence and is not influenced by the network assessment in <code>/organism</code>. These are independent observation layers.</p>
 
@@ -298,7 +322,7 @@ GET /commerce/observations  →  authority states (Layer 2, separate from networ
 <div class="note">All public endpoints return JSON with <code>Content-Type: application/json</code> and <code>Access-Control-Allow-Origin: *</code> (CORS enabled).</div>
 
 <h2>Design Principle</h2>
-<div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes network truth. Your agent interprets it.</div>
+<div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes its core assessment. Your agent interprets it.</div>
 
 <footer class="doc-footer">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
 <div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div></body></html>

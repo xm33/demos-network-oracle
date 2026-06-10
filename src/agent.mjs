@@ -148,7 +148,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v6.9 &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
-'<div class="e"><b>GET /organism</b><span>Compact public truth feed — 12 canonical fields, zero fleet data, optimized for agents</span></div>' +
+'<div class="e"><b>GET /organism</b><span>Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
 '<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
 '<h2>Validators</h2>' +

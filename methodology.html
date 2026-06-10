@@ -206,12 +206,12 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>The dashboard at <a href="/dashboard">/dashboard</a> provides a visual overview. The banner shows current status with risk and confidence context. The Network Agreement panel shows whether validators agree. The Network Growth panel tracks validator discovery and sync progress.</p>
 <p>The <a href="/health">/health</a> endpoint provides full diagnostic data — canonical fields at the top level, derived data for detail, fleet data under <code>reference</code>, and deprecated fields under <code>legacy</code>.</p>
 <h3>For agents and automated consumers</h3>
-<p>The <a href="/organism">/organism</a> endpoint is the primary agent feed. It returns 16 flat fields with no nested objects and no fleet data. Every field is always present and never null.</p>
+<p>The <a href="/organism">/organism</a> endpoint is the primary agent feed. It returns 17 top-level fields and no fleet data. Most fields are flat values; <code>risk_factors</code> is an array and <code>last_24h</code> is a small summary object. Every top-level field is always present and never null.</p>
 <p>The simplest consumption pattern is the <b>minimal triple</b>: read <code>status</code> + <code>risk</code> + <code>confidence</code>. These three fields give you the complete network picture in three values. Your agent decides what to do with them — the Oracle never tells you.</p>
 <p>For trust calibration: check <code>data_quality</code> before relying on the assessment. Check <code>staleness_seconds</code> to know how fresh the data is. If data quality is <span class="val">insufficient</span>, treat all other values with skepticism.</p>
 <p>For incident awareness: <code>active_incidents</code> gives the count, <code>max_incident_severity</code> tells you the worst active problem without needing to fetch the full incident list.</p>
 <div class="note"><b>API endpoints</b><br>
-Agent feed: <a href="/organism">/organism</a> — 14 fields, flat JSON, public-only, refreshes every 20 seconds.<br>
+Agent feed: <a href="/organism">/organism</a> — 17 fields, public-only, refreshes every 20 seconds.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived + reference + legacy.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope by default, <code>?scope=fleet</code> or <code>?scope=all</code> available.<br>
 API documentation: <a href="/docs">/docs</a><br>
