@@ -134,6 +134,7 @@ const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 // Historical data file (JSON-based, lightweight)
 const HISTORY_FILE = join(LOG_DIR, "history.json");
 const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
+const PUBLIC_NODE_HISTORY_RETENTION_DAYS = Number(process.env.PUBLIC_NODE_HISTORY_RETENTION_DAYS || 365);
 
 var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — API</title>' +
 '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#cbd5e1;padding:2rem;max-width:860px;margin:0 auto;line-height:1.5}' +
@@ -1264,7 +1265,7 @@ function recordPublicNodeHistory() {
         JSON.stringify(nodes)
       ]
     );
-    var cutoff = Date.now() - 7 * 86400000;
+    var cutoff = Date.now() - PUBLIC_NODE_HISTORY_RETENTION_DAYS * 86400000;
     sharedDb.run("DELETE FROM public_node_history WHERE ts < ?", [cutoff]);
   } catch(e) { log("  [history] Public node history write error: " + e.message); }
 }
