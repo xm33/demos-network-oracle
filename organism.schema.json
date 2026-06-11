@@ -6,8 +6,8 @@
   "x-changelog": [
     { "version": "1.0", "date": "2026-06-10", "change_type": "initial",
       "notes": "Initial public contract. Testnet-era schema. 17 required top-level fields; all enums verified against source code." },
-    { "version": "1.0", "date": "2026-06-11", "change_type": "additive",
-      "notes": "Added 'diverged' to agreement enum (pre-existing code value missing from initial schema). Status/risk derivation fixed in same commit: diverged now maps to unstable/high; previously it fell through to stable/low." }
+    { "version": "1.0", "date": "2026-06-11", "change_type": "clarification",
+      "notes": "api_version constraint relaxed from const 1.0 to pattern ^1. to allow additive 1.x releases per the stability policy. Correction note: a diverged agreement value was briefly added and removed same-day (commit 52ca4f9, reverted); it originated from a non-public code path and is not an emittable value. Public agreement states remain strong|moderate|weak|unknown." }
   ],
   "type": "object",
   "required": ["status","trend","risk","data_quality","confidence","agreement","active_incidents","max_incident_severity","summary","status_reason","risk_factors","confidence_reason","agreement_reason","staleness_seconds","last_updated","api_version","last_24h"],
@@ -18,7 +18,7 @@
     "risk":     { "enum": ["low","elevated","high"], "description": "Resilience / safety margin. By design, insufficient data (status=unknown) maps to risk=elevated: uncertainty resolves to a conservative posture rather than an unknown risk value." },
     "data_quality": { "enum": ["sufficient","insufficient"], "description": "Observability. If insufficient, treat all other values with skepticism." },
     "confidence":   { "enum": ["clear","uncertain"] },
-    "agreement":    { "enum": ["strong","moderate","weak","diverged","unknown"], "description": "Block-height alignment among reachable public nodes. 'diverged' is the most severe state: fewer than half of reachable nodes are within the alignment threshold of the median." },
+    "agreement":    { "enum": ["strong","moderate","weak","unknown"], "description": "Block-height alignment among reachable public nodes." },
     "active_incidents": { "type": "integer", "minimum": 0 },
     "max_incident_severity": { "enum": ["none","info","warning","critical"] },
     "summary":           { "type": "string" },

@@ -1019,7 +1019,7 @@ function computeCanonicalState() {
   // Do not degrade status only because some monitored nodes are offline
   var status;
   if (data_quality === "insufficient") status = "unknown";
-  else if (max_incident_severity === "critical" || agreement.state === "weak" || agreement.state === "diverged") status = "unstable";
+  else if (max_incident_severity === "critical" || agreement.state === "weak") status = "unstable";
   else if (pubReachable === 1 || max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
   else status = "stable";
 
@@ -1027,7 +1027,7 @@ function computeCanonicalState() {
   // Includes reduced node redundancy even when status is stable
   var risk;
   if (status === "unknown") risk = "elevated";
-  else if (status === "unstable" || max_incident_severity === "critical" || agreement.state === "weak" || agreement.state === "diverged") risk = "high";
+  else if (status === "unstable" || max_incident_severity === "critical" || agreement.state === "weak") risk = "high";
   else if (status === "degraded" || max_incident_severity === "warning" || confidence === "uncertain" || agreement.state === "moderate" || (pubTotal > 2 && pubTotal - pubReachable > 1)) risk = "elevated";
   else risk = "low";
 
@@ -1089,7 +1089,7 @@ function computeCanonicalState() {
 
   var statusReason = "";
   if (status === "stable") statusReason = "Blocks advancing; reachable nodes aligned";
-  else if (status === "unstable") statusReason = agreement.state === "diverged" ? "Reachable public nodes have diverged on block height" : agreement.state === "weak" ? "Significant disagreement among reachable nodes" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
+  else if (status === "unstable") statusReason = agreement.state === "weak" ? "Significant disagreement among reachable nodes" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
   else if (status === "degraded") statusReason = pubReachable === 1 ? "A public node is advancing; broader visibility is limited" : max_incident_severity === "warning" ? "Warning-level incidents active" : "Agreement reduced among reachable nodes";
   else statusReason = "Insufficient data to assess network state";
   var riskFactors = [];
@@ -1097,7 +1097,6 @@ function computeCanonicalState() {
   if (max_incident_severity === "warning") riskFactors.push("warning-level incidents active");
   if (max_incident_severity === "critical") riskFactors.push("critical incidents active");
   if (agreement.state === "moderate") riskFactors.push("agreement is moderate, not strong");
-  if (agreement.state === "diverged") riskFactors.push("block-height divergence among reachable public nodes");
   var agreementReason = "";
   if (agreement.state === "unknown") agreementReason = "Fewer than 2 reachable nodes";
   else agreementReason = agreement.aligned_nodes + " of " + agreement.total_nodes + " reachable nodes within ±25 blocks of median (spread: " + agreement.block_spread + " blocks)";
