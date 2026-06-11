@@ -69,6 +69,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <h1>How the Oracle Works</h1>
 <p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Observing many signals. Resolving one truth.</p>
 <p class="sub">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
+<p style="color:var(--text-secondary);font-size:12px;margin-top:-8px;margin-bottom:20px">Methodology v1.0 · 2026-06-11 · aligned with <a href="/organism/schema">/organism contract v1.0</a></p>
 <h2>What the Oracle Is</h2>
 <p>The Demos Network Oracle (DNO) is a public observability layer for the Demos blockchain testnet. It watches the network's public validator nodes, measures whether they agree on the state of the chain, tracks specific problems, and publishes what it finds.</p>
 <p>The Oracle is strictly watch-only. It observes, interprets, and summarizes. It does not command validators, does not advise operators, and does not make predictions about what will happen next. It publishes network state as neutral facts. What anyone does with those facts is their decision.</p>
@@ -202,6 +203,8 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
 <p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core assessment model.</p>
 <p><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b></p>
+<h2>Methodology Changelog</h2>
+<p><b>v1.0 — 2026-06-11.</b> Initial versioned methodology. All numeric thresholds stated on this page (5-minute buckets, 12-bucket minimum, 95% advance ratio, 5-minute static-run limit, two-node reachability minimum) verified against source code on this date. Going forward, any change to the assessment logic receives a dated entry here; changes that affect the /organism contract also receive an x-changelog entry in the schema.</p>
 <h2>How to Use the Data</h2>
 <h3>For builders and operators</h3>
 <p>The dashboard at <a href="/dashboard">/dashboard</a> provides a visual overview. The banner shows current status with risk and confidence context. The Network Agreement panel shows whether validators agree. The Network Growth panel tracks validator discovery and sync progress.</p>
@@ -213,7 +216,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>For incident awareness: <code>active_incidents</code> gives the count, <code>max_incident_severity</code> tells you the worst active problem without needing to fetch the full incident list.</p>
 <div class="note"><b>API endpoints</b><br>
 Agent feed: <a href="/organism">/organism</a> — 17 fields, public-only, refreshes every 20 seconds.<br>
-Contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema, stability policy, changelog.<br>
+Contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema, stability policy, changelog. The schema is the binding contract; this page is the explanation. If they ever disagree, the schema governs and the discrepancy is a bug.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived + reference + legacy.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope by default, <code>?scope=fleet</code> or <code>?scope=all</code> available.<br>
 API documentation: <a href="/docs">/docs</a><br>
