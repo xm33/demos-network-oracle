@@ -135,6 +135,15 @@ const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 const HISTORY_FILE = join(LOG_DIR, "history.json");
 const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
 const PUBLIC_NODE_HISTORY_RETENTION_DAYS = Number(process.env.PUBLIC_NODE_HISTORY_RETENTION_DAYS || 365);
+// Public incident generation (2026-06-11). Two classes, strictly generated:
+// observability (DNO cannot sufficiently see the network) vs network-condition.
+const PUBLIC_INCIDENT_OPEN_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_OPEN_CYCLES || "3", 10);
+const PUBLIC_INCIDENT_RESOLVE_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_RESOLVE_CYCLES || "9", 10);
+const PUBLIC_VISIBILITY_MARKER = "PUBLIC_NETWORK_VISIBILITY";
+const PUBLIC_DEGRADED_MARKER = "PUBLIC_NETWORK_DEGRADED";
+const PUBLIC_UNSTABLE_MARKER = "PUBLIC_NETWORK_UNSTABLE";
+var publicIncidentCounters = { obsBad: 0, obsGood: 0, degBad: 0, degGood: 0, unsBad: 0, unsGood: 0 };
+var publicBackfillChecked = false;
 const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === "1"; // Path 2 (2026-06-10): disabled by default - zero consumers, broken auth
 const CONSENSUS_ENABLED = process.env.CONSENSUS_ENABLED === "1";     // Path 2 (2026-06-10): disabled by default - zero reports ever received
 var ORGANISM_SCHEMA = '{"error":"schema file not loaded"}'; // Phase 1 contract
@@ -522,6 +531,72 @@ function resolveIncident(key, block) {
 
 function getActiveIncidentIds() {
   return Object.values(activeIncidents).map(function(i) { return i.id; });
+}
+
+function evaluatePublicIncidents() {
+  try {
+    var canonical = computeCanonicalState();
+    var c = publicIncidentCounters;
+    var obsBad = (canonical.status === "unknown" || canonical.data_quality === "insufficient");
+
+    // One-time adoption/backfill guard. Flag is only set once sharedDb exists,
+    // so a DB-not-ready first cycle retries instead of silently skipping forever.
+    if (!publicBackfillChecked && sharedDb) {
+      publicBackfillChecked = true;
+      if (obsBad && !activeIncidents[PUBLIC_VISIBILITY_MARKER]) {
+        var existing = null;
+        try { existing = sharedDb.query("SELECT id FROM incidents WHERE status='active' AND affected_nodes=? LIMIT 1").get(JSON.stringify([PUBLIC_VISIBILITY_MARKER])); } catch (e) {}
+        if (existing) {
+          log("  [public-incidents] Active DB incident " + existing.id + " exists but not in memory; relying on restart rehydration");
+        } else {
+          var minTs = null;
+          try {
+            var row = sharedDb.query("SELECT MIN(ts) t FROM public_node_history WHERE status = 'unknown'").get();
+            if (row && row.t) {
+              var brk = sharedDb.query("SELECT COUNT(*) c FROM public_node_history WHERE status != 'unknown' AND ts >= ?").get(row.t);
+              if (brk.c === 0) minTs = new Date(row.t).toISOString();
+            }
+          } catch (e) {}
+          var desc = "Insufficient public visibility: fewer than 2 public nodes reachable." + (minTs ? " Continuous since earliest retained public observation; actual start may be earlier." : "");
+          var inc = openIncident("warning", [PUBLIC_VISIBILITY_MARKER], desc, null);
+          if (inc && minTs) {
+            inc.startedAt = minTs; // in-memory too, so eventual resolve duration is honest
+            try { sharedDb.prepare("UPDATE incidents SET started_at=? WHERE id=?").run(minTs, inc.id); } catch (e) {}
+            log("  [public-incidents] Backdated " + inc.id + " to " + minTs + " (provable start in retained window)");
+          }
+        }
+      }
+    }
+
+    // Observability hysteresis
+    if (obsBad) { c.obsBad++; c.obsGood = 0; } else { c.obsGood++; c.obsBad = 0; }
+    if (!activeIncidents[PUBLIC_VISIBILITY_MARKER] && c.obsBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
+      openIncident("warning", [PUBLIC_VISIBILITY_MARKER], "Insufficient public visibility: fewer than 2 public nodes reachable.", null);
+    }
+    if (activeIncidents[PUBLIC_VISIBILITY_MARKER] && c.obsGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
+      resolveIncident(PUBLIC_VISIBILITY_MARKER, null);
+    }
+
+    // Network-condition incidents — suppressed while observability is bad:
+    // DNO does not claim the network is degraded while admitting it cannot see it.
+    var reason = canonical.status_reason ? String(canonical.status_reason) : "";
+    var degBad = (!obsBad && canonical.status === "degraded");
+    var unsBad = (!obsBad && canonical.status === "unstable");
+    if (degBad) { c.degBad++; c.degGood = 0; } else { c.degGood++; c.degBad = 0; }
+    if (unsBad) { c.unsBad++; c.unsGood = 0; } else { c.unsGood++; c.unsBad = 0; }
+    if (!activeIncidents[PUBLIC_DEGRADED_MARKER] && c.degBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
+      openIncident("warning", [PUBLIC_DEGRADED_MARKER], "Public network condition observed: " + (reason || "status=degraded"), null);
+    }
+    if (activeIncidents[PUBLIC_DEGRADED_MARKER] && c.degGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
+      resolveIncident(PUBLIC_DEGRADED_MARKER, null);
+    }
+    if (!activeIncidents[PUBLIC_UNSTABLE_MARKER] && c.unsBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
+      openIncident("critical", [PUBLIC_UNSTABLE_MARKER], "Public network condition observed: " + (reason || "status=unstable"), null);
+    }
+    if (activeIncidents[PUBLIC_UNSTABLE_MARKER] && c.unsGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
+      resolveIncident(PUBLIC_UNSTABLE_MARKER, null);
+    }
+  } catch (e) { log("  [public-incidents] eval error: " + e.message); }
 }
 
 var FLEET_NODE_NAMES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
@@ -4316,6 +4391,7 @@ async function main() {
 
       // M3: Record public node observation snapshot
       recordPublicNodeHistory();
+      evaluatePublicIncidents();
 
       // --- Check explorer (every cycle, lightweight) ---
       var explorerResult = await checkExplorer();
