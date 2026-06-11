@@ -468,13 +468,20 @@ async function fetchData() {
     incCount.textContent=org.active_incidents!=null?org.active_incidents:'\u2014';
     incCount.style.color=org.active_incidents>0?'var(--degraded)':'var(--text-primary)';
     var incList=document.getElementById('inc-list');
-    if(org.active_incidents>0&&health.signals_grouped){
-      var items=(health.signals_grouped.critical||[]).concat(health.signals_grouped.warning||[]);
-      var ih='';
-      items.slice(0,5).forEach(function(s){ih+='<div class="inc-item '+(s.severity||'')+'">'+
-        (s.message||s.type||'Unknown')+'</div>';});
-      incList.innerHTML=ih;
-    }else{incList.innerHTML='';}
+    // Public-scope incidents only (2026-06-11). Previously rendered fleet signal
+    // text from /health under the INCIDENTS heading — a Layer 3 presentation leak.
+    if(org.active_incidents>0){
+      fetch('/incidents?scope=public').then(function(r){return r.json();}).then(function(ij){
+        var act=(ij.incidents||[]).filter(function(i){return i.status==='active';});
+        var ih='';
+        act.slice(0,5).forEach(function(i){
+          var since=i.startedAt?new Date(i.startedAt).toISOString().slice(0,10):'';
+          ih+='<div class="inc-item '+(i.severity||'')+'">'+(i.description||i.id)+
+            (since?' <span style="opacity:0.55;font-size:0.85em">(observed since '+since+')</span>':'')+'</div>';
+        });
+        incList.innerHTML=ih||'<div class="inc-item" style="opacity:0.6">No active public incidents.</div>';
+      }).catch(function(e){console.warn('incidents panel fetch failed',e);incList.innerHTML='';});
+    }else{incList.innerHTML='<div class="inc-item" style="opacity:0.6">No active public incidents.</div>';}
 
     // API
     var apiEl=document.getElementById('api-example');apiEl.textContent='GET /organism\n\n'+JSON.stringify(org,null,2);apiEl.classList.remove('loading');
