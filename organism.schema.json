@@ -5,7 +5,9 @@
   "description": "Public core network assessment feed of the Demos Network Oracle (independent, watch-only). DNO informs context; it does not advise, predict, score, certify, or decide action. Honest-uncertainty values (unknown, insufficient, uncertain) are first-class states, not errors.\n\nSTABILITY: Within api_version 1.x the contract is additive-only. The 17 required top-level fields are guaranteed to remain present, non-null, and never renamed. Existing enum values on top-level fields will not be removed (new values may be added; consumers should treat unrecognized future enum values as non-fatal). Any change that removes a top-level field, renames a field, makes a required field nullable, or removes an existing enum value is a breaking change and will ship under api_version 2.0 with an x-changelog entry. The last_24h object is informative only — its internal fields may be null or absent while history accumulates and are not covered by the stability guarantee.",
   "x-changelog": [
     { "version": "1.0", "date": "2026-06-10", "change_type": "initial",
-      "notes": "Initial public contract. Testnet-era schema. 17 required top-level fields; all enums verified against source code." }
+      "notes": "Initial public contract. Testnet-era schema. 17 required top-level fields; all enums verified against source code." },
+    { "version": "1.0", "date": "2026-06-11", "change_type": "additive",
+      "notes": "Added 'diverged' to agreement enum (pre-existing code value missing from initial schema). Status/risk derivation fixed in same commit: diverged now maps to unstable/high; previously it fell through to stable/low." }
   ],
   "type": "object",
   "required": ["status","trend","risk","data_quality","confidence","agreement","active_incidents","max_incident_severity","summary","status_reason","risk_factors","confidence_reason","agreement_reason","staleness_seconds","last_updated","api_version","last_24h"],
@@ -16,7 +18,7 @@
     "risk":     { "enum": ["low","elevated","high"], "description": "Resilience / safety margin. By design, insufficient data (status=unknown) maps to risk=elevated: uncertainty resolves to a conservative posture rather than an unknown risk value." },
     "data_quality": { "enum": ["sufficient","insufficient"], "description": "Observability. If insufficient, treat all other values with skepticism." },
     "confidence":   { "enum": ["clear","uncertain"] },
-    "agreement":    { "enum": ["strong","moderate","weak","unknown"], "description": "Block-height alignment among reachable public nodes." },
+    "agreement":    { "enum": ["strong","moderate","weak","diverged","unknown"], "description": "Block-height alignment among reachable public nodes. 'diverged' is the most severe state: fewer than half of reachable nodes are within the alignment threshold of the median." },
     "active_incidents": { "type": "integer", "minimum": 0 },
     "max_incident_severity": { "enum": ["none","info","warning","critical"] },
     "summary":           { "type": "string" },
@@ -26,7 +28,7 @@
     "agreement_reason":  { "type": "string" },
     "staleness_seconds": { "type": "integer", "minimum": 0, "description": "Whole seconds since last observation cycle; use for freshness judgment." },
     "last_updated":      { "type": "string", "format": "date-time" },
-    "api_version":       { "const": "1.0" },
+    "api_version":       { "type": "string", "pattern": "^1\\." },
     "last_24h": {
       "type": "object",
       "description": "Rolling 24h observability summary. Informative tier: inner fields may be null or absent while history accumulates.",
