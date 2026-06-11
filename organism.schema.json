@@ -7,7 +7,7 @@
     { "version": "1.0", "date": "2026-06-10", "change_type": "initial",
       "notes": "Initial public contract. Testnet-era schema. 17 required top-level fields; all enums verified against source code." },
     { "version": "1.0", "date": "2026-06-11", "change_type": "clarification",
-      "notes": "api_version constraint relaxed from const 1.0 to pattern ^1. to allow additive 1.x releases per the stability policy. Correction note: a diverged agreement value was briefly added and removed same-day (commit 52ca4f9, reverted); it originated from a non-public code path and is not an emittable value. Public agreement states remain strong|moderate|weak|unknown." }
+      "notes": "api_version constraint relaxed from const 1.0 to pattern ^1. to allow additive 1.x releases per the stability policy. Correction note: a diverged agreement value was briefly added and removed same-day (commit 52ca4f9, reverted); it originated from a separate legacy agreement computation (exposed as network_agreement on /health, no known consumers) and is not an emittable value of this field. Public agreement states remain strong|moderate|weak|unknown." }
   ],
   "type": "object",
   "required": ["status","trend","risk","data_quality","confidence","agreement","active_incidents","max_incident_severity","summary","status_reason","risk_factors","confidence_reason","agreement_reason","staleness_seconds","last_updated","api_version","last_24h"],
