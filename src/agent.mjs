@@ -142,6 +142,12 @@ const PUBLIC_INCIDENT_RESOLVE_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_RESO
 const PUBLIC_VISIBILITY_MARKER = "PUBLIC_NETWORK_VISIBILITY";
 const PUBLIC_DEGRADED_MARKER = "PUBLIC_NETWORK_DEGRADED";
 const PUBLIC_UNSTABLE_MARKER = "PUBLIC_NETWORK_UNSTABLE";
+// Network Observation Timeline release events. Structured data, versioned in git.
+// Append one entry per published release; never edit history.
+var TIMELINE_RELEASE_EVENTS = [
+  { date: "2026-06-10", type: "contract", text: "Public API contract v1.0 published at /organism/schema: 17 required top-level fields, additive-only within api_version 1.x." },
+  { date: "2026-06-11", type: "methodology", text: "Methodology v1.0 published: versioned, with changelog. The schema binds; the methodology explains." }
+];
 var publicIncidentCounters = { obsBad: 0, obsGood: 0, degBad: 0, degGood: 0, unsBad: 0, unsGood: 0 };
 var publicBackfillChecked = false;
 const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === "1"; // Path 2 (2026-06-10): disabled by default - zero consumers, broken auth
@@ -1101,6 +1107,39 @@ function computeCanonicalState() {
 // Phase B: Last 24h Summary — helpers
 // ============================================================================
 
+function escapeHtmlTL(t) { return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function renderTimelinePage() {
+  var events = [];
+  try {
+    var rows = sharedDb.query("SELECT id,status,severity,started_at,resolved_at,duration_seconds,description,affected_nodes FROM incidents WHERE started_at >= ? ORDER BY started_at DESC").all(INCIDENT_RECONCILIATION_START_AT);
+    for (var i = 0; i < rows.length; i++) {
+      if (isFleetIncident_24h(rows[i])) continue;
+      events.push({ d: rows[i].started_at, kind: "incident", r: rows[i] });
+    }
+  } catch (e) { log("  [timeline] query error: " + e.message); }
+  for (var j = 0; j < TIMELINE_RELEASE_EVENTS.length; j++) {
+    events.push({ d: TIMELINE_RELEASE_EVENTS[j].date + "T12:00:00.000Z", kind: TIMELINE_RELEASE_EVENTS[j].type, text: TIMELINE_RELEASE_EVENTS[j].text });
+  }
+  events.sort(function(a,b){ return a.d < b.d ? 1 : -1; });
+  var items = "";
+  for (var k = 0; k < events.length; k++) {
+    var ev = events[k], day = String(ev.d).slice(0,10);
+    if (ev.kind === "incident") {
+      var r = ev.r, sev = escapeHtmlTL(r.severity || "info");
+      var state = r.status === "active" ? "ongoing" : "resolved";
+      var dur = "";
+      var secs = r.status === "active" ? Math.round((Date.now() - new Date(r.started_at).getTime())/1000) : (r.duration_seconds || 0);
+      if (secs >= 86400) dur = Math.floor(secs/86400) + "d " + Math.floor((secs%86400)/3600) + "h";
+      else if (secs >= 3600) dur = Math.floor(secs/3600) + "h " + Math.floor((secs%3600)/60) + "m";
+      else dur = Math.floor(secs/60) + "m";
+      items += '<div class="tl-item sev-' + sev + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + sev + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div></div></div>';
+    } else {
+      items += '<div class="tl-item sev-release"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + escapeHtmlTL(ev.kind) + '</span><div class="tl-text">' + escapeHtmlTL(ev.text) + '</div></div></div>';
+    }
+  }
+  if (!items) items = '<div class="tl-item"><div class="tl-body"><div class="tl-text">No public-scope events in the observation record yet.</div></div></div>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><style>:root{--bg:#0d1117;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff}body{background:var(--bg);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:0 16px 60px}.wrap{max-width:880px;margin:0 auto}nav{padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:28px}nav a{color:var(--text2);text-decoration:none;margin-right:16px;font-size:13px}nav a:hover{color:var(--text)}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}</style></head><body><div class="wrap"><nav><a href="/" class="doc-nav-link" data-nav="home">Oracle</a><a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a><a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a><a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a><a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline" style="color:var(--text)">Timeline</a></nav><h1>Network Observation Timeline</h1><div class="sub">Many signals. One attested view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div></body></html>';
+}
 function isFleetIncident_24h(inc) {
   if (inc.description && (
       inc.description.indexOf("Fleet reference") === 0 ||
@@ -3452,6 +3491,9 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
+    } else if (req.url === "/timeline") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(renderTimelinePage());
     } else if (req.url === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);
