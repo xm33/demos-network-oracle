@@ -8,7 +8,7 @@
     "dev": "tsx --env-file=.env --watch src/agent.mjs"
   },
   "dependencies": {
-    "@kynesyslabs/demosdk": "4.0.6",
+    "@kynesyslabs/demosdk": "4.0.8",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "better-sqlite3": "^12.8.0",
