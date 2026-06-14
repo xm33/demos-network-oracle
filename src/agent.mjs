@@ -1411,6 +1411,8 @@ function generateSignals(data, stalenessSeconds) {
   // Offline nodes
   if (offlineNodes.length > 0) {
     var sev = offlineNodes.length >= 3 ? "critical" : offlineNodes.length >= 2 ? "warning" : "info";
+    // Fleet uses "offline" (direct SSH/process visibility); public nodes use
+    // "unreachable" (vantage-limited inference). Intentional — do not unify.
     signals.push({ type: "node_offline", severity: sev, nodes: offlineNodes.map(function(n) { return n.name; }), value: offlineNodes.length, message: offlineNodes.map(function(n) { return n.name; }).join(", ") + " offline" });
   }
 
@@ -3791,7 +3793,7 @@ async function refresh(){
       var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
       mg.innerHTML+='<div class="metric"><div class="label">Network Block</div><div class="value">'+(na.max_block||na.median_block||"?")+'</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Agreement</div><div class="value" style="color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Public Nodes</div><div class="value">'+na.aligned_nodes+'/'+na.total_nodes+' online</div></div>';
+      mg.innerHTML+='<div class="metric"><div class="label">Public Nodes</div><div class="value">'+na.aligned_nodes+'/'+na.total_nodes+' aligned</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Block Spread</div><div class="value" style="color:'+(na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+na.block_spread+'</div></div>';
     }
     var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
