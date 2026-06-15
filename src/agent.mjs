@@ -788,50 +788,6 @@ function getValidatorGrowth() {
   } catch(e) { return result; }
 }
 
-function generateNetworkAgreement(fleetData, publicNodes) {
-  // Network agreement is calculated from PUBLIC nodes only.
-  // Fleet nodes run on a separate testnet chain and are NOT included here.
-  // Fleet data is used separately for oracle confidence scoring only.
-  var allBlocks = [];
-
-  if (publicNodes) {
-    publicNodes.forEach(function(n) {
-      if (n.block && n.ok) allBlocks.push({ name: n.name, block: n.block, source: n.source_type || "public" });
-    });
-  }
-
-  if (allBlocks.length === 0) return { status: "unknown", block_spread: 0, median_block: null, max_block: null, aligned_nodes: 0, outlier_nodes: [], total_nodes: 0, agreement_ratio: 0 };
-
-  var blocks = allBlocks.map(function(n) { return n.block; }).sort(function(a,b) { return a-b; });
-  var maxBlock = blocks[blocks.length - 1];
-  var minBlock = blocks[0];
-  var medianBlock = blocks[Math.floor(blocks.length / 2)];
-  var blockSpread = maxBlock - minBlock;
-
-  // Nodes within 10 blocks of median are "aligned"
-  var ALIGNMENT_THRESHOLD = 10;
-  var aligned = allBlocks.filter(function(n) { return Math.abs(n.block - medianBlock) <= ALIGNMENT_THRESHOLD; });
-  var outliers = allBlocks.filter(function(n) { return Math.abs(n.block - medianBlock) > ALIGNMENT_THRESHOLD; });
-  var agreementRatio = Math.round((aligned.length / allBlocks.length) * 100);
-
-  var status = "unknown";
-  if (agreementRatio >= 90) status = "strong";
-  else if (agreementRatio >= 70) status = "moderate";
-  else if (agreementRatio >= 50) status = "weak";
-  else status = "diverged";
-
-  return {
-    status: status,
-    block_spread: blockSpread,
-    median_block: medianBlock,
-    max_block: maxBlock,
-    min_block: minBlock,
-    aligned_nodes: aligned.length,
-    outlier_nodes: outliers.map(function(n) { return { name: n.name, block: n.block, lag: maxBlock - n.block }; }),
-    total_nodes: allBlocks.length,
-    agreement_ratio: agreementRatio
-  };
-}
 
 function generateDecision(data, stalenessSeconds, signals) {
   if (!data || !data.nodeReports) {
@@ -2690,7 +2646,6 @@ function generatePrometheusMetrics(fleetData) {
         signals: healthSignals,
         signals: healthSignals,
         signals_grouped: groupSignals(healthSignals),
-        network_agreement: generateNetworkAgreement(latestHealthData, latestPublicNodes),
         validator_growth: getValidatorGrowth(),
         discoveredPeers: Object.keys(discoveredPeers).length,
         reference: {
