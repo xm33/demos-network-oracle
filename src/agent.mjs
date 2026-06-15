@@ -3923,25 +3923,6 @@ async function refresh(){
       sl.innerHTML=html;
     } else if(sl) { sl.innerHTML='<span style="color:#8b949e;font-size:0.85em">No signals yet</span>'; }
   }catch(e){}
-  if(false){try{
-    var rr=await fetch("/reputation");var rd=await rr.json();
-    var rl=document.getElementById("rep-list");
-    if(rl&&rd.scores){
-      var scores=Object.entries(rd.scores).sort(function(a,b){return b[1]-a[1];});
-      var html='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Node</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Score</th><th style="color:#8b949e;padding:4px 8px;border-bottom:1px solid #21262d"></th><th style="color:#8b949e;text-align:right;padding:4px 8px;border-bottom:1px solid #21262d">Rank</th></tr></thead><tbody>';
-      scores.forEach(function(e,i){
-        var name=e[0],score=e[1];
-        var col=score>=80?"#3fb950":score>=50?"#d29922":"#f85149";
-        var barW=score+"%";
-        html+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+name+'</b></td>';
-        html+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;font-weight:bold;color:'+col+'">'+score+'</td>';
-        html+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;width:160px"><div style="background:#21262d;border-radius:4px;height:8px"><div style="height:8px;border-radius:4px;background:'+col+';width:'+barW+'"></div></div></td>';
-        html+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;text-align:right;color:#8b949e">#'+(i+1)+'</td></tr>';
-      });
-      html+='</tbody></table><div style="font-size:0.75em;color:#484f58;margin-top:8px">Window: '+rd.window+' | '+rd.historyLength+' data points</div>';
-      rl.innerHTML=html;
-    }
-  }catch(e){}}
   try{
     var sr=await fetch("/sentinel");var sd=await sr.json();
     var sb=document.getElementById("sentinel-status");
