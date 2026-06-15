@@ -105,7 +105,18 @@ const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8080");
 
 // Agent profile
 let AGENT_WALLET = "0xbdb3e8189a62dce62229bf3badbf01e5bdb3fbeb22f6f59f4c7c2edafe802a45"; // will be updated after wallet connect
-const INSTANCE_ROLE = process.env.INSTANCE_ROLE || "primary";
+function parseInstanceRole(rawRole) {
+  if (rawRole == null || rawRole === "") {
+    return { raw: rawRole == null ? null : rawRole, normalized: null, effective: "primary", can_publish: true, warning: "INSTANCE_ROLE absent; defaulting to primary for backward compatibility." };
+  }
+  var normalized = String(rawRole).trim().toLowerCase();
+  if (normalized === "primary")   return { raw: rawRole, normalized: normalized, effective: "primary",   can_publish: true,  warning: null };
+  if (normalized === "validator") return { raw: rawRole, normalized: normalized, effective: "validator", can_publish: true,  warning: null };
+  return { raw: rawRole, normalized: normalized, effective: "config_error", can_publish: false, warning: "Invalid INSTANCE_ROLE. Expected 'primary' or 'validator'. Publishing disabled." };
+}
+const INSTANCE_ROLE_CONFIG = parseInstanceRole(process.env.INSTANCE_ROLE);
+const INSTANCE_ROLE = INSTANCE_ROLE_CONFIG.effective;
+const INSTANCE_ROLE_CAN_PUBLISH = INSTANCE_ROLE_CONFIG.can_publish;
 const PRIMARY_ORACLE_URL = process.env.PRIMARY_ORACLE_URL || "";
 let primaryLastSeen = 0; // timestamp of last successful primary health fetch
 let primarySilentCycles = 0;
@@ -1772,6 +1783,11 @@ async function sendTelegram(message) {
 }
 
 async function publish(demos, post, attestations) {
+  // Role-authority guard: an invalid INSTANCE_ROLE must never publish (prevents silent validator->primary degradation).
+  if (!INSTANCE_ROLE_CAN_PUBLISH) {
+    logError("Publish BLOCKED by invalid INSTANCE_ROLE raw=" + JSON.stringify(INSTANCE_ROLE_CONFIG.raw) + " normalized=" + JSON.stringify(INSTANCE_ROLE_CONFIG.normalized) + " effective=" + INSTANCE_ROLE_CONFIG.effective + ": " + post.text.substring(0, 80));
+    return false;
+  }
   // FIX BUG 6: Check shared write budget before publishing
   var budget = canPublish();
   if (!budget.ok) {
@@ -2661,6 +2677,13 @@ function generatePrometheusMetrics(fleetData) {
           uptime: uptimeStats,
         },
         legacy: {},
+        instance_role: {
+          raw: INSTANCE_ROLE_CONFIG.raw,
+          normalized: INSTANCE_ROLE_CONFIG.normalized,
+          effective: INSTANCE_ROLE_CONFIG.effective,
+          can_publish: INSTANCE_ROLE_CONFIG.can_publish,
+          warning: INSTANCE_ROLE_CONFIG.warning,
+        },
       };
       res.writeHead(200);
       res.end(JSON.stringify(payload, null, 2));
@@ -4264,6 +4287,12 @@ async function main() {
   AGENT_WALLET = demos.getAddress();
   log("  Agent wallet: " + AGENT_WALLET);
   log("Wallet connected. Agent is live.\n");
+  log("[role] INSTANCE_ROLE raw=" + JSON.stringify(INSTANCE_ROLE_CONFIG.raw) + " normalized=" + JSON.stringify(INSTANCE_ROLE_CONFIG.normalized) + " effective=" + INSTANCE_ROLE_CONFIG.effective + " can_publish=" + INSTANCE_ROLE_CONFIG.can_publish);
+  if (INSTANCE_ROLE_CONFIG.warning) log("[role] " + INSTANCE_ROLE_CONFIG.warning);
+  if (!INSTANCE_ROLE_CAN_PUBLISH) {
+    logError("[role] INSTANCE_ROLE invalid — publishing disabled until corrected.");
+    try { await sendTelegram("\u26a0\ufe0f <b>DNO ROLE CONFIG ERROR</b>\nRaw INSTANCE_ROLE: <code>" + String(INSTANCE_ROLE_CONFIG.raw) + "</code>\nEffective: <code>" + INSTANCE_ROLE_CONFIG.effective + "</code>\nPublishing: disabled\n\nDNO is running but will not publish until INSTANCE_ROLE is corrected."); } catch(e) {}
+  }
 
   // Register agent profile (fire and forget)
   registerAgentProfile();
