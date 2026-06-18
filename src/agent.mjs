@@ -28,7 +28,7 @@ var MAX_LOG_BACKUPS = 3;
 // Fleet identification for incident scope inference (no scope column in schema).
 // All 9 fleet members listed: n9 + m3 onboarded 2026-05-05 (see drift register).
 // Used to filter incidents into fleet vs public scope.
-var FLEET_NODES_24H = new Set(['n1','n2','n3','n4','n5','n6','m1','m3','n9']);
+var FLEET_NODES_24H = new Set(['n1','n2','n3','n4','n5','n6','n7','m1','m3','n9']);
 
 // Chain movement thresholds — env-overridable for live-chain migration tuning.
 var CHAIN_BUCKET_MIN_24H = parseInt(process.env.PHASE_B_CHAIN_BUCKET_MIN || '5', 10);
@@ -285,6 +285,7 @@ const EXPECTED_FLEET = {
   n6: { side: "B", port: 54550, host: "193.77.169.106", identity: "0x3ab3365e67583a89968082475816cf2f16f8f9a3b936a38513493d0c6b69f768" },
   m1: { side: "A", port: 53550, host: "82.192.52.254",  identity: "0x56b46be173e20f540401d079811e5b524903a197ae5d07824d0e70a22ee6e591" },
   n9: { side: "C", port: 55550, host: "193.77.50.180",  identity: "0x2e288105c9e73ae974a0a54c528ebce4fc43551c4918ff4430449211d6563f23" },
+  n7: { side: "C", port: 55550, host: "193.77.169.106", identity: "0x1a799a345704ea4ac5fe5632f77ef605aeb935bfcc6e32989cca2dff88bc4816" },
   m3: { side: "A", port: 53550, host: "193.95.249.97",  identity: "0x5cfc9fa3c038a16b5261a111ff681439bcbcbdfce31a926358c441d702ac971c" },
 };
 
@@ -349,7 +350,7 @@ var PUBLIC_NODE_IDENTITIES = {};
 for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identity] = _pn; }
 
 
-// Fleet fixnet registry — 7 XM33 fleet nodes + Kynesys anchor
+// Fleet fixnet registry — 8 XM33 fleet nodes + Kynesys anchor
 // Separate from PUBLIC_NODES (different network)
 const FIXNET_NODES = {
   "kynesys-anchor": {
@@ -414,6 +415,15 @@ const FIXNET_NODES = {
     trust_tier: "verified",
     operator: "XM33",
     joined_at: "2026-04-22"
+  },
+  "fleet-n7": {
+    url: "http://193.77.169.106:55550",
+    host: "193.77.169.106",
+    identity: "0x1a799a345704ea4ac5fe5632f77ef605aeb935bfcc6e32989cca2dff88bc4816",
+    source_type: "fleet",
+    trust_tier: "verified",
+    operator: "XM33",
+    joined_at: "2026-06-16"
   },
   "fleet-m1": {
     url: "http://82.192.52.254:53550",
