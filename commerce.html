@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Commerce Infrastructure — Demos Network Oracle</title>
 <style>
-:root { --bg:#0a0a0a; --surface:#101010; --border:#1a1a1a; --text:#e5e7eb; --text-secondary:#98a2b3; --improving:rgba(45,212,160,1); --mono:'Source Code Pro',monospace; --sans:Inter,system-ui,sans-serif; --brand:#2B36D9; }
+:root { --bg:#0a0a0a; --surface:#101010; --border:#1a1a1a; --text:#e5e7eb; --text-secondary:#98a2b3; --improving:#00DAFF; --mono:'Source Code Pro',monospace; --sans:Inter,system-ui,sans-serif; --brand:#2B36D9; }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6;}
 .container{max-width:980px;margin:0 auto;padding:0 24px;}
@@ -15,7 +15,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:
 .nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);}
 .nav-brand svg{width:30px;height:30px;}
 .nav-title{font-family:var(--mono);font-size:13px;letter-spacing:0.12em;font-weight:500;}
-.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(45,212,160,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px;}
+.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(0,218,255,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px;}
 .nav-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8;}
 .nav-links{margin-left:auto;display:flex;gap:16px;font-family:var(--mono);font-size:11px;}
 .nav-links a{color:var(--text-secondary);text-decoration:none;letter-spacing:0.04em;}
@@ -152,7 +152,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:
     var stateEl = document.getElementById('obs-state');
     stateEl.textContent = (d.commerce_observability_state || 'unknown').toUpperCase();
     stateEl.classList.remove('loading');
-    if (d.commerce_observability_state === 'healthy') stateEl.style.color = 'rgba(45,212,160,1)';
+    if (d.commerce_observability_state === 'healthy') stateEl.style.color = '#22C55E';
     else if (d.commerce_observability_state === 'degraded') stateEl.style.color = 'rgba(217,119,6,1)';
     else if (d.commerce_observability_state === 'unavailable') stateEl.style.color = '#EF4444';
     else stateEl.style.color = 'var(--text-secondary)';
