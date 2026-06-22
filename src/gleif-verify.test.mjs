@@ -9,8 +9,9 @@
 // The seeded ISSUED fixture is the real live record for 506700GE1G29325QX363.
 // The status-conflict fixture is that record with entity.status flipped to
 // INACTIVE (synthesized per spec §8). The no-record fixture is a 404.
-// The LAPSED fixture is the one still pending a real lapsed LEI (spec §9.3) —
-// included here as a structural shape so the test is ready to fill.
+// The LAPSED fixture is a real captured record (743700SEJ147Y3TSFE83), and the
+// RETIRED fixture is a real captured record (9845006A7A5583CF9B64) — both frozen
+// snapshots pulled live from n3 on 2026-06-19 (do NOT re-fetch at test time).
 //
 // Run:  bun gleif-verify.test.mjs   (or: node gleif-verify.test.mjs)
 
@@ -56,6 +57,35 @@ const LAPSED_RECORD = {
       lei: "743700SEJ147Y3TSFE83",
       entity: { legalName: { name: "Dadaal Service Oy", language: "fi" }, status: "ACTIVE" },
       registration: { status: "LAPSED", nextRenewalDate: "2026-06-17T09:00:00Z" },
+    },
+  },
+};
+
+// RETIRED fixture — REAL captured record (9845006A7A5583CF9B64,
+// "ΤΑΜΕΙΟ ΠΡΟΝΟΙΑΣ ΕΡΓΑΤΩΝ ΔΗΜΟΥ ΑΓΛΑΝΤΖΙΑΣ"), pulled live from n3 on 2026-06-19;
+// bodyHash of these exact bytes matched the live n3 fetch (sha256:bf679d80...f740).
+// Snapshot frozen (terminal status — RETIRED via a COMPLETED dissolution won't flip
+// back). Two things this row proves that LAPSED doesn't: (1) the RETIRED →
+// indeterminate / alt-fail / confidence-B verdict end-to-end, and (2) NFC handling
+// on a non-Latin (Greek) entity name (raw == normalized, no case-fold/accent-strip).
+// entity.eventGroups is retained (not read by the emitter) as the in-record grounding
+// for the lifecycle-end reading — asserted separately as input, not emitter output.
+const RETIRED_RECORD = {
+  data: {
+    type: "lei-records",
+    id: "9845006A7A5583CF9B64",
+    attributes: {
+      lei: "9845006A7A5583CF9B64",
+      entity: {
+        legalName: { name: "ΤΑΜΕΙΟ ΠΡΟΝΟΙΑΣ ΕΡΓΑΤΩΝ ΔΗΜΟΥ ΑΓΛΑΝΤΖΙΑΣ", language: "el" },
+        status: "INACTIVE",
+        eventGroups: [
+          { groupType: "STANDALONE", events: [
+            { type: "DISSOLUTION", status: "COMPLETED", effectiveDate: "2026-03-19T00:00:00Z" },
+          ] },
+        ],
+      },
+      registration: { status: "RETIRED", nextRenewalDate: "2027-06-15T13:47:42Z" },
     },
   },
 };
@@ -161,6 +191,30 @@ function stubFetch(map) {
   eq("[lapsed] registrationStatus diag", lapsed?.diagnostics?.registrationStatus, "LAPSED");
   eq("[lapsed] entityStatus diag (ACTIVE, not overridden)", lapsed?.diagnostics?.entityStatus, "ACTIVE");
   eq("[lapsed] resolvedEntity present", lapsed?.resolvedEntity, "Dadaal Service Oy");
+
+  // Fixture 6 (RETIRED): real captured record, registration RETIRED + entity INACTIVE,
+  // grounded by a COMPLETED DISSOLUTION event. Proves the lifecycle-end verdict
+  // (indeterminate, alt-fail defensible, confidence B) AND non-Latin NFC handling.
+  const GREEK = "ΤΑΜΕΙΟ ΠΡΟΝΟΙΑΣ ΕΡΓΑΤΩΝ ΔΗΜΟΥ ΑΓΛΑΝΤΖΙΑΣ";
+  stubFetch({ "9845006A7A5583CF9B64": { status: 200, body: RETIRED_RECORD } });
+  const retired = await verifyLei("9845006A7A5583CF9B64");
+  // -- emitter output --
+  eq("[retired] decision", retired?.decision, "indeterminate");
+  eq("[retired] reason", retired?.diagnostics?.decisionReason, "registration_retired_lifecycle_end");
+  eq("[retired] registrationStatus diag", retired?.diagnostics?.registrationStatus, "RETIRED");
+  eq("[retired] entityStatus diag", retired?.diagnostics?.entityStatus, "INACTIVE");
+  eq("[retired] mappingConfidence B", retired?.diagnostics?.mappingConfidence, "B");
+  eq("[retired] alternateDefensibleDecision fail", retired?.diagnostics?.alternateDefensibleDecision, "fail");
+  eq("[retired] resolvedEntity (Greek)", retired?.resolvedEntity, GREEK);
+  eq("[retired] resolvedEntityRaw (Greek)", retired?.diagnostics?.resolvedEntityRaw, GREEK);
+  eq("[retired] NFC: normalized == raw (no fold/strip)", retired?.diagnostics?.resolvedEntityNormalized, GREEK);
+  check("[retired] dataQualityFlags empty", Array.isArray(retired?.diagnostics?.dataQualityFlags) && retired.diagnostics.dataQualityFlags.length === 0);
+  check("[retired] bodyHash present", typeof retired?.diagnostics?.bodyHash === "string" && retired.diagnostics.bodyHash.startsWith("sha256:"));
+  // -- in-record grounding (INPUT, not emitter output): the dissolution event that
+  //    makes this lifecycle-end (indeterminate) rather than assignment-error (fail) --
+  const retEvent = RETIRED_RECORD.data.attributes.entity.eventGroups?.[0]?.events?.[0];
+  check("[retired] grounding: record carries DISSOLUTION/COMPLETED",
+    retEvent?.type === "DISSOLUTION" && retEvent?.status === "COMPLETED");
 
   console.log(`\n----\n${passed} passed, ${failed} failed${failed ? "" : "  ✓ all green"}\n`);
   if (failed) process.exit(1);
