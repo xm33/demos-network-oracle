@@ -3138,6 +3138,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '<span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>';
       h += '</div><div class="doc-nav-right">';
       h += '<a href="/methodology" class="doc-nav-link">Methodology</a>';
+      h += '<a href="/commerce" class="doc-nav-link">Commerce</a>';
       h += '<a href="/agent" class="doc-nav-link">Agent</a>';
       h += '<a href="/sources" class="doc-nav-link">Sources</a>';
       h += '<a href="/community" class="doc-nav-link" aria-current="page">Community</a>';
