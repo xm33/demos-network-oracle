@@ -1115,7 +1115,7 @@ function renderTimelinePage() {
     }
   }
   if (!items) items = '<div class="tl-item"><div class="tl-body"><div class="tl-text">No public-scope events recorded yet. Public incident generation began 2026-06-11.</div></div></div>';
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><style>:root{--bg:#0d1117;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff}body{background:var(--bg);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:0 16px 60px}.wrap{max-width:880px;margin:0 auto}nav{padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:28px}nav a{color:var(--text2);text-decoration:none;margin-right:16px;font-size:13px}nav a:hover{color:var(--text)}.nav-live{font-size:10px;padding:3px 9px;border:1px solid rgba(45,212,160,0.16);border-radius:999px;color:var(--text2);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px;margin-right:16px}.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#2dd4a0;opacity:0.8}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}</style></head><body><div class="wrap"><nav><a href="/" class="doc-nav-link" data-nav="home" style="letter-spacing:2.2px;font-weight:700;color:var(--text)">ORACLE</a><span class="nav-live"><span class="nav-live-dot"></span>LIVE</span><a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a><a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a><a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a><a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a><a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline" style="color:var(--text)">Timeline</a></nav><h1>Network Observation Timeline</h1><div class="sub">Many signals. One attested view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div>' + "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>" + '</body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><style>:root{--bg:#0d1117;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff}body{background:var(--bg);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:0 16px 60px}.wrap{max-width:880px;margin:0 auto}nav{padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:28px}nav a{color:var(--text2);text-decoration:none;margin-right:16px;font-size:13px}nav a:hover{color:var(--text)}.nav-live{font-size:10px;padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text2);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px;margin-right:16px}.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}</style></head><body><div class="wrap"><nav><a href="/" class="doc-nav-link" data-nav="home" style="letter-spacing:2.2px;font-weight:700;color:var(--text)">ORACLE</a><span class="nav-live"><span class="nav-live-dot"></span>LIVE</span><a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a><a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a><a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a><a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a><a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline" style="color:var(--text)">Timeline</a></nav><h1>Network Observation Timeline</h1><div class="sub">Many signals. One attested view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div>' + "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>" + '</body></html>';
 }
 function isFleetIncident_24h(inc) {
   if (inc.description && (
@@ -3083,12 +3083,12 @@ function generatePrometheusMetrics(fleetData) {
         }
         return { id:r.id, host:r.host, port:r.port, operator:r.operator, stage:stage, block:r.probe_block, behind:behind, error:r.probe_error, submitted_at:r.submitted_at, reason:info.reason, next_step:info.next_step, history:history };
       });
-      var stageColors = { submitted:"#98a2b3", unreachable:"#EF4444", reachable:"#98a2b3", syncing:"#d97706", near_head:"#2dd4a0", ready:"#2dd4a0", approved:"#2dd4a0", duplicate:"#d97706" };
-      var stageBg = { submitted:"rgba(152,162,179,0.08)", unreachable:"rgba(239,68,68,0.08)", reachable:"rgba(152,162,179,0.08)", syncing:"rgba(217,119,6,0.08)", near_head:"rgba(45,212,160,0.08)", ready:"rgba(45,212,160,0.08)", approved:"rgba(45,212,160,0.06)", duplicate:"rgba(217,119,6,0.08)" };
+      var stageColors = { submitted:"#98a2b3", unreachable:"#EF4444", reachable:"#98a2b3", syncing:"#d97706", near_head:"#22C55E", ready:"#22C55E", approved:"#22C55E", duplicate:"#d97706" };
+      var stageBg = { submitted:"rgba(152,162,179,0.08)", unreachable:"rgba(239,68,68,0.08)", reachable:"rgba(152,162,179,0.08)", syncing:"rgba(217,119,6,0.08)", near_head:"rgba(34,197,94,0.08)", ready:"rgba(34,197,94,0.08)", approved:"rgba(34,197,94,0.06)", duplicate:"rgba(217,119,6,0.08)" };
       var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Community Nodes</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
       h += '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">';
       h += '<style>';
-      h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#2dd4a0;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
+      h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#00DAFF;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
       h += '*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}';
       h += 'main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}';
       h += '.noncanonical-banner{margin:0 0 28px;padding:14px 18px;background:#0f0f0f;border:1px solid #1f1f1f;border-left:3px solid #4a4a4a;color:#c9d1d9;font-size:13px;line-height:1.6;border-radius:4px}';
@@ -3122,11 +3122,11 @@ function generatePrometheusMetrics(fleetData) {
       h += '.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}';
       h += '.doc-nav-link[aria-current="page"]{opacity:0.5}';
       h += '.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}';
-      h += '.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(45,212,160,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}';
+      h += '.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(0,218,255,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}';
       h += '.nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8}';
       h += '@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}';
       h += '.oracle-hero-submit{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(255,255,255,0.15);border-radius:999px;color:rgba(255,255,255,0.7);text-decoration:none;letter-spacing:0.04em;transition:all 0.2s}';
-      h += '.oracle-hero-submit:hover{color:var(--improving);border-color:rgba(45,212,160,0.3)}';
+      h += '.oracle-hero-submit:hover{color:var(--improving);border-color:rgba(0,218,255,0.3)}';
       h += 'footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:11px;opacity:0.5;text-align:center}.xm33-dot{display:none}';
       h += '.table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}';
       h += '@media(max-width:720px){main{padding:20px 16px 64px}.summary{gap:8px}.sum-card{flex:1;min-width:88px;padding:10px 10px}.sum-label{font-size:9px;letter-spacing:0.2px}table{font-size:11px}td,th{padding:6px 8px}}';
@@ -3187,8 +3187,8 @@ function generatePrometheusMetrics(fleetData) {
         h += '</div>';
         h += '<div class="summary" style="margin-bottom:16px">';
         h += '<div class="sum-card"><div class="sum-val">' + fxTotalN + '</div><div class="sum-label">Nodes</div></div>';
-        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxOnlineN===fxTotalN?"#2dd4a0":"#d97706") + '">' + fxOnlineN + '</div><div class="sum-label">Reachable</div></div>';
-        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxAtHeadN>0?"#2dd4a0":"#98a2b3") + '">' + fxAtHeadN + '</div><div class="sum-label">At Head</div></div>';
+        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxOnlineN===fxTotalN?"#22C55E":"#d97706") + '">' + fxOnlineN + '</div><div class="sum-label">Reachable</div></div>';
+        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxAtHeadN>0?"#22C55E":"#98a2b3") + '">' + fxAtHeadN + '</div><div class="sum-label">At Head</div></div>';
         h += '<div class="sum-card"><div class="sum-val">' + (fxNetHead?fxNetHead.toLocaleString():"\u2014") + '</div><div class="sum-label">Network Head</div></div>';
 
         h += '</div>';
@@ -3232,7 +3232,7 @@ function generatePrometheusMetrics(fleetData) {
 
           // Status resolution: monitored uses .ok, discovered uses .online
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
-          var statusColor = isOnline ? "#2dd4a0" : "#EF4444";
+          var statusColor = isOnline ? "#22C55E" : "#EF4444";
           var statusText = isOnline ? "online" : "offline";
 
 
@@ -3240,7 +3240,7 @@ function generatePrometheusMetrics(fleetData) {
           // Block
           var block = fn.block || fn.last_block || null;
           var syncPct = (block && fxNetHead > 0) ? Math.round((block / fxNetHead) * 1000) / 10 : null;
-          var syncColor = syncPct === null ? "#98a2b3" : (syncPct >= 95 ? "#2dd4a0" : (syncPct >= 80 ? "#d97706" : "#EF4444")); var syncOpacity = (syncPct !== null && syncPct >= 95 && syncPct < 100) ? ";opacity:0.55" : "";
+          var syncColor = syncPct === null ? "#98a2b3" : (syncPct >= 95 ? "#22C55E" : (syncPct >= 80 ? "#d97706" : "#EF4444")); var syncOpacity = (syncPct !== null && syncPct >= 95 && syncPct < 100) ? ";opacity:0.55" : "";
 
           // Latency (only meaningful for monitored; discovered has no current-cycle latency)
           // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
@@ -3301,7 +3301,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '<p class="sub">Community validator nodes during onboarding and approval.</p>';
       // Summary
       h += '<div class="summary">';
-      var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#2dd4a0"],["Ready",counts.ready||0,"#2dd4a0"],["Approved",counts.approved||0,"#2dd4a0"]];
+      var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#22C55E"],["Ready",counts.ready||0,"#22C55E"],["Approved",counts.approved||0,"#22C55E"]];
       for (var si=0; si<sumItems.length; si++) {
         h += '<div class="sum-card"><div class="sum-val" style="color:'+sumItems[si][2]+'">'+sumItems[si][1]+'</div><div class="sum-label">'+sumItems[si][0]+'</div></div>';
       }
@@ -3335,7 +3335,7 @@ function generatePrometheusMetrics(fleetData) {
           h += '<br><br><b>Previous submissions for this host:</b><br>';
           for (var hi = 0; hi < r.history.length; hi++) {
             var hr = r.history[hi];
-            var hColor = hr.status === "probed_ok" || hr.status === "approved" ? "#2dd4a0" : hr.status === "duplicate" ? "#d97706" : "#EF4444";
+            var hColor = hr.status === "probed_ok" || hr.status === "approved" ? "#22C55E" : hr.status === "duplicate" ? "#d97706" : "#EF4444";
             var hTime = hr.submitted_at ? new Date(hr.submitted_at).toISOString().replace("T"," ").slice(0,16) + " UTC" : "\u2014";
             h += '<span style="color:var(--text-secondary)">#' + hr.id + '</span> \u00b7 ' + esc(hr.host) + ':' + hr.port + ' \u00b7 <span style="color:' + hColor + '">' + esc(String(hr.status || "unknown").replace(/_/g," ")) + '</span>';
             if (hr.probe_error) h += ' <span style="color:var(--text-secondary)">(' + esc(hr.probe_error.replace(/_/g," ")) + ')</span>';
@@ -3383,7 +3383,7 @@ function generatePrometheusMetrics(fleetData) {
           var dvStatusBg = dvOnline ? "rgba(217,119,6,0.08)" : "rgba(152,162,179,0.08)";
           var dvStatusText = dvOnline ? "syncing" : "offline";
           var dvSyncPct = dv.sync_pct != null ? dv.sync_pct : 0;
-          var dvSyncColor = dvSyncPct >= 99.9 ? "#2dd4a0" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
+          var dvSyncColor = dvSyncPct >= 99.9 ? "#22C55E" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
           h += '<tr>';
           h += '<td style="font-family:var(--mono);font-size:11px">' + esc(dv.identity ? dv.identity.substring(0,16) + "..." : "\u2014") + '</td>';
           h += '<td><span class="pill" style="color:' + dvStatusColor + ';background:' + dvStatusBg + ';border-color:' + dvStatusColor + '44">' + dvStatusText + '</span></td>';
@@ -3441,8 +3441,8 @@ function generatePrometheusMetrics(fleetData) {
       html += 'th{text-align:left;padding:8px 10px;border-bottom:1px solid #1a1a1a;color:#98a2b3;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}';
       html += 'td{padding:8px 10px;border-bottom:1px solid #1a1a1a}';
       html += 'tr:hover{background:#101010}';
-      html += '.s-ok{color:#2dd4a0}.s-fail{color:#EF4444}.s-dup{color:#d97706}.s-approved{color:#2dd4a0;opacity:0.7}.s-pending{color:#98a2b3}';
-      html += '.btn{display:inline-block;padding:4px 10px;font-size:11px;background:#2dd4a0;color:#000;border-radius:6px;text-decoration:none;font-weight:600}';
+      html += '.s-ok{color:#22C55E}.s-fail{color:#EF4444}.s-dup{color:#d97706}.s-approved{color:#22C55E;opacity:0.7}.s-pending{color:#98a2b3}';
+      html += '.btn{display:inline-block;padding:4px 10px;font-size:11px;background:#00DAFF;color:#000;border-radius:6px;text-decoration:none;font-weight:600}';
       html += '.btn:hover{opacity:0.85}';
       html += '.muted{color:#98a2b3;font-size:11px}';
       html += '@media(max-width:640px){.cards{flex-direction:column}table{font-size:11px}td,th{padding:6px}}';
