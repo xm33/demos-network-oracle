@@ -63,7 +63,7 @@ const LAPSED_RECORD = {
 
 // RETIRED fixture — REAL captured record (9845006A7A5583CF9B64,
 // "ΤΑΜΕΙΟ ΠΡΟΝΟΙΑΣ ΕΡΓΑΤΩΝ ΔΗΜΟΥ ΑΓΛΑΝΤΖΙΑΣ"), pulled live from n3 on 2026-06-19;
-// bodyHash of these exact bytes matched the live n3 fetch (sha256:bf679d80...f740).
+// Raw response frozen in fixtures/gleif-raw/ (+ manifest.json: bodyHash is provenance, verdictFields are the invariant). A GLEIF golden-copy republish moves bodyHash, not the verdict.
 // Snapshot frozen (terminal status — RETIRED via a COMPLETED dissolution won't flip
 // back). Two things this row proves that LAPSED doesn't: (1) the RETIRED →
 // indeterminate / alt-fail / confidence-B verdict end-to-end, and (2) NFC handling
