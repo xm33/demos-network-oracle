@@ -1,0 +1,26 @@
+{
+  "_note": "Raw GLEIF responses frozen as shared drift-test input (DACS #146, DNO-sourced). Each impl extracts its own fields from these IDENTICAL bytes; expected decision + resolvedEntity live in shared-leis.json. bodyHash is provenance, NOT a compared field — a GLEIF golden-copy republish changes it without changing the verdict. verdictFields below are what MUST hold across a re-capture; if a re-capture moves a verdictField, that is a real change to re-evaluate, not a republish.",
+  "source": "https://api.gleif.org/api/v1/lei-records/{lei}",
+  "accept": "application/vnd.api+json",
+  "capturedAt": "2026-06-23",
+  "records": [
+    {
+      "lei": "506700GE1G29325QX363",
+      "bodyHash": "sha256:d576ea120377c03b8f3700e0512485d1f56fea2365440f5d4e3f0ff279806433",
+      "publishDate": "2026-06-22T16:00:00Z",
+      "verdictFields": { "registrationStatus": "ISSUED", "entityStatus": "ACTIVE", "legalName": "Global Legal Entity Identifier Foundation" }
+    },
+    {
+      "lei": "743700SEJ147Y3TSFE83",
+      "bodyHash": "sha256:91e6325c0270d049efe9252402d828d9df357795e71445cea37ac0af9b9449b6",
+      "publishDate": "2026-06-22T16:00:00Z",
+      "verdictFields": { "registrationStatus": "LAPSED", "entityStatus": "ACTIVE", "legalName": "Dadaal Service Oy" }
+    },
+    {
+      "lei": "9845006A7A5583CF9B64",
+      "bodyHash": "sha256:416a1061767d95044c05fca75b089ffcf38ebb89dbd196ae5027d7c1c7cb48d9",
+      "publishDate": "2026-06-22T16:00:00Z",
+      "verdictFields": { "registrationStatus": "RETIRED", "entityStatus": "INACTIVE", "legalName": "ΤΑΜΕΙΟ ΠΡΟΝΟΙΑΣ ΕΡΓΑΤΩΝ ΔΗΜΟΥ ΑΓΛΑΝΤΖΙΑΣ" }
+    }
+  ]
+}
