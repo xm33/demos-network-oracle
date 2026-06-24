@@ -155,6 +155,10 @@ const PUBLIC_INCIDENT_RESOLVE_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_RESO
 const PUBLIC_VISIBILITY_MARKER = "PUBLIC_NETWORK_VISIBILITY";
 const PUBLIC_DEGRADED_MARKER = "PUBLIC_NETWORK_DEGRADED";
 const PUBLIC_UNSTABLE_MARKER = "PUBLIC_NETWORK_UNSTABLE";
+const MARKER_NODES = [PUBLIC_VISIBILITY_MARKER, PUBLIC_DEGRADED_MARKER, PUBLIC_UNSTABLE_MARKER];
+function isPublicConditionMarker(inc) {
+  return Array.isArray(inc.affectedNodes) && inc.affectedNodes.length === 1 && MARKER_NODES.includes(inc.affectedNodes[0]);
+}
 // Network Observation Timeline release events. Structured data, versioned in git.
 // Append one entry per published release; never edit history.
 var TIMELINE_RELEASE_EVENTS = [
@@ -983,6 +987,7 @@ function computeCanonicalState() {
   var publicActiveIncs = Object.values(activeIncidents).filter(function(inc) {
     if (inc.description && (inc.description.indexOf("Fleet reference") === 0 || inc.description === "Chain-level issue detected")) return false;
     if (inc.affectedNodes && inc.affectedNodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); })) return false;
+    if (isPublicConditionMarker(inc)) return false;
     return true;
   });
   var publicIncidentCount = publicActiveIncs.length;
