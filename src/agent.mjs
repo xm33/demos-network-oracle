@@ -628,7 +628,7 @@ function evaluatePublicIncidents() {
   } catch (e) { log("  [public-incidents] eval error: " + e.message); }
 }
 
-var FLEET_NODE_NAMES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
+var FLEET_NODE_NAMES = NODE_NAMES;
 
 // Operator labels for discovered fixnet peers (self-identified to the Oracle operator).
 // Key: first 10 chars of identity (e.g. "0xd9409b0d"). Value: display name.
@@ -3723,7 +3723,7 @@ function drawChart(hist){
   if(t0)ctx.fillText(t0.toLocaleTimeString(),PAD,H-2);
   if(t1){ctx.textAlign="right";ctx.fillText(t1.toLocaleTimeString(),W-4,H-2);}
 }
-var FLEET_NODES = ["n1","n2","n3","n4","n5","n6","m1","m3","n9"];
+var FLEET_NODES = NODE_NAMES;
 function isFleetIncident(inc) {
   if(inc.description && (inc.description.indexOf("Fleet reference")===0 || inc.description === "Chain-level issue detected")) return true;
   return inc.affectedNodes && inc.affectedNodes.length > 0 && inc.affectedNodes.every(function(n){ return FLEET_NODES.includes(n); });
