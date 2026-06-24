@@ -3959,11 +3959,11 @@ async function refresh(){
   try{
     var pn=document.getElementById("pub-list");
     if(pn&&d.publicNodes&&d.publicNodes.length>0){
-      var pt='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Node</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Latency</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Peers</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Status</th></tr></thead><tbody>';
+      var pt='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Node</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Latency</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Peers</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Reachability</th></tr></thead><tbody>';
       d.publicNodes.forEach(function(n){
-        pt+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+n.name+'</b></td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.block||'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.latencyMs?n.latencyMs+'ms':'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.peers||'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.ok?'\u2705 online':'\u274c offline')+'</td></tr>';
+        pt+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+n.name+'</b></td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.block||'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.latencyMs?n.latencyMs+'ms':'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.peers||'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.ok?'\u2705 reachable':'\u26aa unreachable')+'</td></tr>';
       });
-      pt+='</tbody></table>';
+      pt+='</tbody></table>';pt+='<div style="font-size:0.75em;color:#484f58;margin-top:8px">Reachability is from the Oracle\u2019s vantage point. \u201cUnreachable\u201d means the Oracle could not reach the node \u2014 not proof the node is down.</div>';
       pn.innerHTML=pt;
     } else if(pn) { pn.innerHTML='<span style="color:#8b949e">No public nodes data yet</span>'; }
   }catch(e){}
