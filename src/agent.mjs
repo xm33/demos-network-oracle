@@ -4304,6 +4304,14 @@ async function main() {
     criteria_version    TEXT NOT NULL DEFAULT 'v1'
   )`);
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_reset_events_node_time ON observation_reset_events (node_id, event_at)`);
+  sharedDb.run(`CREATE TABLE IF NOT EXISTS node_observation_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          INTEGER NOT NULL,
+    identity    TEXT NOT NULL,
+    online      INTEGER NOT NULL,
+    block       INTEGER
+  )`);
+  sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_obs_history_id_ts ON node_observation_history (identity, ts)`);
   log("  Observation tables ready");
   // M9: Reload approved submissions into PUBLIC_NODES
   try {

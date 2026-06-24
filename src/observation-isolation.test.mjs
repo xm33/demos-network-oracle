@@ -33,6 +33,7 @@ const L1_OBSERVATION_ISOLATION = "L1_OBSERVATION_ISOLATION";
 const FORBIDDEN_CANONICAL_REFERENCES = [
   "node_observations",
   "observation_reset_events",
+  "node_observation_history",
   "meets_published_criteria",
   "discoveredPeers",
   // evaluator exports go here when the evaluator exists, e.g. "evaluateObservations"
@@ -170,7 +171,7 @@ for (const [name, body] of Object.entries(bodies)) {
 // ============================================================================
 console.log(`\n[${L1_OBSERVATION_ISOLATION}] Layer B-SQL — no observation tables in canonical SQL`);
 
-const OBSERVATION_TABLES = ["node_observations", "observation_reset_events"];
+const OBSERVATION_TABLES = ["node_observations", "observation_reset_events", "node_observation_history"];
 for (const [name, body] of Object.entries(bodies)) {
   if (body === null) continue;
   // crude SQL-string scan: any quoted segment mentioning an observation table
