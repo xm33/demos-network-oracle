@@ -4291,7 +4291,7 @@ async function main() {
   log("  Node metadata table ready");
 
   // ── Under-Observation Surface — additive, watch-only isolated (L1_OBSERVATION_ISOLATION).
-  //    Neither table may EVER be read by computeCanonicalState(), generateNetworkAgreement(),
+  //    Neither table may EVER be read by computeCanonicalState() or
   //    the submissions->PUBLIC_NODES loader, or anything feeding latestPublicNodes.
   //    Observation evidence only — never an admission input. Enforced by observation-isolation.test.mjs.
   sharedDb.run(`CREATE TABLE IF NOT EXISTS node_observations (
