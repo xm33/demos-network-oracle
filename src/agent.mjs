@@ -2514,8 +2514,6 @@ function discoverValidators(infoData) {
       log("  Discovery: new peer " + identity.substring(0, 16) + "... via " + (peer.connection ? peer.connection.string : "?"));
       // Persist to DB
       if (sharedDb) { try { sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection) VALUES (?, ?, ?, ?)", [identity, Date.now(), Date.now(), peer.connection ? peer.connection.string : "unknown"]); } catch(e) {} }
-      // Persist to DB
-      if (sharedDb) { try { sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection) VALUES (?, ?, ?, ?)", [identity, Date.now(), Date.now(), peer.connection ? peer.connection.string : "unknown"]); } catch(e) {} }
     } else {
       discoveredPeers[identity].lastSeen = Date.now();
       discoveredPeers[identity].online = peer.status ? peer.status.online : false;
@@ -2694,7 +2692,6 @@ function generatePrometheusMetrics(fleetData) {
         agreement_reason: canonical.agreement_reason,
         // === Derived ===
         publicNodes: latestPublicNodes || [],
-        signals: healthSignals,
         signals: healthSignals,
         signals_grouped: groupSignals(healthSignals),
         validator_growth: getValidatorGrowth(),
