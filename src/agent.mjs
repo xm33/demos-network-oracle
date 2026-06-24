@@ -146,6 +146,7 @@ const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 const HISTORY_FILE = join(LOG_DIR, "history.json");
 const MAX_HISTORY_CYCLES = 432; // 6 days at 20min intervals
 const PUBLIC_NODE_HISTORY_RETENTION_DAYS = Number(process.env.PUBLIC_NODE_HISTORY_RETENTION_DAYS || 365);
+const OBSERVATION_HISTORY_RETENTION_DAYS = Number(process.env.OBSERVATION_HISTORY_RETENTION_DAYS || 30);
 // Public incident generation (2026-06-11). Two classes, strictly generated:
 // observability (DNO cannot sufficiently see the network) vs network-condition.
 const PUBLIC_INCIDENT_OPEN_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_OPEN_CYCLES || "3", 10);
@@ -1363,6 +1364,30 @@ function recordPublicNodeHistory() {
     var cutoff = Date.now() - PUBLIC_NODE_HISTORY_RETENTION_DAYS * 86400000;
     sharedDb.run("DELETE FROM public_node_history WHERE ts < ?", [cutoff]);
   } catch(e) { log("  [history] Public node history write error: " + e.message); }
+}
+
+// Phase 1: append-only observation history for discovered nodes.
+// WRITES ONLY to node_observation_history. Reads discoveredPeers (observation side).
+// MUST NEVER touch latestPublicNodes / computeCanonicalState / the submissions loader
+// (enforced by observation-isolation.test.mjs, L1_OBSERVATION_ISOLATION).
+// Mirrors recordPublicNodeHistory's append+prune idiom. Single INSERT per peer —
+// do NOT replicate the validator_discoveries double-INSERT at 2491-2493.
+function recordObservationHistory() {
+  if (!sharedDb) return;
+  try {
+    var now = Date.now();
+    var peers = Object.values(discoveredPeers || {});
+    for (var i = 0; i < peers.length; i++) {
+      var p = peers[i];
+      if (!p || !p.identity) continue;
+      sharedDb.run(
+        "INSERT INTO node_observation_history (ts, identity, online, block) VALUES (?, ?, ?, ?)",
+        [now, p.identity, p.online ? 1 : 0, (p.block != null ? p.block : null)]
+      );
+    }
+    var cutoff = now - OBSERVATION_HISTORY_RETENTION_DAYS * 86400000;
+    sharedDb.run("DELETE FROM node_observation_history WHERE ts < ?", [cutoff]);
+  } catch (e) { log("  [obs-history] write error: " + e.message); }
 }
 
 function generateSignals(data, stalenessSeconds) {
@@ -4459,6 +4484,7 @@ async function main() {
 
       // M3: Record public node observation snapshot
       recordPublicNodeHistory();
+      recordObservationHistory();
       evaluatePublicIncidents();
 
       // --- Check explorer (every cycle, lightweight) ---
