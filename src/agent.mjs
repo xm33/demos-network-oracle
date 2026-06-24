@@ -4267,6 +4267,44 @@ async function main() {
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_metadata_chain ON node_metadata(source_chain)`);
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_metadata_seed ON node_metadata(seed_node)`);
   log("  Node metadata table ready");
+
+  // ── Under-Observation Surface — additive, watch-only isolated (L1_OBSERVATION_ISOLATION).
+  //    Neither table may EVER be read by computeCanonicalState(), generateNetworkAgreement(),
+  //    the submissions->PUBLIC_NODES loader, or anything feeding latestPublicNodes.
+  //    Observation evidence only — never an admission input. Enforced by observation-isolation.test.mjs.
+  sharedDb.run(`CREATE TABLE IF NOT EXISTS node_observations (
+    node_id                  TEXT PRIMARY KEY,
+    observation_started_at   INTEGER NOT NULL,
+    compliant_seconds        INTEGER NOT NULL DEFAULT 0,
+    required_seconds         INTEGER NOT NULL DEFAULT 432000,
+    reset_count_window       INTEGER NOT NULL DEFAULT 0,
+    sync_distance_current    INTEGER,
+    sync_distance_max        INTEGER,
+    uptime_percent           REAL,
+    response_rate_percent    REAL,
+    major_disconnect_count   INTEGER NOT NULL DEFAULT 0,
+    sync_quality_pass        INTEGER,
+    uptime_pass              INTEGER NOT NULL DEFAULT 0,
+    response_rate_pass       INTEGER NOT NULL DEFAULT 0,
+    stability_pass           INTEGER NOT NULL DEFAULT 0,
+    data_consistency_pass    INTEGER,
+    meets_published_criteria INTEGER NOT NULL DEFAULT 0,
+    criteria_version         TEXT NOT NULL DEFAULT 'v1',
+    last_evaluated_at        INTEGER NOT NULL
+  )`);
+  sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_observations_compliant ON node_observations (compliant_seconds, meets_published_criteria)`);
+  sharedDb.run(`CREATE TABLE IF NOT EXISTS observation_reset_events (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id             TEXT NOT NULL,
+    event_at            INTEGER NOT NULL,
+    reason_code         TEXT NOT NULL,
+    observed_value      TEXT,
+    threshold_value     TEXT,
+    human_readable      TEXT NOT NULL,
+    criteria_version    TEXT NOT NULL DEFAULT 'v1'
+  )`);
+  sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_reset_events_node_time ON observation_reset_events (node_id, event_at)`);
+  log("  Observation tables ready");
   // M9: Reload approved submissions into PUBLIC_NODES
   try {
     var approved = sharedDb.query("SELECT * FROM submissions WHERE status='approved' ORDER BY id ASC").all();
