@@ -3792,7 +3792,7 @@ async function refresh(){
     var re=document.getElementById("rec");
     re.textContent=(d.status||"unknown").toUpperCase();
     re.className="rec "+(d.status==="stable"?"safe":d.status==="degraded"?"caution":d.status==="unstable"?"unsafe":"unknown");
-    document.getElementById("rec-reason").textContent=(d.reason||"")+" · Risk: "+(d.risk||"?").toUpperCase()+" · Confidence: "+(d.confidence||"?").toUpperCase();
+    document.getElementById("rec-reason").textContent=(d.status_reason||"")+" · Risk: "+(d.risk||"?").toUpperCase()+" · Confidence: "+(d.confidence||"?").toUpperCase();
     var ng=document.getElementById("nodes");ng.innerHTML="";
     if(d.reference&&d.reference.fleet_nodes){d.reference.fleet_nodes.forEach(function(n){
       var cls=n.status==="HEALTHY"?"healthy":"unhealthy";
@@ -3900,7 +3900,7 @@ async function refresh(){
       var dqCol=d.data_quality==="sufficient"?"#3fb950":"#d29922";
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Data Quality</div><div style="font-size:1.1em;font-weight:bold;color:'+dqCol+'">'+d.data_quality.toUpperCase()+'</div></div>';
       html+='</div>';
-      html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+(d.reason||'')+'</div>';
+      html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+(d.status_reason||'')+'</div>';
       db.innerHTML=html;
     }
     // Filter signals — only show public/network signals on main page
