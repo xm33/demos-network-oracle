@@ -82,6 +82,7 @@ const MNEMONIC = process.env.DEMOS_MNEMONIC;
 const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
 const FALLBACK_RPCS = [RPC_URL, "http://193.77.44.160:53550", "http://193.77.50.180:53550"];
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
+const AGENT_VERSION = "6.9";  // single source of truth for the Oracle build/release version (NOT api_version, NOT node version)
 const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://127.0.0.1:9091";
 const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
@@ -177,7 +178,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
 '<h1>Demos Network Oracle</h1>' +
 '<p class="sub">Public network intelligence for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes attested health data on-chain via SuperColony.<br>' +
-'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v6.9 &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
+'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
 '<div class="e"><b>GET /organism</b><span>Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
@@ -2528,7 +2529,7 @@ function discoverValidators(infoData) {
 // --- HTTP Health Endpoint ---
 let latestHealthData = null; // updated each cycle
 let latestPublicNodes = []; // updated each cycle
-let latestVersionData = { running: "6.8", latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
+let latestVersionData = { running: AGENT_VERSION, latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
 let signalAlertDedup = {}; // { "signal_type_nodes": timestamp }
 let signalFirstSeen = {}; // { "signal_type": timestamp } — tracks when each signal type first appeared
 let signalPrevValue = {}; // { "signal_type": value } — tracks previous value for trend
@@ -2776,7 +2777,7 @@ function generatePrometheusMetrics(fleetData) {
         dahrAttestations: dahrAvailable ? 2 : 0,
         activeAlerts: Object.keys(problemHistory).filter(function(k) { return problemHistory[k] && problemHistory[k].count >= 2; }).length,
         totalAlerts: dailyAlertCount || 0,
-        version: "6.4",
+        version: AGENT_VERSION,
         wallet: AGENT_WALLET,
         cycleCount: cycleCount
       };
@@ -2807,7 +2808,7 @@ function generatePrometheusMetrics(fleetData) {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify({
         agent: "Demos Network Oracle",
-        version: "6.9",
+        version: AGENT_VERSION,
         api_version: "1.0",
         status: computeCanonicalState().status,
         uptimeSeconds: Math.round(process.uptime()),
@@ -3686,7 +3687,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 </div>
 
 <div class="footer" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
-  <span>Demos Network Oracle v6.9 &bull; ${INSTANCE_ROLE.toUpperCase()}</span>
+  <span>Demos Network Oracle v${AGENT_VERSION} &bull; ${INSTANCE_ROLE.toUpperCase()}</span>
   <span style="color:#3fb950;font-weight:600">&#10003; DAHR Attested</span>
   <span style="display:flex;align-items:center;gap:5px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:3px 8px;font-size:0.78em">powered by <img src="https://framerusercontent.com/assets/IyyrITqCg67NykDbX6dibaTrhfA.svg" height="14" style="vertical-align:middle;filter:brightness(10)"></span>
   <span style="color:#444">|</span>
@@ -4130,7 +4131,7 @@ async function probeFleetVersions() {
 
 async function main() {
   log("===============================================================");
-  log("  SuperColony Node Health Agent v6.3 — Demos Fleet Oracle");
+  log("  SuperColony Node Health Agent v" + AGENT_VERSION + " — Demos Fleet Oracle");
   log("  Fleet: " + FLEET_SIZE + " nodes across 4 servers");
   log("  Interval: " + (INTERVAL_MS / 1000 / 60) + " minutes");
   log("  Cooldown: " + COOLDOWN_CYCLES + " cycles before alerting");
