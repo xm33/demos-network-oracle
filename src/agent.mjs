@@ -1805,7 +1805,8 @@ function composeAlert(data) {
     };
   }
 
-  var offline = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "OFFLINE" || i === "NOT_IN_PEERLIST"; }); });
+  var offline = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "OFFLINE"; }); });
+  var unpeered = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "NOT_IN_PEERLIST"; }); });
   var notSynced = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "NOT_SYNCED"; }); });
   var blockLag = data.problems.filter(function(p) { return p.issues.some(function(i) { return i.indexOf("BLOCK_LAG") === 0; }); });
   var notReady = data.problems.filter(function(p) { return p.issues.some(function(i) { return i === "NOT_READY"; }); });
@@ -1815,6 +1816,7 @@ function composeAlert(data) {
 
   var parts = [];
   if (offline.length > 0) parts.push("OFFLINE: " + offline.map(function(p) { return p.name; }).join(","));
+  if (unpeered.length > 0) parts.push("UNPEERED: " + unpeered.map(function(p) { return p.name; }).join(","));
   if (notSynced.length > 0) parts.push("UNSYNC: " + notSynced.map(function(p) { return p.name; }).join(","));
   if (blockLag.length > 0) parts.push("LAG: " + blockLag.map(function(p) { return p.name; }).join(","));
   if (notReady.length > 0) parts.push("!READY: " + notReady.map(function(p) { return p.name; }).join(","));
