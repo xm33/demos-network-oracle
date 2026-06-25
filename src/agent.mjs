@@ -666,6 +666,18 @@ function resolveNodeDisplay(opts) {
   }
   return "discovered-" + (identity ? identity.substring(identity.length - 4) : "????");
 }
+// DISPLAY_PRIVACY: convert a raw discoveredPeers entry to a public-safe shape.
+// Drops connection (host:port) and full identity; exposes resolved display + truncated id only.
+// Rule: raw peer objects must never be JSON-stringified directly into a public endpoint.
+function toPublicPeer(identity, peer) {
+  return {
+    display: resolveNodeDisplay({ identity: identity }),
+    identity_truncated: truncId(identity),
+    block: (peer && peer.block) || null,
+    online: (peer && peer.online) || false,
+    first_seen: (peer && peer.firstSeen) || null
+  };
+}
 function getPublicActiveIncidentIds() {
   return Object.values(activeIncidents).filter(function(i) {
     // Exclude fleet chain incidents from public count
@@ -2749,7 +2761,9 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/peers") {
       var staleness = getStaleness(); // FIX BUG 7
       res.writeHead(200);
-      res.end(JSON.stringify({ known: FLEET_SIZE, discovered: discoveredPeers, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds }, null, 2));
+      var publicDiscovered = {};
+      for (var _pid in discoveredPeers) { publicDiscovered[truncId(_pid)] = toPublicPeer(_pid, discoveredPeers[_pid]); }
+      res.end(JSON.stringify({ scope: "public_sanitized", known: FLEET_SIZE, discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
     } else if (req.url === "/history") {
       // Return last 24h of data points
       var last24h = history.slice(-72);
