@@ -3452,7 +3452,7 @@ function generatePrometheusMetrics(fleetData) {
           var dvSyncPct = dv.sync_pct != null ? dv.sync_pct : 0;
           var dvSyncColor = dvSyncPct >= 99.9 ? "#22C55E" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
           h += '<tr>';
-          h += '<td style="font-family:var(--mono);font-size:11px">' + esc(dv.identity ? dv.identity.substring(0,16) + "..." : "\u2014") + '</td>';
+          h += '<td style="font-family:var(--mono);font-size:11px">' + esc(truncId(dv.identity)) + '</td>';
           h += '<td><span class="pill" style="color:' + dvStatusColor + ';background:' + dvStatusBg + ';border-color:' + dvStatusColor + '44">' + dvStatusText + '</span></td>';
           h += '<td>' + (dv.block ? dv.block.toLocaleString() : "\u2014") + '</td>';
           h += '<td style="color:' + dvSyncColor + '">' + dvSyncPct + '%</td>';
