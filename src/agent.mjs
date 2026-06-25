@@ -645,6 +645,27 @@ var FIXNET_DISCOVERED_OPERATORS = {
   "0x25aa62f3": "R2",
   "0xc4abb72d": "R3"
 };
+// --- DISPLAY_PRIVACY: shared node-display resolution (top-level; mirrors /community renderer) ---
+// Rule: never expose raw connection/IP:port or full public key as an identifier.
+// Priority: assigned operator name -> fleet name (XM33 - <id>) -> discovered-<last4> ; identity shown truncated.
+// truncId hoisted here so getValidatorGrowth and the /community route share ONE definition.
+function truncId(id) {
+  if (!id || id.length < 12) return id || "\u2014";
+  return id.substring(0, 6) + "\u2026" + id.substring(id.length - 4);
+}
+function resolveNodeDisplay(opts) {
+  var identity = (opts && opts.identity) || "";
+  if (identity) {
+    var pfx = identity.substring(0, 10);
+    if (FIXNET_DISCOVERED_OPERATORS[pfx]) return FIXNET_DISCOVERED_OPERATORS[pfx];
+  }
+  if (identity && IDENTITY_TO_NAME[identity]) {
+    var fname = IDENTITY_TO_NAME[identity];
+    var suffix = (fname && fname.indexOf("fleet-") === 0) ? fname.substring(6) : fname;
+    return "XM33 - " + suffix;
+  }
+  return "discovered-" + (identity ? identity.substring(identity.length - 4) : "????");
+}
 function getPublicActiveIncidentIds() {
   return Object.values(activeIncidents).filter(function(i) {
     // Exclude fleet chain incidents from public count
@@ -754,7 +775,7 @@ function getValidatorGrowth() {
       var identity = row.identity;
       if (FIXNET_NODE_IDENTITIES[identity]) continue;
       if (PUBLIC_NODE_IDENTITIES[identity]) continue; // skip monitored (already pushed in Pass 1)
-      var display = (row.connection || "unknown").replace("http://", "");
+      var display = resolveNodeDisplay({ identity: identity });   // DISPLAY_PRIVACY: name/fleet/discovered-xxxx, never host:port
       var block = null, online = false;
       if (discoveredPeers[identity]) {
         block = discoveredPeers[identity].block || null;
