@@ -3297,8 +3297,8 @@ function generatePrometheusMetrics(fleetData) {
 
           // Status resolution: monitored uses .ok, discovered uses .online
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
-          var statusColor = isOnline ? "#22C55E" : "#EF4444";
-          var statusText = isOnline ? "online" : "offline";
+          var statusColor = isOnline ? "#3fb950" : "#8b949e";   // S2: reachable=green, unreachable=neutral grey (not alarm-red)
+          var statusText = isOnline ? "reachable" : "unreachable";   // S2: fixnet probe measures reachability-from-vantage, not liveness
 
 
 
