@@ -140,7 +140,7 @@ async function checkPrimaryOracle() {
   }
 }
 const AGENT_NAME = "Demos Network Oracle";
-const AGENT_DESCRIPTION = "Public network intelligence oracle for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes DAHR-attested health data on-chain via SuperColony every 20 minutes. Public API at demos-oracle.com/health";
+const AGENT_DESCRIPTION = "Public network intelligence oracle for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes health data on-chain via SuperColony every 20 minutes (DAHR source-attestation when available). Public API at demos-oracle.com/health";
 const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 
 // Historical data file (JSON-based, lightweight)
@@ -181,7 +181,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'code{background:#0f172a;padding:1px 5px;border-radius:3px;font-size:.85rem}' +
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
 '<h1>Demos Network Oracle</h1>' +
-'<p class="sub">Public network intelligence for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes attested health data on-chain via SuperColony.<br>' +
+'<p class="sub">Public network intelligence for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes health data on-chain via SuperColony.<br>' +
 'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
