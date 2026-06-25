@@ -2568,6 +2568,7 @@ function discoverValidators(infoData) {
 let latestHealthData = null; // updated each cycle
 let latestPublicNodes = []; // updated each cycle
 let latestVersionData = { running: AGENT_VERSION, latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
+let latestAttestationState = { available: false, lastCount: 0, lastOkAt: null, lastAttemptAt: null }; // honest DAHR attestation state; drives metric + /health (never hardcoded)
 let signalAlertDedup = {}; // { "signal_type_nodes": timestamp }
 let signalFirstSeen = {}; // { "signal_type": timestamp } — tracks when each signal type first appeared
 let signalPrevValue = {}; // { "signal_type": value } — tracks previous value for trend
@@ -2735,6 +2736,7 @@ function generatePrometheusMetrics(fleetData) {
         signals_grouped: groupSignals(healthSignals),
         validator_growth: getValidatorGrowth(),
         discoveredPeers: Object.keys(discoveredPeers).length,
+        attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
         reference: {
           fleet_size: FLEET_SIZE,
           fleet_healthy: latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
@@ -2814,7 +2816,7 @@ function generatePrometheusMetrics(fleetData) {
         secondsSinceLastBlock: latestHealthData && latestHealthData.chain ? latestHealthData.chain.secondsSinceLastBlock || 0 : 0,
         discoveredPeersCount: Object.keys(discoveredPeers).length,
         publicRPCs: publicRpcStats ? Object.entries(publicRpcStats).map(function(e) { return { url: e[0], available: e[1].reachable > 0, latencyMs: e[1].avgLatency || 0 }; }) : [],
-        dahrAttestations: dahrAvailable ? 2 : 0,
+        dahrAttestations: latestAttestationState.lastCount,   // real per-cycle successes (was hardcoded 2; currently 0 — attestation failing)
         activeAlerts: Object.keys(problemHistory).filter(function(k) { return problemHistory[k] && problemHistory[k].count >= 2; }).length,
         totalAlerts: dailyAlertCount || 0,
         version: AGENT_VERSION,
@@ -4502,6 +4504,12 @@ async function main() {
       var publicRpcProbe = await probePublicRPCs(demos);
       var publicRpcResults = publicRpcProbe.results;
       var cycleAttestations = publicRpcProbe.attestations;
+      latestAttestationState = {
+        available: dahrAvailable === true,
+        lastCount: cycleAttestations.length,
+        lastOkAt: cycleAttestations.length > 0 ? Date.now() : latestAttestationState.lastOkAt,
+        lastAttemptAt: Date.now()
+      };
       var publicNodeResults = await probePublicNodes();
       latestPublicNodes = publicNodeResults;
       // --- Probe fleet fixnet (additive, independent of testnet polling) ---
