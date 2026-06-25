@@ -345,7 +345,7 @@ async function fetchData() {
     var banner=document.getElementById('observability-banner');
     if(banner){
       if(org.data_quality==='insufficient'){
-        banner.innerHTML='Network observability is limited during the Demos fixnet upgrade. The Oracle\u2019s monitored public nodes are temporarily unreachable. <a href="/fixnet/health">Fleet reference nodes</a> confirm the network is operational.';
+        banner.innerHTML='Network observability is limited during the Demos fixnet upgrade \u2014 the Oracle\u2019s monitored public nodes are temporarily unreachable. Separately, <a href="/fixnet/health">fleet reference nodes</a> remain reachable and are tracking chain progress.';
         banner.style.display='block';
       } else {
         banner.style.display='none';
