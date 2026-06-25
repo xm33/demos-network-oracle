@@ -3116,7 +3116,10 @@ function generatePrometheusMetrics(fleetData) {
           return "submitted";
         }
         if (!r.probe_block) return "reachable";
-        var behind = netHead > 0 ? netHead - r.probe_block : 0;
+        if (netHead <= 0) return "reachable";   // C3: no network head to compare against -> cannot assess, NOT ready
+        var AHEAD_TOLERANCE = 100;
+        var behind = netHead - r.probe_block;
+        if (behind < -AHEAD_TOLERANCE) return "chain_mismatch";  // C3: block far AHEAD of head -> different chain, cannot confirm on Demos
         if (behind <= 0) return "ready";
         if (behind <= 100) return "near_head";
         return "syncing";
@@ -3128,6 +3131,7 @@ function generatePrometheusMetrics(fleetData) {
           reachable: ["Node responds but no block data received.", "Verify your node is fully initialized and syncing."],
           syncing: ["Node is reachable and syncing, but still behind the network head.", "Wait until the node syncs closer to the network head. Approval happens after sync."],
           near_head: ["Node is close to the network head.", "Continue syncing. This node may soon be eligible for manual review."],
+          chain_mismatch: ["Node reports a block far ahead of the Demos network head \u2014 likely a different chain or network. Cannot be confirmed on the Demos network.", "Verify the node is running on the Demos network, not a different chain."],
           ready: ["Node is synced and ready for approval.", "Pending manual review by the Oracle operator."],
           approved: ["Node has been approved and is now monitored.", "Your node appears in the main Oracle homepage."],
           duplicate: ["This node is already monitored by the Oracle.", "No further action needed."]
@@ -3136,12 +3140,12 @@ function generatePrometheusMetrics(fleetData) {
         return { reason: info[0], next_step: info[1] };
       }
       // Build page
-      var counts = {submitted:0,unreachable:0,reachable:0,syncing:0,near_head:0,ready:0,approved:0,duplicate:0};
+      var counts = {submitted:0,unreachable:0,reachable:0,syncing:0,near_head:0,ready:0,chain_mismatch:0,approved:0,duplicate:0};
       var enriched = rows.map(function(r) {
         var stage = computeStage(r, netHead);
         counts[stage] = (counts[stage]||0) + 1;
         var info = stageInfo(stage, r);
-        var behind = (r.probe_block && netHead > 0) ? Math.max(0, netHead - r.probe_block) : null;
+        var behind = (r.probe_block && netHead > 0) ? (netHead - r.probe_block >= 0 ? netHead - r.probe_block : null) : null;   // C3: do not clamp ahead-of-head to 0 (would look synced); null lets stage carry it
         var history = [];
         if (r.host && sharedDb) {
           try {
@@ -3150,8 +3154,8 @@ function generatePrometheusMetrics(fleetData) {
         }
         return { id:r.id, host:r.host, port:r.port, operator:r.operator, stage:stage, block:r.probe_block, behind:behind, error:r.probe_error, submitted_at:r.submitted_at, reason:info.reason, next_step:info.next_step, history:history };
       });
-      var stageColors = { submitted:"#98a2b3", unreachable:"#EF4444", reachable:"#98a2b3", syncing:"#d97706", near_head:"#22C55E", ready:"#22C55E", approved:"#22C55E", duplicate:"#d97706" };
-      var stageBg = { submitted:"rgba(152,162,179,0.08)", unreachable:"rgba(239,68,68,0.08)", reachable:"rgba(152,162,179,0.08)", syncing:"rgba(217,119,6,0.08)", near_head:"rgba(34,197,94,0.08)", ready:"rgba(34,197,94,0.08)", approved:"rgba(34,197,94,0.06)", duplicate:"rgba(217,119,6,0.08)" };
+      var stageColors = { submitted:"#98a2b3", unreachable:"#EF4444", reachable:"#98a2b3", syncing:"#d97706", near_head:"#22C55E", ready:"#22C55E", chain_mismatch:"#d97706", approved:"#22C55E", duplicate:"#d97706" };
+      var stageBg = { submitted:"rgba(152,162,179,0.08)", unreachable:"rgba(239,68,68,0.08)", reachable:"rgba(152,162,179,0.08)", syncing:"rgba(217,119,6,0.08)", near_head:"rgba(34,197,94,0.08)", ready:"rgba(34,197,94,0.08)", chain_mismatch:"rgba(217,119,6,0.08)", approved:"rgba(34,197,94,0.06)", duplicate:"rgba(217,119,6,0.08)" };
       var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Community Nodes</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
       h += '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">';
       h += '<style>';
