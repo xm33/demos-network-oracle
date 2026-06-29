@@ -2332,7 +2332,7 @@ function composeLeaderboard(scores) {
   return { cat: "OBSERVATION", text: text, confidence: 85 };
 }
 
-// --- Predictive alerts (detect degradation trends) ---
+// --- detectTrends: backward-looking health-ratio deltas. No live caller after S3 (emit removed, constitution: no prediction surfaces). Retained only for the gated marketplace; remove in H-1. ---
 function detectTrends() {
   if (history.length < 12) return []; // need at least 4 hours of data
 
@@ -4520,18 +4520,6 @@ async function main() {
             data.problems.push({ name: "CHAIN", issues: [anomalies[ai]] });
           }
         }
-      }
-
-      // --- Predictive trend alerts ---
-      var trendAlerts = detectTrends();
-      if (trendAlerts.length > 0) {
-        log("  Trend alerts: " + trendAlerts.join(", "));
-        var trendPost = {
-          cat: "ALERT",
-          text: "Predictive Warning: " + trendAlerts.join(". ") + ".",
-          confidence: 75,
-        };
-        await sendTelegram("⚠️ <b>TREND WARNING</b>\n" + trendPost.text);
       }
 
       // === v6.0: Marketplace poll ===
