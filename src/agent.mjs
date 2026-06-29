@@ -124,20 +124,18 @@ let primaryLastSeen = 0; // timestamp of last successful primary health fetch
 let primarySilentCycles = 0;
 
 async function checkPrimaryOracle() {
-  if (!PRIMARY_ORACLE_URL) return { silent: false, diverged: false };
+  if (!PRIMARY_ORACLE_URL) return { silent: false };
   try {
     var r = await fetch(PRIMARY_ORACLE_URL + "/health", { signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    var d = await r.json();
+    await r.json(); // parse to confirm a well-formed JSON body; failover keys on reachability only
     primaryLastSeen = Date.now();
     primarySilentCycles = 0;
-    var primaryBlock = d.fleet ? d.fleet.block : null;
-    var primaryHealthy = d.fleet ? d.fleet.healthy : 0;
-    return { silent: false, diverged: false, block: primaryBlock, healthy: primaryHealthy };
+    return { silent: false };
   } catch(e) {
     primarySilentCycles++;
     log("  [validator] Primary oracle unreachable (" + primarySilentCycles + " cycles): " + e.message);
-    return { silent: primarySilentCycles >= 1, diverged: false };
+    return { silent: primarySilentCycles >= 1 };
   }
 }
 const AGENT_NAME = "Demos Network Oracle";
