@@ -29,3 +29,5 @@ demos-session*.md
 dno-*.md
 apply-*.py
 phase-*.patch
+fleet.config.mjs
+src/fleet.config.mjs

@@ -1,3 +1,4 @@
+import { EXPECTED_FLEET } from "./fleet.config.mjs";
 import { readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync, statSync } from "fs";
 import { join } from "path";
 import { createServer } from "http";
@@ -285,18 +286,10 @@ if (!MNEMONIC) {
   process.exit(1);
 }
 
-const EXPECTED_FLEET = {
-  n1: { side: "A", port: 53550, host: "193.77.44.160",  identity: "0x8f3abd366c7b846c1ee940f35d2d7ef7774dfe636e6284a32bf2c5a3e1b3ba05" },
-  n2: { side: "B", port: 54550, host: "193.77.44.160",  identity: "0xbfda23d32dee055bda23f1e74a25abb7e33478da1b2013768e135cc2ed924f37" },
-  n3: { side: "A", port: 53550, host: "193.77.169.106", identity: "0x4ba486bc92263f2cb15608ed369eafbd576097e79194f0895c1e01d232aa4b52" },
-  n4: { side: "B", port: 54550, host: "193.77.50.180",  identity: "0x848ae0759c5eba1974ec942b8e1fb4962e1b256ff89e93bdb6ad12ea58ad76a9" },
-  n5: { side: "A", port: 53550, host: "193.77.50.180",  identity: "0x95cbd7147cf09dc46d91cd6ae8f2912ae0f597fac9c61d0b0c347a46374af80f" },
-  n6: { side: "B", port: 54550, host: "193.77.169.106", identity: "0x3ab3365e67583a89968082475816cf2f16f8f9a3b936a38513493d0c6b69f768" },
-  m1: { side: "A", port: 53550, host: "82.192.52.254",  identity: "0x56b46be173e20f540401d079811e5b524903a197ae5d07824d0e70a22ee6e591" },
-  n9: { side: "C", port: 55550, host: "193.77.50.180",  identity: "0x2e288105c9e73ae974a0a54c528ebce4fc43551c4918ff4430449211d6563f23" },
-  n7: { side: "C", port: 55550, host: "193.77.169.106", identity: "0x1a799a345704ea4ac5fe5632f77ef605aeb935bfcc6e32989cca2dff88bc4816" },
-  m3: { side: "A", port: 53550, host: "193.95.249.97",  identity: "0x5cfc9fa3c038a16b5261a111ff681439bcbcbdfce31a926358c441d702ac971c" },
-};
+if (!EXPECTED_FLEET || Object.keys(EXPECTED_FLEET).length === 0) {
+  console.error("FATAL: fleet.config.mjs missing or empty — refusing to start to avoid empty-fleet mis-assessment.");
+  process.exit(1);
+}
 
 const NODE_NAMES = Object.keys(EXPECTED_FLEET);
 const FLEET_SIZE = NODE_NAMES.length;
