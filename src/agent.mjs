@@ -4554,7 +4554,7 @@ async function main() {
         log("[consensus] poll error (non-fatal): " + (conErr.message || conErr));
       }
 
-      // --- Daily summary (includes reputation leaderboard) ---
+      // --- Daily summary ---
       if (dailySummaryCounter >= DAILY_SUMMARY_CYCLES) {
         log("  Generating daily summary...");
         var summaryPost = composeDailySummary(data.skip ? null : data, publicRpcResults, explorerResult);
@@ -4569,13 +4569,6 @@ async function main() {
         }
         await publish(demos, summaryPost, cycleAttestations);
         await sendTelegram("📊 <b>DAILY SUMMARY</b>\n" + summaryPost.text);
-
-        // Publish reputation leaderboard
-        if (history.length >= 12) {
-          var scores = calculateReputationScores();
-          var leaderboardPost = composeLeaderboard(scores);
-          await sendTelegram("🏆 <b>LEADERBOARD</b>\n" + leaderboardPost.text);
-        }
 
         resetDailyStats(data.chain ? data.chain.block : null);
       }
