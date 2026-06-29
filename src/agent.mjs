@@ -6,8 +6,6 @@ import { Database } from "bun:sqlite"; // FIX BUG 3: shared DB handle
 try { readFileSync(".env","utf8").split("\n").forEach(function(line) { var m = line.match(/^([^#=]+)=(.*)$/); if (m) process.env[m[1].trim()] = m[2].trim(); }); } catch(e) {}
 import { Demos } from "@kynesyslabs/demosdk/websdk";
 
-// === v6.0: Marketplace ===
-import { initMarketplace, pollAndProcessQueries, getMarketplaceStats, getRecentQueries, shutdownMarketplace } from "./marketplace.mjs";
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 
 // --- Logging setup ---
@@ -166,7 +164,6 @@ var TIMELINE_RELEASE_EVENTS = [
 ];
 var publicIncidentCounters = { obsBad: 0, obsGood: 0, degBad: 0, degGood: 0, unsBad: 0, unsGood: 0 };
 var publicBackfillChecked = false;
-const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === "1"; // Path 2 (2026-06-10): disabled by default - zero consumers, broken auth
 const CONSENSUS_ENABLED = process.env.CONSENSUS_ENABLED === "1";     // Path 2 (2026-06-10): disabled by default - zero reports ever received
 var ORGANISM_SCHEMA = '{"error":"schema file not loaded"}'; // Phase 1 contract
 try { ORGANISM_SCHEMA = readFileSync("organism.schema.json", "utf8"); } catch (e) { console.error("[schema] organism.schema.json not loaded: " + e.message); }
@@ -2714,15 +2711,6 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/consensus" || req.url === "/consensus/") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(getConsensusState(), null, 2));
-    } else if (req.url === "/marketplace" || req.url === "/marketplace/") {
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify(getMarketplaceStats(), null, 2));
-    } else if (req.url === "/marketplace/queries" || req.url.indexOf("/marketplace/queries?") === 0) {
-      var mqLimit = 20;
-      var mqIdx = req.url.indexOf("limit=");
-      if (mqIdx !== -1) { mqLimit = parseInt(req.url.substring(mqIdx + 6), 10) || 20; }
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify(getRecentQueries(mqLimit), null, 2));
     } else if (req.url === "/self") {
       var selfBudget = canPublish();
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -4309,9 +4297,6 @@ async function main() {
     address: mktAddress,
     db: sharedDb, // FIX BUG 3: shared DB handle
     getFleetData: function() { return latestHealthData; },
-    getHistory: function() { return history; },
-    getRepScores: calculateReputationScores,
-    detectTrends: detectTrends,
     publish: publish,
     dahrAttest: dahrAttest,
     sendTelegram: sendTelegram,
@@ -4319,13 +4304,6 @@ async function main() {
     dataDir: LOG_DIR,
     canPublish: canPublish, // FIX BUG 6: expose budget check
   };
-
-  // === v6.0: Marketplace init ===
-  try {
-    if (MARKETPLACE_ENABLED) initMarketplace(sharedDeps); else log("[marketplace] disabled (Path 2, 2026-06-10)");
-  } catch (mktErr) {
-    log("[marketplace] init failed (non-fatal): " + (mktErr.message || mktErr));
-  }
 
   // === v6.1: Consensus Oracle init ===
   try {
@@ -4518,16 +4496,6 @@ async function main() {
             data.problems.push({ name: "CHAIN", issues: [anomalies[ai]] });
           }
         }
-      }
-
-      // === v6.0: Marketplace poll ===
-      try {
-        var mktResult = MARKETPLACE_ENABLED ? await pollAndProcessQueries() : { queriesFound: 0, queriesProcessed: 0, errors: [] };
-        if (mktResult.queriesFound > 0 || mktResult.queriesProcessed > 0) {
-          log("[marketplace] cycle: found=" + mktResult.queriesFound + " processed=" + mktResult.queriesProcessed + " errors=" + mktResult.errors.length);
-        }
-      } catch (mktErr) {
-        log("[marketplace] poll error (non-fatal): " + (mktErr.message || mktErr));
       }
 
       // === v6.1: Consensus Oracle poll ===
@@ -4912,14 +4880,12 @@ pollTelegram().catch(function(err) {
 // === v6.0: Graceful shutdown ===
 process.on("SIGTERM", function() {
   log("[agent] SIGTERM — shutting down");
-  if (MARKETPLACE_ENABLED) shutdownMarketplace();
   // FIX BUG 3: Close shared DB on shutdown
   if (sharedDb) { try { sharedDb.close(); log("[agent] shared DB closed"); } catch(e) {} }
   process.exit(0);
 });
 process.on("SIGINT", function() {
   log("[agent] SIGINT — shutting down");
-  if (MARKETPLACE_ENABLED) shutdownMarketplace();
   // FIX BUG 3: Close shared DB on shutdown
   if (sharedDb) { try { sharedDb.close(); log("[agent] shared DB closed"); } catch(e) {} }
   process.exit(0);
