@@ -4850,11 +4850,10 @@ async function pollTelegram() {
             try {
               var hr = await fetch("http://127.0.0.1:55225/health");
               var d = await hr.json();
-              var rec = d.recommendation || {};
               var nodes = (d.fleet && d.fleet.nodes) || [];
               var healthy = d.fleet ? d.fleet.healthy : 0;
               var lines = ["<b>Fleet Status</b>"];
-              lines.push((rec.recommendation==="SAFE"?"\u2705":"\u26a0\ufe0f") + " <b>" + (rec.recommendation||"?") + "</b>");
+              lines.push("Status: <b>" + String(d.status||"unknown").toUpperCase() + "</b>");
               lines.push("Block: " + ((d.fleet&&d.fleet.block)||"?"));
               lines.push("Healthy: " + healthy + "/" + nodes.length);
               lines.push("Cycle: " + (d.cycleCount||0));
@@ -4876,18 +4875,6 @@ async function pollTelegram() {
                 });
                 reply = lines.join(NL);
               }
-            } catch(e) { reply = "Error: " + e.message; }
-          } else if (text === "/recommendation" || text === "/rec") {
-            try {
-              var hr = await fetch("http://127.0.0.1:55225/health");
-              var d = await hr.json();
-              var rec = d.recommendation || {};
-              var lines = ["<b>Recommendation</b>"];
-              lines.push((rec.recommendation==="SAFE"?"\u2705":rec.recommendation==="CAUTION"?"\u26a0\ufe0f":"\ud83d\udd34") + " <b>" + (rec.recommendation||"?") + "</b>");
-              lines.push("Safe to propose: " + (rec.safe_to_propose?"YES":"NO"));
-              lines.push("Confidence: " + (rec.confidence||"?"));
-              lines.push("Reason: " + (rec.reason||"?"));
-              reply = lines.join(NL);
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/uptime" || text === "/sla") {
             try {
@@ -4918,7 +4905,7 @@ async function pollTelegram() {
               reply = lines.join(NL);
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/help" || text === "/start") {
-            var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/rec — SAFE/CAUTION/UNSAFE","/uptime — per-node uptime %","/signals — current network signals","/help — this message","","Dashboard: http://193.77.169.106:55225/dashboard"];
+            var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/uptime — per-node uptime %","/signals — current network signals","/help — this message","","Dashboard: http://193.77.169.106:55225/dashboard"];
             reply = lines.join(NL);
           }
           if (reply && chatId === TELEGRAM_CHAT_ID) {
