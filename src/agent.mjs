@@ -4831,13 +4831,11 @@ async function pollTelegram() {
             try {
               var hr = await fetch("http://127.0.0.1:55225/health");
               var d = await hr.json();
-              var nodes = (d.fleet && d.fleet.nodes) || [];
-              var healthy = d.fleet ? d.fleet.healthy : 0;
+              var ref = d.reference || {};
+              var nodes = ref.fleet_nodes || [];
               var lines = ["<b>Fleet Status</b>"];
               lines.push("Status: <b>" + String(d.status||"unknown").toUpperCase() + "</b>");
-              lines.push("Block: " + ((d.fleet&&d.fleet.block)||"?"));
-              lines.push("Healthy: " + healthy + "/" + nodes.length);
-              lines.push("Cycle: " + (d.cycleCount||0));
+              lines.push("Healthy: " + (ref.fleet_healthy||0) + "/" + (ref.fleet_size||nodes.length));
               nodes.forEach(function(n){
                 lines.push((n.status==="HEALTHY"?"\u2705":"\u274c") + " " + n.name + " block " + (n.blockHeight||"?"));
               });
