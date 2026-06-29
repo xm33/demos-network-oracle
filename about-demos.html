@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<!--
+  DNO /about-demos — v1.1 (2026-06-27) — copy-only, JSON-LD-ready, newcomer-first ordering.
+
+  DEPLOYMENT: served by src/agent.mjs via the same idiom as methodology.html:
+    const ABOUT_DEMOS_HTML = readFileSync("about-demos.html") at boot;
+    } else if (req.url === "/about-demos") { res.end(ABOUT_DEMOS_HTML); }
+  File lives at repo root: /home/deploy/supercolony-node-health-agent/about-demos.html
+  The <style> block is self-contained so the page renders standalone; if you later merge
+  into the methodology shell, lift the region between the BEGIN/END markers and drop this style.
+
+  JSON-LD-READY: every <dt>/<dd> is a self-contained sourced term -> future DefinedTerm. v2 wrap is mechanical.
+
+  CONSTITUTION SELF-CHECK (full checklist lives in the project study, to keep served bytes clean):
+  independence banner top + bottom; financial-advice disclaimer in the top banner;
+  attribution/tense discipline throughout; Vet examples kept at registry-existence level only.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What is Demos? — DNO</title>
+<meta name="description" content="Independent, plain-English context from DNO on the Demos network and DACS — the ecosystem DNO observes. Not affiliated with or endorsed by Demos or KyneSys Labs.">
+<!-- DELETE this style block if merging into the methodology.html shell -->
+<style>
+  :root { --ink:#1a1d21; --muted:#5b636c; --line:#e3e6ea; --bg:#ffffff; --accent:#2b6cb0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  main { max-width:720px; margin:0 auto; padding:48px 24px 80px; }
+  h1 { font-size:2.1rem; line-height:1.15; margin:0 0 .5rem; letter-spacing:-.02em; }
+  .subtitle { color:var(--muted); font-size:1.1rem; margin:0 0 2.2rem; }
+  h2 { font-size:1.25rem; margin:2.6rem 0 .7rem; letter-spacing:-.01em; }
+  p { margin:.75rem 0; }
+  ul { margin:.6rem 0; padding-left:1.2rem; }
+  li { margin:.3rem 0; }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .notice { border:1px solid var(--line); border-left:4px solid var(--accent);
+    background:#f8f9fb; padding:16px 18px; border-radius:6px; font-size:.95rem;
+    line-height:1.6; margin:0 0 2.2rem; }
+  .notice strong { color:var(--ink); }
+  .plain { background:#f1f6fb; border:1px solid #d8e6f3; border-radius:8px;
+    padding:14px 18px; margin:1.4rem 0; font-size:1.02rem; }
+  dl { margin:1rem 0; }
+  dt { font-weight:600; margin-top:1.1rem; }
+  dd { margin:.2rem 0 0; }
+  dd .src { color:var(--muted); font-size:.82rem; display:block; margin-top:.15rem; }
+  .sources li { margin:.35rem 0; }
+  .meta { color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+
+<!-- BEGIN about-demos content -->
+<main>
+
+  <!-- Independence banner (top) — carries the financial-advice guardrail -->
+  <div class="notice" role="note">
+    <strong>DNO is an independent, watch-only observability layer.</strong>
+    This page is neutral, plain-English context about the network DNO observes. It is
+    <strong>not</strong> affiliated with, endorsed by, or operated by Demos or KyneSys Labs,
+    and it is not official Demos documentation, an endorsement, a validator recommendation,
+    a security or quality assessment, or investment advice.
+  </div>
+
+  <h1>What is Demos?</h1>
+  <p class="subtitle">Start here. A plain-English introduction to the Demos network, DACS, and why DNO observes the Demos testnet from the outside.</p>
+
+  <div class="plain">
+    <strong>In plain English:</strong> Demos is a blockchain project trying to connect things that
+    normally can&rsquo;t easily talk to each other — different blockchains, websites, identity records,
+    and AI agents — so they can exchange information and value in a way others can verify.
+  </div>
+
+  <h2>The short version</h2>
+  <p>
+    Most digital systems live in separate worlds. A company might have one identity in a government
+    register, another on a blockchain, and accounts on several Web2 platforms. A piece of software
+    acting on its behalf — an <em>agent</em> — may need to prove who it represents, check another
+    party&rsquo;s claims, agree on terms, pay across different chains, and later prove what happened.
+  </p>
+  <p>
+    Demos describes itself as a layer-1 blockchain built to act as a connecting layer for exactly this
+    kind of cross-system work, rather than as another chain competing to replace the others. Its authors
+    call the broader connected environment the &ldquo;Omniweb.&rdquo; Demos is currently described as a
+    testnet, with a mainnet launch presented by the project as a planned future step.
+  </p>
+
+  <h2>Why this matters</h2>
+  <p>
+    Most existing tools solve only one piece of that problem — identity, or payments, or data lookups —
+    but not the whole chain of steps end to end. Demos is designed around the broader problem: how
+    different digital contexts can verify each other, coordinate, settle value, and leave a record,
+    without everyone having to trust one central company or platform.
+  </p>
+
+  <h2>A simple example</h2>
+  <p>
+    Imagine one software agent wants to buy a service from another. Before paying, it might need to know:
+  </p>
+  <ul>
+    <li>Who is the other agent, and who does it represent?</li>
+    <li>Is the company behind it real — can that be checked against an authority?</li>
+    <li>What exactly are both sides agreeing to?</li>
+    <li>Can payment happen even if the two sides are on different blockchains?</li>
+    <li>Can both sides prove later what was agreed and what happened?</li>
+  </ul>
+  <p>
+    Demos and DACS are aimed at this kind of problem: verifiable interaction between agents, identities,
+    Web2 sources, and blockchains.
+  </p>
+
+  <h2>How Demos describes its technology</h2>
+  <p>
+    Per the Demos yellowpaper, Demos is a layer-1 blockchain with a consensus design of its own and a
+    focus on interoperability across Web2, Web3, and multiple chains. For a newcomer, the most useful
+    way in is the small set of building blocks the project highlights — described here by what they do,
+    with the project&rsquo;s own name for each:
+  </p>
+
+  <!-- JSON-LD-ready: each dt/dd is a future DefinedTerm. Do not merge or reorder casually. -->
+  <dl>
+    <dt>One identity across many systems</dt>
+    <dd>A way for a single identity to work across multiple blockchains and Web2 platforms at once.
+        <span class="src">Demos calls this Cross-Context Identity (CCI); described as testnet-stage.</span></dd>
+
+    <dt>Verifying web data on-chain</dt>
+    <dd>A way for network validators to fetch data from a normal website or API and record a verifiable, on-chain attestation of what was seen.
+        <span class="src">Demos calls this DAHR (Data Agnostic HTTP(S) Relay); described as testnet-stage.</span></dd>
+
+    <dt>Private coordination, public proof</dt>
+    <dd>Private channels where only the participants see the details, while the fact that an agreement happened is anchored publicly.
+        <span class="src">Demos calls this L2PS (Layer-2 Privacy Subnets); described as testnet-stage.</span></dd>
+
+    <dt>Settling across chains</dt>
+    <dd>Mechanisms intended to let value move between different blockchains in a coordinated, all-or-nothing way.
+        <span class="src">Demos describes Liquidity Tanks and native bridges for this; described as testnet-stage with partial chain coverage.</span></dd>
+
+    <dt>Proving facts without oversharing</dt>
+    <dd>Methods that let someone prove a specific fact from a website without revealing all of the underlying data.
+        <span class="src">Composed open standards (TLSNotary, zkTLS) used in the DACS vetting stage.</span></dd>
+  </dl>
+
+  <h2>What is DACS?</h2>
+  <p>
+    DACS (Demos Agent Commerce Standards) is an open standard, published by KyneSys Labs, for commerce
+    between software agents. A software agent is a program that can act for a person, company, or system.
+    DACS breaks an agent-to-agent transaction into five stages — in plain terms, it answers:
+    <em>Who are you? Can I check that? What are we agreeing to? How do we pay? How do we prove what happened?</em>
+  </p>
+
+  <!-- JSON-LD-ready: each dt/dd is a future DefinedTerm. -->
+  <dl>
+    <dt>1 · Identify</dt>
+    <dd>Each party presents a verifiable identity and what it is offering.</dd>
+
+    <dt>2 · Vet</dt>
+    <dd>Each party checks the other&rsquo;s claims against authoritative sources — for example, confirming that a Legal Entity Identifier exists in the public GLEIF register — where possible without revealing more than needed.</dd>
+
+    <dt>3 · Negotiate</dt>
+    <dd>The parties agree on terms, with support for private negotiation and a signed agreement.</dd>
+
+    <dt>4 · Settle</dt>
+    <dd>Value or deliverables are exchanged, where possible atomically across different chains.</dd>
+
+    <dt>5 · Verify</dt>
+    <dd>The whole session is anchored as a tamper-evident audit record that can be checked later.</dd>
+  </dl>
+
+  <p>
+    DACS is designed to work with existing open standards (such as W3C Verifiable Credentials, ERC-8004,
+    AP2, and x402) rather than replace them. As published, it is an early specification (a v0.1 baseline,
+    with some per-stage standards at v0.2), maintained under a single steward.
+  </p>
+
+  <h2>What is live, and what is roadmap?</h2>
+  <p>
+    Early blockchain projects often mix working testnet components, experimental features, and future
+    plans in the same public narrative. When reading anything about Demos, it helps to separate three things:
+  </p>
+  <ul>
+    <li><strong>Observed state</strong> — what an independent observer like DNO can currently see from the public testnet.</li>
+    <li><strong>Project claims</strong> — what Demos or KyneSys Labs describe in their own materials.</li>
+    <li><strong>Roadmap</strong> — features the project describes as planned, in progress, or not yet active.</li>
+  </ul>
+  <p>
+    As of June 2026, Demos describes the network as running on testnet, with its core primitives reported
+    as operational at the testnet stage, and a mainnet launch described as a planned future step.
+  </p>
+
+  <h2>Why DNO observes Demos</h2>
+  <p>
+    DNO watches the Demos testnet from the outside and publishes assessments of network health based only
+    on what it can directly observe. As new infrastructure for agent-to-agent coordination develops, an
+    independent, non-participating observer becomes more useful — precisely because it has no stake in what
+    it reports. DNO does not run the network, recommend validators, score or rank participants, certify
+    anyone, or take part in any transaction. This page is here only so you can understand the system DNO
+    watches; it is context, not endorsement.
+  </p>
+
+  <h2>What this page is not</h2>
+  <p>
+    This page does not say Demos is complete, successful, secure, or suitable for any financial use. It
+    does not recommend buying, selling, minting, validating, investing, or transacting. It is only
+    educational context about the ecosystem DNO observes.
+  </p>
+
+  <h2>Primary sources</h2>
+  <p>Going deeper is best done at the source: Demos&rsquo;s architecture, primitives, and the DACS specification are documented by the project itself. Start with the Demos documentation and yellowpaper, and the DACS specification, linked below.</p>
+  <ul class="sources">
+    <li><a href="https://demos.network/" rel="nofollow noopener" target="_blank">demos.network</a> — Demos&rsquo;s agent-commerce framing and roadmap</li>
+    <li><a href="https://demos.sh/" rel="nofollow noopener" target="_blank">demos.sh</a> — Demos applications and community</li>
+    <li><a href="https://kynesys.xyz/" rel="nofollow noopener" target="_blank">kynesys.xyz</a> — KyneSys Labs</li>
+    <li><a href="https://docs.kynesys.xyz/" rel="nofollow noopener" target="_blank">docs.kynesys.xyz</a> — Demos technical documentation and yellowpaper</li>
+    <li><a href="https://github.com/DACS-Agent-commerce/DACS-Standard" rel="nofollow noopener" target="_blank">DACS-Standard</a> — the DACS specification</li>
+  </ul>
+
+  <!-- Independence line (bottom) — asset-position line removed per operator decision 2026-06-27 -->
+  <div class="notice" role="note" style="margin-top:3rem;">
+    DNO does not certify, endorse, score, rank, or recommend Demos, DACS, or any participant. This page is
+    independent context about an observed network.
+    <br><span class="meta">Last updated 2026-06-27 · about-demos v1.2</span>
+  </div>
+
+</main>
+<!-- END about-demos content -->
+
+</body>
+</html>

@@ -221,6 +221,9 @@ try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { 
 var METHODOLOGY_HTML = "";
 try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
+var ABOUT_DEMOS_HTML = "";
+try { ABOUT_DEMOS_HTML = readFileSync("about-demos.html", "utf8"); } catch(e) { ABOUT_DEMOS_HTML = "<html><body><h1>About Demos page not found</h1></body></html>"; }
+
 var COMMERCE_HTML = "";
 try { COMMERCE_HTML = readFileSync("commerce.html", "utf8"); } catch(e) { COMMERCE_HTML = "<html><body><h1>Commerce page not found</h1></body></html>"; }
 
@@ -694,25 +697,6 @@ function determineSeverity(offlineCount, chainIssues, lagCount) {
   return "info";
 }
 
-function getRecommendation(data) {
-  // Recommendation is based on PUBLIC network state only — not fleet health
-  var publicActiveIncs = getPublicActiveIncidentIds();
-  var pubNodes = latestPublicNodes || [];
-  var pubOnline = pubNodes.filter(function(n) { return n.ok; }).length;
-  var pubTotal = pubNodes.length;
-
-  if (pubTotal === 0) {
-    return { recommendation: "INSUFFICIENT_DATA", safe_to_propose: false, confidence: "low", reason: "No public node data available" };
-  }
-  if (publicActiveIncs.length === 0 && pubOnline >= Math.ceil(pubTotal * 0.5)) {
-    return { recommendation: "SAFE", safe_to_propose: true, confidence: "high", reason: "Network stable, no issues detected" };
-  }
-  if (publicActiveIncs.length > 0 || pubOnline < pubTotal) {
-    return { recommendation: "CAUTION", safe_to_propose: true, confidence: "medium", reason: "Network stable, minor observations present" };
-  }
-  return { recommendation: "UNSAFE", safe_to_propose: false, confidence: "high", reason: "Significant public network issues detected" };
-}
-
 // Load incident counter from DB on startup
 function getValidatorGrowth() {
   var result = {
@@ -848,106 +832,6 @@ function getValidatorGrowth() {
   } catch(e) { return result; }
 }
 
-
-function generateDecision(data, stalenessSeconds, signals) {
-  if (!data || !data.nodeReports) {
-    return { status: "uncertain", trend: "unknown", confidence: 0.0, risk_level: "high", reason: "No fleet data available", affected_components: ["data"], valid_until: new Date(Date.now() + 60000).toISOString(), last_updated: new Date().toISOString() };
-  }
-
-  // Use PUBLIC nodes for decision — not fleet
-  var pubNodes = latestPublicNodes || [];
-  var total = pubNodes.length || 1;
-  var healthy = pubNodes.filter(function(n) { return n.ok; }).length;
-  var offline = pubNodes.filter(function(n) { return !n.ok; }).length;
-  var blocks = pubNodes.map(function(n) { return n.block; }).filter(Boolean);
-  var blockSpread = blocks.length > 1 ? Math.max.apply(null, blocks) - Math.min.apply(null, blocks) : 0;
-  var PUBLIC_SIGNAL_TYPES = ["public_node_offline","public_network_block","discovered_validators"];
-  var criticalSignals = signals.filter ? signals.filter(function(s) { return s.severity === "critical" && PUBLIC_SIGNAL_TYPES.indexOf(s.type) !== -1; }) : [];
-  var warningSignals = signals.filter ? signals.filter(function(s) { return s.severity === "warning" && PUBLIC_SIGNAL_TYPES.indexOf(s.type) !== -1; }) : [];
-  var chainStall = false;
-
-  // Confidence: start at 1.0, subtract penalties
-  var confidence = 1.0;
-  if (stalenessSeconds > 300) confidence -= 0.3;
-  else if (stalenessSeconds > 60) confidence -= 0.1;
-  confidence -= (offline / total) * 0.4;
-  confidence -= criticalSignals.length * 0.15;
-  confidence -= warningSignals.length * 0.05;
-  if (blockSpread > 50) confidence -= 0.1;
-  confidence = Math.max(0.0, Math.min(1.0, Math.round(confidence * 100) / 100));
-
-  // Status
-  var status, risk_level, reason, affected = [];
-  if (chainStall) {
-    status = "unstable"; risk_level = "high";
-    reason = "Chain-level issue detected — no block progression";
-    affected = ["network", "chain"];
-  } else if (stalenessSeconds > 300) {
-    status = "uncertain"; risk_level = "medium";
-    reason = "Data is stale (" + Math.round(stalenessSeconds / 60) + " min) — observations may not reflect current state";
-    affected = ["data"];
-  } else if (offline >= Math.ceil(total * 0.5)) {
-    status = "unstable"; risk_level = "high";
-    reason = offline + "/" + total + " nodes offline — majority unreachable";
-    affected = ["network", "nodes"];
-  } else if (offline > 1 || criticalSignals.length > 0) {
-    status = "degraded"; risk_level = "medium";
-    reason = offline + " node(s) offline, " + criticalSignals.length + " critical signal(s)";
-    affected = ["nodes"];
-  } else if (offline === 1 || warningSignals.length > 0 || blockSpread > 10) {
-    status = "stable"; risk_level = "low";
-    reason = "Network stable, " + (offline === 1 ? "1 node offline" : warningSignals.length + " warning(s)");
-    affected = ["nodes"];
-  } else if (healthy === total) {
-    status = "stable"; risk_level = "low";
-    reason = "Network stable — reference nodes synced, zero active incidents";
-    affected = [];
-  } else {
-    status = "recovering"; risk_level = "medium";
-    reason = healthy + "/" + total + " nodes healthy";
-    affected = ["nodes"];
-  }
-
-  // Valid for 2x the monitor interval (2 min)
-  var validUntil = new Date(Date.now() + 120000).toISOString();
-
-  return {
-    status: status,
-    risk_level: risk_level,
-    confidence: confidence,
-    reason: reason,
-    affected_components: affected,
-    valid_until: validUntil,
-    last_updated: new Date().toISOString()
-  };
-}
-
-function generateScores(data, stalenessSeconds, signals) {
-  if (!data || !data.nodeReports) return { network_health: 0, stability: 0, partition_risk: 100, data_confidence: 0 };
-
-  // Use PUBLIC nodes for scores — not fleet
-  var pubNodes = latestPublicNodes || [];
-  var total = pubNodes.length || 1;
-  var healthy = pubNodes.filter(function(n) { return n.ok; }).length;
-  var offline = pubNodes.filter(function(n) { return !n.ok; }).length;
-  var blocks = pubNodes.map(function(n) { return n.block; }).filter(Boolean);
-  var blockSpread = blocks.length > 1 ? Math.max.apply(null, blocks) - Math.min.apply(null, blocks) : 0;
-  var sideImbalance = 0;
-  var PUBLIC_SIGS = ["public_node_offline","public_network_block"];
-  var criticalCount = signals.filter ? signals.filter(function(s) { return s.severity === "critical" && PUBLIC_SIGS.indexOf(s.type) !== -1; }).length : 0;
-
-  var network_health = Math.round((healthy / total) * 100);
-  var stability = Math.max(0, Math.round(100 - (blockSpread / 10) - (criticalCount * 15) - (offline * 10)));
-  var partition_risk = Math.min(100, Math.round((blockSpread > 100 ? 50 : blockSpread > 10 ? 20 : 0) + (offline > 0 ? offline * 10 : 0)));
-  var data_confidence = Math.max(0, Math.round(100 - (stalenessSeconds > 300 ? 40 : stalenessSeconds > 60 ? 10 : 0) - (criticalCount * 10)));
-
-  return {
-    network_health: network_health,
-    stability: Math.min(100, stability),
-    partition_risk: partition_risk,
-    data_confidence: data_confidence
-  };
-}
 
 // === Layer 2: Canonical assessment model ===
 /**
@@ -1682,7 +1566,8 @@ async function perceive() {
       ready = true;
       var firstPeer = info.peerlist && info.peerlist[0];
       blockHeight = firstPeer && firstPeer.sync ? firstPeer.sync.block : null;
-      syncOk = true;
+      syncOk = firstPeer && firstPeer.sync ? firstPeer.sync.status : null;
+      if (syncOk === false) issues.push("NOT_SYNCED");
       if (!identityMatch) issues.push("IDENTITY_MISMATCH");
     } else {
       var peerData = peerByConn[connStr];
@@ -3264,11 +3149,6 @@ function generatePrometheusMetrics(fleetData) {
 
         h += '</div>';
 
-        // Helper: truncate identity (0x8f3a…ba05)
-        function truncId(id) {
-          if (!id || id.length < 12) return id || "\u2014";
-          return id.substring(0, 6) + "\u2026" + id.substring(id.length - 4);
-        }
 
         h += '<div class="table-scroll"><table><thead><tr>';
         h += '<th>Validator</th><th>Source</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th>';
@@ -3558,6 +3438,9 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/timeline") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(renderTimelinePage());
+    } else if (req.url === "/about-demos") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(ABOUT_DEMOS_HTML);
     } else if (req.url === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);

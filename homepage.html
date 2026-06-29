@@ -103,6 +103,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
 .dot-online { background:var(--improving); }
 .dot-offline { background:var(--unstable); }
+.dot-unreachable { background:var(--unknown); }
 .dot-syncing { background:var(--unknown); }
 
 /* INCIDENTS */
@@ -445,8 +446,8 @@ async function fetchData() {
     } else {
       var h='';
       monitored.forEach(function(v){
-        var dotClass=v.online?'dot-online':'dot-offline';
-        var statusText=v.online?'online':'offline';
+        var dotClass=v.online?'dot-online':'dot-unreachable';
+        var statusText=v.online?'reachable':'unreachable';
         var syncColor=v.sync_pct>=95?'var(--stable)':v.sync_pct>=80?'var(--degraded)':'var(--unstable)';var syncOpacity=(v.sync_pct>=95&&v.sync_pct<100)?';opacity:0.55':'';
         var pn=nodes.find(function(n){return n.name===v.display;});
         var latency=pn&&pn.latencyMs!=null?pn.latencyMs+'ms':'\u2014';
