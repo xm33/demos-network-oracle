@@ -31,3 +31,4 @@ apply-*.py
 phase-*.patch
 fleet.config.mjs
 src/fleet.config.mjs
+.claude/
