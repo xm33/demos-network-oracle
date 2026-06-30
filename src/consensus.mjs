@@ -2,7 +2,7 @@
  * SuperColony Fleet Oracle — Multi-Agent Consensus Oracle (v6.1 → v6.2)
  *
  * Drop into src/ alongside agent.mjs.
- * Shares marketplace.db (bun:sqlite) and auth token file.
+ * Shares the primary DB (logs/marketplace.db — historical name; holds incidents, public-node history, submissions, consensus, daily stats) via deps.db, and the auth token file.
  *
  * v6.2 fixes: shared DB handle (BUG 3), flag file for announcement (BUG 5),
  *             shared write budget check (BUG 6)

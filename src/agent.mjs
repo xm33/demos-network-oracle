@@ -3968,7 +3968,10 @@ async function main() {
   // Load historical data
   loadHistory();
 
-  // FIX BUG 3: Open shared SQLite handle ONCE for both modules
+  // FIX BUG 3: Open shared SQLite handle ONCE for both modules.
+  // NOTE: "marketplace.db" is a historical filename. This is the shared PRIMARY
+  // datastore (incidents, public_node_history, submissions, consensus, daily_stats,
+  // + gated Phase-3 observation schema). Filename kept to avoid a live-DB migration.
   var dbPath = join(LOG_DIR, "marketplace.db");
   sharedDb = new Database(dbPath);
   sharedDb.exec("PRAGMA journal_mode = WAL;");
