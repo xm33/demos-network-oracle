@@ -26,16 +26,27 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary); min-height:100vh; -webkit-font-smoothing:antialiased; }
 
-/* NAVBAR */
-.navbar { display:flex; align-items:center; justify-content:center; padding:0; height:52px; background:#101010; backdrop-filter:blur(10px); position:sticky; top:0; z-index:100; }
-.navbar-inner { display:flex; align-items:center; justify-content:space-between; width:100%; max-width:980px; padding:0 28px; }
-.navbar-left { display:flex; align-items:center; gap:28px; }
-.navbar-right { display:flex; align-items:center; gap:12px; }
-.navbar-brand { font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:2.6px; color:var(--brand); display:inline-flex; align-items:center; gap:8px; text-decoration:none; }
-.oracle-logo { width:30px; height:30px; color:var(--text-primary); }
-.nav-links { display:flex; align-items:center; gap:18px; }
-.nav-links a { font-size:11px; font-weight:500; color:var(--text-secondary); text-decoration:none; letter-spacing:0.7px; text-transform:uppercase; transition:color 0.2s; }
-.nav-links a:hover { color:var(--text-primary); }
+/* BEGIN canonical-header-css v1 */
+/* Navbar (doc-nav component) */
+.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
+.doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
+.doc-nav-left{order:1}
+.doc-nav-right{order:2;margin-left:auto}
+.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
+.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
+.doc-nav-brand:hover{text-decoration:none;opacity:0.9}
+.doc-logo{width:30px;height:30px;color:var(--text-primary)}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none}
+.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
+.doc-nav-link[aria-current="page"]{opacity:0.5}
+.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
+.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
+.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}}
+/* END canonical-header-css v1 */
+/* homepage-only: optional far slot (holds the powered-by-DEMOS badge) + LOCKED uppercase-nav exception */
+.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
+.doc-page--home .doc-nav-link { text-transform:uppercase; }
 .demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
 .demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
 .dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
@@ -48,8 +59,6 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .hero { padding:48px 0 36px; }
 .oracle-kicker-row { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
 .oracle-kicker { font-size:12px; color:var(--text-secondary); opacity:0.62; letter-spacing:0.01em; font-family:var(--sans); }
-.oracle-hero-live { font-size:10px; font-family:var(--mono); padding:4px 12px; border:1px solid rgba(0,218,255,0.16); border-radius:12px; color:var(--text-secondary); display:inline-flex; align-items:center; gap:5px; letter-spacing:0.45px; }
-.hero-dot { width:5px; height:5px; border-radius:50%; background:var(--improving); opacity:0.8; }
 .oracle-hero-submit { font-size:10px; font-family:var(--mono); padding:3px 9px; border:1px solid rgba(255,255,255,0.15); border-radius:999px; color:rgba(255,255,255,0.7); text-decoration:none; letter-spacing:0.04em; transition:all 0.2s; }
 .oracle-hero-submit:hover { color:var(--improving); border-color:rgba(0,218,255,0.3); }
 .oracle-status { font-family:var(--mono); font-size:36px; font-weight:600; letter-spacing:-0.03em; line-height:1.02; margin-bottom:16px; color:var(--text-primary); }
@@ -154,15 +163,7 @@ body { position:relative; }
 
 @media (max-width:640px) {
   .main { padding:0 18px; }
-  .navbar { padding:0; height:auto; min-height:auto; }
-  .navbar-inner { flex-wrap:wrap; gap:0; padding:8px 16px; align-items:center; }
-  .navbar-left { width:auto; flex:1 1 auto; justify-content:flex-start; order:1; }
-  .navbar-right { width:auto; flex:0 0 auto; justify-content:flex-end; gap:8px; order:2; }
-  .nav-links { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; width:100%; flex-basis:100%; order:3; margin-top:8px; }
-  .nav-links a { text-align:center; padding:6px 2px; background:#0d0d0d; border:1px solid var(--border); border-radius:5px; font-size:9px; letter-spacing:0.2px; white-space:nowrap; overflow:hidden; }
-  .nav-links a:hover { border-color:#333; }
-  /* ORACLE LIVE sits next to logo on mobile row 1 */
-  .nav-live { display:inline-flex; font-size:9px; padding:3px 7px; letter-spacing:0.3px; }
+  /* mobile nav is handled by the canonical doc-nav @media(640) above; badge hidden on mobile */
   .demos-brand-btn { display:none; }
   .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
   .xm33-sep { display:none; }
@@ -187,29 +188,31 @@ body { position:relative; }
 }
 </style>
 </head>
-<body>
-<nav class="navbar">
-  <div class="navbar-inner">
-  <div class="navbar-left">
-    <a href="/" class="navbar-brand"><svg class="oracle-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-    <span class="oracle-hero-live nav-live"><span class="hero-dot"></span>LIVE</span>
-  </div>
-  <div class="nav-links">
-    <a href="/methodology">Methodology</a>
-    <a href="/commerce">Commerce</a>
-    <a href="/agent">Agent</a>
-    <a href="/sources">Sources</a>
-    <a href="/community">Community</a><a href="/timeline">Timeline</a>
-  </div>
-  <div class="navbar-right">
-    <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-      <span class="dbtn-prefix">powered by</span>
-      <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-      <span class="dbtn-wordmark">DEMOS</span>
-    </a>
-  </div>
+<body class="doc-page--home">
+<!-- BEGIN canonical-header v1 -->
+<nav class="doc-nav">
+  <div class="doc-nav-inner">
+    <div class="doc-nav-left">
+      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
+      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
+    </div>
+    <div class="doc-nav-right">
+      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
+      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
+      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
+      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
+      <a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
+    </div>
+    <div class="doc-nav-far">
+      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
+        <span class="dbtn-prefix">powered by</span>
+        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
+        <span class="dbtn-wordmark">DEMOS</span>
+      </a>
+    </div>
   </div>
 </nav>
+<!-- END canonical-header v1 -->
 <div class="main">
   <section class="hero" id="overview">
     <div class="oracle-kicker-row">
@@ -336,8 +339,8 @@ async function fetchData() {
     hs.textContent=(org.status||'\u2014').toUpperCase();
     hs.style.color=statusColor(org.status);
     hs.classList.remove('loading');
-    var lb=document.querySelector('.oracle-hero-live');
-    if(lb){lb.innerHTML='<span class="hero-dot"></span>LIVE';lb.style.borderColor='rgba(0,218,255,0.2)';}
+    var lb=document.querySelector('.nav-live');
+    if(lb){lb.innerHTML='<span class="nav-live-dot"></span>LIVE';lb.style.borderColor='rgba(0,218,255,0.2)';}
 
     document.getElementById('hero-summary').textContent=org.status_reason||org.summary||'';
     document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
@@ -490,8 +493,8 @@ async function fetchData() {
   }catch(err){
     document.getElementById('hero-status').textContent='OFFLINE';
     document.getElementById('hero-status').style.color='var(--unknown)';
-    var lb=document.querySelector('.oracle-hero-live');
-    if(lb){lb.innerHTML='<span class="hero-dot" style="background:var(--unknown)"></span>OFFLINE';lb.style.borderColor='rgba(107,114,128,0.2)';}
+    var lb=document.querySelector('.nav-live');
+    if(lb){lb.innerHTML='<span class="nav-live-dot" style="background:var(--unknown)"></span>OFFLINE';lb.style.borderColor='rgba(107,114,128,0.2)';}
   }
 }
 fetchData();

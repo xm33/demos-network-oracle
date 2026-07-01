@@ -226,6 +226,34 @@ try { COMMERCE_HTML = readFileSync("commerce.html", "utf8"); } catch(e) { COMMER
 var COMMERCE_METHODOLOGY_HTML = "";
 try { COMMERCE_METHODOLOGY_HTML = readFileSync("commerce-methodology.html", "utf8"); } catch(e) { COMMERCE_METHODOLOGY_HTML = "<html><body><h1>Commerce methodology not found</h1></body></html>"; }
 
+/* __CANON_HEADER_START__  Canonical header — SINGLE SOURCE: commerce.html marked regions.
+   Captured from COMMERCE_HTML at load so the two agent.mjs-generated headers (community,
+   timeline) cannot drift from the static canonical. Logo SVG + CSS are copied, never hand-written. */
+var CANONICAL_HEADER_CSS = (function(){ var m = COMMERCE_HTML.match(/\/\* BEGIN canonical-header-css v1 \*\/[\s\S]*?\/\* END canonical-header-css v1 \*\//); return m ? m[0] : ""; })();
+var CANONICAL_LOGO_SVG = (function(){ var m = COMMERCE_HTML.match(/<svg class="doc-logo"[\s\S]*?<\/svg>/); return m ? m[0] : ""; })();
+function renderHeaderNavLink(href, dataNav, label, activeItem) {
+  var cur = (dataNav === activeItem) ? ' aria-current="page"' : '';
+  return '<a href="' + href + '" class="doc-nav-link" data-nav="' + dataNav + '"' + cur + '>' + label + '</a>';
+}
+function renderHeader(activeItem, farSlot) {
+  return '<!-- BEGIN canonical-header v1 -->'
+    + '<nav class="doc-nav"><div class="doc-nav-inner"><div class="doc-nav-left">'
+    + '<a href="/" class="doc-nav-brand">' + CANONICAL_LOGO_SVG + 'ORACLE</a>'
+    + '<span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>'
+    + '</div><div class="doc-nav-right">'
+    + renderHeaderNavLink('/methodology', 'methodology', 'Methodology', activeItem)
+    + renderHeaderNavLink('/commerce', 'commerce', 'Commerce', activeItem)
+    + renderHeaderNavLink('/agent', 'agent', 'Agent', activeItem)
+    + renderHeaderNavLink('/sources', 'sources', 'Sources', activeItem)
+    + renderHeaderNavLink('/community', 'community', 'Community', activeItem)
+    + renderHeaderNavLink('/timeline', 'timeline', 'Timeline', activeItem)
+    + '</div>'
+    + (farSlot ? '<div class="doc-nav-far">' + farSlot + '</div>' : '')
+    + '</div></nav>'
+    + '<!-- END canonical-header v1 -->';
+}
+/* __CANON_HEADER_END__ */
+
 // ─── Commerce Sanitization (Layer 2 → public projection) ────
 function buildPublicCommerceObservation() {
   try {
@@ -1027,7 +1055,7 @@ function renderTimelinePage() {
     }
   }
   if (!items) items = '<div class="tl-item"><div class="tl-body"><div class="tl-text">No public-scope events recorded yet. Public incident generation began 2026-06-11.</div></div></div>';
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><style>:root{--bg:#0d1117;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff}body{background:var(--bg);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:0 16px 60px}.wrap{max-width:880px;margin:0 auto}nav{padding:18px 0;border-bottom:1px solid var(--border);margin-bottom:28px}nav a{color:var(--text2);text-decoration:none;margin-right:16px;font-size:13px}nav a:hover{color:var(--text)}.nav-live{font-size:10px;padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text2);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px;margin-right:16px}.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}</style></head><body><div class="wrap"><nav><a href="/" class="doc-nav-link" data-nav="home" style="letter-spacing:2.2px;font-weight:700;color:var(--text)">ORACLE</a><span class="nav-live"><span class="nav-live-dot"></span>LIVE</span><a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a><a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a><a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a><a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a><a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline" style="color:var(--text)">Timeline</a></nav><h1>Network Observation Timeline</h1><div class="sub">Many signals. One observed view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div>' + "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>" + '</body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet"><style>:root{--bg:#0a0a0a;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff;--surface:#101010;--brand:#2B36D9;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--mono:"Source Code Pro",monospace}body{background:var(--bg);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:0 16px 60px}.wrap{max-width:880px;margin:0 auto}' + CANONICAL_HEADER_CSS + 'h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}</style></head><body><div class="wrap">' + renderHeader("timeline") + '<h1>Network Observation Timeline</h1><div class="sub">Many signals. One observed view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div>' + "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>" + '</body></html>';
 }
 function isFleetIncident_24h(inc) {
   if (inc.description && (
@@ -2928,7 +2956,7 @@ function generatePrometheusMetrics(fleetData) {
       var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Community Nodes</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
       h += '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">';
       h += '<style>';
-      h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#00DAFF;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
+      h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#00DAFF;--brand:#2B36D9;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
       h += '*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}';
       h += 'main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}';
       h += '.noncanonical-banner{margin:0 0 28px;padding:14px 18px;background:#0f0f0f;border:1px solid #1f1f1f;border-left:3px solid #4a4a4a;color:#c9d1d9;font-size:13px;line-height:1.6;border-radius:4px}';
@@ -2949,22 +2977,8 @@ function generatePrometheusMetrics(fleetData) {
       h += '.toggle{cursor:pointer;color:var(--text-secondary);font-size:11px;text-decoration:underline}';
       h += '.toggle:hover{color:var(--text-primary)}';
       h += 'a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}a:hover{border-bottom-color:var(--improving)}';
-      h += '.doc-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:#101010;height:52px;display:flex;align-items:center}';
-      h += '.doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}';
-      h += '.doc-nav-left{order:1}';
-      h += '.doc-nav-right{order:2;margin-left:auto}';
-      
-      h += '.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}';
-      h += '.doc-nav-brand{color:var(--brand,#2B36D9);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;text-transform:uppercase}';
-      h += '.doc-nav-brand:hover{text-decoration:none;opacity:0.9}';
-      h += '.doc-logo{width:30px;height:30px;color:var(--text-primary)}';
-      h += '.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;text-transform:uppercase;transition:color 0.2s}';
-      h += '.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}';
-      h += '.doc-nav-link[aria-current="page"]{opacity:0.5}';
-      h += '.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}';
-      h += '.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(0,218,255,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}';
-      h += '.nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8}';
-      h += '@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}';
+      h += CANONICAL_HEADER_CSS;
+      h += '@media(max-width:640px){.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}';
       h += '.oracle-hero-submit{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(255,255,255,0.15);border-radius:999px;color:rgba(255,255,255,0.7);text-decoration:none;letter-spacing:0.04em;transition:all 0.2s}';
       h += '.oracle-hero-submit:hover{color:var(--improving);border-color:rgba(0,218,255,0.3)}';
       h += 'footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:11px;opacity:0.5;text-align:center}.xm33-dot{display:none}';
@@ -2973,19 +2987,7 @@ function generatePrometheusMetrics(fleetData) {
       h += '.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}';
       h += '</style></head><body>';
       // Nav
-      h += '<nav class="doc-nav"><div class="doc-nav-inner"><div class="doc-nav-left">';
-      h += '<a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>';
-      h += '<span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>';
-      h += '</div><div class="doc-nav-right">';
-      h += '<a href="/methodology" class="doc-nav-link">Methodology</a>';
-      h += '<a href="/commerce" class="doc-nav-link">Commerce</a>';
-      h += '<a href="/agent" class="doc-nav-link">Agent</a>';
-      h += '<a href="/sources" class="doc-nav-link">Sources</a>';
-      h += '<a href="/community" class="doc-nav-link" aria-current="page">Community</a>';
-      h += '<a href="/timeline" class="doc-nav-link">Timeline</a>';
-      h += '</div>';
-      
-      h += '</div></nav>';
+      h += renderHeader("community");
       h += '<main>';
       h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are not core network assessment until approved. Inclusion does not imply endorsement.</div>';
       h += '<h1>Community Node Onboarding</h1>';
