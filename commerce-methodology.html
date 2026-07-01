@@ -9,21 +9,24 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6;}
 .container{max-width:980px;margin:0 auto;padding:0 24px;}
+/* BEGIN canonical-header-css v1 */
+/* Navbar (doc-nav component) */
 .doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
 .doc-nav-inner{max-width:980px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
 .doc-nav-left{order:1}
 .doc-nav-right{order:2;margin-left:auto}
 .doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;text-transform:uppercase}
+.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
 .doc-nav-brand:hover{text-decoration:none;opacity:0.9}
 .doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none}
 .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-.doc-page--commerce .doc-nav-link[data-nav="commerce"]{opacity:0.5}
-.doc-page--commerce .doc-nav-link[data-nav="commerce"]:hover{opacity:0.8;text-decoration:none}
-.nav-live{font-size:10px;font-family:var(--mono);padding:4px 12px;border:1px solid rgba(0,218,255,0.16);border-radius:12px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-.nav-live-dot{width:5px;height:5px;border-radius:50%;background:var(--improving);opacity:0.8}
+.doc-nav-link[aria-current="page"]{opacity:0.5}
+.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
+.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
+.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
 @media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}}
+/* END canonical-header-css v1 */
 .hero{padding:48px 0 36px;border-bottom:1px solid var(--border);}
 .page-kicker{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:12px;}
 .page-title{font-family:var(--sans);font-size:28px;font-weight:600;margin-bottom:14px;}
@@ -43,6 +46,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:
 </head>
 <body class="doc-page doc-page--commerce">
 <div class="container">
+  <!-- BEGIN canonical-header v1 -->
   <nav class="doc-nav">
     <div class="doc-nav-inner">
       <div class="doc-nav-left">
@@ -58,6 +62,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:
       </div>
     </div>
   </nav>
+  <!-- END canonical-header v1 -->
 
   <section class="hero">
     <div class="page-kicker">COMMERCE METHODOLOGY</div>
