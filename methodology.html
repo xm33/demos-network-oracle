@@ -35,7 +35,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 .doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
 .doc-nav-brand:hover{text-decoration:none;opacity:0.9}
 .doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
 .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
 .doc-nav-link[aria-current="page"]{opacity:0.5}
 .doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
@@ -227,7 +227,6 @@ Onboarding pipeline: <a href="/community">/community</a> — submitted nodes and
 API version: <code>1.0</code></div>
 <footer class="doc-footer">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
 </main>
-<div style="position:fixed;bottom:24px;right:24px;z-index:1;pointer-events:none;opacity:0.08"><svg width="64" height="64" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="42" stroke="#fff" stroke-width="1.5"/><circle cx="50" cy="22" r="3" fill="#fff"/><circle cx="22" cy="72" r="3" fill="#fff"/><circle cx="78" cy="72" r="3" fill="#fff"/><line x1="50" y1="22" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="22" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><line x1="78" y1="72" x2="50" y2="50" stroke="#fff" stroke-width="1"/><circle cx="50" cy="50" r="4.5" fill="#fff"/></svg></div>
 <div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div><script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class="nav-live-dot" style="background:#d29922"></span>STALE';}}).catch(function(){p.innerHTML='<span class="nav-live-dot" style="background:#6b7280"></span>OFFLINE';});})();</script></body></html>
 <script>
 document.querySelectorAll('.val').forEach(function(el){
