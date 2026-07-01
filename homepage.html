@@ -42,15 +42,14 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text-secondary
 .doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
 .nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
 .nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}}
-/* END canonical-header-css v1 */
-/* homepage-only: optional far slot (holds the powered-by-DEMOS badge) */
 .doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
 .demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
 .demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
 .dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
 .dbtn-logo { height:16px; width:auto; opacity:1; }
 .dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
+/* END canonical-header-css v1 */
 
 .main { max-width:980px; margin:0 auto; padding:0 28px; }
 
@@ -162,8 +161,7 @@ body { position:relative; }
 
 @media (max-width:640px) {
   .main { padding:0 18px; }
-  /* mobile nav is handled by the canonical doc-nav @media(640) above; badge hidden on mobile */
-  .demos-brand-btn { display:none; }
+  /* mobile nav + badge-hide handled by the canonical doc-nav @media(640) above */
   .cards,.agreement-grid { grid-template-columns:repeat(2,1fr); }
   .xm33-sep { display:none; }
   .xm33-block { display:block; }
@@ -177,9 +175,6 @@ body { position:relative; }
   .oracle-kicker-row { flex-wrap:wrap; gap:8px; }
   .oracle-kicker { font-size:11px; }
   .oracle-hero-submit { display:none; }
-  .dbtn-prefix { display:none; }
-  .dbtn-wordmark { font-size:11px; }
-  .demos-brand-btn { padding:0 10px; height:30px; }
   .growth-cards { gap:10px; }
   .growth-card { flex:1 1 calc(50% - 10px); min-width:unset; }
   .vtable { display:block; overflow-x:auto; }

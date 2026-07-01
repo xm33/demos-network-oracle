@@ -41,7 +41,13 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 .doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
 .nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
 .nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}}
+.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
+.demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
+.demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
+.dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
+.dbtn-logo { height:16px; width:auto; opacity:1; }
+.dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
 /* END canonical-header-css v1 */
 @media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:26px}h2{font-size:16px;margin-top:28px}}
 @media(max-width:640px){.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}
@@ -59,6 +65,13 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
       <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
       <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
       <a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
+    </div>
+    <div class="doc-nav-far">
+      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
+        <span class="dbtn-prefix">powered by</span>
+        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
+        <span class="dbtn-wordmark">DEMOS</span>
+      </a>
     </div>
   </div>
 </nav>
