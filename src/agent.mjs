@@ -2930,7 +2930,7 @@ function generatePrometheusMetrics(fleetData) {
           syncing: ["Node is reachable and syncing, but still behind the network head.", "Wait until the node syncs closer to the network head. Approval happens after sync."],
           near_head: ["Node is close to the network head.", "Continue syncing. This node may soon be eligible for manual review."],
           chain_mismatch: ["Node reports a block far ahead of the Demos network head \u2014 likely a different chain or network. Cannot be confirmed on the Demos network.", "Verify the node is running on the Demos network, not a different chain."],
-          ready: ["Node is synced and ready for approval.", "Pending manual review by the Oracle operator."],
+          ready: ["Node is synced and meets published criteria.", "Listed as a community submission; not part of DNO core network assessment."],
           approved: ["Node has been approved and is now monitored.", "Your node appears in the main Oracle homepage."],
           duplicate: ["This node is already monitored by the Oracle.", "No further action needed."]
         };
@@ -2990,7 +2990,7 @@ function generatePrometheusMetrics(fleetData) {
       // Nav
       h += renderHeader("community", DEMOS_BADGE);
       h += '<main>';
-      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are not core network assessment until approved. Inclusion does not imply endorsement.</div>';
+      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are community-submitted and are not part of DNO core network assessment. Inclusion does not imply endorsement.</div>';
       h += '<h1>Community Node Onboarding</h1>';
 
       // --- Fleet Fixnet section (v7.2) ---
@@ -3136,10 +3136,10 @@ function generatePrometheusMetrics(fleetData) {
       }
       // --- end Fleet Fixnet section ---
 
-      h += '<p class="sub">Community validator nodes during onboarding and approval.</p>';
+      h += '<p class="sub">Community validator nodes during onboarding.</p>';
       // Summary
       h += '<div class="summary">';
-      var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#22C55E"],["Ready",counts.ready||0,"#22C55E"],["Approved",counts.approved||0,"#22C55E"]];
+      var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#22C55E"],["Criteria met",counts.ready||0,"#22C55E"],["Listed",counts.approved||0,"#22C55E"]];
       for (var si=0; si<sumItems.length; si++) {
         h += '<div class="sum-card"><div class="sum-val" style="color:'+sumItems[si][2]+'">'+sumItems[si][1]+'</div><div class="sum-label">'+sumItems[si][0]+'</div></div>';
       }

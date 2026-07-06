@@ -25,7 +25,7 @@ console.log(`\n${GUARD} guard  (base: ${BASE})\n`);
 
 try {
   const community = await (await fetch(BASE + "/community")).text();
-  const m = community.match(/sum-val[^>]*>(\d+)<\/div><div class="sum-label">Ready<\/div>/);
+  const m = community.match(/sum-val[^>]*>(\d+)<\/div><div class="sum-label">Criteria met<\/div>/);
   const readyCount = m ? parseInt(m[1], 10) : null;
   const hasChainMismatch = /chain[ _]mismatch/i.test(community);
   check("A1 /community renders submission stages",
