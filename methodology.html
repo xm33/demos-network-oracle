@@ -131,13 +131,13 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>1. Polls each known public validator node — checks reachability, block height, sync status, and peer count.<br>
 2. Computes network agreement from the observed block heights.<br>
 3. Checks for active incidents — new problems, resolved problems.<br>
-4. Runs the canonical state computation — derives all seven concepts from the raw observations.<br>
+4. Runs the public state computation — derives all seven concepts from the raw observations.<br>
 5. Updates all API endpoints with the new state.</p>
 <p>Every 20 minutes, the Oracle publishes an attested summary on-chain via SuperColony.</p>
-<p>The canonical state computation is a single function that takes public node observations as input and produces all seven values as output. Fleet data never enters this function. The computation is deterministic — given the same observations, it always produces the same assessment.</p>
+<p>The public state computation is a single function that takes public node observations as input and produces all seven values as output. Fleet data never enters this function. The computation is deterministic — given the same observations, it always produces the same assessment.</p>
 <h2>Public vs Reference Separation</h2>
 <p>This is the most important structural rule in the Oracle. It governs everything.</p>
-<h3>Public network (primary truth)</h3>
+<h3>Public network (primary observation basis)</h3>
 <p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are validator nodes operated by independent parties: Kynesys (the protocol team) and manually approved community validators.</p>
 <h3>Reference fleet (internal context)</h3>
 <p>The Oracle operator (XM33) also runs a fleet of nine validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
@@ -234,7 +234,7 @@ Incident log: <a href="/incidents">/incidents</a> — public scope by default, <
 API documentation: <a href="/docs">/docs</a><br>
 Agent guide: <a href="/agent">/agent</a><br>
 
-Oracle sources: <a href="/sources">/sources</a> — where truth comes from.<br>
+Oracle sources: <a href="/sources">/sources</a> — where the observations come from.<br>
 Submit a node: <a href="/submit">/submit</a> — community validator onboarding.<br>
 Observation timeline: <a href="/timeline">/timeline</a> — generated public observation record.<br>
 Onboarding pipeline: <a href="/community">/community</a> — submitted nodes and onboarding progress.<br>

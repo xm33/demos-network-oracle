@@ -20,6 +20,7 @@ const GUARD = "CRITERIA_CATALOG_CONSTITUTION";
 
 const html = readFileSync(HTML_PATH, "utf8");
 const json = JSON.parse(readFileSync(JSON_PATH, "utf8"));
+const meth = readFileSync(join(__dir, "..", "methodology.html"), "utf8");
 const crit = (id) => json.criteria.find((c) => c.id === id);
 
 let passed = 0, failed = 0;
@@ -73,6 +74,9 @@ check("E3 heuristic: no per-node result surface leaked",
       !/top\s+validators/i.test(html) && !/best\s+validator/i.test(html) &&
       !/approved\s+validator/i.test(html) && !/certified\s+validator/i.test(html) &&
       !/validator\s+(score|ranking|rank)\b/i.test(html));
+
+// M — methodology page (/methodology): §2.5 "truth" ban applies here too
+check("M3 no 'where truth comes from' claim", !/where\s+truth\s+comes\s+from/i.test(meth));
 
 // F — gated evaluator boundary
 check("F1 names the gated, separate evaluator capability",
