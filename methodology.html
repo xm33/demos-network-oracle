@@ -85,6 +85,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>The Demos Network Oracle (DNO) is a public observability layer for the Demos blockchain testnet. It watches the network's public validator nodes, measures whether they agree on the state of the chain, tracks specific problems, and publishes what it finds.</p>
 <p>The Oracle is strictly watch-only. It observes, interprets, and summarizes. It does not command validators, does not advise operators, and does not make predictions about what will happen next. It publishes network state as neutral facts. What anyone does with those facts is their decision.</p>
 <p>The Oracle is independent. It is not operated by the Demos core team. It does not control any downstream system. Any agent, builder, or person can consume its output and form their own conclusions.</p>
+<div class="note">DNO also publishes a versioned <a href="/criteria">Criteria Catalog</a> — the definitions of its observation criteria (C1–C6), available as data at <a href="/criteria.json">/criteria.json</a>.</div>
 <h2>What It Measures</h2>
 <p>Every Oracle assessment is built from seven independent concepts. Each answers exactly one question about the network. No two concepts overlap — if you can express something by combining two other concepts, it is not given its own field.</p>
 <table><thead><tr><th>Concept</th><th>Question</th><th>Possible values</th></tr></thead><tbody>

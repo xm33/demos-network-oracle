@@ -1,0 +1,189 @@
+<!DOCTYPE html><html><head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet"><meta charset="utf-8"><title>Demos Network Oracle — Criteria Catalog</title><meta name="description" content="DNO's published observation-criteria definitions for the Demos testnet — descriptive, not prescriptive. Definitions only; no participant results, scores, rankings, or certifications. Machine-readable companion: /criteria.json. Not affiliated with Demos or KyneSys Labs.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='18' r='4' fill='%232B36D9'/%3E%3Ccircle cx='18' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='82' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='50' cy='50' r='5.5' fill='%232B36D9'/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--brand:#2B36D9;--accent:#00DAFF;--warning:#d97706;--critical:#EF4444;--improving:var(--accent);--degraded:var(--warning);--unstable:var(--critical);--mono:'Source Code Pro',monospace;--sans:'Inter',system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;line-height:1.7}
+main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
+h1{font-family:var(--mono);font-size:32px;font-weight:600;letter-spacing:-0.03em;line-height:1.05;margin:0 0 8px;color:var(--text-primary)}
+.sub{color:var(--text-secondary);margin-bottom:2rem;font-size:14px;line-height:1.7}
+h2{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;color:var(--text-primary);margin:36px 0 12px;padding-top:16px;border-top:1px solid var(--border)}
+h3{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text-primary);margin:18px 0 6px}
+p{color:var(--text-secondary);font-size:14px;line-height:1.72;margin:0 0 12px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th{color:var(--text-secondary);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase}
+td{padding:8px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--text-primary)}
+.val{display:inline-block;padding:1px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--improving);font-family:var(--mono);font-size:12px;font-weight:500}
+.note{margin:14px 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text-secondary);font-size:13px;line-height:1.6}
+.warn{margin:14px 0;padding:12px 14px;border:1px solid rgba(217,119,6,0.3);border-radius:10px;background:var(--surface);color:var(--text-secondary);font-size:13px;line-height:1.6}
+a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}
+a:hover{border-bottom-color:var(--improving)}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);color:var(--text-primary);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px}
+footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
+/* BEGIN canonical-header-css v1 */
+/* Navbar (doc-nav component) */
+.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
+.doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
+.doc-nav-left{order:1}
+.doc-nav-right{order:2;margin-left:auto}
+.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
+.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
+.doc-nav-brand:hover{text-decoration:none;opacity:0.9}
+.doc-logo{width:30px;height:30px;color:var(--text-primary)}
+.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
+.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
+.doc-nav-link[aria-current="page"]{opacity:0.5}
+.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
+.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
+.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
+.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
+.demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
+.demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
+.dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
+.dbtn-logo { height:16px; width:auto; opacity:1; }
+.dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
+@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
+/* END canonical-header-css v1 */
+@media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:26px}h2{font-size:16px;margin-top:28px}}
+@media(max-width:640px){.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}
+.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body class="doc-page doc-page--criteria">
+<!-- BEGIN canonical-header v1 -->
+<nav class="doc-nav">
+  <div class="doc-nav-inner">
+    <div class="doc-nav-left">
+      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
+      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
+    </div>
+    <div class="doc-nav-right">
+      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
+      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
+      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
+      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
+      <a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
+    </div>
+    <div class="doc-nav-far">
+      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
+        <span class="dbtn-prefix">powered by</span>
+        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
+        <span class="dbtn-wordmark">DEMOS</span>
+      </a>
+    </div>
+  </div>
+</nav>
+<!-- END canonical-header v1 -->
+<main>
+
+<h1>Criteria Catalog</h1>
+<p class="sub">DNO's published observation-criteria definitions · Criteria Framework v1.0 · effective 2026-07-06 · definitions only, descriptive not prescriptive · machine-readable companion: <a href="/criteria.json">/criteria.json</a></p>
+
+<div class="note">
+<b>Definitions only — applied to no named participant here.</b> This page publishes the definitions of the criteria DNO uses to describe what it observes on the Demos testnet, and the epistemic rules it follows when it cannot observe cleanly. These are <b>not</b> admission requirements, a bar any participant must meet, a score, a ranking, a certification, or a recommendation. DNO applies these criteria to no named participant on this page, operates no admission API, and maintains no eligibility list. Validator admission is not DNO's to decide, and DNO takes no part in it; any DNO observation is at most one non-binding, independent evidence source. DNO is an independent, watch-only observer and is not affiliated with or endorsed by Demos or KyneSys Labs.
+</div>
+
+<div class="note">
+For how DNO currently assesses live network health, see <a href="/methodology">/methodology</a>. This catalog is the versioned definition of DNO's observation criteria as <em>definitions</em>. Applying them to individual participants in public is a separate capability that is <b>gated and not live</b> — see <a href="#gated">Relationship to a published observation surface</a>.
+</div>
+
+<h2>How to read a criterion</h2>
+<p>Every criterion answers four questions, in order: <b>measures what</b> (the observable quantity), <b>from what vantage</b> (where DNO stands when it looks), <b>with what limitation</b> (what bounds or invalidates the observation), and <b>what it does not mean</b> (the interpretations the criterion cannot support). A criterion is a definition, not a result. This page contains no results.</p>
+
+<h2>Vantage and epistemic rules</h2>
+<p>These rules govern every criterion and are why the definitions hold even before any observation is published.</p>
+
+<h3>Vantage — what DNO can and cannot see</h3>
+<p>A Demos node speaks three layers: an internal binary peer-to-peer transport (OmniProtocol), a JSON-RPC layer, and messaging channels. <b>DNO observes only the JSON-RPC and peerlist layer.</b> It does not see consensus rounds or block-sync traffic directly. Everything DNO reports is the node's <em>reported</em> state over RPC, not a direct view of consensus.</p>
+
+<h3>The do-not-collapse rule</h3>
+<p>When DNO cannot check something, the result is <code>insufficient</code> — never a pole. A criterion never silently resolves a missing, partial, or unverifiable observation into &ldquo;met&rdquo; or &ldquo;not met.&rdquo; <code>unknown</code>, <code>insufficient</code>, and <code>unavailable</code> are first-class outputs. This is the rule that most distinguishes an observer from a scorer: a scorer guesses; an observer declines.</p>
+
+<h3>Non-circularity</h3>
+<p>Any criterion that compares a node against a reference (sync distance, consistency) compares against an <b>external reference head</b>, never against DNO's own observed set. Judging nodes by how well they match DNO's prior view is a feedback loop that destroys an observer's independence; it is structurally excluded.</p>
+
+<h3>Identity continuity is a prerequisite</h3>
+<p>A participant that changes identity does <b>not</b> shed prior observation history and start a clean window. Rapid or repeated identity change <em>extends</em> the <code>insufficient</code> period rather than permitting a fresh favorable result.</p>
+
+<h3>On-chain fact vs. observed reachability</h3>
+<p>A value recorded on-chain (for example, a validator's registered state) and a reachability observation made from DNO's vantage are categorically distinct, and are never merged into one statement, column, or field. DNO reports each as what it is.</p>
+
+<h2>The criteria (v1.0)</h2>
+<p>The threshold values below are DNO's own published parameters for its observation window — not values Demos requires of anyone. They are versioned (see Changelog) and auditable as data in <a href="/criteria.json">/criteria.json</a>. The observation window used throughout is <b>120 hours</b>; this is the criteria framework's own window and is distinct from any live rolling metric shown elsewhere on the site (for example, a 7-day uptime figure on <a href="/methodology">/methodology</a>).</p>
+
+<h3>C1 · Sync distance</h3>
+<p><b>Measures:</b> the difference between an observed peer's reported chain tip and the external reference head, sampled per observation cycle. <b>Vantage:</b> the peer's tip via its RPC (<code>getLastBlockNumber</code> / node info), compared to the external reference head.</p>
+<p><b>Threshold (v1.0):</b> within 3 blocks. &nbsp;<b>Window:</b> 120 hours. &nbsp;<b>Possible states:</b> <code>within threshold</code> · <code>outside threshold</code> · <code>insufficient</code> · <code>reference anchor unavailable</code>.</p>
+<p><b>Limitation:</b> point-in-time per cycle; RPC responses may be cached (network parameters carry a ~30-second server-side TTL). If the reference anchor is unavailable the state is <code>insufficient</code> — DNO never falls back to comparing against its own set. <b>Does not mean:</b> correctness, quality, or standing. A lagging tip is a lag observation and nothing more.</p>
+
+<h3>C2 · Uptime</h3>
+<p><b>Measures:</b> the fraction of observation cycles in the window in which the node was observed reachable. <b>Vantage — three distinct facts, never conflated:</b> (1) direct reachability — DNO fetches the node itself; (2) reference-peerlist presence — the node appears in the external reference's peerlist; (3) relayed liveness — a liveness flag the network itself reports. A published uptime definition names which of the three it counts and labels the others as separate.</p>
+<p><b>Threshold (v1.0):</b> at least 97% of cycles. &nbsp;<b>Window:</b> 120 hours. &nbsp;<b>Possible states:</b> <code>within threshold</code> · <code>outside threshold</code> · <code>insufficient</code>.</p>
+<p><b>Limitation:</b> absence from a roster is <b>not</b> downtime — a node DNO has not observed enough is <code>insufficient</code>, never counted as failing. <b>Does not mean:</b> service quality, or reachability for any other client on any other network path.</p>
+
+<h3>C3 · Response rate</h3>
+<p><b>Measures:</b> the fraction of DNO probe requests in the window that received a well-formed response, from DNO's vantage only.</p>
+<p><b>Threshold (v1.0):</b> at least 95%. &nbsp;<b>Window:</b> 120 hours. &nbsp;<b>Possible states:</b> <code>within threshold</code> · <code>outside threshold</code> · <code>insufficient</code>.</p>
+<p><b>Limitation:</b> the probe does not capture latency; response <em>rate</em> is not response <em>speed</em>. <b>Does not mean:</b> throughput, latency, or quality of service to any other consumer.</p>
+
+<h3>C4 · Stability</h3>
+<p><b>Measures:</b> the count of observation-reset events in the window (a reset truncates the continuity of the window).</p>
+<p><b>Threshold (v1.0):</b> at most 2 resets. &nbsp;<b>Window:</b> 120 hours. &nbsp;<b>Possible states:</b> <code>within threshold</code> · <code>outside threshold</code> · <code>insufficient</code>.</p>
+<p><b>Limitation:</b> governed by the identity-continuity rule — identity change never sheds history; churn extends <code>insufficient</code>. <b>Does not mean:</b> misbehavior. A reset is an observation-continuity fact, not a judgment about the node.</p>
+
+<h3>C5 · Minimum observation age</h3>
+<p><b>Measures:</b> whether a full, unbroken observation window exists for the participant.</p>
+<p><b>Threshold (v1.0):</b> at least 120 hours of continuous observation. &nbsp;<b>Possible states:</b> <code>sufficient</code> · <code>insufficient</code>.</p>
+<p><b>Limitation:</b> any gap yields <code>insufficient</code>; boundaries are strict (119.9 hours is not 120); a single monotonic time source is recorded with each observation. <b>Does not mean:</b> that a node observed for less time is deficient — only that DNO has insufficient history to say anything.</p>
+
+<h3>C6 · Consistency</h3>
+<p><b>Measures:</b> agreement between an observed peer's state and the external reference head, reported as a fact with magnitude — never collapsed into a good/bad pole. <b>Vantage:</b> the network's own GCR Status hash; a divergent status hash between an observed peer and the reference at the same height is the consistency signal.</p>
+<p><b>Threshold (v1.0):</b> <b>descriptive — no numeric threshold.</b> Divergence is reported as a fact with magnitude, not scored. &nbsp;<b>Possible states:</b> <code>consistent</code> · <code>divergent (with magnitude)</code> · <code>insufficient</code> · <code>reference anchor unavailable</code>.</p>
+<p><b>Limitation:</b> meaningful only when the observed peer and the reference share the same genesis fork schedule; divergence clustered around a fork-activation height may reflect binary/version skew rather than fault, and is described as such, not judged. <b>Does not mean:</b> agreement with DNO, honesty, or safety.</p>
+
+<h2>State vocabulary <span style="font-weight:400;color:var(--text-secondary)">(defined here; applied to no participant on this page)</span></h2>
+<p>DNO's observation outputs, when published on a separate surface, draw only from this fixed vocabulary:</p>
+<p><code>meets_published_criteria = true | false</code> — a binary result against the disclosed thresholds above, accompanied by the criterion-level facts. It is <b>never</b> a score, grade, ranking, trust level, or validator-quality metric.</p>
+<p><code>insufficient observation history</code> — not enough continuous observation to evaluate. &nbsp;<code>reference anchor unavailable</code> — the external reference needed for C1/C6 was not available. &nbsp;<code>criterion unavailable</code> — a specific criterion could not be observed this cycle. &nbsp;<code>attestation unavailable</code> — used only where source attestation genuinely does not exist; DNO distinguishes &ldquo;published on-chain&rdquo; from &ldquo;source attestation available.&rdquo;</p>
+<p>Defining this vocabulary does not mean DNO is currently computing or publishing per-participant results — see below.</p>
+
+<h2>What DNO deliberately does not do</h2>
+<p>The restraint here is not a limitation to apologize for; it is the source of DNO's credibility.</p>
+<p>DNO does <b>not</b> score, rank, grade, certify, approve, recommend, or predict. DNO does <b>not</b> publish per-participant results on this page — this document is definitions only. DNO does <b>not</b> republish, mirror, or derive from any reputation, credibility, points, or per-account labelling that may exist elsewhere; where such signals exist, they belong to the systems that maintain them. DNO does <b>not</b> act on the set it observes, participate in the network, or influence admission.</p>
+<p>A DNO observation means exactly one thing: <em>an independent, non-participating observer, with no stake in the outcome, saw this from its stated vantage, subject to the limitations named above.</em></p>
+
+<h2 id="gated">Relationship to a published observation surface <span style="font-weight:400;color:var(--text-secondary)">(gated — not live)</span></h2>
+<p>These definitions exist independently of any surface that would apply them. An evaluator that emits <code>meets_published_criteria</code> per participant is a <b>separate, gated capability</b> and is <b>not live</b>. Two conditions gate it, and neither is satisfied by this document: (1) a sufficient, continuous observation history exists (until then, the honest output is <code>insufficient observation history</code>); and (2) the external boundary is settled — a public position that admission is not DNO's to grant and that any DNO methodology is one non-binding evidence source, with no mechanical &ldquo;meets-DNO-criteria &rarr; promoted&rdquo; rule. Publishing these definitions requires neither gate. Applying them to participants in public requires both, plus a named external consumer that has stated a specific need and accepted the constraints on use.</p>
+
+<h2>Versioning and changelog</h2>
+<p><b>Criteria Framework version:</b> 1.0 &nbsp;·&nbsp; <b>Effective date:</b> 2026-07-06. Every change to a threshold, window, measurement source, or state definition increments the framework version, is recorded below with an effective date, and preserves prior versions for citation. <a href="/criteria.json">/criteria.json</a> is the machine-readable form of this document and carries the same version and effective date; the two must not diverge.</p>
+<table>
+<thead><tr><th>Version</th><th>Effective</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>1.0</td><td>2026-07-06</td><td>Initial published definitions (C1–C6, state vocabulary, epistemic rules). Definitions-only; no participant evaluation published.</td></tr>
+</tbody>
+</table>
+
+<h2>Grounding note</h2>
+<p>The observable quantities and their limits are grounded in the Demos network's own documented behavior (node RPC surface, validator lifecycle, GCR state-consistency hashing, consensus and fork semantics) as verified against primary sources on 2026-07-06. The threshold values (3 blocks, 97%, 95%, 2 resets, 120 hours) are DNO's own published parameters, not values Demos requires of anyone. DNO takes no position on whether Demos's own criteria are correct or sufficient.</p>
+
+<div class="note" style="margin-top:24px">
+DNO does not score, rank, certify, approve, recommend, or predict, and applies these criteria to no named participant here. This page publishes definitions only; per-participant evaluation is a separate, gated capability that is not live. &nbsp;<span style="color:var(--text-secondary)">Criteria Framework v1.0 · effective 2026-07-06 · machine-readable companion: <a href="/criteria.json">/criteria.json</a></span>
+</div>
+
+</main>
+<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div><script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class="nav-live-dot" style="background:#d29922"></span>STALE';}}).catch(function(){p.innerHTML='<span class="nav-live-dot" style="background:#6b7280"></span>OFFLINE';});})();</script></body></html>
+<script>
+document.querySelectorAll('.val').forEach(function(el){
+  var v = el.textContent.trim().toLowerCase();
+  var green = ['stable','low','clear','sufficient','strong','improving','info','none'];
+  var orange = ['degraded','elevated','uncertain','insufficient','moderate','warning'];
+  var red = ['unstable','high','worsening','weak','critical'];
+  if (green.indexOf(v) !== -1) el.style.color = '#22C55E';
+  else if (orange.indexOf(v) !== -1) el.style.color = '#d97706';
+  else if (red.indexOf(v) !== -1) el.style.color = '#EF4444';
+  else el.style.color = '#98a2b3';
+});
+</script>

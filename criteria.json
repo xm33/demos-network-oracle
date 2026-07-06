@@ -1,0 +1,106 @@
+{
+  "criteria_framework_version": "1.0",
+  "effective_date": "2026-07-06",
+  "status": "definitions_only",
+  "descriptive_not_prescriptive": true,
+  "applied_to_participants": false,
+  "evaluator_status": "gated_not_live",
+  "currently_published_per_participant": false,
+  "observation_window_hours": 120,
+  "reference_anchor": {
+    "type": "external",
+    "note": "External reference head only. DNO never compares a node against its own observed set (non-circularity).",
+    "identifier": "external_reference_head"
+  },
+  "epistemic_rules": {
+    "cannot_check_resolves_to": "insufficient",
+    "never_collapses_to_pole": true,
+    "identity_continuity_required": true,
+    "identity_churn_extends_insufficient": true,
+    "on_chain_fact_and_observed_reachability_are_distinct": true,
+    "vantage": "json_rpc_and_peerlist_only"
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "name": "sync_distance",
+      "threshold": { "operator": "<=", "value": 3, "unit": "blocks" },
+      "measurement_source": "observed peer chain tip vs external reference head, per cycle",
+      "observation_window_hours": 120,
+      "possible_states": ["within_threshold", "outside_threshold", "insufficient", "reference_anchor_unavailable"],
+      "does_not_mean": ["correctness", "quality", "standing"]
+    },
+    {
+      "id": "C2",
+      "name": "uptime",
+      "threshold": { "operator": ">=", "value": 97, "unit": "percent_of_cycles" },
+      "measurement_source": "observed reachability across cycles (named source: direct | reference_peerlist_presence | relayed_liveness)",
+      "observation_window_hours": 120,
+      "possible_states": ["within_threshold", "outside_threshold", "insufficient"],
+      "does_not_mean": ["service_quality", "reachability_for_other_clients"],
+      "note": "Absence from a roster is insufficient, never downtime."
+    },
+    {
+      "id": "C3",
+      "name": "response_rate",
+      "threshold": { "operator": ">=", "value": 95, "unit": "percent_of_probes" },
+      "measurement_source": "fraction of DNO probe requests receiving a well-formed response, DNO vantage only",
+      "observation_window_hours": 120,
+      "possible_states": ["within_threshold", "outside_threshold", "insufficient"],
+      "does_not_mean": ["latency", "throughput", "quality_of_service"]
+    },
+    {
+      "id": "C4",
+      "name": "stability",
+      "threshold": { "operator": "<=", "value": 2, "unit": "reset_events" },
+      "measurement_source": "observation reset events within the window",
+      "observation_window_hours": 120,
+      "possible_states": ["within_threshold", "outside_threshold", "insufficient"],
+      "does_not_mean": ["misbehavior"]
+    },
+    {
+      "id": "C5",
+      "name": "minimum_observation_age",
+      "threshold": { "operator": ">=", "value": 120, "unit": "hours_continuous" },
+      "measurement_source": "presence of a full unbroken observation window",
+      "observation_window_hours": 120,
+      "possible_states": ["sufficient", "insufficient"],
+      "does_not_mean": ["deficiency_of_newer_nodes"],
+      "note": "Strict boundaries; any gap yields insufficient. Single monotonic time source per observation."
+    },
+    {
+      "id": "C6",
+      "name": "consistency",
+      "threshold": { "operator": "descriptive", "value": null, "unit": "divergence_from_reference_reported_as_fact" },
+      "measurement_source": "GCR status-hash / state agreement between observed peer and external reference head at height",
+      "observation_window_hours": 120,
+      "possible_states": ["consistent", "divergent_with_magnitude", "insufficient", "reference_anchor_unavailable"],
+      "does_not_mean": ["agreement_with_dno", "honesty", "safety"],
+      "note": "Meaningful only under a shared genesis fork schedule; never collapsed to a good/bad pole."
+    }
+  ],
+  "aggregate_result_vocabulary": {
+    "meets_published_criteria": [true, false],
+    "other_states": [
+      "insufficient observation history",
+      "reference anchor unavailable",
+      "criterion unavailable",
+      "attestation unavailable"
+    ],
+    "prohibited_interpretations": ["score", "grade", "ranking", "trust_level", "validator_quality", "recommendation", "approval", "certification"]
+  },
+  "not_published": [
+    "per_node_results",
+    "per_node_measurements",
+    "scores",
+    "rankings",
+    "verdicts",
+    "reputation",
+    "credibility",
+    "per_account_flags",
+    "usage_or_adoption_counts"
+  ],
+  "changelog": [
+    { "version": "1.0", "effective": "2026-07-06", "change": "Initial published definitions. Definitions-only; no participant evaluation published." }
+  ]
+}

@@ -217,6 +217,12 @@ try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { 
 var METHODOLOGY_HTML = "";
 try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
+var CRITERIA_HTML = "";
+try { CRITERIA_HTML = readFileSync("criteria.html", "utf8"); } catch(e) { CRITERIA_HTML = "<html><body><h1>Criteria page not found</h1></body></html>"; }
+
+var CRITERIA_JSON = "";
+try { CRITERIA_JSON = readFileSync("criteria.json", "utf8"); } catch(e) { CRITERIA_JSON = "{\"error\":\"criteria.json not found\"}"; }
+
 var ABOUT_DEMOS_HTML = "";
 try { ABOUT_DEMOS_HTML = readFileSync("about-demos.html", "utf8"); } catch(e) { ABOUT_DEMOS_HTML = "<html><body><h1>About Demos page not found</h1></body></html>"; }
 
@@ -3331,6 +3337,12 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);
+    } else if (req.url === "/criteria") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(CRITERIA_HTML);
+    } else if (req.url === "/criteria.json") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.end(CRITERIA_JSON);
     } else if (req.url === "/commerce") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(COMMERCE_HTML);
