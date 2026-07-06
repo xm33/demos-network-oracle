@@ -94,5 +94,17 @@ check("G2 meets_published_criteria framed as never-a-score",
 check("G3 admission stays out of Demos governance",
       !/Demos\s+alone\s+(decides|owns)/i.test(html) && html.includes("not DNO's to decide"));
 
+// R-series: B1 — community submission/approval subsystem removed (§2.1/§2.4/§2.6)
+const agent = readFileSync(join(__dir, "..", "src", "agent.mjs"), "utf8");
+check("R1a no /approve route",  !/indexOf\("\/approve/.test(agent));
+check("R1b no /submit route",   !/req\.url === "\/submit"/.test(agent));
+check("R1c no community node in public set",
+  !/"community-node[12]"/.test(agent) && !/source_type:\s*"community"/.test(agent));
+check("R1d computeCanonicalState still reads latestPublicNodes",
+  /function computeCanonicalState[\s\S]{0,400}latestPublicNodes/.test(agent));
+check("R1e no /submit link on homepage (tripwire; vacuous at introduction)",
+  !/href="\/submit"/.test(readFileSync(join(__dir, "..", "homepage.html"), "utf8")));
+check("R1f no /submit href anywhere in agent",  !/href="\/submit"/.test(agent));
+
 console.log(`\n${GUARD}: ${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

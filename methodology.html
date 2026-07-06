@@ -138,7 +138,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <h2>Public vs Reference Separation</h2>
 <p>This is the most important structural rule in the Oracle. It governs everything.</p>
 <h3>Public network (primary observation basis)</h3>
-<p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are validator nodes operated by independent parties: Kynesys (the protocol team) and manually approved community validators.</p>
+<p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are the independent Kynesys validators DNO observes.</p>
 <h3>Reference fleet (internal context)</h3>
 <p>The Oracle operator (XM33) also runs a fleet of nine validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
 <p>The fleet is a reference layer because it is operated by a single entity, may be on a different chain state than the public network, and its health does not represent public network health.</p>
@@ -210,7 +210,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 3. Consumers can rely on these states as stable, intentional signals — not bugs.</p>
 <h2>Known Limitations</h2>
 <p>DEMOS is a young testnet. The Oracle is designed for this reality and makes no claims beyond what it can observe.</p>
-<p><b>Small public node set.</b> The Oracle currently monitors five public nodes (two Kynesys, three community). Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
+<p><b>Small public node set.</b> The Oracle currently monitors the Kynesys public validators. Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
 <p><b>Discovered but unmonitored validators.</b> The Oracle discovers new validators via peer list crawling. Some may be online but not yet added to formal monitoring. The Network Growth panel on the dashboard shows their sync progress. They are added to monitoring manually after reaching the network head.</p>
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
 <p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core assessment model.</p>
@@ -235,7 +235,6 @@ API documentation: <a href="/docs">/docs</a><br>
 Agent guide: <a href="/agent">/agent</a><br>
 
 Oracle sources: <a href="/sources">/sources</a> — where the observations come from.<br>
-Submit a node: <a href="/submit">/submit</a> — community validator onboarding.<br>
 Observation timeline: <a href="/timeline">/timeline</a> — generated public observation record.<br>
 Onboarding pipeline: <a href="/community">/community</a> — submitted nodes and onboarding progress.<br>
 API version: <code>1.0</code></div>

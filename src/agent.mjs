@@ -210,8 +210,7 @@ var HOMEPAGE_HTML = "";
 try { HOMEPAGE_HTML = readFileSync("homepage.html", "utf8"); } catch(e) { HOMEPAGE_HTML = "<html><body><h1>Homepage not found</h1></body></html>"; }
 var SOURCES_HTML = "";
 try { SOURCES_HTML = readFileSync("sources.html", "utf8"); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
-var SUBMIT_HTML = "";
-try { SUBMIT_HTML = readFileSync("submit.html", "utf8"); } catch(e) { SUBMIT_HTML = "<html><body><h1>Submit page not found</h1></body></html>"; }
+
 var AGENT_GUIDE_HTML = "";
 try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
 var METHODOLOGY_HTML = "";
@@ -331,8 +330,8 @@ if (!EXPECTED_FLEET[LOCAL_NODE_NAME]) {
 }
 
 // Node registry — separated by source type and trust tier
-// source_type: "public" | "community" | "discovered"
-// trust_tier: "verified" | "community_submitted" | "auto_discovered"
+// source_type: "public" | "discovered"
+// trust_tier: "verified" | "auto_discovered"
 
 const PUBLIC_NODES = {
   // Kynesys public nodes — verified, known operators
@@ -359,23 +358,6 @@ const PUBLIC_NODES = {
     trust_tier: "verified",
     operator: "Kynesys",
     joined_at: "2026-04-14"
-  },
-  // Community nodes — manually approved by XM33
-  "community-node1": {
-    url: "http://107.131.170.202:53552",
-    identity: "0x283ab24d052cfd8aa82b66780b6d88723e577697d718bada19dfcafcd64524ea",
-    source_type: "community",
-    trust_tier: "community_submitted",
-    operator: "Community",
-    joined_at: "2026-04-15"
-  },
-  "community-node2": {
-    url: "http://65.7.20.194:53552",
-    identity: "0x036a053dd8b06aeef6b4a3cf2e0181c69947997fad0ab82e7beb9324448ec43d",
-    source_type: "community",
-    trust_tier: "community_submitted",
-    operator: "Community",
-    joined_at: "2026-04-15"
   },
 };
 var PUBLIC_NODE_IDENTITIES = {};
@@ -2715,82 +2697,6 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/sources") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(SOURCES_HTML);
-    } else if (req.url === "/submit" && req.method === "GET") {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(SUBMIT_HTML);
-    } else if (req.url === "/submit" && req.method === "POST") {
-      var body = "";
-      req.on("data", function(chunk) { body += chunk; });
-      req.on("end", async function() {
-        try {
-          var params = new URLSearchParams(body);
-          var host = (params.get("host") || "").trim();
-          var port = parseInt(params.get("port") || "53550", 10);
-          var operator = (params.get("operator") || "").trim();
-          var blocked = ["localhost","127.0.0.1","0.0.0.0","10.","192.168.","172.16.","172.17.","172.18.","172.19.","172.20.","172.21.","172.22.","172.23.","172.24.","172.25.","172.26.","172.27.","172.28.","172.29.","172.30.","172.31."];
-          var isBlocked = blocked.some(function(b){ return host.indexOf(b) === 0; });
-          if (isBlocked) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"private or local addresses not allowed"})); return; }
-          if (!host || !operator) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"host and operator required"})); return; }
-          if (!sharedDb) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"database not available"})); return; }
-          // Check existing — allow retry if probed_failed
-          var existing = sharedDb.query("SELECT id, status FROM submissions WHERE host=? AND port=? ORDER BY id DESC LIMIT 1").get(host, port);
-          var subId = null;
-          if (existing) {
-            if (existing.status === "probed_failed") {
-              sharedDb.run("UPDATE submissions SET operator=?, status='pending' WHERE id=?", operator, existing.id);
-              subId = existing.id;
-              log("[m10] Retry submission id=" + subId + " " + host + ":" + port);
-            } else {
-              res.writeHead(409, {"Content-Type":"application/json"});
-              res.end(JSON.stringify({error:"already submitted", existing_status: existing.status}));
-              return;
-            }
-          }
-          if (!subId) {
-            sharedDb.run("INSERT INTO submissions (host, port, operator, submitted_at) VALUES (?, ?, ?, ?)", host, port, operator, Date.now());
-            var row = sharedDb.query("SELECT id FROM submissions WHERE host=? AND port=? ORDER BY id DESC LIMIT 1").get(host, port);
-            subId = row ? row.id : null;
-          }
-          // Synchronous probe
-          var probeResult = {status: "probed_failed", error: "unknown"};
-          try {
-            var probeRes = await fetch("http://" + host + ":" + port + "/info", { signal: AbortSignal.timeout(5000) });
-            if (probeRes.ok) {
-              var probeData = await probeRes.json();
-              var block = probeData.peerlist && probeData.peerlist[0] && probeData.peerlist[0].sync ? probeData.peerlist[0].sync.block : null;
-              var identity = probeData.identity || null;
-              var subUrl = "http://" + host + ":" + port;
-              var dupUrl = Object.values(PUBLIC_NODES).some(function(n){ return n.url === subUrl; });
-              var dupIdentity = identity && Object.values(PUBLIC_NODES).some(function(n){ return n.identity === identity; });
-              if (dupUrl || dupIdentity) {
-                if (subId) sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='duplicate', probe_error=NULL WHERE id=?", block, identity, subId);
-                log("[m10] Duplicate: " + host + ":" + port);
-                probeResult = {status: "duplicate", block: block, message: "This node is already monitored by the Oracle."};
-              } else {
-                if (subId) sharedDb.run("UPDATE submissions SET probe_ok=1, probe_block=?, probe_identity=?, status='probed_ok', probe_error=NULL WHERE id=?", block, identity, subId);
-                log("[m10] Probe OK: " + host + ":" + port + " block=" + block);
-                probeResult = {status: "probed_ok", block: block};
-              }
-            } else {
-              var httpErr = "http_" + probeRes.status;
-              if (subId) sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error=? WHERE id=?", httpErr, subId);
-              log("[m10] Probe FAIL: " + host + ":" + port + " HTTP " + probeRes.status);
-              probeResult = {status: "probed_failed", error: httpErr};
-            }
-          } catch(probeErr) {
-            var probeReason = "unknown"; var pmsg = (probeErr.message || "").toLowerCase();
-            if (pmsg.indexOf("timeout") !== -1) probeReason = "timeout";
-            else if (pmsg.indexOf("refused") !== -1 || pmsg.indexOf("unable to connect") !== -1) probeReason = "connection_refused";
-            else if (pmsg.indexOf("dns") !== -1 || pmsg.indexOf("resolve") !== -1) probeReason = "dns_error";
-            else if (pmsg.indexOf("fetch") !== -1) probeReason = "fetch_failed";
-            if (subId) sharedDb.run("UPDATE submissions SET probe_ok=0, status='probed_failed', probe_error=? WHERE id=?", probeReason, subId);
-            log("[m10] Probe FAIL: " + host + ":" + port + " reason=" + probeReason);
-            probeResult = {status: "probed_failed", error: probeReason};
-          }
-          res.writeHead(200, {"Content-Type":"application/json"});
-          res.end(JSON.stringify({ok: true, probe: probeResult}));
-        } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
-      });
     } else if (req.url === "/submissions" || req.url.indexOf("/submissions?") === 0) {
       var subUrl = new URL(req.url, "http://d"); var subTk = subUrl.searchParams.get("token");
       if (subTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
@@ -2798,28 +2704,6 @@ function generatePrometheusMetrics(fleetData) {
       var rows = sharedDb.query("SELECT * FROM submissions ORDER BY submitted_at DESC").all();
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(rows, null, 2));
-    } else if (req.url && req.url.indexOf("/approve?") === 0) {
-      var appUrl = new URL(req.url, "http://d"); var appTk = appUrl.searchParams.get("token");
-      if (appTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
-      var approveId = parseInt(appUrl.searchParams.get("id"), 10);
-      if (!sharedDb || !approveId) { res.writeHead(400); res.end(JSON.stringify({error:"invalid id"})); return; }
-      var sub = sharedDb.query("SELECT * FROM submissions WHERE id=?").get(approveId);
-      if (!sub) { res.writeHead(404); res.end(JSON.stringify({error:"not found"})); return; }
-      if (sub.status === "approved") { res.writeHead(200); res.end(JSON.stringify({ok:true, message:"already approved"})); return; }
-      // Check duplicate identity
-      if (sub.probe_identity) {
-        var existingIdentity = Object.values(PUBLIC_NODES).some(function(n){ return n.identity === sub.probe_identity; });
-        if (existingIdentity) { res.writeHead(409, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"node with this identity already monitored"})); return; }
-      }
-      // Check duplicate URL
-      var existingUrl = Object.values(PUBLIC_NODES).some(function(n){ return n.url === "http://" + sub.host + ":" + sub.port; });
-      if (existingUrl) { res.writeHead(409, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"node at this address already monitored"})); return; }
-      var nodeName = "community-node-" + approveId;
-      PUBLIC_NODES[nodeName] = { url: "http://" + sub.host + ":" + sub.port, identity: sub.probe_identity || "unknown", source_type: "community", trust_tier: "community_submitted", operator: sub.operator, joined_at: new Date().toISOString().split("T")[0] };
-      sharedDb.run("UPDATE submissions SET status='approved', reviewed_at=? WHERE id=?", Date.now(), approveId);
-      log("[m7] Approved: " + nodeName + " = " + sub.host + ":" + sub.port + " (" + sub.operator + ")");
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ok:true, node_name: nodeName, message:"Node approved and added to monitoring"}));
     } else if (req.url === "/submissions/summary" || req.url.indexOf("/submissions/summary?") === 0) {
       var sumUrl = new URL(req.url, "http://d"); var sumTk = sumUrl.searchParams.get("token");
       if (sumTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
@@ -3155,7 +3039,7 @@ function generatePrometheusMetrics(fleetData) {
       // Table
       h += '<div class="table-scroll"><table><thead><tr><th>Identity</th><th>Operator</th><th>Stage</th><th>Block</th><th>Behind</th><th>Details</th></tr></thead><tbody>';
       if (enriched.length === 0) {
-        h += '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No community submissions yet. <a href="/submit">Submit your node</a></td></tr>';
+        h += '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No community submissions on record.</td></tr>';
       }
       for (var ri=0; ri<enriched.length; ri++) {
         var r = enriched[ri];
@@ -3211,8 +3095,6 @@ function generatePrometheusMetrics(fleetData) {
           discoveredList = vgrow.validators.filter(function(v){ return !v.monitored; });
         }
       } catch(e) { discoveredList = []; }
-      // v7.3: OPEN: NODE SUBMISSION CTA pill above Discovered Validators
-      h += '<div style="margin-top:32px;margin-bottom:8px"><a href="/submit" class="oracle-hero-submit">OPEN: NODE SUBMISSION</a></div>';
       h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
       h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Discovered Validators</h2>';
       h += '<p class="sub" style="margin-bottom:18px">Validators the Oracle has seen via peer crawling but has not yet formally added to monitoring. Shown here for transparency; added to the monitored set manually once they reach the network head. Not community-submitted.</p>';
@@ -3262,69 +3144,6 @@ function generatePrometheusMetrics(fleetData) {
       }
       res.writeHead(200, {"Content-Type":"application/json","Cache-Control":"public, max-age=10"});
       res.end(JSON.stringify(stResp));
-    } else if (req.url && req.url.indexOf("/admin/submissions") === 0) {
-      function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
-      var adUrl = new URL(req.url, "http://d"); var adTk = adUrl.searchParams.get("token");
-      if (adTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"text/plain"}); res.end("403 Forbidden"); return; }
-      if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No database</h1>"); return; }
-      var totals = sharedDb.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status='probed_ok' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='probed_failed' THEN 1 ELSE 0 END) AS failed, SUM(CASE WHEN status='duplicate' THEN 1 ELSE 0 END) AS dup, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved FROM submissions").get() || {};
-      var failures = sharedDb.query("SELECT probe_error, COUNT(*) AS count FROM submissions WHERE status='probed_failed' AND probe_error IS NOT NULL GROUP BY probe_error ORDER BY count DESC").all();
-      var rows = sharedDb.query("SELECT id, host, port, operator, status, probe_block, probe_error, submitted_at FROM submissions ORDER BY id DESC LIMIT 50").all();
-      var tk = encodeURIComponent(adTk);
-      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO Admin</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>';
-      html += '*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Source Code Pro",monospace;background:#0a0a0a;color:#f5f5f5;padding:24px;max-width:1100px;margin:0 auto}';
-      html += 'h1{font-size:20px;margin-bottom:4px}';
-      html += '.sub{color:#98a2b3;font-size:12px;margin-bottom:24px}';
-      html += '.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}';
-      html += '.card{flex:1;min-width:120px;background:#101010;border:1px solid #1a1a1a;border-radius:10px;padding:14px}';
-      html += '.card-val{font-size:28px;font-weight:600;margin-bottom:2px}';
-      html += '.card-label{font-size:11px;color:#98a2b3;text-transform:uppercase;letter-spacing:0.5px}';
-      html += '.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}';
-      html += '.pill{font-size:11px;padding:3px 8px;border-radius:999px;background:#101010;border:1px solid #1a1a1a;color:#98a2b3}';
-      html += 'table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}';
-      html += 'th{text-align:left;padding:8px 10px;border-bottom:1px solid #1a1a1a;color:#98a2b3;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}';
-      html += 'td{padding:8px 10px;border-bottom:1px solid #1a1a1a}';
-      html += 'tr:hover{background:#101010}';
-      html += '.s-ok{color:#22C55E}.s-fail{color:#EF4444}.s-dup{color:#d97706}.s-approved{color:#22C55E;opacity:0.7}.s-pending{color:#98a2b3}';
-      html += '.btn{display:inline-block;padding:4px 10px;font-size:11px;background:#00DAFF;color:#000;border-radius:6px;text-decoration:none;font-weight:600}';
-      html += '.btn:hover{opacity:0.85}';
-      html += '.muted{color:#98a2b3;font-size:11px}';
-      html += '@media(max-width:640px){.cards{flex-direction:column}table{font-size:11px}td,th{padding:6px}}';
-      html += '</style></head><body>';
-      html += '<h1>Submission Review</h1>';
-      html += '<div class="sub">Community node submissions, probe outcomes, and approval actions.</div>';
-      // Summary cards
-      html += '<div class="cards">';
-      html += '<div class="card"><div class="card-val">'+(totals.total||0)+'</div><div class="card-label">Total</div></div>';
-      html += '<div class="card"><div class="card-val s-ok">'+(totals.pending||0)+'</div><div class="card-label">Pending Review</div></div>';
-      html += '<div class="card"><div class="card-val s-fail">'+(totals.failed||0)+'</div><div class="card-label">Failed</div></div>';
-      html += '<div class="card"><div class="card-val s-dup">'+(totals.dup||0)+'</div><div class="card-label">Duplicate</div></div>';
-      html += '<div class="card"><div class="card-val s-approved">'+(totals.approved||0)+'</div><div class="card-label">Approved</div></div>';
-      html += '</div>';
-      // Failure reasons
-      if (failures.length > 0) {
-        html += '<div class="pills">';
-        for (var fi = 0; fi < failures.length; fi++) { html += '<span class="pill">' + esc(failures[fi].probe_error||"unknown") + ': ' + failures[fi].count + '</span>'; }
-        html += '</div>';
-      }
-      // Table
-      html += '<table><thead><tr><th>ID</th><th>Host</th><th>Port</th><th>Operator</th><th>Status</th><th>Block</th><th>Error</th><th>Action</th></tr></thead><tbody>';
-      for (var ri = 0; ri < rows.length; ri++) {
-        var r = rows[ri];
-        var sc = r.status === "probed_ok" ? "s-ok" : r.status === "probed_failed" ? "s-fail" : r.status === "duplicate" ? "s-dup" : r.status === "approved" ? "s-approved" : "s-pending";
-        var action = "";
-        if (r.status === "probed_ok") action = '<a class="btn" href="/approve?id=' + r.id + '&token=' + tk + '">Approve</a>';
-        else if (r.status === "approved") action = '<span class="muted">Approved</span>';
-        else if (r.status === "duplicate") action = '<span class="muted">Already monitored</span>';
-        else if (r.status === "probed_failed") action = '<span class="muted">Failed</span>';
-        else action = '<span class="muted">In progress</span>';
-        html += '<tr><td>' + r.id + '</td><td>' + esc(r.host) + '</td><td>' + r.port + '</td><td>' + esc(r.operator||"-") + '</td><td class="' + sc + '">' + esc(r.status) + '</td><td>' + (r.probe_block||"-") + '</td><td>' + esc(r.probe_error||"-") + '</td><td>' + action + '</td></tr>';
-      }
-      html += '</tbody></table>';
-      html += '<div style="margin-top:24px;color:#98a2b3;font-size:11px;opacity:0.5">DNO Admin &middot; Token-protected &middot; Not public</div>';
-      html += '</body></html>';
-      res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
-      res.end(html);
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
@@ -4171,23 +3990,6 @@ async function main() {
   )`);
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_obs_history_id_ts ON node_observation_history (identity, ts)`);
   log("  Observation tables ready");
-  // M9: Reload approved submissions into PUBLIC_NODES
-  try {
-    var approved = sharedDb.query("SELECT * FROM submissions WHERE status='approved' ORDER BY id ASC").all();
-    var loadedCount = 0, skippedCount = 0;
-    for (var ai = 0; ai < approved.length; ai++) {
-      var sub = approved[ai];
-      var subUrl = "http://" + sub.host + ":" + sub.port;
-      var dupUrl = Object.values(PUBLIC_NODES).some(function(n){ return n.url === subUrl; });
-      var dupIdentity = sub.probe_identity && Object.values(PUBLIC_NODES).some(function(n){ return n.identity === sub.probe_identity; });
-      if (dupUrl || dupIdentity) { skippedCount++; continue; }
-      var nodeName = "community-node-" + sub.id;
-      PUBLIC_NODES[nodeName] = { url: subUrl, identity: sub.probe_identity || "unknown", source_type: "community", trust_tier: "community_submitted", operator: sub.operator, joined_at: new Date(sub.reviewed_at || sub.submitted_at).toISOString().split("T")[0] };
-      loadedCount++;
-      log("  Loaded approved node: " + nodeName + " = " + sub.host + ":" + sub.port);
-    }
-    log("  Approved submissions: " + loadedCount + " loaded, " + skippedCount + " skipped (duplicate)");
-  } catch(loadErr) { log("  Failed to load approved submissions: " + loadErr.message); }
 
   // v6.4: Load incident counter from DB
   loadIncidentCounter();

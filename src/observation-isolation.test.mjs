@@ -75,16 +75,6 @@ const TARGETS = [
     name: "computeCanonicalState",
     anchor: /^function computeCanonicalState\s*\(/,
   },
-  {
-    name: "submissions->PUBLIC_NODES loader (M9 try-block)",
-    // The admission doorway: the try-block that reads approved submissions and
-    // writes PUBLIC_NODES. Anchored on its distinctive query line; brace-balance
-    // captures the enclosing try { ... } catch.
-    anchor: /SELECT \* FROM submissions WHERE status='approved'/,
-    // For a non-`function {` anchor, walk back to the opening `try {` so the
-    // extracted block is the whole loader scope, not a mid-statement fragment.
-    backAnchor: /^\s*try\s*\{/,
-  },
 ];
 
 // ============================================================================
@@ -129,6 +119,19 @@ const ccs = bodies["computeCanonicalState"];
 check("computeCanonicalState body is substantial (>50 lines)",
   ccs !== null && ccs.split("\n").length > 50,
   ccs ? `only ${ccs.split("\n").length} lines extracted` : "null body");
+
+// ============================================================================
+// B1 (2026-07-06): the submissions->PUBLIC_NODES admission loader was REMOVED.
+// The strongest form of "admission cannot contaminate L1" is: no admission
+// path exists. These absence assertions replace the former M9 body-scan target.
+// ============================================================================
+console.log(`\n[${L1_OBSERVATION_ISOLATION}] admission path absent (B1)`);
+check("admission loader absent",
+  !/SELECT \* FROM submissions WHERE status='approved'/.test(SRC),
+  "M9 admission loader reappeared — community nodes must not be re-admittable to the public set");
+check("no community-node admission write to PUBLIC_NODES",
+  !/PUBLIC_NODES\[[^\]]*\]\s*=\s*\{[^}]*source_type:\s*"community"/.test(SRC),
+  "a community-node admission write reappeared");
 
 // ============================================================================
 // LAYER A — single-writer assertion on the canonical input variable.
