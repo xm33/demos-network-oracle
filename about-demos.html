@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About Demos • Demos Network Oracle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --about-bg: #0a0c10;
@@ -13,6 +16,11 @@
       --about-text: #e6e8eb;
       --about-muted: #9aa0a8;
       --about-code-bg: #1a1f26;
+      --surface: #101010;
+      --brand: #2B36D9;
+      --text-primary: #e6e8eb;
+      --text-secondary: #9aa0a8;
+      --mono: 'Source Code Pro', monospace;
     }
 
     body {
@@ -24,9 +32,36 @@
     }
 
     .about-demos-page {
-      padding-top: 60px;
+      padding-top: 36px;
       padding-bottom: 80px;
     }
+
+    /* BEGIN canonical-header-css v1 */
+    .doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
+    .doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
+    .doc-nav-left{order:1}
+    .doc-nav-right{order:2;margin-left:auto}
+    .doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
+    .doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
+    .doc-nav-brand:hover{text-decoration:none;opacity:0.9}
+    .doc-logo{width:30px;height:30px;color:var(--text-primary)}
+    .doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
+    .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
+    .doc-nav-link[aria-current="page"]{opacity:0.5}
+    .doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
+    .nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
+    .nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
+    .doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
+    .demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
+    .demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
+    .dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
+    .dbtn-logo { height:16px; width:auto; opacity:1; }
+    .dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
+    @media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
+    /* END canonical-header-css v1 */
+
+    .watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}
+    .watermark svg{width:100%;height:100%;display:block}
 
     .container-narrow {
       max-width: 720px;
@@ -130,8 +165,9 @@
     }
 
     @media (max-width: 640px) {
+      .watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}
       .about-demos-page {
-        padding-top: 44px;
+        padding-top: 28px;
         padding-bottom: 64px;
       }
       .container-narrow {
@@ -156,7 +192,34 @@
     }
   </style>
 </head>
-<body>
+<body class="doc-page doc-page--about-demos">
+
+<!-- BEGIN canonical-header v1 -->
+<nav class="doc-nav">
+  <div class="doc-nav-inner">
+    <div class="doc-nav-left">
+      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
+      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
+    </div>
+    <div class="doc-nav-right">
+      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
+      <a href="/about-demos" class="doc-nav-link" data-nav="about-demos" aria-current="page">About Demos</a>
+      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
+      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
+      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
+      <a href="/community" class="doc-nav-link" data-nav="community">Community</a>
+      <a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
+    </div>
+    <div class="doc-nav-far">
+      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
+        <span class="dbtn-prefix">powered by</span>
+        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
+        <span class="dbtn-wordmark">DEMOS</span>
+      </a>
+    </div>
+  </div>
+</nav>
+<!-- END canonical-header v1 -->
 
 <main class="about-demos-page">
   <div class="container-narrow">
@@ -209,6 +272,26 @@
       </p>
     </section>
 
+    <!-- Why agent commerce matters -->
+    <section class="section">
+      <h2>Why agent commerce matters</h2>
+      <p>
+        Agent commerce refers to autonomous systems conducting economic activity — discovering counterparties, negotiating terms, exchanging value, and verifying outcomes — with minimal human intervention.
+      </p>
+      <p>
+        For this to work reliably at scale, agents need shared infrastructure that supports:
+      </p>
+      <ul>
+        <li><strong>Portable identity</strong> — So an agent can prove who it is across different platforms and networks.</li>
+        <li><strong>Verifiable claims</strong> — So counterparties can check credentials, permissions, or reputation signals.</li>
+        <li><strong>Atomic settlement</strong> — So value can move cleanly without unnecessary counterparty risk.</li>
+        <li><strong>Auditability</strong> — So important steps leave a clear, reviewable record.</li>
+      </ul>
+      <p>
+        Without these foundations, agent-to-agent interactions remain fragmented, manual, or limited to low-stakes use cases.
+      </p>
+    </section>
+
     <!-- Cross-Context Identity -->
     <section class="section">
       <h2>Cross-Context Identity</h2>
@@ -217,17 +300,6 @@
       </p>
       <p>
         This matters because agent commerce depends on knowing who is acting, what authority they have, what evidence supports their claims, and whether the interaction can be reviewed later.
-      </p>
-    </section>
-
-    <!-- Why this matters -->
-    <section class="section">
-      <h2>Why this matters</h2>
-      <p>
-        Agent commerce requires more than payment rails. Agents need identity, verification, settlement, and auditability in forms that other agents and systems can read.
-      </p>
-      <p>
-        If agents are going to coordinate across networks, they need infrastructure with observable state — so builders, users, and other agents can understand whether the public network is reachable, whether visible nodes appear aligned, and whether the available data is sufficient.
       </p>
     </section>
 
@@ -242,6 +314,30 @@
       </p>
       <p>
         DNO observes public validators and selected public infrastructure endpoints, applies a published methodology, and publishes structured assessments about what it can see.
+      </p>
+    </section>
+
+    <!-- DNO as an observability layer -->
+    <section class="section">
+      <h2>DNO as an observability layer</h2>
+      <p>
+        DNO functions as an independent observability layer on top of the Demos public testnet. It continuously monitors public validators and selected public infrastructure endpoints, then reduces those observations into structured, machine-readable assessments.
+      </p>
+      <p>
+        Its primary output is the <code>/organism</code> feed, which reports:
+      </p>
+      <ul>
+        <li>Current observed network status, trend, and risk</li>
+        <li>Data quality and confidence in the assessment</li>
+        <li>Whether visible public nodes appear aligned</li>
+        <li>Active public incidents (if any)</li>
+        <li>Explicit signals when data is insufficient or uncertain</li>
+      </ul>
+      <p>
+        DNO does not control validators, participate in consensus, or influence protocol behavior. It only observes public signals and publishes what it can see, along with clear indications of what it cannot determine.
+      </p>
+      <p>
+        This separation allows agents, developers, and researchers to consume network context without relying solely on statements from the protocol team.
       </p>
     </section>
 
@@ -334,6 +430,9 @@
 
   </div>
 </main>
+
+<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>
+<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>600){p.style.borderColor='rgba(217,119,6,0.35)';p.style.color='rgba(217,119,6,0.9)';var d=p.querySelector('.nav-live-dot');if(d)d.style.background='#d97706'}}).catch(function(){})})();</script>
 
 </body>
 </html>

@@ -61,7 +61,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
     </div>
     <div class="doc-nav-right">
       <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
-<a href="/about-demos" data-nav="about-demos">About Demos</a>      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
+<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a>      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
       <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
       <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
       <a href="/community" class="doc-nav-link" data-nav="community">Community</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
@@ -87,7 +87,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 
 <div class="note">
 For how DNO currently assesses live network health, see <a href="/methodology">/methodology</a>. This catalog is the versioned definition of DNO's observation criteria as <em>definitions</em>. Applying them to individual participants in public is a separate capability that is <b>gated and not live</b> — see <a href="#gated">Relationship to a published observation surface</a>.
-<a href="/about-demos" data-nav="about-demos">About Demos</a></div>
+<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a></div>
 
 <h2>How to read a criterion</h2>
 <p>Every criterion answers four questions, in order: <b>measures what</b> (the observable quantity), <b>from what vantage</b> (where DNO stands when it looks), <b>with what limitation</b> (what bounds or invalidates the observation), and <b>what it does not mean</b> (the interpretations the criterion cannot support). A criterion is a definition, not a result. This page contains no results.</p>
@@ -112,7 +112,7 @@ For how DNO currently assesses live network health, see <a href="/methodology">/
 
 <h2>The criteria (v1.0)</h2>
 <p>The threshold values below are DNO's own published parameters for its observation window — not values Demos requires of anyone. They are versioned (see Changelog) and auditable as data in <a href="/criteria.json">/criteria.json</a>. The observation window used throughout is <b>120 hours</b>; this is the criteria framework's own window and is distinct from any live rolling metric shown elsewhere on the site (for example, a 7-day uptime figure on <a href="/methodology">/methodology</a>).</p>
-<a href="/about-demos" data-nav="about-demos">About Demos</a>
+<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a>
 <h3>C1 · Sync distance</h3>
 <p><b>Measures:</b> the difference between an observed peer's reported chain tip and the external reference head, sampled per observation cycle. <b>Vantage:</b> the peer's tip via its RPC (<code>getLastBlockNumber</code> / node info), compared to the external reference head.</p>
 <p><b>Threshold (v1.0):</b> within 3 blocks. &nbsp;<b>Window:</b> 120 hours. &nbsp;<b>Possible states:</b> <code>within threshold</code> · <code>outside threshold</code> · <code>insufficient</code> · <code>reference anchor unavailable</code>.</p>

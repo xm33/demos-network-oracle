@@ -248,6 +248,7 @@ function renderHeader(activeItem, farSlot) {
     + '<span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>'
     + '</div><div class="doc-nav-right">'
     + renderHeaderNavLink('/methodology', 'methodology', 'Methodology', activeItem)
+    + renderHeaderNavLink('/about-demos', 'about-demos', 'About Demos', activeItem)
     + renderHeaderNavLink('/commerce', 'commerce', 'Commerce', activeItem)
     + renderHeaderNavLink('/agent', 'agent', 'Agent', activeItem)
     + renderHeaderNavLink('/sources', 'sources', 'Sources', activeItem)
