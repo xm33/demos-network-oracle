@@ -32,3 +32,6 @@ phase-*.patch
 fleet.config.mjs
 src/fleet.config.mjs
 .claude/
+
+# one-shot scratch patch scripts (applied, not source)
+patch-*.mjs
