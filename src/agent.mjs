@@ -1297,7 +1297,7 @@ function recordPublicNodeHistory() {
 
 // Phase 1: append-only observation history for discovered nodes.
 // WRITES ONLY to node_observation_history. Reads discoveredPeers (observation side).
-// MUST NEVER touch latestPublicNodes / computeCanonicalState / the submissions loader
+// MUST NEVER touch latestPublicNodes / computeCanonicalState
 // (enforced by observation-isolation.test.mjs, L1_OBSERVATION_ISOLATION).
 // Mirrors recordPublicNodeHistory's append+prune idiom. Single INSERT per peer —
 // do NOT replicate the validator_discoveries double-INSERT at 2491-2493.
@@ -2698,25 +2698,6 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/sources") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(SOURCES_HTML);
-    } else if (req.url === "/submissions" || req.url.indexOf("/submissions?") === 0) {
-      var subUrl = new URL(req.url, "http://d"); var subTk = subUrl.searchParams.get("token");
-      if (subTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
-      if (!sharedDb) { res.writeHead(200); res.end("[]"); return; }
-      var rows = sharedDb.query("SELECT * FROM submissions ORDER BY submitted_at DESC").all();
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify(rows, null, 2));
-    } else if (req.url === "/submissions/summary" || req.url.indexOf("/submissions/summary?") === 0) {
-      var sumUrl = new URL(req.url, "http://d"); var sumTk = sumUrl.searchParams.get("token");
-      if (sumTk !== DNO_ADMIN_TOKEN) { res.writeHead(403, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:"unauthorized"})); return; }
-      if (!sharedDb) { res.writeHead(200, {"Content-Type":"application/json"}); res.end(JSON.stringify({total:0})); return; }
-      try {
-        var totals = sharedDb.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN status='probed_ok' THEN 1 ELSE 0 END) AS probed_ok, SUM(CASE WHEN status='probed_failed' THEN 1 ELSE 0 END) AS probed_failed, SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) AS approved FROM submissions").get() || {};
-        var topPorts = sharedDb.query("SELECT port, COUNT(*) AS count FROM submissions GROUP BY port ORDER BY count DESC LIMIT 10").all();
-        var recent = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, probe_error, submitted_at FROM submissions ORDER BY submitted_at DESC LIMIT 10").all();
-        var failReasons = sharedDb.query("SELECT probe_error, COUNT(*) AS count FROM submissions WHERE status='probed_failed' AND probe_error IS NOT NULL GROUP BY probe_error ORDER BY count DESC LIMIT 10").all();
-        res.writeHead(200, {"Content-Type":"application/json"});
-        res.end(JSON.stringify({total:totals.total||0, pending:totals.pending||0, probed_ok:totals.probed_ok||0, probed_failed:totals.probed_failed||0, approved:totals.approved||0, top_ports:topPorts, failure_reasons:failReasons, recent:recent}, null, 2));
-      } catch(err) { res.writeHead(500, {"Content-Type":"application/json"}); res.end(JSON.stringify({error:err.message})); }
     } else if (req.url === "/fixnet/health") {
       var fxNodes = latestFixnetNodes || [];
       var fxOnline = fxNodes.filter(function(n) { return n.ok; });
@@ -2792,59 +2773,7 @@ function generatePrometheusMetrics(fleetData) {
       res.end(JSON.stringify(fxPayload, null, 2));
     } else if (req.url === "/community") {
       if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
-      var rows = sharedDb.query("SELECT id, host, port, operator, status, probe_ok, probe_block, probe_error, probe_identity, submitted_at FROM submissions WHERE status != 'probed_failed' ORDER BY id DESC LIMIT 50").all();
-      // Get network head from latest public node data
-      var netHead = 0;
-      try { var pn = latestPublicNodes || []; for (var pi=0;pi<pn.length;pi++) { if (pn[pi].block && pn[pi].block > netHead) netHead = pn[pi].block; } } catch(e){}
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
-      function computeStage(r, netHead) {
-        if (r.status === "approved") return "approved";
-        if (r.status === "duplicate") return "duplicate";
-        if (!r.probe_ok) {
-          if (r.probe_error) return "unreachable";
-          return "submitted";
-        }
-        if (!r.probe_block) return "reachable";
-        if (netHead <= 0) return "reachable";   // C3: no network head to compare against -> cannot assess, NOT ready
-        var AHEAD_TOLERANCE = 100;
-        var behind = netHead - r.probe_block;
-        if (behind < -AHEAD_TOLERANCE) return "chain_mismatch";  // C3: block far AHEAD of head -> different chain, cannot confirm on Demos
-        if (behind <= 0) return "ready";
-        if (behind <= 100) return "near_head";
-        return "syncing";
-      }
-      function stageInfo(stage, r) {
-        var reasons = {
-          submitted: ["Submission received, probe pending or not yet attempted.", "The Oracle will probe your node automatically."],
-          unreachable: ["Oracle cannot reach this node. Error: " + (r.probe_error||"unknown").replace(/_/g," ") + ".", "Check that your node is running, the port is open, and the firewall allows inbound connections."],
-          reachable: ["Node responds but no block data received.", "Verify your node is fully initialized and syncing."],
-          syncing: ["Node is reachable and syncing, but still behind the network head.", "Wait until the node syncs closer to the network head. Approval happens after sync."],
-          near_head: ["Node is close to the network head.", "Continue syncing. This node may soon be eligible for manual review."],
-          chain_mismatch: ["Node reports a block far ahead of the Demos network head \u2014 likely a different chain or network. Cannot be confirmed on the Demos network.", "Verify the node is running on the Demos network, not a different chain."],
-          ready: ["Node is synced and meets published criteria.", "Listed as a community submission; not part of DNO core network assessment."],
-          approved: ["Node has been approved and is now monitored.", "Your node appears in the main Oracle homepage."],
-          duplicate: ["This node is already monitored by the Oracle.", "No further action needed."]
-        };
-        var info = reasons[stage] || ["Unknown state.", "Contact the operator."];
-        return { reason: info[0], next_step: info[1] };
-      }
-      // Build page
-      var counts = {submitted:0,unreachable:0,reachable:0,syncing:0,near_head:0,ready:0,chain_mismatch:0,approved:0,duplicate:0};
-      var enriched = rows.map(function(r) {
-        var stage = computeStage(r, netHead);
-        counts[stage] = (counts[stage]||0) + 1;
-        var info = stageInfo(stage, r);
-        var behind = (r.probe_block && netHead > 0) ? (netHead - r.probe_block >= 0 ? netHead - r.probe_block : null) : null;   // C3: do not clamp ahead-of-head to 0 (would look synced); null lets stage carry it
-        var history = [];
-        if (r.host && sharedDb) {
-          try {
-            history = sharedDb.query("SELECT id, host, port, status, probe_error, submitted_at FROM submissions WHERE host = ? AND id != ? ORDER BY id DESC LIMIT 10").all(r.host, r.id);
-          } catch(e) { history = []; }
-        }
-        return { id:r.id, host:r.host, port:r.port, operator:r.operator, stage:stage, block:r.probe_block, behind:behind, error:r.probe_error, submitted_at:r.submitted_at, reason:info.reason, next_step:info.next_step, history:history };
-      });
-      var stageColors = { submitted:"#98a2b3", unreachable:"#EF4444", reachable:"#98a2b3", syncing:"#d97706", near_head:"#22C55E", ready:"#22C55E", chain_mismatch:"#d97706", approved:"#22C55E", duplicate:"#d97706" };
-      var stageBg = { submitted:"rgba(152,162,179,0.08)", unreachable:"rgba(239,68,68,0.08)", reachable:"rgba(152,162,179,0.08)", syncing:"rgba(217,119,6,0.08)", near_head:"rgba(34,197,94,0.08)", ready:"rgba(34,197,94,0.08)", chain_mismatch:"rgba(217,119,6,0.08)", approved:"rgba(34,197,94,0.06)", duplicate:"rgba(217,119,6,0.08)" };
       var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Community Nodes</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
       h += '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">';
       h += '<style>';
@@ -2881,7 +2810,7 @@ function generatePrometheusMetrics(fleetData) {
       // Nav
       h += renderHeader("community", DEMOS_BADGE);
       h += '<main>';
-      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong>Community node submissions, discovered validators, and fleet diagnostics shown on this page are community-submitted and are not part of DNO core network assessment. Inclusion does not imply endorsement.</div>';
+      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Discovered validators and operator fleet nodes shown here are observation/operator-layer context and are not part of DNO core network assessment.</div>';
       h += '<h1>Community Node Onboarding</h1>';
 
       // --- Fleet Fixnet section (v7.2) ---
@@ -3027,54 +2956,6 @@ function generatePrometheusMetrics(fleetData) {
       }
       // --- end Fleet Fixnet section ---
 
-      h += '<p class="sub">Community validator nodes during onboarding.</p>';
-      // Summary
-      h += '<div class="summary">';
-      var sumItems = [["Submitted",rows.length,"#f5f5f5"],["Unreachable",counts.unreachable||0,"#EF4444"],["Syncing",counts.syncing||0,"#d97706"],["Near Head",counts.near_head||0,"#22C55E"],["Criteria met",counts.ready||0,"#22C55E"],["Listed",counts.approved||0,"#22C55E"]];
-      for (var si=0; si<sumItems.length; si++) {
-        h += '<div class="sum-card"><div class="sum-val" style="color:'+sumItems[si][2]+'">'+sumItems[si][1]+'</div><div class="sum-label">'+sumItems[si][0]+'</div></div>';
-      }
-      h += '</div>';
-      // Network head info
-      if (netHead > 0) h += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;font-family:var(--mono)">Network head: ' + netHead.toLocaleString() + '</div>';
-      // Table
-      h += '<div class="table-scroll"><table><thead><tr><th>Identity</th><th>Operator</th><th>Stage</th><th>Block</th><th>Behind</th><th>Details</th></tr></thead><tbody>';
-      if (enriched.length === 0) {
-        h += '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">No community submissions on record.</td></tr>';
-      }
-      for (var ri=0; ri<enriched.length; ri++) {
-        var r = enriched[ri];
-        var sc = stageColors[r.stage] || "#98a2b3";
-        var sb = stageBg[r.stage] || "transparent";
-        h += '<tr>';
-        h += '<td style="font-family:var(--mono);font-size:11px">' + (r.probe_identity ? esc(r.probe_identity.slice(0,14)) + '\u2026' : esc(r.host) + ':' + r.port) + '</td>';
-        h += '<td>' + esc(r.operator||"—") + '</td>';
-        h += '<td><span class="pill" style="color:'+sc+';background:'+sb+';border-color:'+sc+'44">' + esc(r.stage.replace(/_/g," ")) + '</span></td>';
-        h += '<td>' + (r.block ? r.block.toLocaleString() : "—") + '</td>';
-        h += '<td>' + (r.behind != null ? r.behind.toLocaleString() : "—") + '</td>';
-        h += '<td><span class="toggle" onclick="var d=document.getElementById(\'detail-'+r.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">details</span></td>';
-        h += '</tr>';
-        h += '<tr><td colspan="6" style="padding:0"><div class="detail" id="detail-' + r.id + '">';
-        h += '<b>Reason:</b> ' + esc(r.reason) + '<br>';
-        h += '<b>Next step:</b> ' + esc(r.next_step) + '<br>';
-        if (r.error) h += '<b>Probe error:</b> ' + esc(r.error.replace(/_/g," ")) + '<br>';
-        h += '<b>Submission ID:</b> ' + r.id + '<br>';
-        h += '<b>Check status:</b> <a href="/submission/status?host=' + encodeURIComponent(r.host) + '&port=' + r.port + '">/submission/status</a>';
-        if (r.history && r.history.length > 0) {
-          h += '<br><br><b>Previous submissions for this host:</b><br>';
-          for (var hi = 0; hi < r.history.length; hi++) {
-            var hr = r.history[hi];
-            var hColor = hr.status === "probed_ok" || hr.status === "approved" ? "#22C55E" : hr.status === "duplicate" ? "#d97706" : "#EF4444";
-            var hTime = hr.submitted_at ? new Date(hr.submitted_at).toISOString().replace("T"," ").slice(0,16) + " UTC" : "\u2014";
-            h += '<span style="color:var(--text-secondary)">#' + hr.id + '</span> \u00b7 ' + esc(hr.host) + ':' + hr.port + ' \u00b7 <span style="color:' + hColor + '">' + esc(String(hr.status || "unknown").replace(/_/g," ")) + '</span>';
-            if (hr.probe_error) h += ' <span style="color:var(--text-secondary)">(' + esc(hr.probe_error.replace(/_/g," ")) + ')</span>';
-            h += ' <span style="color:var(--text-secondary)">\u00b7 ' + esc(hTime) + '</span>';
-            h += '<br>';
-          }
-        }
-        h += '</div></td></tr>';
-      }
-      h += '</tbody></table></div>';
       // Fleet diagnostics — read from cached health data
       var fleetReports = {};
       try {
@@ -3098,7 +2979,7 @@ function generatePrometheusMetrics(fleetData) {
       } catch(e) { discoveredList = []; }
       h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
       h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Discovered Validators</h2>';
-      h += '<p class="sub" style="margin-bottom:18px">Validators the Oracle has seen via peer crawling but has not yet formally added to monitoring. Shown here for transparency; added to the monitored set manually once they reach the network head. Not community-submitted.</p>';
+      h += '<p class="sub" style="margin-bottom:18px">Validators the Oracle has seen via peer crawling but has not yet formally added to monitoring. Shown here for transparency; added to the monitored set manually once they reach the network head.</p>';
       if (discoveredList.length === 0) {
         h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">No discovered validators at this time.</p>';
       } else {
@@ -3128,23 +3009,6 @@ function generatePrometheusMetrics(fleetData) {
       h += '</main></body></html>';
       res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
       res.end(h);
-    } else if (req.url && req.url.indexOf("/submission/status") === 0) {
-      var stUrl = new URL(req.url, "http://d");
-      var stHost = (stUrl.searchParams.get("host") || "").trim();
-      var stPort = parseInt(stUrl.searchParams.get("port") || "0", 10);
-      if (!stHost || !stPort) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({status:"error", message:"host and port required"})); return; }
-      if (!sharedDb) { res.writeHead(200, {"Content-Type":"application/json"}); res.end(JSON.stringify({status:"not_found"})); return; }
-      var stRow = sharedDb.query("SELECT status, probe_block, probe_error FROM submissions WHERE host=? AND port=? ORDER BY id DESC LIMIT 1").get(stHost, stPort);
-      if (!stRow) { res.writeHead(200, {"Content-Type":"application/json","Cache-Control":"public, max-age=10"}); res.end(JSON.stringify({status:"not_found", host:stHost, port:stPort})); return; }
-      var stResp = {status: stRow.status, host: stHost, port: stPort};
-      if (stRow.probe_block) stResp.block = stRow.probe_block;
-      if (stRow.probe_error) stResp.error = stRow.probe_error;
-      if (stRow.status === "approved") {
-        var nm = Object.keys(PUBLIC_NODES).find(function(k){ return PUBLIC_NODES[k].url === "http://" + stHost + ":" + stPort; });
-        if (nm) stResp.node_name = nm;
-      }
-      res.writeHead(200, {"Content-Type":"application/json","Cache-Control":"public, max-age=10"});
-      res.end(JSON.stringify(stResp));
     } else if (req.url === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
@@ -3805,7 +3669,7 @@ async function main() {
 
   // FIX BUG 3: Open shared SQLite handle ONCE for both modules.
   // NOTE: "marketplace.db" is a historical filename. This is the shared PRIMARY
-  // datastore (incidents, public_node_history, submissions, consensus, daily_stats,
+  // datastore (incidents, public_node_history, consensus, daily_stats,
   // + gated Phase-3 observation schema). Filename kept to avoid a live-DB migration.
   var dbPath = join(LOG_DIR, "marketplace.db");
   sharedDb = new Database(dbPath);
@@ -3922,9 +3786,6 @@ async function main() {
   )`);
   sharedDb.run("CREATE INDEX IF NOT EXISTS idx_pnh_ts ON public_node_history(ts)");
   log("  Public node history table ready");
-  try { sharedDb.run("ALTER TABLE submissions ADD COLUMN probe_error TEXT"); } catch(e) {}
-    sharedDb.run("CREATE TABLE IF NOT EXISTS submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT, port INTEGER, operator TEXT, status TEXT DEFAULT 'pending', probe_ok INTEGER DEFAULT 0, probe_block INTEGER, probe_identity TEXT, submitted_at INTEGER, reviewed_at INTEGER, probe_error TEXT)");
-  log("  Submissions table ready");
 
   // node_metadata — identity-keyed registry (architecture memo Evolution B, Stage 1)
   // Populated once by scripts/populate-node-metadata.js; no runtime code reads from this yet.
@@ -3948,7 +3809,7 @@ async function main() {
 
   // ── Under-Observation Surface — additive, watch-only isolated (L1_OBSERVATION_ISOLATION).
   //    Neither table may EVER be read by computeCanonicalState() or
-  //    the submissions->PUBLIC_NODES loader, or anything feeding latestPublicNodes.
+  //    anything feeding latestPublicNodes.
   //    Observation evidence only — never an admission input. Enforced by observation-isolation.test.mjs.
   sharedDb.run(`CREATE TABLE IF NOT EXISTS node_observations (
     node_id                  TEXT PRIMARY KEY,
