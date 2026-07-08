@@ -3,6 +3,10 @@
 // full public key (64-hex identity) as a node identifier. Identity may appear
 // truncated or as an assigned/fleet name; transport never appears.
 //   Node identity != connection endpoint.
+// Privacy asserts on EVERY served representation of a dataset — HTML, JSON, and any future
+// format — not only the renderer sanitized at the time. (Scope widened after the 2026-07
+// /fixnet/health incident: a JSON endpoint leaked fleet topology the HTML renderer had
+// already sanitized.)
 // Run:  bun run src/display-privacy.test.mjs [baseUrl]   (NOT `bun test`)
 // Breach ritual: restore `display = row.connection` -> B1 FAILS; revert -> green.
 

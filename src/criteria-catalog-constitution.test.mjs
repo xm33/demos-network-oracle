@@ -106,5 +106,13 @@ check("R1e no /submit link on homepage (tripwire; vacuous at introduction)",
   !/href="\/submit"/.test(readFileSync(join(__dir, "..", "homepage.html"), "utf8")));
 check("R1f no /submit href anywhere in agent",  !/href="\/submit"/.test(agent));
 
+// R2: /fixnet/health removed — no raw JSON representation of fleet/discovered topology (§2.6)
+check("R2a no /fixnet/health route in agent",
+  !/req\.url === "\/fixnet\/health"/.test(agent));
+check("R2b no fixnet/health href in agent",
+  !/href="\/fixnet\/health"/.test(agent));
+check("R2c no fixnet/health href in homepage",
+  !/href="\/fixnet\/health"/.test(readFileSync(join(__dir, "..", "homepage.html"), "utf8")));
+
 console.log(`\n${GUARD}: ${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

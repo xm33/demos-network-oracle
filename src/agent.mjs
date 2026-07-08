@@ -2698,79 +2698,6 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/sources") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(SOURCES_HTML);
-    } else if (req.url === "/fixnet/health") {
-      var fxNodes = latestFixnetNodes || [];
-      var fxOnline = fxNodes.filter(function(n) { return n.ok; });
-      var fxAnchor = fxNodes.find(function(n) { return n.source_type === "anchor"; });
-      var fxFleet = fxNodes.filter(function(n) { return n.source_type === "fleet"; });
-      var fxNetworkHead = fxAnchor && fxAnchor.block ? fxAnchor.block : 0;
-      var fxFleetHead = 0;
-      for (var fxi = 0; fxi < fxFleet.length; fxi++) {
-        if (fxFleet[fxi].block && fxFleet[fxi].block > fxFleetHead) fxFleetHead = fxFleet[fxi].block;
-      }
-      var fxAtHead = fxOnline.filter(function(n) {
-        return n.block && fxNetworkHead > 0 && (fxNetworkHead - n.block) <= 100;
-      }).length;
-      // v7.2: include discovered fixnet nodes
-      var fxDisc = latestDiscoveredFixnet || [];
-      var fxDiscOnline = fxDisc.filter(function(d) { return d.online; });
-      var fxPayload = {
-        network: "fixnet",
-        observed_at: new Date().toISOString(),
-        anchor: fxAnchor ? {
-          url: fxAnchor.url,
-          host: fxAnchor.host,
-          identity: fxAnchor.identity,
-          status: fxAnchor.ok ? "online" : "offline",
-          block: fxAnchor.block,
-          latency_ms: fxAnchor.latencyMs,
-          error: fxAnchor.error || null
-        } : null,
-        fleet: {
-          count: fxFleet.length,
-          online: fxFleet.filter(function(n) { return n.ok; }).length,
-          at_head: fxAtHead,
-          nodes: fxFleet.map(function(n) {
-            return {
-              name: n.name,
-              host: n.host,
-              identity: n.identity,
-              status: n.ok ? "online" : "offline",
-              block: n.block,
-              latency_ms: n.latencyMs,
-              behind: (n.block && fxNetworkHead > 0) ? Math.max(0, fxNetworkHead - n.block) : null,
-              sync_pct: (n.block && fxNetworkHead > 0) ? Math.round((n.block / fxNetworkHead) * 1000) / 10 : null,
-              error: n.error || null
-            };
-          })
-        },
-        discovered: {
-          count: fxDisc.length,
-          online: fxDiscOnline.length,
-          nodes: fxDisc.map(function(d) {
-            return {
-              identity: d.identity,
-              identity_short: d.identity ? (d.identity.substring(0, 6) + "…" + d.identity.substring(d.identity.length - 4)) : null,
-              connection: d.connection,
-              status: d.online ? "online" : "offline",
-              block: d.block,
-              behind: (d.block && fxNetworkHead > 0) ? Math.max(0, fxNetworkHead - d.block) : null,
-              sync_pct: (d.block && fxNetworkHead > 0) ? Math.round((d.block / fxNetworkHead) * 1000) / 10 : null,
-              first_seen: d.first_seen ? new Date(d.first_seen).toISOString() : null,
-              last_seen: d.last_seen ? new Date(d.last_seen).toISOString() : null,
-              last_probed_at: d.last_probed_at ? new Date(d.last_probed_at).toISOString() : null
-            };
-          })
-        },
-        summary: {
-          fleet_head: fxFleetHead,
-          network_head: fxNetworkHead,
-          fleet_lag: fxNetworkHead > fxFleetHead ? fxNetworkHead - fxFleetHead : 0,
-          status: (fxNodes.length > 0 && fxOnline.length === fxNodes.length) ? "stable" : (fxOnline.length > 0 ? "degraded" : "offline")
-        }
-      };
-      res.writeHead(200);
-      res.end(JSON.stringify(fxPayload, null, 2));
     } else if (req.url === "/reference") {
       if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
@@ -2845,8 +2772,7 @@ function generatePrometheusMetrics(fleetData) {
         h += '<section style="margin:28px 0 36px">';
         h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Demos Fixnet — workers-debug</h2>';
         h += '<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin:0 0 14px">';
-        h += '<a href="/fixnet/health" style="color:var(--improving);text-decoration:none">JSON</a>';
-        if (fxAgoStr) h += ' &nbsp;&middot;&nbsp; Updated ' + fxAgoStr;
+        if (fxAgoStr) h += 'Updated ' + fxAgoStr;
         h += '</div>';
         h += '<div class="summary" style="margin-bottom:16px">';
         h += '<div class="sum-card"><div class="sum-val">' + fxTotalN + '</div><div class="sum-label">Nodes</div></div>';
