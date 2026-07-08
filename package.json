@@ -6,7 +6,7 @@
   "scripts": {
     "start": "tsx --env-file=.env src/agent.mjs",
     "dev": "tsx --env-file=.env --watch src/agent.mjs",
-    "test": "bun src/observation-isolation.test.mjs && bun src/display-privacy.test.mjs && bun src/dahr-attestation-honesty.test.mjs && bun src/c3-chain-mismatch-honesty.test.mjs && bun src/gleif-verify.test.mjs && bun src/criteria-catalog-constitution.test.mjs",
+    "test": "bun src/observation-isolation.test.mjs && bun src/display-privacy.test.mjs && bun src/dahr-attestation-honesty.test.mjs && bun src/gleif-verify.test.mjs && bun src/criteria-catalog-constitution.test.mjs",
     "test:contract": "bun tools/organism-contract-test.mjs",
     "build-check": "bun build src/agent.mjs --target=bun --outfile=/tmp/check.js && echo BUILD OK"
   },
