@@ -252,7 +252,7 @@ function renderHeader(activeItem, farSlot) {
     + renderHeaderNavLink('/commerce', 'commerce', 'Commerce', activeItem)
     + renderHeaderNavLink('/agent', 'agent', 'Agent', activeItem)
     + renderHeaderNavLink('/sources', 'sources', 'Sources', activeItem)
-    + renderHeaderNavLink('/community', 'community', 'Community', activeItem)
+    + renderHeaderNavLink('/reference', 'reference', 'Reference', activeItem)
     + renderHeaderNavLink('/timeline', 'timeline', 'Timeline', activeItem)
     + '</div>'
     + (farSlot ? '<div class="doc-nav-far">' + farSlot + '</div>' : '')
@@ -2771,10 +2771,10 @@ function generatePrometheusMetrics(fleetData) {
       };
       res.writeHead(200);
       res.end(JSON.stringify(fxPayload, null, 2));
-    } else if (req.url === "/community") {
+    } else if (req.url === "/reference") {
       if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
-      var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Community Nodes</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
+      var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Reference</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
       h += '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">';
       h += '<style>';
       h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#00DAFF;--brand:#2B36D9;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
@@ -2808,10 +2808,10 @@ function generatePrometheusMetrics(fleetData) {
       h += '.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}';
       h += '</style></head><body>';
       // Nav
-      h += renderHeader("community", DEMOS_BADGE);
+      h += renderHeader("reference", DEMOS_BADGE);
       h += '<main>';
       h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Discovered validators and operator fleet nodes shown here are observation/operator-layer context and are not part of DNO core network assessment.</div>';
-      h += '<h1>Community Node Onboarding</h1>';
+      h += '<h1>Reference — Observation &amp; Operator Layer</h1>';
 
       // --- Fleet Fixnet section (v7.2) ---
       var fx = latestFixnetNodes || [];
