@@ -35,3 +35,6 @@ src/fleet.config.mjs
 
 # one-shot scratch patch scripts (applied, not source)
 patch-*.mjs
+
+# Session-start router (operator workflow, references L3 docs)
+CLAUDE.md
