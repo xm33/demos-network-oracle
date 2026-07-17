@@ -48,6 +48,10 @@ try {
   check("A1 homepage Discovered: no host:port / full-id in display",
         dispLeaks.length === 0, dispLeaks.slice(0, 5).join(", "));
 
+  check("A3 /health carries no reference key (fleet projection removed)",
+        !Object.prototype.hasOwnProperty.call(health, "reference"),
+        "reference key present");
+
   const peers = await getJson("/peers");
   check("A2a /peers scope = public_sanitized",
         peers.scope === "public_sanitized", "scope=" + peers.scope);
@@ -77,6 +81,12 @@ check("B3 toPublicPeer boundary present",
       /function\s+toPublicPeer\s*\(/.test(SRC) && /toPublicPeer\s*\(/.test(SRC));
 check("B4 resolveNodeDisplay resolver present and used",
       /function\s+resolveNodeDisplay\s*\(/.test(SRC) && /resolveNodeDisplay\s*\(\s*\{/.test(SRC));
+check("B5 no reference producer key in source",
+      !/reference:\s*\{/.test(SRC),
+      "reference producer re-introduced");
+check("B6 no hw-fleet-count fleet-size element in source",
+      !/hw-fleet-count/.test(SRC),
+      "dashboard fleet-count element re-introduced");
 
 console.log(`\n${DISPLAY_PRIVACY}: ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

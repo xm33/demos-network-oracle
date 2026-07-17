@@ -2535,18 +2535,6 @@ function generatePrometheusMetrics(fleetData) {
         validator_growth: getValidatorGrowth(),
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
-        reference: {
-          fleet_size: FLEET_SIZE,
-          fleet_healthy: latestHealthData ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
-          fleet_nodes: latestHealthData ? latestHealthData.nodeReports || [] : [],
-          fleet_incidents: Object.values(activeIncidents).filter(function(i) {
-            if (i.description && (i.description.indexOf("Fleet reference") === 0 || i.description === "Chain-level issue detected")) return true;
-            if (i.affectedNodes && i.affectedNodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); })) return true;
-            return false;
-          }).map(function(i) { return { id: i.id, severity: i.severity, description: i.description, startedAt: i.startedAt }; }),
-          node_versions: nodeVersions,
-          uptime: uptimeStats,
-        },
         legacy: {},
         instance_role: {
           raw: INSTANCE_ROLE_CONFIG.raw,
@@ -3120,7 +3108,6 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:0.82em;color:#8b949e">
   <span style="color:#58a6ff;font-weight:600">How we know</span> &nbsp;·&nbsp;
   Public network observed via <span id="hw-public-count">—</span> public nodes &nbsp;·&nbsp;
-  Confidence anchored by <span id="hw-fleet-count">—</span> reference nodes &nbsp;·&nbsp;
   Updated every 20s &nbsp;·&nbsp;
   Data quality: <span id="hw-quality">—</span> &nbsp;·&nbsp;
   <a href="/methodology" style="color:#58a6ff">Methodology</a>
@@ -3279,10 +3266,8 @@ async function refresh(){
 
     // How we know box
     var hwPublic=document.getElementById("hw-public-count");
-    var hwFleet=document.getElementById("hw-fleet-count");
     var hwQuality=document.getElementById("hw-quality");
     if(hwPublic&&d.agreement) hwPublic.textContent=d.agreement.total_nodes;
-    if(hwFleet&&d.reference) hwFleet.textContent=d.reference.fleet_size;
     if(hwQuality&&d.data_quality) hwQuality.textContent=d.data_quality.toUpperCase();
     var gb=document.getElementById("growth-status");
     if(gb&&d.validator_growth){
@@ -4293,17 +4278,19 @@ async function pollTelegram() {
           var reply = "";
           if (text === "/status") {
             try {
-              var hr = await fetch("http://127.0.0.1:55225/health");
-              var d = await hr.json();
-              var ref = d.reference || {};
-              var nodes = ref.fleet_nodes || [];
+              if (latestHealthData === null) { reply = "Status unavailable — no completed crawl is loaded."; }
+              else {
+              var canonical = computeCanonicalState();
+              var nodes = latestHealthData.nodeReports || [];
+              var healthy = nodes.filter(function(n){ return n.status==="HEALTHY"; }).length;
               var lines = ["<b>Fleet Status</b>"];
-              lines.push("Status: <b>" + String(d.status||"unknown").toUpperCase() + "</b>");
-              lines.push("Healthy: " + (ref.fleet_healthy||0) + "/" + (ref.fleet_size||nodes.length));
+              lines.push("Status: <b>" + String(canonical.status||"unknown").toUpperCase() + "</b>");
+              lines.push("Healthy: " + healthy + "/" + FLEET_SIZE);
               nodes.forEach(function(n){
                 lines.push((n.status==="HEALTHY"?"\u2705":"\u274c") + " " + n.name + " block " + (n.blockHeight||"?"));
               });
               reply = lines.join(NL);
+              }
             } catch(e) { reply = "Error fetching status: " + e.message; }
           } else if (text === "/incidents") {
             try {
@@ -4321,16 +4308,17 @@ async function pollTelegram() {
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/uptime" || text === "/sla") {
             try {
-              var hr = await fetch("http://127.0.0.1:55225/health");
-              var d = await hr.json();
+              if (latestHealthData === null) { reply = "Uptime unavailable — no completed crawl is loaded."; }
+              else {
               var lines = ["<b>Node Uptime</b>"];
-              var up = d.uptime || {};
+              var up = uptimeStats || {};
               Object.keys(up).forEach(function(name){
                 var u = up[name];
                 var pct = u.total > 0 ? Math.round(u.healthy/u.total*100) : null;
                 lines.push((pct===100?"\u2705":pct>=80?"\u26a0\ufe0f":"\u274c") + " " + name + ": " + (pct!==null?pct+"%":"--") + " (" + u.healthy + "/" + u.total + ")");
               });
               reply = lines.join(NL);
+              }
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/signals") {
             try {
