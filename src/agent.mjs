@@ -3235,11 +3235,6 @@ async function refresh(){
     re.textContent=(d.status||"unknown").toUpperCase();
     re.className="rec "+(d.status==="stable"?"safe":d.status==="degraded"?"caution":d.status==="unstable"?"unsafe":"unknown");
     document.getElementById("rec-reason").textContent=(d.status_reason||"")+" · Risk: "+(d.risk||"?").toUpperCase()+" · Confidence: "+(d.confidence||"?").toUpperCase();
-    var ng=document.getElementById("nodes");ng.innerHTML="";
-    if(d.reference&&d.reference.fleet_nodes){d.reference.fleet_nodes.forEach(function(n){
-      var cls=n.status==="HEALTHY"?"healthy":"unhealthy";
-      ng.innerHTML+='<div class="node '+cls+'"><h3>'+n.name+'</h3><div class="status">'+(n.status==="HEALTHY"?"\u2705":"\u274C")+" "+n.status+'</div><div class="block">Block '+(n.blockHeight||"?")+'</div></div>';
-    });}
     var mg=document.getElementById("metrics");mg.innerHTML="";
     // Summary cards — public network focused only
     if(d.agreement){
@@ -3315,16 +3310,6 @@ async function refresh(){
       }
       gb.innerHTML=gh;
     }
-    var sb=document.getElementById("sla-body");sb.innerHTML="";
-    var up=(d.reference&&d.reference.uptime)||{};
-    if(d.reference&&d.reference.fleet_nodes){d.reference.fleet_nodes.forEach(function(n){
-      var u=up[n.name]||{healthy:0,total:0};
-      var pct=u.total>0?Math.round(u.healthy/u.total*100):null;
-      var pctStr=pct!==null?pct+"%":"—";
-      var fillCls=pct===null?"":pct>=95?"":pct>=80?" warn":" bad";
-      var bar=pct!==null?'<div class="uptime-bar"><div class="uptime-fill'+fillCls+'" style="width:'+pct+'%"></div></div>':'<div class="uptime-bar"></div>';
-      sb.innerHTML+='<tr><td><b>'+n.name+'</b></td><td>'+(n.blockHeight||"?")+'</td><td>'+pctStr+'</td><td style="width:120px">'+bar+'</td></tr>';
-    });}
   }catch(e){document.getElementById("updated").textContent="Error: "+e.message;}
   try{
     var hr=await fetch("/history");var hd=await hr.json();
