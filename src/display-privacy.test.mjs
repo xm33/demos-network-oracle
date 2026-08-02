@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { toPublicSignals, PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES } from "./signal-projection.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(__dir, "agent.mjs"), "utf8");
@@ -87,6 +88,57 @@ check("B5 no reference producer key in source",
 check("B6 no hw-fleet-count fleet-size element in source",
       !/hw-fleet-count/.test(SRC),
       "dashboard fleet-count element re-introduced");
+
+// ---- C: signal projection (executed, per gate 6 extraction) ----
+{
+  // C1: sets disjoint and complete against the actual emitted signal types
+  const pub = [...PUBLIC_SIGNAL_TYPES], nonpub = [...NON_PUBLIC_SIGNAL_TYPES];
+  const inter = pub.filter(t => NON_PUBLIC_SIGNAL_TYPES.has(t));
+  check("C1a PUBLIC and NON_PUBLIC disjoint", inter.length === 0, inter.join(","));
+  const union = new Set([...pub, ...nonpub]);
+  // scrape actual emitted signal types: signals.push({ type: "..." }) and .unshift
+  const emitted = new Set();
+  const re = /signals\.(?:push|unshift)\(\{\s*type:\s*"([a-z_]+)"/g;
+  let m; while ((m = re.exec(SRC)) !== null) emitted.add(m[1]);
+  check("C1b emitted type count == 13", emitted.size === 13, "emitted=" + emitted.size);
+  check("C1c union covers every emitted type (completeness)",
+        [...emitted].every(t => union.has(t)),
+        [...emitted].filter(t => !union.has(t)).join(","));
+  check("C1d no set member is unemitted (no phantom types)",
+        [...union].every(t => emitted.has(t)),
+        [...union].filter(t => !emitted.has(t)).join(","));
+
+  // C2: projection keeps only public types, order preserved, drops all non-public
+  const fixture = [...union].map(t => ({ type: t, severity: "info", nodes: ["n1"], value: 1, message: "msg " + t }));
+  const projected = toPublicSignals(fixture);
+  const outTypes = projected.map(s => s.type);
+  check("C2a projection output contains only public types",
+        outTypes.every(t => PUBLIC_SIGNAL_TYPES.has(t)), outTypes.join(","));
+  check("C2b projection drops all non-public types",
+        outTypes.every(t => !NON_PUBLIC_SIGNAL_TYPES.has(t)), outTypes.join(","));
+  check("C2c projection keeps exactly the 3 public types", outTypes.length === 3, "n=" + outTypes.length);
+
+  // C3: fail-closed on malformed entries (dropped, not passed through)
+  const malformed = [
+    { type: "public_node_offline", severity: "info", nodes: "not-an-array", value: 1, message: "x" },
+    { type: "public_node_offline", severity: "info", nodes: [1,2], value: 1, message: "x" },
+    { type: "public_node_offline", severity: "info", nodes: ["n1"], value: 1, message: 42 },
+    { type: "public_node_offline", severity: 7, nodes: ["n1"], value: 1, message: "x" },
+    null,
+    { type: "public_node_offline" },
+  ];
+  const mres = toPublicSignals(malformed);
+  check("C3 malformed entries all dropped (fail closed)", mres.length === 0, "survived=" + mres.length);
+
+  // C4: never-spread — extra fields (e.g. identity/connection) do not survive
+  const leaky = [{ type: "public_node_offline", severity: "info", nodes: ["n1"], value: 1, message: "ok",
+                   identity: "0x" + "a".repeat(64), connection: "10.0.0.1:55225", operator: "secret" }];
+  const lres = toPublicSignals(leaky);
+  check("C4a leaky public signal still projected", lres.length === 1, "n=" + lres.length);
+  const keys = lres.length ? Object.keys(lres[0]).sort().join(",") : "";
+  check("C4b output has exactly the 5 allowed fields (no identity/connection/operator)",
+        keys === "message,nodes,severity,type,value", "keys=" + keys);
+}
 
 console.log(`\n${DISPLAY_PRIVACY}: ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

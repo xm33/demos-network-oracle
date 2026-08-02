@@ -7,6 +7,7 @@ try { readFileSync(".env","utf8").split("\n").forEach(function(line) { var m = l
 import { Demos } from "@kynesyslabs/demosdk/websdk";
 
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
+import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -1443,6 +1444,12 @@ let dailySummaryCounter = 0;
 // FIX BUG 7: Track when last cycle ran
 let lastCycleAt = 0;
 
+// FIX BUG 7: staleness helper — hoisted to module scope (reachable by serializer and bot)
+function getStaleness() {
+  if (!lastCycleAt) return { lastCycleAt: null, stalenessSeconds: null };
+  return { lastCycleAt: lastCycleAt, stalenessSeconds: Math.round((Date.now() - lastCycleAt) / 1000) };
+}
+
 function expectedConnStr(name) {
   var n = EXPECTED_FLEET[name];
   return "http://" + n.host + ":" + n.port;
@@ -2496,11 +2503,6 @@ function generatePrometheusMetrics(fleetData) {
 }
 // ---- end v5.0: Federated Prometheus Metrics ----
 
-  // FIX BUG 7: Helper to compute staleness for any endpoint
-  function getStaleness() {
-    if (!lastCycleAt) return { lastCycleAt: null, stalenessSeconds: null };
-    return { lastCycleAt: lastCycleAt, stalenessSeconds: Math.round((Date.now() - lastCycleAt) / 1000) };
-  }
 
   var server = createServer(function(req, res) {
     // CORS headers
@@ -2511,6 +2513,7 @@ function generatePrometheusMetrics(fleetData) {
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
       var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
+      var publicSignals = toPublicSignals(healthSignals); // public-surface projection (privacy control)
       var payload = {
         status: canonical.status,
         trend: canonical.trend,
@@ -2530,8 +2533,8 @@ function generatePrometheusMetrics(fleetData) {
         agreement_reason: canonical.agreement_reason,
         // === Derived ===
         publicNodes: latestPublicNodes || [],
-        signals: healthSignals,
-        signals_grouped: groupSignals(healthSignals),
+        signals: publicSignals,
+        signals_grouped: groupSignals(publicSignals),
         validator_growth: getValidatorGrowth(),
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
@@ -3315,8 +3318,11 @@ async function refresh(){
       html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+(d.status_reason||'')+'</div>';
       db.innerHTML=html;
     }
-    // Filter signals — only show public/network signals on main page
-    // Fleet-internal signals go to reference layer only
+    // NON-AUTHORITATIVE display filter. The server-side projection in
+    // signal-projection.mjs (toPublicSignals, applied at the /health serializer) is
+    // the load-bearing privacy control — /health emits only public types. This
+    // client filter is redundant defense-in-depth; do NOT delete the server
+    // projection believing this covers it (it runs post-network, browser-side only).
     var FLEET_SIGNAL_TYPES = ["node_offline","block_lag","not_synced","not_ready","identity_mismatch","low_online_count","block_divergence","chain_stall"];
     if(d.signals) d.signals = d.signals.filter(function(s){ return FLEET_SIGNAL_TYPES.indexOf(s.type) === -1; });
     if(d.signals_grouped) {
@@ -4322,10 +4328,13 @@ async function pollTelegram() {
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/signals") {
             try {
-              var hr = await fetch("http://127.0.0.1:55225/health");
-              var d = await hr.json();
-              var sigs = d.signals || [];
+              if (latestHealthData === null) { reply = "Signals unavailable — no completed crawl is loaded."; }
+              else {
+              var st = getStaleness();
+              var sigs = generateSignals(latestHealthData, st.stalenessSeconds);
+              var stForBot = (Number.isFinite(st.stalenessSeconds) && st.stalenessSeconds >= 0) ? st.stalenessSeconds : null;
               var lines = ["<b>Network Signals</b>"];
+              lines.push(stForBot === null ? "Staleness: unavailable" : ("Staleness: " + stForBot + "s"));
               var sevIcon = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udd34"};
               sigs.forEach(function(s) {
                 var icon = sevIcon[s.severity] || "\u2139\ufe0f";
@@ -4334,6 +4343,7 @@ async function pollTelegram() {
                 if (s.nodes && s.nodes.length > 0) lines.push("  Nodes: " + s.nodes.join(", "));
               });
               reply = lines.join(NL);
+              }
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/help" || text === "/start") {
             var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/uptime — per-node uptime %","/signals — current network signals","/help — this message","","Dashboard: http://193.77.169.106:55225/dashboard"];
