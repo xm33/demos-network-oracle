@@ -1,4 +1,26 @@
-import { EXPECTED_FLEET } from "./fleet.config.mjs";
+import { EXPECTED_FLEET, FIXNET_NODES, FLEET_RPC_FALLBACKS, FLEET_CROSS_VALIDATION_RPCS } from "./fleet.config.mjs";
+
+// L1 completeness gate (fail-closed): registry must cover the full expected fleet.
+// Throws before any server bind. Error text carries key names only, never values.
+{
+  const _ef = Object.keys(EXPECTED_FLEET);
+  const _fx = Object.keys(FIXNET_NODES);
+  for (const _k of _ef) {
+    if (!FIXNET_NODES["fleet-" + _k]) throw new Error("FIXNET_NODES incomplete: missing fleet-" + _k);
+  }
+  if (_fx.length !== _ef.length) throw new Error("FIXNET_NODES count mismatch: " + _fx.length + " vs expected " + _ef.length);
+  if (!Array.isArray(FLEET_RPC_FALLBACKS) || FLEET_RPC_FALLBACKS.length < 1) throw new Error("FLEET_RPC_FALLBACKS missing or empty");
+  for (const _u of FLEET_RPC_FALLBACKS) { if (typeof _u !== "string" || !/^https?:\/\//.test(_u)) throw new Error("FLEET_RPC_FALLBACKS invalid url"); }
+  if (new Set(FLEET_RPC_FALLBACKS).size !== FLEET_RPC_FALLBACKS.length) throw new Error("FLEET_RPC_FALLBACKS duplicate url");
+  if (!Array.isArray(FLEET_CROSS_VALIDATION_RPCS) || FLEET_CROSS_VALIDATION_RPCS.length < 1) throw new Error("FLEET_CROSS_VALIDATION_RPCS missing or empty");
+  { const _n=new Set(), _u=new Set();
+    for (const _r of FLEET_CROSS_VALIDATION_RPCS) {
+      if (!_r || typeof _r.name !== "string" || _r.name.length < 1) throw new Error("FLEET_CROSS_VALIDATION_RPCS entry missing name");
+      if (typeof _r.url !== "string" || !/^https?:\/\//.test(_r.url)) throw new Error("FLEET_CROSS_VALIDATION_RPCS entry invalid url");
+      if (_n.has(_r.name)) throw new Error("FLEET_CROSS_VALIDATION_RPCS duplicate name"); _n.add(_r.name);
+      if (_u.has(_r.url)) throw new Error("FLEET_CROSS_VALIDATION_RPCS duplicate url"); _u.add(_r.url);
+    } }
+}
 import { readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync, statSync } from "fs";
 import { join } from "path";
 import { createServer } from "http";
@@ -80,7 +102,7 @@ async function sleep(ms) {
 
 const MNEMONIC = process.env.DEMOS_MNEMONIC;
 const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
-const FALLBACK_RPCS = [RPC_URL, "http://193.77.44.160:53550", "http://193.77.50.180:53550"];
+const FALLBACK_RPCS = Object.freeze([RPC_URL, ...FLEET_RPC_FALLBACKS]);
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
 const AGENT_VERSION = "6.9";  // single source of truth for the Oracle build/release version (NOT api_version, NOT node version)
 const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
@@ -90,11 +112,9 @@ const LOCAL_NODE_NAME = process.env.LOCAL_NODE_NAME || "n3";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
-// Public endpoints for cross-validation
-const PUBLIC_RPCS = [
-  { name: "n1", url: "http://193.77.44.160:53550/info" },
-  { name: "n5", url: "http://193.77.50.180:53550/info" },
-];
+// Cross-validation RPC endpoints (fleet-sourced from private config)
+function publicValidationRpcName(index) { return "validation-" + (index + 1); }
+const CROSS_VALIDATION_RPCS = Object.freeze([...FLEET_CROSS_VALIDATION_RPCS]);
 const EXPLORER_STATUS_URL = "https://scan.demos.network/status";
 const PUBLIC_PROBE_TIMEOUT_MS = 10000;
 
@@ -366,109 +386,7 @@ var PUBLIC_NODE_IDENTITIES = {};
 for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identity] = _pn; }
 
 
-// Fleet fixnet registry — 8 XM33 fleet nodes + Kynesys anchor
-// Separate from PUBLIC_NODES (different network)
-const FIXNET_NODES = {
-  "kynesys-anchor": {
-    url: "http://node3.demos.sh:60001",
-    host: "node3.demos.sh",
-    identity: "0x412bee5548b43bc0a23429c06946c1eb990d900f6c0ed5c3ad001481e7f7a8ef",
-    source_type: "anchor",
-    trust_tier: "verified",
-    operator: "Kynesys",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n1": {
-    url: "http://193.77.44.160:53550",
-    host: "193.77.44.160",
-    identity: "0x8f3abd366c7b846c1ee940f35d2d7ef7774dfe636e6284a32bf2c5a3e1b3ba05",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n2": {
-    url: "http://193.77.44.160:54550",
-    host: "193.77.44.160",
-    identity: "0xbfda23d32dee055bda23f1e74a25abb7e33478da1b2013768e135cc2ed924f37",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n3": {
-    url: "http://193.77.169.106:53550",
-    host: "193.77.169.106",
-    identity: "0x4ba486bc92263f2cb15608ed369eafbd576097e79194f0895c1e01d232aa4b52",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n4": {
-    url: "http://193.77.50.180:54550",
-    host: "193.77.50.180",
-    identity: "0x848ae0759c5eba1974ec942b8e1fb4962e1b256ff89e93bdb6ad12ea58ad76a9",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n5": {
-    url: "http://193.77.50.180:53550",
-    host: "193.77.50.180",
-    identity: "0x95cbd7147cf09dc46d91cd6ae8f2912ae0f597fac9c61d0b0c347a46374af80f",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n6": {
-    url: "http://193.77.169.106:54550",
-    host: "193.77.169.106",
-    identity: "0x3ab3365e67583a89968082475816cf2f16f8f9a3b936a38513493d0c6b69f768",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n7": {
-    url: "http://193.77.169.106:55550",
-    host: "193.77.169.106",
-    identity: "0x1a799a345704ea4ac5fe5632f77ef605aeb935bfcc6e32989cca2dff88bc4816",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-06-16"
-  },
-  "fleet-m1": {
-    url: "http://82.192.52.254:53550",
-    host: "82.192.52.254",
-    identity: "0x56b46be173e20f540401d079811e5b524903a197ae5d07824d0e70a22ee6e591",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-04-22"
-  },
-  "fleet-n9": {
-    url: "http://193.77.50.180:55550",
-    host: "193.77.50.180",
-    identity: "0x2e288105c9e73ae974a0a54c528ebce4fc43551c4918ff4430449211d6563f23",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-05-05"
-  },
-  "fleet-m3": {
-    url: "http://193.95.249.97:53550",
-    host: "193.95.249.97",
-    identity: "0x5cfc9fa3c038a16b5261a111ff681439bcbcbdfce31a926358c441d702ac971c",
-    source_type: "fleet",
-    trust_tier: "verified",
-    operator: "XM33",
-    joined_at: "2026-05-05"
-  }
-};
+
 
 var FIXNET_NODE_IDENTITIES = {};
 for (var _fn in FIXNET_NODES) { FIXNET_NODE_IDENTITIES[FIXNET_NODES[_fn].identity] = _fn; }
@@ -1435,7 +1353,7 @@ let lastPublishAt = null;
 let uptimeStats = {}; // { "n1": { healthy: 0, total: 0 }, ... }
 for (var _n of NODE_NAMES) uptimeStats[_n] = { healthy: 0, total: 0 };
 let publicRpcStats = {}; // { "discus": { reachable: 0, total: 0, totalLatency: 0 }, ... }
-for (var _r of PUBLIC_RPCS) publicRpcStats[_r.name] = { reachable: 0, total: 0, totalLatency: 0 };
+for (var _r of CROSS_VALIDATION_RPCS) publicRpcStats[_r.name] = { reachable: 0, total: 0, totalLatency: 0 };
 let dailyAlertCount = 0;
 let dailyRecoveryCount = 0;
 let dailyBlockStart = null;
@@ -1913,8 +1831,8 @@ async function dahrAttest(demos, url, method) {
 async function probePublicRPCs(demos) {
   var results = [];
   var attestations = [];
-  for (var i = 0; i < PUBLIC_RPCS.length; i++) {
-    var rpc = PUBLIC_RPCS[i];
+  for (var i = 0; i < CROSS_VALIDATION_RPCS.length; i++) {
+    var rpc = CROSS_VALIDATION_RPCS[i];
     publicRpcStats[rpc.name].total++;
     try {
       var start = Date.now();
@@ -2201,11 +2119,12 @@ function composeDailySummary(fleetData, publicRpcResults, explorerResult) {
 
   // Public RPC summary
   var rpcParts = [];
-  for (var rpc of PUBLIC_RPCS) {
+  for (var _ci = 0; _ci < CROSS_VALIDATION_RPCS.length; _ci++) {
+    var rpc = CROSS_VALIDATION_RPCS[_ci];
     var rs = publicRpcStats[rpc.name];
     var rpcPct = rs.total > 0 ? Math.round((rs.reachable / rs.total) * 100) : 0;
     var avgLatency = rs.reachable > 0 ? Math.round(rs.totalLatency / rs.reachable) : 0;
-    rpcParts.push(rpc.name + ":" + rpcPct + "% avg " + avgLatency + "ms");
+    rpcParts.push(publicValidationRpcName(_ci) + ":" + rpcPct + "% avg " + avgLatency + "ms");
   }
 
   var blocksProduced = (block != null && dailyBlockStart != null) ? block - dailyBlockStart : null;
@@ -2232,7 +2151,7 @@ function resetDailyStats(currentBlock) {
   dailyBlockStart = currentBlock;
   dailySummaryCounter = 0;
   for (var name of NODE_NAMES) uptimeStats[name] = { healthy: 0, total: 0 };
-  for (var rpc of PUBLIC_RPCS) publicRpcStats[rpc.name] = { reachable: 0, total: 0, totalLatency: 0 };
+  for (var rpc of CROSS_VALIDATION_RPCS) publicRpcStats[rpc.name] = { reachable: 0, total: 0, totalLatency: 0 };
 }
 
 // =================================================================
@@ -2604,7 +2523,7 @@ function generatePrometheusMetrics(fleetData) {
         mempoolSize: latestHealthData && latestHealthData.chain ? latestHealthData.chain.mempoolSize || 0 : 0,
         secondsSinceLastBlock: latestHealthData && latestHealthData.chain ? latestHealthData.chain.secondsSinceLastBlock || 0 : 0,
         discoveredPeersCount: Object.keys(discoveredPeers).length,
-        publicRPCs: publicRpcStats ? Object.entries(publicRpcStats).map(function(e) { return { url: e[0], available: e[1].reachable > 0, latencyMs: e[1].avgLatency || 0 }; }) : [],
+        publicRPCs: CROSS_VALIDATION_RPCS.map(function(rpc, index) { var s = publicRpcStats[rpc.name]; return { name: publicValidationRpcName(index), available: Boolean(s && s.reachable > 0), latencyMs: (s && s.avgLatency) ? s.avgLatency : 0 }; }),
         dahrAttestations: latestAttestationState.lastCount,   // real per-cycle successes (was hardcoded 2; currently 0 — attestation failing)
         activeAlerts: Object.keys(problemHistory).filter(function(k) { return problemHistory[k] && problemHistory[k].count >= 2; }).length,
         totalAlerts: dailyAlertCount || 0,
@@ -3555,7 +3474,7 @@ async function main() {
   log("  Cooldown: " + COOLDOWN_CYCLES + " cycles before alerting");
   log("  DAHR: attestation enabled (auto-detect SDK support)");
   log("  Daily summary: every " + DAILY_SUMMARY_CYCLES + " cycles (" + Math.round(DAILY_SUMMARY_CYCLES * INTERVAL_MS / 1000 / 3600) + "h)");
-  log("  Public RPCs: " + PUBLIC_RPCS.map(function(r) { return r.name; }).join(", "));
+  log("  Public RPCs: " + CROSS_VALIDATION_RPCS.map(function(r, i) { return publicValidationRpcName(i); }).join(", "));
   log("  Explorer: " + EXPLORER_STATUS_URL);
   log("  Health API: http://0.0.0.0:" + HEALTH_PORT + "/health");
   log("  Primary probe: " + LOCAL_INFO_URL);
