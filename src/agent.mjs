@@ -158,7 +158,7 @@ async function checkPrimaryOracle() {
   }
 }
 const AGENT_NAME = "Demos Network Oracle";
-const AGENT_DESCRIPTION = "Public network intelligence oracle for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes health data on-chain via SuperColony every 20 minutes (DAHR source-attestation when available). Public API at demos-oracle.com/health";
+const AGENT_DESCRIPTION = "Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently unavailable. Public API at demos-oracle.com/health";
 const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 
 // Historical data file (JSON-based, lightweight)
@@ -198,8 +198,9 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'code{background:#0f172a;padding:1px 5px;border-radius:3px;font-size:.85rem}' +
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
 '<h1>Demos Network Oracle</h1>' +
-'<p class="sub">Public network intelligence for the Demos ecosystem. Monitors public validators, tracks network agreement, and publishes health data on-chain via SuperColony.<br>' +
+'<p class="sub">Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently unavailable.<br>' +
 'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
+'<p class="sub">On-chain publication is currently unavailable from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
 '<div class="e"><b>GET /organism</b><span>Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
@@ -2457,6 +2458,7 @@ function generatePrometheusMetrics(fleetData) {
         validator_growth: getValidatorGrowth(),
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
+        on_chain_publication: "unavailable",
         legacy: {},
         instance_role: {
           raw: INSTANCE_ROLE_CONFIG.raw,
@@ -3039,7 +3041,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
   <span>Demos Network Oracle v${AGENT_VERSION} &bull; ${INSTANCE_ROLE.toUpperCase()}</span>
   ${latestAttestationState.lastCount > 0
     ? '<span style="color:#3fb950;font-weight:600">&#10003; DAHR Attested</span>'
-    : '<span style="color:#8b949e;font-weight:600" title="Observations publish on-chain via SuperColony; DAHR source-attestation currently unavailable">Published on-chain &bull; DAHR attestation unavailable</span>'}
+    : '<span style="color:#8b949e;font-weight:600" title="DAHR source-attestation currently unavailable">DAHR attestation unavailable</span>'}
   <span style="display:flex;align-items:center;gap:5px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:3px 8px;font-size:0.78em">powered by <img src="https://framerusercontent.com/assets/IyyrITqCg67NykDbX6dibaTrhfA.svg" height="14" style="vertical-align:middle;filter:brightness(10)"></span>
   <span style="color:#444">|</span>
   <a href="/docs" style="color:#58a6ff">Docs</a>
