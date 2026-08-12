@@ -219,7 +219,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<h2>Integration</h2>' +
 '<div class="e"><b>GET /federate</b><span>Prometheus metrics endpoint for scraping</span></div>' +
 '<div class="e"><b>GET /federate/config</b><span>Prometheus scrape_config snippet</span></div>' +
-'<div class="e"><b>GET /badge</b><span>SVG status badge showing canonical network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
+'<div class="e"><b>GET /badge</b><span>SVG status badge showing observed network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
 '<div class="e"><b>GET /version</b><span>Running agent version vs latest GitHub commit</span></div>' +
 '<footer>All endpoints return JSON unless noted. Monitoring interval: 20s. Publishing interval: 20 min. API version: 1.0. Oracle is strictly watch-only — observe, interpret, summarize risk.</footer></body></html>';
 
