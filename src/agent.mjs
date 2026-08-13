@@ -2546,26 +2546,6 @@ function generatePrometheusMetrics(fleetData) {
     } else if (req.url === "/consensus" || req.url === "/consensus/") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(getConsensusState(), null, 2));
-    } else if (req.url === "/self") {
-      var selfBudget = canPublish();
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({
-        agent: "Demos Network Oracle",
-        version: AGENT_VERSION,
-        api_version: "1.0",
-        status: computeCanonicalState().status,
-        uptimeSeconds: Math.round(process.uptime()),
-        lastCycleAt: lastCycleAt || null,
-        lastPublishAt: lastPublishAt,
-        cycleCount: cycleCount,
-        writeBudget: { hourly: selfBudget.hourly, maxHourly: HOURLY_PUBLISH_LIMIT, daily: selfBudget.daily, maxDaily: DAILY_PUBLISH_LIMIT, ok: selfBudget.ok },
-        wallet: AGENT_WALLET,
-        activeRpc: activeRpcUrl,
-        demBalance: lastKnownBalance,
-        agent_ready: true,
-        primary_endpoint: "/organism",
-        endpoints: ["/organism", "/organism/schema", "/agent", "/sources", "/health", "/dashboard", "/methodology", "/incidents", "/peers", "/sentinel", "/history", "/history/export", "/federate", "/federate/config", "/badge", "/version", "/docs", "/self"]
-      }, null, 2));
     } else if (req.url === "/organism/schema") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(ORGANISM_SCHEMA);
