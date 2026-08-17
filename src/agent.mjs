@@ -106,6 +106,8 @@ const FALLBACK_RPCS = Object.freeze([RPC_URL, ...FLEET_RPC_FALLBACKS]);
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
 const AGENT_VERSION = "6.9";  // single source of truth for the Oracle build/release version (NOT api_version, NOT node version)
 const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
+const STALE_MULTIPLIER = 3; // public-RPC freshness multiplier
+const STALE_BOUND = STALE_MULTIPLIER * MONITOR_INTERVAL_MS; // derived from cycle cadence; passed explicitly to buildPublicMetrics
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://127.0.0.1:9091";
 const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
 const LOCAL_NODE_NAME = process.env.LOCAL_NODE_NAME || "n3";
@@ -217,8 +219,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /history</b><span>Last 72 health cycles as JSON</span></div>' +
 '<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Optional from/to filters (Unix ms)</span></div>' +
 '<h2>Integration</h2>' +
-'<div class="e"><b>GET /federate</b><span>Prometheus metrics endpoint for scraping</span></div>' +
-'<div class="e"><b>GET /federate/config</b><span>Prometheus scrape_config snippet</span></div>' +
+'<div class="e"><b>GET /federate</b><span>Prometheus text metrics: oracle implementation version plus public-RPC reachability and probe latency observed from this DNO vantage</span></div>' +
 '<div class="e"><b>GET /badge</b><span>SVG status badge showing observed network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
 '<div class="e"><b>GET /version</b><span>Running agent version vs latest GitHub commit</span></div>' +
 '<footer>All endpoints return JSON unless noted. Monitoring interval: 20s. Publishing interval: 20 min. API version: 1.0. Oracle is strictly watch-only — observe, interpret, summarize risk.</footer></body></html>';
@@ -2294,6 +2295,7 @@ let latestHealthData = null; // updated each cycle
 let latestPublicNodes = []; // updated each cycle
 let latestVersionData = { running: AGENT_VERSION, latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
 let latestAttestationState = { available: false, lastCount: 0, lastOkAt: null, lastAttemptAt: null }; // honest DAHR attestation state; drives metric + /health (never hardcoded)
+let latestPublicRpcObservations = null; // null = no public-RPC observation yet; sanitized snapshot refreshed after each completed public-RPC probe; stale snapshots are not served
 let signalAlertDedup = {}; // { "signal_type_nodes": timestamp }
 let signalFirstSeen = {}; // { "signal_type": timestamp } — tracks when each signal type first appeared
 let signalPrevValue = {}; // { "signal_type": value } — tracks previous value for trend
@@ -2423,6 +2425,97 @@ function generatePrometheusMetrics(fleetData) {
 }
 // ---- end v5.0: Federated Prometheus Metrics ----
 
+// ---- Public metrics contract (default-deny allowlist) ----
+// Pure function of (snapshot, now, staleBound) + module constant AGENT_VERSION.
+// Reads no mutable operational containers. Emits HELP/TYPE only for families it emits.
+function promLabelValue(v) {
+  return String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+function buildPublicMetrics(snapshot, now, staleBound) {
+  var lines = [];
+
+  // dno_oracle_info — always served; static implementation metadata, no observation claim.
+  lines.push('# HELP dno_oracle_info Oracle implementation metadata.');
+  lines.push('# TYPE dno_oracle_info gauge');
+  lines.push('dno_oracle_info{version="' + promLabelValue(AGENT_VERSION) + '"} 1');
+  lines.push('');
+
+  // --- Public-RPC families: three-state freshness (positive-fresh, strict bound) ---
+  // Serveable ONLY when ALL hold: snapshot is an object with an entries array;
+  // now, observedAt, staleBound strictly finite; staleBound > 0;
+  // 0 <= now - observedAt < staleBound (strict upper bound).
+  var fresh = !!(
+    snapshot && typeof snapshot === 'object' &&
+    Array.isArray(snapshot.entries) &&
+    Number.isFinite(now) &&
+    Number.isFinite(snapshot.observedAt) &&
+    Number.isFinite(staleBound) && staleBound > 0
+  );
+  if (fresh) {
+    var age = now - snapshot.observedAt;
+    if (!(age >= 0 && age < staleBound)) { fresh = false; }
+  }
+
+  // Snapshot-level duplicate-alias scan: considers ONLY format-valid public aliases
+  // (a collision between servable identities makes the snapshot ambiguous). Runs over
+  // the full array BEFORE any emission; ignores up/latency validity. Invalid-format
+  // aliases can never serve, so their collisions stay entry-local (skipped below).
+  var validForEmission = null;
+  if (fresh) {
+    var seen = new Set();
+    var dup = false;
+    for (var i = 0; i < snapshot.entries.length; i++) {
+      var e = snapshot.entries[i];
+      if (e && typeof e === 'object' &&
+          typeof e.rpc === 'string' && /^validation-\d+$/.test(e.rpc)) {
+        if (seen.has(e.rpc)) { dup = true; break; }
+        seen.add(e.rpc);
+      }
+    }
+    if (!dup) { validForEmission = snapshot.entries; }
+  }
+
+  if (validForEmission) {
+    var upLines = [];
+    var latLines = [];
+    for (var j = 0; j < validForEmission.length; j++) {
+      var en = validForEmission[j];
+      if (!en || typeof en !== 'object') { continue; }
+      if (typeof en.rpc !== 'string' || !/^validation-\d+$/.test(en.rpc)) { continue; }
+      if (en.up !== true && en.up !== false) { continue; }
+      upLines.push(
+        'dno_public_rpc_up{rpc="' + en.rpc + '"} ' + (en.up ? '1' : '0')
+      );
+      if (
+        en.up === true &&
+        typeof en.latencyMs === 'number' &&
+        Number.isFinite(en.latencyMs) &&
+        en.latencyMs >= 0
+      ) {
+        latLines.push(
+          'dno_public_rpc_latency_ms{rpc="' + en.rpc + '"} ' + en.latencyMs
+        );
+      }
+    }
+    // Conditional family presence: HELP/TYPE emitted ONLY when the family has >= 1 sample.
+    if (upLines.length > 0) {
+      lines.push('# HELP dno_public_rpc_up Public RPC reachability as observed from this DNO vantage (1=observed reachable, 0=observed unreachable).');
+      lines.push('# TYPE dno_public_rpc_up gauge');
+      for (var u = 0; u < upLines.length; u++) { lines.push(upLines[u]); }
+      lines.push('');
+    }
+    if (latLines.length > 0) {
+      lines.push('# HELP dno_public_rpc_latency_ms Measured public RPC probe latency (ms) for successful probes in this observation.');
+      lines.push('# TYPE dno_public_rpc_latency_ms gauge');
+      for (var l = 0; l < latLines.length; l++) { lines.push(latLines[l]); }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+// ---- end public metrics contract ----
+
 
   var server = createServer(function(req, res) {
     // CORS headers
@@ -2517,32 +2610,9 @@ function generatePrometheusMetrics(fleetData) {
         res.end(JSON.stringify({ scope: incScope || "public", total: 0, active: 0, incidents: [], error: incErr.message }, null, 2));
       }
     } else if (req.url === "/federate" || req.url === "/metrics") {
-      var fleetData = {
-        // nodes: removed from public API — fleet data is in reference layer only
-        nodesOnline: latestHealthData && latestHealthData.nodeReports ? latestHealthData.nodeReports.filter(function(n) { return n.status === "HEALTHY"; }).length : 0,
-        blockHeight: latestHealthData && latestHealthData.chain ? latestHealthData.chain.block : 0,
-        tps: latestHealthData && latestHealthData.chain ? latestHealthData.chain.tps : 0,
-        mempoolSize: latestHealthData && latestHealthData.chain ? latestHealthData.chain.mempoolSize || 0 : 0,
-        secondsSinceLastBlock: latestHealthData && latestHealthData.chain ? latestHealthData.chain.secondsSinceLastBlock || 0 : 0,
-        discoveredPeersCount: Object.keys(discoveredPeers).length,
-        publicRPCs: CROSS_VALIDATION_RPCS.map(function(rpc, index) { var s = publicRpcStats[rpc.name]; return { name: publicValidationRpcName(index), available: Boolean(s && s.reachable > 0), latencyMs: (s && s.avgLatency) ? s.avgLatency : 0 }; }),
-        dahrAttestations: latestAttestationState.lastCount,   // real per-cycle successes (was hardcoded 2; currently 0 — attestation failing)
-        activeAlerts: Object.keys(problemHistory).filter(function(k) { return problemHistory[k] && problemHistory[k].count >= 2; }).length,
-        totalAlerts: dailyAlertCount || 0,
-        version: AGENT_VERSION,
-        wallet: AGENT_WALLET,
-        cycleCount: cycleCount
-      };
-      var prometheusText = generatePrometheusMetrics(fleetData);
+      var publicMetricsText = buildPublicMetrics(latestPublicRpcObservations, Date.now(), STALE_BOUND);
       res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(prometheusText);
-    } else if (req.url === "/federate/config") {
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({
-        instructions: "Add to your prometheus.yml scrape_configs:",
-        scrape_config: { job_name: "demos-network-oracle", scrape_interval: "60s", metrics_path: "/federate",
-          static_configs: [{ targets: ["193.77.169.106:55225"], labels: { network: "demos-testnet", agent: "fleet-oracle" } }] }
-      }, null, 2));
+      res.end(publicMetricsText);
     } else if (req.url === "/consensus" || req.url === "/consensus/") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(getConsensusState(), null, 2));
@@ -3759,6 +3829,19 @@ async function main() {
         lastCount: cycleAttestations.length,
         lastOkAt: cycleAttestations.length > 0 ? Date.now() : latestAttestationState.lastOkAt,
         lastAttemptAt: Date.now()
+      };
+      // --- Sanitized public-RPC observation snapshot ---
+      // Declassification boundary: reduce probe results to {rpc-alias, up, latencyMs} only.
+      // No urls, raw names, block, peers, versions, errors, or raw objects cross into public state.
+      latestPublicRpcObservations = {
+        observedAt: Date.now(),
+        entries: publicRpcProbe.results.map(function(r, index) {
+          return {
+            rpc: publicValidationRpcName(index),
+            up: r.ok,
+            latencyMs: (r.ok === true && Number.isFinite(r.latencyMs)) ? r.latencyMs : null
+          };
+        })
       };
       var publicNodeResults = await probePublicNodes();
       latestPublicNodes = publicNodeResults;

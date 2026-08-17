@@ -1,7 +1,8 @@
 // dahr-attestation-honesty.test.mjs — DAHR_ATTESTATION_HONESTY guard.
-// Invariant: attestation claims (metric, badge, /health) are DERIVED from live
-// state (latestAttestationState), never hardcoded. Must not claim "attested"
-// while attestation is failing. Published-on-chain (true) != DAHR-attested.
+// Invariant: attestation claims (badge, /health) are DERIVED from live state
+// (latestAttestationState), never hardcoded; DAHR is excluded from the v1
+// public metric surface. Must not claim "attested" while attestation is failing.
+// Published-on-chain (true) != DAHR-attested.
 // Run:  bun run src/dahr-attestation-honesty.test.mjs [baseUrl]   (NOT `bun test`)
 // Breach: re-hardcode `dahrAttestations: 2` -> B1 FAILS; revert -> green.
 
@@ -51,10 +52,9 @@ try {
     check("A2 attestation state present", false, "no attestation.available");
   }
   const fed = await getText("/federate");
-  const m = fed.match(/demos_dahr_attestations_total\s+(\d+)/);
-  check("A4 /federate metric == /health last_count (real, not fabricated)",
-        m && att && parseInt(m[1], 10) === att.last_count,
-        m ? ("metric=" + m[1] + " last_count=" + (att && att.last_count)) : "metric not found");
+  check("A4 /federate exposes no DAHR attestation metric (excluded from v1 public contract)",
+        !/demos_dahr_attestations_total/.test(fed),
+        "demos_dahr_attestations_total present in /federate body");
 } catch (e) {
   check("A endpoint layer reachable", false, e.message);
 }
@@ -62,8 +62,22 @@ try {
 check("B1 dahrAttestations not a hardcoded literal",
       !/dahrAttestations:\s*(dahrAvailable\s*\?\s*\d|\d)/.test(SRC),
       "fabricated/hardcoded value");
-check("B1b dahrAttestations derives from latestAttestationState",
-      /dahrAttestations:\s*latestAttestationState\.lastCount/.test(SRC));
+const _cStartMarker = "// ---- Public metrics contract (default-deny allowlist) ----";
+const _cEndMarker = "// ---- end public metrics contract ----";
+const _cStartCount = SRC.split(_cStartMarker).length - 1;
+const _cEndCount = SRC.split(_cEndMarker).length - 1;
+const _cStart = SRC.indexOf(_cStartMarker);
+const _cEnd = SRC.indexOf(_cEndMarker);
+const _contractBlk =
+  (_cStartCount === 1 && _cEndCount === 1 && _cStart !== -1 && _cEnd > _cStart)
+    ? SRC.slice(_cStart, _cEnd + _cEndMarker.length)
+    : "";
+
+check("B1b public metrics excludes the retired DAHR attestation surface (v1 exclusion)",
+      _contractBlk.length > 0 &&
+      !/\bdemos_dahr_attestations_total\b/.test(_contractBlk) &&
+      !/\bdahrAttestations\s*:/.test(SRC),
+      "DAHR metric family in contract block or retired dahrAttestations field restored");
 const hasGreenLiteral = /&#10003; DAHR Attested/.test(SRC);
 const hasConditional = /latestAttestationState\.lastCount\s*>\s*0[\s\S]{0,120}&#10003; DAHR Attested/.test(SRC);
 check("B2 'DAHR Attested' badge conditional on latestAttestationState",
