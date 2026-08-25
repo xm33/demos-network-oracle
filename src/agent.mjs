@@ -3412,7 +3412,7 @@ refresh();setInterval(refresh,20000);
     }
   });
 
-  server.listen(HEALTH_PORT, "0.0.0.0", function() {
+  server.listen(HEALTH_PORT, "127.0.0.1", function() {
     log("  Health API listening on port " + HEALTH_PORT);
   });
 
