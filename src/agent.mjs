@@ -577,7 +577,7 @@ var FIXNET_DISCOVERED_OPERATORS = {
 };
 // --- DISPLAY_PRIVACY: shared node-display resolution (top-level; mirrors /community renderer) ---
 // Rule: never expose raw connection/IP:port or full public key as an identifier.
-// Priority: assigned operator name -> fleet name (XM33 - <id>) -> discovered-<last4> ; identity shown truncated.
+// Priority: assigned operator name -> discovered-<last4> ; identity shown truncated.
 // truncId hoisted here so getValidatorGrowth and the /community route share ONE definition.
 function truncId(id) {
   if (!id || id.length < 12) return id || "\u2014";
@@ -589,11 +589,7 @@ function resolveNodeDisplay(opts) {
     var pfx = identity.substring(0, 10);
     if (FIXNET_DISCOVERED_OPERATORS[pfx]) return FIXNET_DISCOVERED_OPERATORS[pfx];
   }
-  if (identity && IDENTITY_TO_NAME[identity]) {
-    var fname = IDENTITY_TO_NAME[identity];
-    var suffix = (fname && fname.indexOf("fleet-") === 0) ? fname.substring(6) : fname;
-    return "XM33 - " + suffix;
-  }
+  // R-A 2026-08-25 P0: operator-fleet identities resolve to discovered-<last4> on public surfaces (no operator-fleet join)
   return "discovered-" + (identity ? identity.substring(identity.length - 4) : "????");
 }
 // DISPLAY_PRIVACY: convert a raw discoveredPeers entry to a public-safe shape.
@@ -2699,8 +2695,8 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       // Nav
       h += renderHeader("reference", DEMOS_BADGE);
       h += '<main>';
-      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Discovered validators and operator fleet nodes shown here are observation/operator-layer context and are not part of DNO core network assessment.</div>';
-      h += '<h1>Reference — Observation &amp; Operator Layer</h1>';
+      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Discovered validators shown here are observation context and are not part of DNO core network assessment.</div>';
+      h += '<h1>Reference — Discovered Validators</h1>';
 
       // --- Fleet Fixnet section (v7.2) ---
       var fx = latestFixnetNodes || [];
@@ -2709,16 +2705,17 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         var fxAnchorN = fx.find(function(n){return n.source_type==="anchor"});
         var fxFleetN = fx.filter(function(n){return n.source_type==="fleet"});
         var fxNetHead = fxAnchorN && fxAnchorN.block ? fxAnchorN.block : 0;
-        // v7.3: counts span ALL visible table rows (monitored fx + discovered)
-        var fxTotalN = fx.length + fxDiscovered.length;
-        var fxMonitoredOnlineN = fx.filter(function(n){return n.ok}).length;
+        // R-A 2026-08-25 P0: public counts = anchor + discovered only (operator fleet excluded)
+        var fxMonitoredPublic = fxAnchorN ? [fxAnchorN] : [];
+        var fxTotalN = fxMonitoredPublic.length + fxDiscovered.length;
+        var fxMonitoredOnlineN = fxMonitoredPublic.filter(function(n){return n.ok}).length;
         var fxDiscoveredOnlineN = fxDiscovered.filter(function(n){return n.online}).length;
         var fxOnlineN = fxMonitoredOnlineN + fxDiscoveredOnlineN;
-        var fxMonitoredAtHeadN = fx.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
+        var fxMonitoredAtHeadN = fxMonitoredPublic.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
         var fxDiscoveredAtHeadN = fxDiscovered.filter(function(n){return n.online && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
         var fxAtHeadN = fxMonitoredAtHeadN + fxDiscoveredAtHeadN;
-        // "Nodes syncing" stats — across all rows (anchor + fleet + discovered)
-        var fxAllSyncingRows = [].concat(fxFleetN, fxDiscovered.map(function(d){return {ok:d.online, block:d.block}}));
+        // "Nodes syncing" stats — anchor + discovered (operator fleet excluded)
+        var fxAllSyncingRows = fxDiscovered.map(function(d){return {ok:d.online, block:d.block}});
         if (fxAnchorN) fxAllSyncingRows.unshift(fxAnchorN);
         var fxAllAtHeadN = fxAllSyncingRows.filter(function(n){return n.ok && n.block && fxNetHead>0 && (fxNetHead - n.block) <= 100}).length;
         var fxAllSyncingN = fxAllSyncingRows.length - fxAllAtHeadN;
@@ -2732,7 +2729,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         }
 
         h += '<section style="margin:28px 0 36px">';
-        h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Demos Fixnet — workers-debug</h2>';
+        h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Demos Fixnet — discovered validators</h2>';
         h += '<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin:0 0 14px">';
         if (fxAgoStr) h += 'Updated ' + fxAgoStr;
         h += '</div>';
@@ -2761,7 +2758,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
         var fxRows = [];
         if (fxAnchorN) fxRows.push({kind:"anchor", data:fxAnchorN});
-        for (var fli=0; fli<fxFleetSorted.length; fli++) fxRows.push({kind:"fleet", data:fxFleetSorted[fli]});
+        // R-A 2026-08-25 P0: operator fleet rows stay off the public /reference table
         for (var dli=0; dli<fxDiscSorted.length; dli++) fxRows.push({kind:"discovered", data:fxDiscSorted[dli]});
 
         for (var fxi=0; fxi<fxRows.length; fxi++) {
@@ -2792,17 +2789,13 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
           var latencyStr = (fn.latencyMs != null) ? (fn.latencyMs + "ms") : "\u2014";
 
-          // Validator cell: prefer operator/human names.
+          // Validator cell: public observation names only (no operator-fleet join).
           //  - Anchor: "Kynesys Anchor"
-          //  - Fleet:  "XM33 - <nodeId>" (e.g. "XM33 - n1") stripping the "fleet-" prefix
           //  - Discovered + named operator (FIXNET_DISCOVERED_OPERATORS match): operator name (e.g. "Walter")
           //  - Discovered + unnamed: "discovered-<last4 of identity>"
           var nameLabel;
           if (isAnchor) {
             nameLabel = "Kynesys Anchor";
-          } else if (isFleet) {
-            var fleetSuffix = (fn.name && fn.name.indexOf("fleet-") === 0) ? fn.name.substring(6) : fn.name;
-            nameLabel = "XM33 - " + fleetSuffix;
           } else {
             // discovered
             var opName = null;

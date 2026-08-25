@@ -85,6 +85,17 @@ check("B4 resolveNodeDisplay resolver present and used",
 check("B5 no reference producer key in source",
       !/reference:\s*\{/.test(SRC),
       "reference producer re-introduced");
+
+{
+  const refRes = await fetch(BASE + "/reference");
+  const refBody = await refRes.text();
+  check("R-A /reference has no XM33 host-alias join",
+        !/XM33\s*[-–]\s*[nm][0-9]/i.test(refBody) && !/XM33\s*-\s*[A-Za-z]/.test(refBody),
+        "XM33 operator-fleet join present on /reference");
+  check("R-A /reference has no workers-debug copy",
+        !/workers-debug/i.test(refBody),
+        "workers-debug still on /reference");
+}
 check("B6 no hw-fleet-count fleet-size element in source",
       !/hw-fleet-count/.test(SRC),
       "dashboard fleet-count element re-introduced");
