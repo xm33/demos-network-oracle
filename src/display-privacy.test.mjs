@@ -100,6 +100,22 @@ check("B6 no hw-fleet-count fleet-size element in source",
       !/hw-fleet-count/.test(SRC),
       "dashboard fleet-count element re-introduced");
 
+{
+  const hRes = await fetch(BASE + "/health");
+  const hBody = await hRes.text();
+  const h = JSON.parse(hBody);
+  const ids = []
+    .concat((h.publicNodes || []).map(n => n.identity))
+    .concat(((h.validator_growth || {}).validators || []).map(v => v.identity))
+    .filter(Boolean);
+  const HEX66 = /^0x[0-9a-fA-F]{64}$/;
+  const TRUNC = /^0x[0-9a-fA-F]{4}…[0-9a-fA-F]{4}$/;
+  check("R-H /health has no trust_tier", !("trust_tier" in h) && !(h.publicNodes || []).some(n => "trust_tier" in n), "trust_tier present on /health");
+  check("R-H /health has no instance_role", !("instance_role" in h), "instance_role present on /health");
+  check("R-H /health identities not hex-66", ids.every(id => !HEX66.test(id)), "full key on /health");
+  check("R-H /health identities truncId-shaped (non-short)", ids.filter(id => id.length >= 12).every(id => TRUNC.test(id)), "identity not truncId shape");
+}
+
 // ---- C: signal projection (executed, per gate 6 extraction) ----
 {
   // C1: sets disjoint and complete against the actual emitted signal types

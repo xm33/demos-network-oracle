@@ -2541,21 +2541,33 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         confidence_reason: canonical.confidence_reason,
         agreement_reason: canonical.agreement_reason,
         // === Derived ===
-        publicNodes: latestPublicNodes || [],
+        publicNodes: (latestPublicNodes || []).map(function(n) {
+          var o = {};
+          for (var k in n) {
+            if (k === "trust_tier") continue;
+            o[k] = n[k];
+          }
+          if (o.identity) o.identity = truncId(o.identity);
+          return o;
+        }),
         signals: publicSignals,
         signals_grouped: groupSignals(publicSignals),
-        validator_growth: getValidatorGrowth(),
+        validator_growth: (function() {
+          var vg = getValidatorGrowth();
+          var out = {};
+          for (var k in vg) out[k] = vg[k];
+          out.validators = (vg.validators || []).map(function(v) {
+            var o = {};
+            for (var vk in v) o[vk] = v[vk];
+            if (o.identity) o.identity = truncId(o.identity);
+            return o;
+          });
+          return out;
+        })(),
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
         on_chain_publication: "unavailable",
         legacy: {},
-        instance_role: {
-          raw: INSTANCE_ROLE_CONFIG.raw,
-          normalized: INSTANCE_ROLE_CONFIG.normalized,
-          effective: INSTANCE_ROLE_CONFIG.effective,
-          can_publish: INSTANCE_ROLE_CONFIG.can_publish,
-          warning: INSTANCE_ROLE_CONFIG.warning,
-        },
       };
       res.writeHead(200);
       res.end(JSON.stringify(payload, null, 2));
