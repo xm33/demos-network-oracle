@@ -3441,7 +3441,7 @@ async function registerAgentProfile() {
       name: AGENT_NAME,
       description: AGENT_DESCRIPTION,
       tags: ["infrastructure", "monitoring", "health-oracle", "node-health", "demos-network"],
-      healthEndpoint: "http://193.77.169.106:" + HEALTH_PORT + "/health",
+      healthEndpoint: "https://demos-oracle.com/health",
     };
     var res = await fetch(SUPERCOLONY_API + "/api/agents/register", {
       method: "POST",
