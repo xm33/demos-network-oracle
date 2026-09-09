@@ -393,6 +393,11 @@ for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identit
 var FIXNET_NODE_IDENTITIES = {};
 for (var _fn in FIXNET_NODES) { FIXNET_NODE_IDENTITIES[FIXNET_NODES[_fn].identity] = _fn; }
 
+// Discovered-set exclusion predicate — the ONLY definition of "not a discovered row".
+// Ruling 2026-09-08: excludes monitored PUBLIC nodes only. Fleet identities are discovered
+// rows like any other crawl-observed peer (rendered per R-A as discovered-<last4>).
+function isExcludedFromDiscovered(identity) { return !!PUBLIC_NODE_IDENTITIES[identity]; }
+
 let latestFixnetNodes = []; // updated each cycle
 let latestDiscoveredFixnet = []; // fixnet peers discovered via anchor peerlist crawl
 let fixnetObservedAt = null; // ms timestamp of last fixnet poll completion
@@ -643,9 +648,7 @@ function getValidatorGrowth() {
     // Filter in JS — simpler than parameterized NOT IN, and the row count is small
     var allRows = sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all();
     var discRows = allRows.filter(function(r) {
-      if (PUBLIC_NODE_IDENTITIES[r.identity]) return false;
-      if (FIXNET_NODE_IDENTITIES[r.identity]) return false;
-      return true;
+      return !isExcludedFromDiscovered(r.identity);
     });
     result.total = discRows.length;
     result.today = discRows.filter(function(r){ return r.first_seen > dayAgo }).length;
@@ -692,8 +695,7 @@ function getValidatorGrowth() {
     for (var vi = 0; vi < dbRows.length; vi++) {
       var row = dbRows[vi];
       var identity = row.identity;
-      if (FIXNET_NODE_IDENTITIES[identity]) continue;
-      if (PUBLIC_NODE_IDENTITIES[identity]) continue; // skip monitored (already pushed in Pass 1)
+      if (isExcludedFromDiscovered(identity)) continue; // skip monitored (already pushed in Pass 1)
       var display = resolveNodeDisplay({ identity: identity });   // DISPLAY_PRIVACY: name/fleet/discovered-xxxx, never host:port
       var block = null, online = false;
       if (discoveredPeers[identity]) {
@@ -1976,9 +1978,7 @@ function discoverFixnetValidators(anchorInfoData) {
     if (!identity) continue;
 
     // Skip known identities (monitored fixnet, monitored testnet, or known fleet)
-    if (FIXNET_NODE_IDENTITIES[identity]) continue;
-    if (PUBLIC_NODE_IDENTITIES[identity]) continue;
-    if (IDENTITY_TO_NAME && IDENTITY_TO_NAME[identity]) continue;
+    if (isExcludedFromDiscovered(identity)) continue;
 
     var connection = peer.connection && peer.connection.string ? peer.connection.string : null;
     var block = peer.sync && peer.sync.block ? peer.sync.block : null;
@@ -2257,9 +2257,7 @@ function discoverValidators(infoData) {
     if (!identity) continue;
 
     // Check if this is a known fleet or public node
-    if (IDENTITY_TO_NAME[identity]) continue;
-    if (PUBLIC_NODE_IDENTITIES[identity]) continue;
-    if (FIXNET_NODE_IDENTITIES[identity]) continue;
+    if (isExcludedFromDiscovered(identity)) continue;
 
     // Unknown peer — track it
     if (!discoveredPeers[identity]) {
