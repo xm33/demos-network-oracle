@@ -222,7 +222,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /federate</b><span>Prometheus text metrics: oracle implementation version plus public-RPC reachability and probe latency observed from this DNO vantage</span></div>' +
 '<div class="e"><b>GET /badge</b><span>SVG status badge showing observed network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
 '<div class="e"><b>GET /version</b><span>Running agent version vs latest GitHub commit</span></div>' +
-'<footer>All endpoints return JSON unless noted. Monitoring interval: 20s. Publishing interval: 20 min. API version: 1.0. Oracle is strictly watch-only — observe, interpret, summarize risk.</footer></body></html>';
+'<footer>All endpoints return JSON unless noted. Monitoring interval: 20s. Publishing interval: 20 min. API version: 1.0. Oracle is strictly watch-only. DNO informs context; it does not advise, predict, score, certify, or decide action.</footer></body></html>';
 
 // FIX BUG 6: Write budget constants (SuperColony rate limits)
 const DAILY_PUBLISH_LIMIT = 15;
@@ -2888,7 +2888,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       }
       h += '</div>';
 
-      h += '<footer>Demos Network Oracle &middot; API v1.0 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>';
+      h += '<footer>Demos Network Oracle &middot; API v1.0 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> &middot; <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>';
       h += "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>";
       h += '<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>';
       h += '</main></body></html>';
@@ -3086,6 +3086,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 
 <div class="footer" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
   <span>Demos Network Oracle v${AGENT_VERSION} &bull; ${INSTANCE_ROLE.toUpperCase()}</span>
+  <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span>
   ${latestAttestationState.lastCount > 0
     ? '<span style="color:#3fb950;font-weight:600">&#10003; DAHR Attested</span>'
     : '<span style="color:#8b949e;font-weight:600" title="DAHR source-attestation currently unavailable">DAHR attestation unavailable</span>'}
