@@ -2,7 +2,7 @@
 
 **Live at:** [demos-oracle.com](https://demos-oracle.com)
 
-The Demos Network Oracle (DNO) is a watch-only network intelligence service for the [Demos blockchain](https://demos.network) testnet. It monitors public validator nodes, tracks network agreement, detects incidents, publishes attested health data on-chain via [SuperColony](https://supercolony.ai), and serves a public API.
+The Demos Network Oracle (DNO) is a watch-only network intelligence service for the [Demos blockchain](https://demos.network) testnet. It monitors public validator nodes, tracks network agreement, detects incidents, attests observed public sources on-chain via DAHR when attestation is available, and serves a public API.
 
 Built by [XM33](https://demos-oracle.com), independently of the Demos team.
 
@@ -68,7 +68,7 @@ curl -s https://demos-oracle.com/health | jq
 - Runtime: Bun
 - Monitoring interval: 20 seconds
 - Publishing interval: 20 minutes
-- On-chain attestation: via SuperColony every ~1–6 hours
+- On-chain attestation: DAHR when available (state at /health)
 
 ## Running your own
 

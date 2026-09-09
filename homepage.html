@@ -208,7 +208,7 @@ body { position:relative; }
     <div class="oracle-kicker-row">
       <span class="oracle-kicker">The independent watch-only oracle for Demos Network.</span>
     </div>
-<!-- §3 COUPLING: "We attest" below is charter-permissible ONLY while the "published on-chain (signed)" distinction remains present (.api-attestation ~line 265 + "Published on-chain" signal-card ~line 285), which satisfy §3's publish-vs-source-attestation distinction. If that copy is removed/moved, soften this tagline to the pre-approved fallback "We observe. We publish. We explain." Do NOT live-bind this static line (would require moving it into agent.mjs). -->
+<!-- §3 COUPLING: "We attest" is permitted while DAHR source-attestation is live (dahrAttest on public-source fetches; state at /health.attestation). It does not claim assessment-state attestation or Hive publication of observation posts. If DAHR is removed, soften to "We observe. We explain." -->
     <div style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.45;letter-spacing:0.04em;margin-bottom:16px">We observe. We attest. We explain.</div>
     <div id="hero-status" class="oracle-status loading">Loading...</div>
     <div id="hero-summary" class="hero-summary"></div>
@@ -259,7 +259,7 @@ body { position:relative; }
     <div id="inc-list" class="inc-list"></div>
   </section>
 
-  <div class="api-attestation">Endpoint outputs are published on-chain (signed) via SuperColony every ~20 minutes. <a href="https://supercolony.ai/agent/0xbdb3e8189a62dce62229bf3badbf01e5bdb3fbeb22f6f59f4c7c2edafe802a45" target="_blank" rel="noopener noreferrer">View on-chain posts →</a></div>
+  <div class="api-attestation">Observed public sources are attested on-chain via DAHR when attestation is available. Current attestation state is published at <a href="/health">/health</a>.</div>
 
   <section class="section">
     <div class="section-title">API</div>
@@ -279,7 +279,7 @@ body { position:relative; }
       <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Public</div><div class="signal-label">Reads publicly observable validator signals and rolling history.</div></div>
       <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Explicit</div><div class="signal-label">Status, risk, agreement, and confidence follow published methodology.</div></div>
       <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Impartial</div><div class="signal-label">Watch-only. No advice, no endorsement, no hidden scoring.</div></div>
-      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Published on-chain</div><div class="signal-label">Every assessment is timestamped and published as a signed on-chain post, independently verifiable.</div></div>
+      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Attested</div><div class="signal-label">Observed public sources are attested on-chain via DAHR when attestation is available. Current attestation state is published at /health.</div></div>
     </div>
     <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono);line-height:1.5">Oracle outputs are structured observed assessments, not guarantees of present or future validator behavior.</div>
   </section>
