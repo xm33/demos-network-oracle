@@ -2344,7 +2344,7 @@ async function checkLatestVersion() {
     log("  Version check: latest GitHub commit is " + latestVersionData.latestCommit + " — " + latestVersionData.latestMessage);
   } catch(e) { log("  Version check failed: " + e.message); }
   try {
-    var lr = await fetch("http://127.0.0.1:53550/info", { signal: AbortSignal.timeout(3000) });
+    var lr = await fetch(LOCAL_INFO_URL, { signal: AbortSignal.timeout(3000) });
     var ld = await lr.json();
     latestVersionData.nodeVersion = ld.version || null;
     latestVersionData.nodeVersionName = ld.version_name || null;
@@ -3531,7 +3531,7 @@ async function main() {
   log("  Daily summary: every " + DAILY_SUMMARY_CYCLES + " cycles (" + Math.round(DAILY_SUMMARY_CYCLES * INTERVAL_MS / 1000 / 3600) + "h)");
   log("  Public RPCs: " + CROSS_VALIDATION_RPCS.map(function(r, i) { return publicValidationRpcName(i); }).join(", "));
   log("  Explorer: " + EXPLORER_STATUS_URL);
-  log("  Health API: http://0.0.0.0:" + HEALTH_PORT + "/health");
+  log("  Health API: http://127.0.0.1:" + HEALTH_PORT + "/health");
   log("  Primary probe: " + LOCAL_INFO_URL);
   log("  Prometheus: " + PROMETHEUS_URL);
   log("  Demos RPC: " + RPC_URL);
@@ -3942,7 +3942,7 @@ async function main() {
         // Crawl n3's own peerlist
         var localInfo = null;
         try {
-          var lr = await fetch("http://127.0.0.1:53550/info", { signal: AbortSignal.timeout(5000) });
+          var lr = await fetch(LOCAL_INFO_URL, { signal: AbortSignal.timeout(5000) });
           localInfo = await lr.json();
           var newFromLocal = discoverValidators(localInfo);
           if (newFromLocal.length > 0) log("  Discovery: " + newFromLocal.length + " new peer(s) from local node");
@@ -4333,7 +4333,7 @@ async function pollTelegram() {
               }
             } catch(e) { reply = "Error: " + e.message; }
           } else if (text === "/help" || text === "/start") {
-            var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/uptime — per-node uptime %","/signals — current network signals","/help — this message","","Dashboard: http://193.77.169.106:55225/dashboard"];
+            var lines = ["<b>Demos Fleet Oracle Bot</b>","","/status — full fleet status","/incidents — last 5 incidents","/uptime — per-node uptime %","/signals — current network signals","/help — this message","","Dashboard: https://demos-oracle.com/dashboard"];
             reply = lines.join(NL);
           }
           if (reply && chatId === TELEGRAM_CHAT_ID) {
