@@ -390,8 +390,6 @@ for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identit
 
 
 
-var FIXNET_NODE_IDENTITIES = {};
-for (var _fn in FIXNET_NODES) { FIXNET_NODE_IDENTITIES[FIXNET_NODES[_fn].identity] = _fn; }
 
 // Discovered-set exclusion predicate — the ONLY definition of "not a discovered row".
 // Ruling 2026-09-08: excludes monitored PUBLIC nodes only. Fleet identities are discovered
@@ -1373,10 +1371,6 @@ function expectedConnStr(name) {
   return "http://" + n.host + ":" + n.port;
 }
 
-var IDENTITY_TO_NAME = {};
-for (var _name in EXPECTED_FLEET) {
-  IDENTITY_TO_NAME[EXPECTED_FLEET[_name].identity] = _name;
-}
 
 // FIX BUG 6: Shared write budget check
 function canPublish() {
