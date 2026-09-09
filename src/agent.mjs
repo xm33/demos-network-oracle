@@ -162,6 +162,7 @@ async function checkPrimaryOracle() {
 const AGENT_NAME = "Demos Network Oracle";
 const AGENT_DESCRIPTION = "Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently unavailable. Public API at demos-oracle.com/health";
 const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
+const SUPERCOLONY_ENABLED = process.env.SUPERCOLONY_ENABLED === "1";
 
 // Historical data file (JSON-based, lightweight)
 const HISTORY_FILE = join(LOG_DIR, "history.json");
@@ -1669,6 +1670,9 @@ async function sendTelegram(message) {
 }
 
 async function publish(demos, post, attestations) {
+  if (!SUPERCOLONY_ENABLED) {
+    return false;
+  }
   // Role-authority guard: an invalid INSTANCE_ROLE must never publish (prevents silent validator->primary degradation).
   if (!INSTANCE_ROLE_CAN_PUBLISH) {
     logError("Publish BLOCKED by invalid INSTANCE_ROLE raw=" + JSON.stringify(INSTANCE_ROLE_CONFIG.raw) + " normalized=" + JSON.stringify(INSTANCE_ROLE_CONFIG.normalized) + " effective=" + INSTANCE_ROLE_CONFIG.effective + ": " + post.text.substring(0, 80));
@@ -2558,7 +2562,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         })(),
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
-        on_chain_publication: "unavailable",
+        on_chain_publication: SUPERCOLONY_ENABLED ? "unavailable" : "disabled",
         legacy: {},
       };
       res.writeHead(200);
@@ -3518,7 +3522,7 @@ async function probeFleetVersions() {
 
 async function main() {
   log("===============================================================");
-  log("  SuperColony Node Health Agent v" + AGENT_VERSION + " — Demos Fleet Oracle");
+  log("  Demos Network Oracle Agent v" + AGENT_VERSION);
   log("  Fleet: " + FLEET_SIZE + " nodes across 4 servers");
   log("  Interval: " + (INTERVAL_MS / 1000 / 60) + " minutes");
   log("  Cooldown: " + COOLDOWN_CYCLES + " cycles before alerting");
@@ -3745,7 +3749,7 @@ async function main() {
   }
 
   // Register agent profile (fire and forget)
-  registerAgentProfile();
+  if (SUPERCOLONY_ENABLED) registerAgentProfile();
 
   var mktAddress = demos.getAddress();
 
