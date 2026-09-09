@@ -143,7 +143,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>The Oracle operator (XM33) also runs a fleet of nine validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
 <p>The fleet is a reference layer because it is operated by a single entity, may be on a different chain state than the public network, and its health does not represent public network health.</p>
 <h3>How separation is enforced</h3>
-<p>In the API: fleet data appears only under a namespaced <code>reference</code> key in <code>/health</code>. The compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
+<p>In the API: the compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
 <p>In the dashboard: public data is presented first. Fleet data is in a collapsed "Reference Layer" section, clearly labeled.</p>
 <h2>Interpretation Model</h2>
 <p>The Oracle separates <b>operability</b> from <b>resilience</b>:</p>
@@ -212,6 +212,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>DEMOS is a young testnet. The Oracle is designed for this reality and makes no claims beyond what it can observe.</p>
 <p><b>Small public node set.</b> The Oracle currently monitors the Kynesys public validators. Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
 <p><b>Discovered but unmonitored validators.</b> The Oracle discovers new validators via peer list crawling. Some may be online but not yet added to formal monitoring. The Network Growth panel on the dashboard shows their sync progress. They are added to monitoring manually after reaching the network head.</p>
+<p>The discovered table lists every peer observed in crawl output that is not one of the monitored public nodes shown above it. This includes any peers operated by the oracle's operator; such peers are resolved and displayed identically to all other discovered peers, and are not otherwise identified.</p>
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
 <p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core assessment model.</p>
 <p><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b></p>
@@ -236,7 +237,7 @@ Agent guide: <a href="/agent">/agent</a><br>
 
 Oracle sources: <a href="/sources">/sources</a> — where the observations come from.<br>
 Observation timeline: <a href="/timeline">/timeline</a> — generated public observation record.<br>
-Reference surface: <a href="/reference">/reference</a> — discovered validators and operator fleet diagnostics (observation/operator-layer context; not part of core assessment).<br>
+Reference surface: <a href="/reference">/reference</a> — discovered validators and fixnet observation context (not part of core assessment).<br>
 API version: <code>1.0</code></div>
 <footer class="doc-footer">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
 <a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a></main>
