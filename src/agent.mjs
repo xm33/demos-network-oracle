@@ -211,7 +211,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
 '<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
 '<h2>Validators</h2>' +
-'<div class="e"><b>GET /peers</b><span>Discovered validators — identity, connection, block, first seen</span></div>' +
+'<div class="e"><b>GET /peers</b><span>Discovered validators — truncated identity, block, first seen (connections are never exposed)</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
 '<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
