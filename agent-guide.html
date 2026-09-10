@@ -85,7 +85,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 
 <h2>Endpoint</h2>
 <pre>GET /organism</pre>
-<p>Returns 17 top-level JSON fields. No fleet data. Every top-level field is always present and never null. Most fields are flat values; <code>risk_factors</code> is an array of strings and <code>last_24h</code> is a small summary object (fields inside it may be null while history accumulates). Refreshes every 20 seconds.</p>
+<p>The default context is GET /organism. Returns 17 top-level JSON fields. No fleet data. Every top-level field is always present and never null. Most fields are flat values; <code>risk_factors</code> is an array of strings and <code>last_24h</code> is a small summary object (fields inside it may be null while history accumulates). Refreshes every 20 seconds.</p>
 <p>Machine-readable contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema with stability guarantees (additive-only within api_version 1.x) and changelog. <code>unknown</code> is a published value, not an HTTP error. Breaking field removals or type changes increment <code>api_version</code>. Validate your integration against it.</p>
 <pre>{
   "status": "unknown",
@@ -289,7 +289,9 @@ else:
     # Fall back to last known state or safe default</pre>
 
 <h2>Combining Endpoints</h2>
-<p>For richer context, combine multiple Oracle endpoints:</p>
+<p>The default context is <a href="/organism">GET /organism</a>.</p>
+<p>Optional context: <a href="/health">GET /health</a> (attestation and publication); <a href="/peers">GET /peers</a> (discovered set — crawl output, not a registry); <a href="/commerce">GET /commerce</a> (Layer 2 only; not an input to status, risk, or agreement).</p>
+<p>Other endpoints add detail. They do not replace /organism.</p>
 <pre># Minimal: just the state
 GET /organism
 

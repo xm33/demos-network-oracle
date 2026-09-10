@@ -206,12 +206,12 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<p class="sub">On-chain publication is currently disabled from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer. on_chain_publication is currently "disabled" (observation posts are not sent). attestation is a separate field: DAHR source-attestation of observed public sources, when available.</span></div>' +
-'<div class="e"><b>GET /organism</b><span>Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
+'<div class="e"><b>GET /organism</b><span>Default context. Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
 '<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
 '<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
 '<h2>Validators</h2>' +
-'<div class="e"><b>GET /peers</b><span>Discovered validators — truncated identity, block, first seen (connections are never exposed)</span></div>' +
+'<div class="e"><b>GET /peers</b><span>Discovered set — crawl output, not a registry. Truncated identity, block, first seen (connections are never exposed)</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
 '<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
@@ -2678,7 +2678,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML);
     } else if (req.url === "/") {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "Link": "</organism>; rel=\"alternate\"; type=\"application/json\", </organism/schema>; rel=\"describedby\"" });
       res.end(renderHomepageNoJs(HOMEPAGE_HTML));
     } else if (req.url === "/home") {
       res.writeHead(301, { "Location": "/" });
