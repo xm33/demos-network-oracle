@@ -2572,7 +2572,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200);
       var publicDiscovered = {};
       for (var _pid in discoveredPeers) { publicDiscovered[truncId(_pid)] = toPublicPeer(_pid, discoveredPeers[_pid]); }
-      res.end(JSON.stringify({ scope: "public_sanitized", known: FLEET_SIZE, discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
+      res.end(JSON.stringify({ scope: "public_sanitized", discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
     } else if (req.url === "/history") {
       // Return last 24h of data points
       var last24h = history.slice(-72);
