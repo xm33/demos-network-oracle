@@ -2584,11 +2584,15 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         on_chain_publication: SUPERCOLONY_ENABLED ? "unavailable" : "disabled",
         legacy: {},
       };
-      res.writeHead(200);
+      var healthHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" };
+      if (staleness.lastCycleAt) healthHdrs["Last-Modified"] = new Date(staleness.lastCycleAt).toUTCString();
+      res.writeHead(200, healthHdrs);
       res.end(JSON.stringify(payload, null, 2));
     } else if (req.url === "/peers") {
       var staleness = getStaleness(); // FIX BUG 7
-      res.writeHead(200);
+      var peerHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" };
+      if (staleness.lastCycleAt) peerHdrs["Last-Modified"] = new Date(staleness.lastCycleAt).toUTCString();
+      res.writeHead(200, peerHdrs);
       var publicDiscovered = {};
       for (var _pid in discoveredPeers) { publicDiscovered[truncId(_pid)] = toPublicPeer(_pid, discoveredPeers[_pid]); }
       res.end(JSON.stringify({ scope: "public_sanitized", discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
