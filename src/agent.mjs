@@ -2677,7 +2677,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML);
     } else if (req.url === "/") {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
       res.end(renderHomepageNoJs(HOMEPAGE_HTML));
     } else if (req.url === "/home") {
       res.writeHead(301, { "Location": "/" });
