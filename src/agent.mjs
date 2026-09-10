@@ -2879,7 +2879,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           }
         }
       } catch(e) {}
-      // Discovered Validators - reference section (peer-crawled, not yet monitored)
+      // Catalog minus monitored (validator_discoveries). Not the cycle set.
       // Call getValidatorGrowth() directly - same source /health uses.
       // latestHealthData does NOT contain validator_growth; that field is
       // built fresh at request time by the /health handler.
@@ -2891,7 +2891,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         }
       } catch(e) { discoveredList = []; }
       h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
-      h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Crawl-visible this cycle</h2>';
+      h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Crawl-observed identities</h2>';
       h += '<p class="sub" style="margin-bottom:18px">Crawl-observed identities that are not in the monitored public set. A row here is observation, not a promise of public monitoring, and not network size.</p>';
       if (discoveredList.length === 0) {
         h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">None in this set.</p>';
