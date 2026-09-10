@@ -257,6 +257,7 @@ body { position:relative; }
     <div class="section-title">Network View</div>
     <div id="growth-cards" class="growth-cards"></div>
     <div id="growth-sub" class="growth-sub"></div>
+    <div id="growth-catalog" class="growth-sub">all-time crawl-observed identities, including ones no longer reachable</div>
     <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Monitored Public Nodes</div>
     <div style="font-size:11px;color:var(--text-secondary);opacity:0.6;margin-bottom:10px">Public validators currently included in the Oracle’s live observation set.</div>
     <table class="vtable">
@@ -433,7 +434,7 @@ async function fetchData() {
     var gc=document.getElementById('growth-cards');
     // v7.4: summary cards now reflect MONITORED set specifically (not mixed counts)
     gc.innerHTML=
-      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">Discovered</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">Identities</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored_online||0)+'</div><div class="gc-label">Reachable</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored_at_head||0)+'</div><div class="gc-label">At Head</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
