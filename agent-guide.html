@@ -86,7 +86,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <h2>Endpoint</h2>
 <pre>GET /organism</pre>
 <p>Returns 17 top-level JSON fields. No fleet data. Every top-level field is always present and never null. Most fields are flat values; <code>risk_factors</code> is an array of strings and <code>last_24h</code> is a small summary object (fields inside it may be null while history accumulates). Refreshes every 20 seconds.</p>
-<p>Machine-readable contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema with stability guarantees (additive-only within api_version 1.x) and changelog. Validate your integration against it.</p>
+<p>Machine-readable contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema with stability guarantees (additive-only within api_version 1.x) and changelog. <code>unknown</code> is a published value, not an HTTP error. Breaking field removals or type changes increment <code>api_version</code>. Validate your integration against it.</p>
 <pre>{
   "status": "unknown",
   "trend": "unknown",
@@ -144,6 +144,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <div class="note"><b>Example:</b> status: stable · risk: elevated · confidence: clear<br>Interpretation: network is operational, but redundancy is reduced.</div>
 
 <h2>Trust Calibration</h2>
+<p>These checks calibrate how much a consumer should rely on this observation. They are not a score, rank, or certification.</p>
 <p>Before relying on the assessment, check:</p>
 <p><code>data_quality</code> — if <span class="val">insufficient</span>, treat all values with skepticism.</p>
 <p><code>staleness_seconds</code> — if high, data may not reflect current reality.</p>
@@ -154,6 +155,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>Recommended interval: <b>10–30 seconds</b>. The Oracle updates every 20 seconds.</p>
 <p>Respect the <code>Cache-Control: public, max-age=5</code> header. Do not poll faster than every 5 seconds.</p>
 <p>For less time-sensitive consumers, polling every 60 seconds is sufficient.</p>
+<p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is observation export, not a ranking.</p>
 
 <h2>Consumption Examples</h2>
 <p><b>curl</b></p>
