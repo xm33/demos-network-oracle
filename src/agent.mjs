@@ -160,7 +160,7 @@ async function checkPrimaryOracle() {
   }
 }
 const AGENT_NAME = "Demos Network Oracle";
-const AGENT_DESCRIPTION = "Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently unavailable. Public API at demos-oracle.com/health";
+const AGENT_DESCRIPTION = "Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently disabled. Public API at demos-oracle.com/health";
 const SUPERCOLONY_API = process.env.COLONY_URL || "https://supercolony.ai";
 const SUPERCOLONY_ENABLED = process.env.SUPERCOLONY_ENABLED === "1";
 
@@ -201,11 +201,11 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'code{background:#0f172a;padding:1px 5px;border-radius:3px;font-size:.85rem}' +
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
 '<h1>Demos Network Oracle</h1>' +
-'<p class="sub">Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently unavailable.<br>' +
+'<p class="sub">Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently disabled.<br>' +
 'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
-'<p class="sub">On-chain publication is currently unavailable from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
+'<p class="sub">On-chain publication is currently disabled from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
 '<h2>Network</h2>' +
-'<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer</span></div>' +
+'<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer. on_chain_publication is currently "disabled" (observation posts are not sent). attestation is a separate field: DAHR source-attestation of observed public sources, when available.</span></div>' +
 '<div class="e"><b>GET /organism</b><span>Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
 '<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
@@ -296,6 +296,7 @@ function renderHeader(activeItem, farSlot) {
     + renderHeaderNavLink('/agent', 'agent', 'Agent', activeItem)
     + renderHeaderNavLink('/sources', 'sources', 'Sources', activeItem)
     + renderHeaderNavLink('/reference', 'reference', 'Reference', activeItem)
+    + renderHeaderNavLink('/dashboard', 'dashboard', 'Dashboard', activeItem)
     + renderHeaderNavLink('/timeline', 'timeline', 'Timeline', activeItem)
     + '</div>'
     + (farSlot ? '<div class="doc-nav-far">' + farSlot + '</div>' : '')
