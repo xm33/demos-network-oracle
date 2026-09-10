@@ -100,6 +100,13 @@ check("B6 no hw-fleet-count fleet-size element in source",
       !/hw-fleet-count/.test(SRC),
       "dashboard fleet-count element re-introduced");
 
+check("P0-TW public discovered_validators message has no fleet token",
+      /crawl-visible this cycle/.test(SRC) && !/non-fleet validator\(s\) discovered/.test(SRC),
+      "old non-fleet discovered message still in agent.mjs");
+check("P0-TW dashboard h2 is cycle heading not Discovered Validators",
+      /<h2[^>]*>Crawl-visible this cycle<\/h2>/.test(SRC) && !/>Discovered Validators<\/h2>/.test(SRC),
+      "old Discovered Validators h2 still present");
+
 {
   const hRes = await fetch(BASE + "/health");
   const hBody = await hRes.text();

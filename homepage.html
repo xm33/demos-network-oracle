@@ -433,11 +433,11 @@ async function fetchData() {
     var gc=document.getElementById('growth-cards');
     // v7.4: summary cards now reflect MONITORED set specifically (not mixed counts)
     gc.innerHTML=
-      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">Discovered</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">Identities</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored_online||0)+'</div><div class="gc-label">Reachable</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored_at_head||0)+'</div><div class="gc-label">At Head</div></div>'+
       '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
-    document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week \u00b7 +'+(vg.month||0)+' this month';
+    document.getElementById('growth-sub').innerHTML='all-time crawl-observed identities, including ones no longer reachable<br>+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week \u00b7 +'+(vg.month||0)+' this month';
 
     // Validators: render monitored only (discovered lives on /community)
     var validators=vg.validators||[];

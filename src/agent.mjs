@@ -1340,11 +1340,11 @@ function generateSignals(data, stalenessSeconds) {
     }
   }
 
-  // Discovered non-fleet validators
+  // Crawl-visible this cycle (public signal; no fleet token)
   var discovered = Object.values(discoveredPeers || {});
   if (discovered.length > 0) {
     var onlineDiscovered = discovered.filter(function(p) { return p.online; });
-    signals.push({ type: "discovered_validators", severity: "info", nodes: discovered.map(function(p) { return p.identity.substring(0,12)+"..."; }), value: discovered.length, message: discovered.length + " non-fleet validator(s) discovered (" + onlineDiscovered.length + " online)" });
+    signals.push({ type: "discovered_validators", severity: "info", nodes: discovered.map(function(p) { return p.identity.substring(0,12)+"..."; }), value: discovered.length, message: discovered.length + " crawl-visible this cycle (" + onlineDiscovered.length + " online)" });
   }
 
   // All healthy (fleet only — public node signals don't affect this)
@@ -2891,10 +2891,10 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         }
       } catch(e) { discoveredList = []; }
       h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
-      h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Discovered Validators</h2>';
-      h += '<p class="sub" style="margin-bottom:18px">Validators the Oracle has seen via peer crawling but has not yet formally added to monitoring. Shown here for transparency; added to the monitored set manually once they reach the network head.</p>';
+      h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Crawl-visible this cycle</h2>';
+      h += '<p class="sub" style="margin-bottom:18px">Crawl-observed identities that are not in the monitored public set. A row here is observation, not a promise of public monitoring, and not network size.</p>';
       if (discoveredList.length === 0) {
-        h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">No discovered validators at this time.</p>';
+        h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">No rows in this slice.</p>';
       } else {
         h += '<div class="table-scroll"><table style="opacity:0.8"><thead><tr><th>Identity</th><th>Status</th><th>Block</th><th>Sync</th></tr></thead><tbody>';
         for (var dvi = 0; dvi < discoveredList.length; dvi++) {
@@ -3273,7 +3273,7 @@ async function refresh(){
     if(gb&&d.validator_growth){
       var vg=d.validator_growth;
       var gh='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Discovered</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.total+'</div></div>';
+      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Identities</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.total+'</div></div>';
       gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Online</div><div style="font-size:1.1em;font-weight:bold;color:#3fb950">'+vg.online+'</div></div>';
       gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Synced</div><div style="font-size:1.1em;font-weight:bold;color:'+(vg.synced>0?'#3fb950':'#d29922')+'">'+vg.synced+'</div></div>';
       gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Monitored</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.monitored+'</div></div>';
