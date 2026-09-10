@@ -232,6 +232,25 @@ let publishTimestamps = []; // rolling window of publish times
 
 var HOMEPAGE_HTML = "";
 try { HOMEPAGE_HTML = readFileSync("homepage.html", "utf8"); } catch(e) { HOMEPAGE_HTML = "<html><body><h1>Homepage not found</h1></body></html>"; }
+function renderHomepageNoJs(html) {
+  try {
+    var c = computeCanonicalState();
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+    var status = esc(c.status || "unknown");
+    var risk = esc(c.risk || "—");
+    var ag = esc((c.agreement && c.agreement.state) || "—");
+    var summary = esc(c.summary || "");
+    html = html.replace('<div id="hero-status" class="oracle-status loading">Loading...</div>', '<div id="hero-status" class="oracle-status">' + status + '</div>');
+    html = html.replace('<div id="hero-summary" class="hero-summary"></div>', '<div id="hero-summary" class="hero-summary">' + summary + '</div>');
+    html = html.replace('<div id="card-risk" class="signal-value">—</div>', '<div id="card-risk" class="signal-value">' + risk + '</div>');
+    html = html.replace('<div id="ag-state" class="ag-value">—</div>', '<div id="ag-state" class="ag-value">' + ag + '</div>');
+    return html;
+  } catch (e) {
+    return html;
+  }
+}
 var SOURCES_HTML = "";
 try { SOURCES_HTML = readFileSync("sources.html", "utf8"); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
 
@@ -2655,7 +2674,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(DOCS_HTML);
     } else if (req.url === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(HOMEPAGE_HTML);
+      res.end(renderHomepageNoJs(HOMEPAGE_HTML));
     } else if (req.url === "/home") {
       res.writeHead(301, { "Location": "/" });
       res.end();
