@@ -89,7 +89,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <main>
 <h1>Sources</h1>
 <p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Observing many signals. Resolving one view.</p>
-<p class="sub">Where the Oracle derives its view of the network. The Oracle observes multiple independent sources and resolves them into a single public state using deterministic aggregation.</p>
+<p class="sub">Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism. That is the independence that matters.</p>
 
 <h2>Resolution Model</h2>
 <div class="flow">
@@ -101,7 +101,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
   <span class="flow-arrow">&rarr;</span>
   <span class="flow-step">Public State</span>
 </div>
-<p>Each public node is observed independently every 20 seconds. Their states are compared and aligned using deterministic rules. The resulting state reflects agreement, disagreement, and uncertainty across sources. The same inputs always produce the same public state.</p>
+<p>Each configured seed is fetched every 20 seconds. Status uses only those seeds. Their states are compared and aligned using deterministic rules. The resulting state reflects agreement, disagreement, and uncertainty across those seeds. The same inputs always produce the same public state.</p>
 
 <h2>Source Layers</h2>
 
@@ -111,7 +111,8 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
     <span class="layer-title">Public Network</span>
   </div>
   <p class="layer-desc">Public validator nodes used to determine network status, agreement, and risk. These are the primary observation sources. All core assessments are derived exclusively from this layer.</p>
-  <div class="layer-detail">Includes: Kynesys-operated public validators (kyne-node2, kyne-node3, kyne-node3b)</div>
+  <div class="layer-detail">Includes: Kynesys-operated public endpoints (kyne-node2, kyne-node3, kyne-node3b)</div>
+  <div class="layer-detail">One operator. node3b is a second port on the same host as node3, not a fourth org. demosnode.discus.sh is an alias of node3, not a fourth seed.</div>
 </div>
 
 <div class="layer-card">
@@ -119,7 +120,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
     <span class="layer-badge reference">Reference</span>
     <span class="layer-title">Discovered (Fixnet)</span>
   </div>
-  <p class="layer-desc">All fixnet validators except the Kynesys anchor are treated as discovered observations. This includes the XM33-operated fleet, self-identified community operators (e.g. Walter), and anonymous peers surfaced via the anchor&apos;s peerlist. Discovered data is probed for reachability, block height, and latency, but does not influence core status, risk, or agreement.</p>
+  <p class="layer-desc">All fixnet validators except the Kynesys anchor are treated as discovered observations. This includes anonymous peers surfaced via the anchor&apos;s peerlist. On the fixnet reference path, discovered rows are probed for reachability, height, and latency. That sentence does not apply to the public testnet catalog. Public testnet catalog rows are copied from seed peerlists (online bit, advertised height). DNO does not dial those identities. Not probed. Neither layer enters status, risk, or agreement.</p>
   <div class="layer-detail">Trust origin on fixnet: the Kynesys anchor only &middot; All other fixnet sources are observed</div>
   <div class="layer-detail">Operator names appear in the Validator column when operators have self-identified. Naming is cosmetic and does not imply promotion, approval, or elevated trust.</div>
 </div>
