@@ -112,7 +112,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>When status is <span class="val">unknown</span>, risk defaults to <span class="val">elevated</span>. The Oracle treats the absence of information as a reason for caution — but not alarm. On a testnet where <span class="val">unknown</span> is a normal occurrence, defaulting to <span class="val">high</span> would desensitize consumers.</p>
 <h3>Data quality</h3>
 <p>Data quality measures whether the Oracle can see the network properly. It answers: did enough public nodes respond, recently enough, to form a credible assessment?</p>
-<p><span class="val">sufficient</span> — At least two public nodes responded within the current cycle and data is fresh. <span class="val">insufficient</span> — Too few nodes responded or data is stale beyond acceptable bounds. When data quality is insufficient, status is set to <span class="val">unknown</span>.</p>
+<p><span class="val">sufficient</span> — At least two public nodes responded within the current cycle and data is fresh. <span class="val">insufficient</span> — Too few seeds answered or the last completed observation is older than 300 s. When data quality is insufficient, status is set to <span class="val">unknown</span>.</p>
 <h3>Confidence</h3>
 <p>Confidence measures whether the observed signals agree with each other. The Oracle may have full visibility (data quality is sufficient) but see contradictory information — nodes reporting divergent block heights, mixed health signals. That is a confidence problem.</p>
 <p><span class="val">clear</span> — Signals are consistent and unambiguous. <span class="val">uncertain</span> — Signals conflict or are ambiguous. Status and risk are still published, but should be consumed with caution.</p>
@@ -126,6 +126,22 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <p>General conditions like "the network is slow" are not incidents — they are captured by status, risk, and agreement. Incidents point to specific, identifiable problems.</p>
 <p>Severity is assessed relative to current network size. One node going offline in a set of five is more significant than in a set of fifty.</p>
 <div class="note">Incidents are state-driven and persist across restarts. The Oracle reconciles each active incident against current observations every cycle, rather than relying only on transition events. A consequence: an incident may remain active for extended periods when the underlying condition does not resolve — for example, a block-stall may be detected and kept active even while all nodes remain individually healthy and reachable. "All nodes healthy" does not always mean "the network is producing blocks."</div>
+
+<h2>Published observation parameters</h2>
+<p>DNO&apos;s floor, not Demos&apos; forge quorum. These are <code>agent.mjs</code> constants at the current pin. They are DNO&apos;s own bounds, not Demos protocol requirements, and not a score.</p>
+<table><thead><tr><th>Token</th><th>Value</th><th>What it is</th></tr></thead><tbody>
+<tr><td>vantage floor</td><td>2 public answers</td><td>else data_quality insufficient</td></tr>
+<tr><td>cycle</td><td>20 s</td><td>MONITOR_INTERVAL_MS</td></tr>
+<tr><td>probe timeout</td><td>5 s</td><td>seed /info abort</td></tr>
+<tr><td>data_quality cliff</td><td>300 s</td><td>kernel</td></tr>
+<tr><td>consumer stale hint</td><td>120 s</td><td>/agent only — not the kernel cliff</td></tr>
+<tr><td>aligned band</td><td>±25 blocks of upper median</td><td>agreement input</td></tr>
+<tr><td>strong</td><td>all aligned and spread ≤ 20</td><td></td></tr>
+<tr><td>moderate</td><td>≥ 60% of heights in band</td><td></td></tr>
+<tr><td>confidence gap</td><td>uncertain if height gap &gt; 50</td><td></td></tr>
+<tr><td>24h static bucket</td><td>5 min</td><td>last_24h clock</td></tr>
+</tbody></table>
+<p class="note">60 s on /agent is consumer advice only. Do not invent a cycle catalog count. Bind probed seeds {k}/{n} and catalog {D_catalog} only.</p>
 <h2>How It Works</h2>
 <p>The Oracle runs a continuous observation cycle. Every 20 seconds, it:</p>
 <p>1. Polls each known public validator node — checks reachability, block height, sync status, and peer count.<br>
@@ -138,7 +154,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <h2>Public vs Reference Separation</h2>
 <p>This is the most important structural rule in the Oracle. It governs everything.</p>
 <h3>Public network (primary observation basis)</h3>
-<p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public nodes are the independent Kynesys validators DNO observes.</p>
+<p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public assessment uses the configured Kynesys seed URLs. Independent of DNO: true. Independent of each other: false. One org.</p>
 <h3>Reference fleet (internal context)</h3>
 <p>The Oracle operator (XM33) also runs a fleet of validator nodes. These provide internal context and infrastructure health monitoring. Fleet data is published separately for transparency — but it never influences the public assessment.</p>
 <p>The fleet is a reference layer because it is operated by a single entity, may be on a different chain state than the public network, and its health does not represent public network health. Fleet nodes that appear in public crawl output are additionally listed in the discovered table, resolved identically to other discovered peers, as described under Discovered but unmonitored validators.</p>

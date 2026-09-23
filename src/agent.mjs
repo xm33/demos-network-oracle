@@ -2727,7 +2727,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       // Nav
       h += renderHeader("reference", DEMOS_BADGE);
       h += '<main>';
-      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Discovered validators shown here are observation context and are not part of DNO core network assessment.</div>';
+      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Two tables. Neither enters status, risk, or agreement. Neither is a validator list, a stake list, or an official-node list.</div>';
       h += '<h1>Reference — Discovered Validators</h1>';
 
       // --- Fleet Fixnet section (v7.2) ---
@@ -2761,17 +2761,13 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         }
 
         h += '<section style="margin:28px 0 36px">';
-        h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Demos Fixnet — discovered validators</h2>';
+        h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Fixnet probe — discovered hosts</h2>';
+        h += '<p class="sub" style="margin:0 0 8px">DNO dialed these fixnet endpoints. reachable here means that probe answered. This is not the public testnet catalog.</p>';
         h += '<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin:0 0 14px">';
         if (fxAgoStr) h += 'Updated ' + fxAgoStr;
         h += '</div>';
-        h += '<div class="summary" style="margin-bottom:16px">';
-        h += '<div class="sum-card"><div class="sum-val">' + fxTotalN + '</div><div class="sum-label">Nodes</div></div>';
-        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxOnlineN===fxTotalN?"#22C55E":"#d97706") + '">' + fxOnlineN + '</div><div class="sum-label">Reachable</div></div>';
-        h += '<div class="sum-card"><div class="sum-val" style="color:' + (fxAtHeadN>0?"#22C55E":"#98a2b3") + '">' + fxAtHeadN + '</div><div class="sum-label">At Head</div></div>';
-        h += '<div class="sum-card"><div class="sum-val">' + (fxNetHead?fxNetHead.toLocaleString():"\u2014") + '</div><div class="sum-label">Network Head</div></div>';
-
-        h += '</div>';
+        h += '<p class="sub" style="margin:0 0 6px">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe</p>';
+        h += '<p class="sub" style="margin:0 0 16px">Not a count of the public testnet. Not network size.</p>';
 
 
         h += '<div class="table-scroll"><table><thead><tr>';
@@ -2823,19 +2819,12 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
           // Validator cell: public observation names only (no operator-fleet join).
           //  - Anchor: "Kynesys Anchor"
-          //  - Discovered + named operator (FIXNET_DISCOVERED_OPERATORS match): operator name (e.g. "Walter")
-          //  - Discovered + unnamed: "discovered-<last4 of identity>"
+          // Discovered rows: discovered-<last4>. Operator names do not feed this table.
           var nameLabel;
           if (isAnchor) {
             nameLabel = "Kynesys Anchor";
           } else {
-            // discovered
-            var opName = null;
-            if (fn.identity) {
-              var idPfx = fn.identity.substring(0, 10);
-              if (FIXNET_DISCOVERED_OPERATORS[idPfx]) opName = FIXNET_DISCOVERED_OPERATORS[idPfx];
-            }
-            nameLabel = opName || ("discovered-" + (fn.identity ? fn.identity.substring(fn.identity.length-4) : "????"));
+            nameLabel = "discovered-" + (fn.identity ? fn.identity.substring(fn.identity.length-4) : "????");
           }
           var identity = fn.identity || "";
 
@@ -2858,13 +2847,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         h += '</tbody></table></div>';
 
         // v7.3: "Nodes syncing" — across ALL rows (anchor + fleet + discovered)
-        if (fxAllSyncingN > 0) {
-          var medianLagStr = fxAllMedianLag > 1000 ? (Math.round(fxAllMedianLag/1000).toLocaleString() + 'k') : fxAllMedianLag.toLocaleString();
-          h += '<p class="sub" style="margin-top:10px;font-size:11px">';
-          h += 'Nodes syncing \u2014 ' + fxAllAtHeadN + ' of ' + fxAllSyncingRows.length + ' at head, ';
-          h += fxAllSyncingN + ' catching up (median lag: ' + medianLagStr + ' blocks).';
-          h += '</p>';
-        }
+        h += '<p class="sub" style="margin-top:10px;font-size:11px">Advertised heights on this fixnet probe, relative to the fixnet anchor this cycle. Not a public-testnet census.</p>';
         h += '</section><hr style="border:none;border-top:1px solid var(--border);margin:24px 0">';
       }
       // --- end Fleet Fixnet section ---
@@ -2892,17 +2875,17 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       } catch(e) { discoveredList = []; }
       h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
       h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Crawl-observed identities</h2>';
-      h += '<p class="sub" style="margin-bottom:18px">Crawl-observed identities that are not in the monitored public set. A row here is observation, not a promise of public monitoring, and not network size.</p>';
+      h += '<p class="sub" style="margin-bottom:18px">Public testnet catalog — identities seen on a seed peerlist. Seen on a public peerlist. Not a validator list. Not a stake list. Not an official-node list. DNO did not dial these identities. Status here is peer-reported, not a probe.</p>';
       if (discoveredList.length === 0) {
         h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">None in this set.</p>';
       } else {
-        h += '<div class="table-scroll"><table style="opacity:0.8"><thead><tr><th>Identity</th><th>Status</th><th>Block</th><th>Sync</th></tr></thead><tbody>';
+        h += '<div class="table-scroll"><table style="opacity:0.8"><thead><tr><th>Identity</th><th>peer-reported</th><th>Block</th><th>Sync</th></tr></thead><tbody>';
         for (var dvi = 0; dvi < discoveredList.length; dvi++) {
           var dv = discoveredList[dvi];
           var dvOnline = dv.online === true;
           var dvStatusColor = dvOnline ? "#d97706" : "#98a2b3";
           var dvStatusBg = dvOnline ? "rgba(217,119,6,0.08)" : "rgba(152,162,179,0.08)";
-          var dvStatusText = dvOnline ? "syncing" : "offline";
+          var dvStatusText = dvOnline ? "reported online" : "not reported";
           var dvSyncPct = dv.sync_pct != null ? dv.sync_pct : 0;
           var dvSyncColor = dvSyncPct >= 99.9 ? "#22C55E" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
           h += '<tr>';

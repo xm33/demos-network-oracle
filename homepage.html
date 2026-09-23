@@ -219,7 +219,7 @@ body { position:relative; }
 <div class="main">
   <section class="hero" id="overview">
     <div class="oracle-kicker-row">
-      <span class="oracle-kicker">The independent watch-only oracle for Demos Network.</span>
+      <span class="oracle-kicker">Independent · not an official Demos product. Not operated by Kynesys. Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism.</span>
     </div>
 <!-- §3 COUPLING: "We attest" is permitted while DAHR source-attestation is live (dahrAttest on public-source fetches; state at /health.attestation). It does not claim assessment-state attestation or Hive publication of observation posts. If DAHR is removed, soften to "We observe. We explain." -->
     <div style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.45;letter-spacing:0.04em;margin-bottom:16px">We observe. We attest. We explain.</div>
@@ -227,9 +227,11 @@ body { position:relative; }
     <div id="hero-summary" class="hero-summary"></div>
     <div id="observability-banner" class="oracle-observability-banner"></div>
     <div id="hero-staleness" class="oracle-staleness"></div>
+    <p class="hero-summary" id="hero-meter" style="margin-top:10px">Those configured seeds are the only endpoints DNO dials this cycle. Status does not use the catalog.</p>
+    <p class="hero-summary" id="hero-door"><a href="#validators">catalog · find a node</a></p>
   </section>
   <section class="section">
-    <div class="section-title">Network Assessment</div>
+    <div class="section-title">This cycle</div>
     <div class="cards">
       <div class="signal-card"><div id="card-trend" class="signal-value">—</div><div class="signal-label">trend</div></div>
       <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div><div id="risk-factors" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
@@ -239,9 +241,9 @@ body { position:relative; }
   </section>
   <section class="section">
     <div class="section-title">Agreement</div>
-    <div class="section-subtitle">Consensus among reachable public nodes.</div>
+    <div class="section-subtitle">Agreement among answering seeds. Not a count of the network.</div>
     <div class="agreement-grid">
-      <div class="ag-item" title="How much reachable nodes agree on the current chain state"><div id="ag-state" class="ag-value">—</div><div class="ag-label">agreement</div><div class="ag-sub">reachable consensus state</div><div id="ag-reason" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
+      <div class="ag-item" title="How much reachable nodes agree on the current chain state"><div id="ag-state" class="ag-value">—</div><div class="ag-label">agreement</div><div class="ag-sub">seed heights this cycle</div><div id="ag-reason" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
       <div class="ag-item" title="Reachable nodes reporting heights within ±25 blocks of the median"><div id="ag-aligned" class="ag-value">—</div><div class="ag-label">aligned nodes</div><div class="ag-sub">within ±25 blocks of median</div></div>
       <div class="ag-item" title="Largest block-height gap between reachable nodes"><div id="ag-spread" class="ag-value">—</div><div class="ag-label">block spread</div><div class="ag-sub">largest height gap</div></div>
       <div class="ag-item" title="Reference height across reachable nodes"><div id="ag-median" class="ag-value">—</div><div class="ag-label">median block</div><div class="ag-sub">reference height</div></div>
@@ -254,17 +256,17 @@ body { position:relative; }
     <div id="last24-coverage" class="last24-coverage"></div>
   </section>
   <section class="section" id="validators">
-    <div class="section-title">Network View</div>
+    <div class="section-title">Observed</div>
     <div id="growth-cards" class="growth-cards"></div>
     <div id="growth-sub" class="growth-sub"></div>
-    <div id="growth-catalog" class="growth-sub">all-time crawl-observed identities, including ones no longer reachable</div>
-    <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Monitored Public Nodes</div>
-    <div style="font-size:11px;color:var(--text-secondary);opacity:0.6;margin-bottom:10px">Public validators currently included in the Oracle’s live observation set.</div>
+    <div id="growth-catalog" class="growth-sub">retained catalog — identities seen on a public peerlist. Not this-cycle. Not a census.</div>
+    <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text-secondary);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Probed seeds</div>
+    <div style="font-size:11px;color:var(--text-secondary);opacity:0.6;margin-bottom:10px">The only endpoints DNO dials this cycle. Status does not use the catalog.</div>
     <table class="vtable">
       <thead><tr><th>Validator</th><th>Source</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th><th>Uptime (obs.)</th></tr></thead>
       <tbody id="vtable-body"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
     </table>
-    <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono)">Rolling observed history. Early values may refine over time.</div>
+    <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono)">Seen on a public peerlist. Not a validator list. Not a stake list. Not an official-node list.</div>
   </section>
   <section class="section" id="incidents">
     <div class="section-title">Incidents</div>
@@ -288,14 +290,13 @@ body { position:relative; }
   </section>
 
   <section class="section">
-    <div class="section-title">Why trust this Oracle</div>
-    <div class="cards">
-      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Public</div><div class="signal-label">Reads publicly observable validator signals and rolling history.</div></div>
-      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Explicit</div><div class="signal-label">Status, risk, agreement, and confidence follow published methodology.</div></div>
-      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Impartial</div><div class="signal-label">Watch-only. No advice, no endorsement, no hidden scoring.</div></div>
-      <div class="signal-card"><div class="signal-value" style="font-size:14px;letter-spacing:0.04em;color:var(--text-primary)">Attested</div><div class="signal-label">Observed public sources are attested on-chain via DAHR when attestation is available. Current attestation state is published at /health.</div></div>
+    <div class="section-title">What this reading cannot see</div>
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;max-width:72ch">
+      <p>Who is in the shard, or who the secretary is.</p>
+      <p>Vote counts, stake, official admission, or any private vantage.</p>
+      <p>Reachability of catalog rows — those were not dialed.</p>
+      <p>Why height stopped. A designed pause and a fault look the same from here.</p>
     </div>
-    <div style="margin-top:8px;font-size:10px;color:var(--text-secondary);opacity:0.6;font-family:var(--mono);line-height:1.5">Oracle outputs are structured observed assessments, not guarantees of present or future validator behavior.</div>
   </section>
 </div>
 
@@ -347,12 +348,20 @@ async function fetchData() {
 
     document.getElementById('hero-summary').textContent=org.status_reason||org.summary||'';
     document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
+    var pathA=health.publicNodes||[];
+    var nSeeds=pathA.length;
+    var kSeeds=pathA.filter(function(n){return n&&n.ok;}).length;
+    var meter=document.getElementById('hero-meter');
+    if(meter) meter.textContent=kSeeds+' of '+nSeeds+' seeds answered. Those '+nSeeds+' are the only endpoints DNO dials this cycle. Status does not use the catalog.';
+    var door=document.getElementById('hero-door');
+    var vg0=health.validator_growth||{};
+    if(door) door.innerHTML='<a href="#validators">'+((vg0.discovered!=null)?vg0.discovered:'\u2014')+' seen \u00b7 find a node</a>';
 
     // Observability banner — shows only when public nodes insufficient
     var banner=document.getElementById('observability-banner');
     if(banner){
       if(org.data_quality==='insufficient'){
-        banner.innerHTML='Network observability is limited during the Demos fixnet upgrade \u2014 the Oracle\u2019s monitored public nodes are temporarily unreachable. Separately, <a href="/reference">fleet reference nodes</a> remain reachable and are tracking chain progress.';
+        banner.innerHTML='Network observability is limited \u2014 fewer than two probed seeds answered, or the observation is stale. Public assessment is unknown. Catalog rows do not enter status.';
         banner.style.display='block';
       } else {
         banner.style.display='none';
@@ -396,7 +405,7 @@ async function fetchData() {
         var nodesLine = last24.peak_set
           ? 'typically ' + last24.typical_set_size + ', peak ' + last24.peak_set.size
           : String(last24.typical_set_size);
-        l24Items.push(['public nodes observed', nodesLine, 'var(--text-primary)']);
+        l24Items.push(['seeds observed', nodesLine, 'var(--text-primary)']);
         if (last24.peak_set) {
           var peakLine = last24.peak_set.size + ' nodes observed; ' +
                          (Math.round(last24.peak_set.avg_reachable * 10) / 10).toFixed(1) +
@@ -434,10 +443,10 @@ async function fetchData() {
     var gc=document.getElementById('growth-cards');
     // v7.4: summary cards now reflect MONITORED set specifically (not mixed counts)
     gc.innerHTML=
-      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">Identities</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.monitored_online||0)+'</div><div class="gc-label">Reachable</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.monitored_at_head||0)+'</div><div class="gc-label">At Head</div></div>'+
-      '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">Monitored</div></div>';
+      '<div class="growth-card"><div class="gc-value">'+(vg.discovered||0)+'</div><div class="gc-label">seen</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.monitored_online||0)+'</div><div class="gc-label">seeds answered</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.monitored_at_head||0)+'</div><div class="gc-label">at head</div></div>'+
+      '<div class="growth-card"><div class="gc-value">'+(vg.monitored||0)+'</div><div class="gc-label">configured seeds</div></div>';
     document.getElementById('growth-sub').textContent='+'+(vg.today||0)+' today \u00b7 +'+(vg.week||0)+' this week \u00b7 +'+(vg.month||0)+' this month';
 
     // Validators: render monitored only (discovered lives on /community)
