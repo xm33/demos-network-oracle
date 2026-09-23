@@ -588,32 +588,15 @@ function evaluatePublicIncidents() {
 
 var FLEET_NODE_NAMES = NODE_NAMES;
 
-// Operator labels for discovered fixnet peers (self-identified to the Oracle operator).
-// Key: first 10 chars of identity (e.g. "0xd9409b0d"). Value: display name.
-// Adding a name here does NOT promote the peer into the core assessment surface —
-// it's a cosmetic label shown in the fixnet source column instead of "Discovered".
-// Trust basis is operator-chat self-identification, not cryptographic proof.
-var FIXNET_DISCOVERED_OPERATORS = {
-  "0xd9409b0d": "Walter",
-  "0xf5abbb44": "R1",
-  "0x25aa62f3": "R2",
-  "0xc4abb72d": "R3"
-};
-// --- DISPLAY_PRIVACY: shared node-display resolution (top-level; mirrors /community renderer) ---
-// Rule: never expose raw connection/IP:port or full public key as an identifier.
-// Priority: assigned operator name -> discovered-<last4> ; identity shown truncated.
-// truncId hoisted here so getValidatorGrowth and the /community route share ONE definition.
+// Public display name. Operator aliases are not a public identifier.
+// truncId is shared by getValidatorGrowth and the /community route.
 function truncId(id) {
   if (!id || id.length < 12) return id || "\u2014";
   return id.substring(0, 6) + "\u2026" + id.substring(id.length - 4);
 }
 function resolveNodeDisplay(opts) {
   var identity = (opts && opts.identity) || "";
-  if (identity) {
-    var pfx = identity.substring(0, 10);
-    if (FIXNET_DISCOVERED_OPERATORS[pfx]) return FIXNET_DISCOVERED_OPERATORS[pfx];
-  }
-  // R-A 2026-08-25 P0: operator-fleet identities resolve to discovered-<last4> on public surfaces (no operator-fleet join)
+  // discovered-<last4> only. No operator-name map. No fleet alias.
   return "discovered-" + (identity ? identity.substring(identity.length - 4) : "????");
 }
 // DISPLAY_PRIVACY: convert a raw discoveredPeers entry to a public-safe shape.
