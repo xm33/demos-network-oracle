@@ -170,6 +170,29 @@ body { position:relative; }
 .watermark { position:fixed; bottom:48px; right:40px; width:120px; height:120px; opacity:0.10; pointer-events:none; z-index:0; }
 .watermark svg { width:100%; height:100%; display:block; }
 
+
+.oracle-mark{display:block}
+.face-top{max-width:1100px;margin:0 auto;padding:22px 28px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.face-oracle{display:inline-flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:0.22em}
+.face-oracle .oracle-mark{width:22px;height:22px}
+.face-read{display:flex;gap:14px;margin-top:8px}
+.face-read a,.face-more a{color:var(--text-secondary);text-decoration:none;font-size:12px}
+.face-read a:hover,.face-more a:hover{color:#fff}
+.face-more{max-width:1100px;margin:8px auto 0;padding:0 28px 0 60px;display:flex;flex-wrap:wrap;gap:12px 16px}
+.face-more a{font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.7}
+.face-live{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:#d7dbe2;padding-top:4px}
+.face-age{color:var(--text-secondary)}
+.identity{text-align:center;padding:28px 0 8px}
+.identity-mark{color:#d5d8de;margin:8px auto 18px}
+.identity-mark .oracle-mark{width:148px;height:148px;margin:0 auto}
+.identity-name{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:0.28em;color:#fff;margin:0 0 12px}
+.identity-indep{font-size:14px;color:#d7dbe2;margin:0}
+.identity-verb{font-size:28px;font-weight:600;color:#fff;margin:14px 0 8px;letter-spacing:-0.03em}
+.identity-verb em{font-style:italic;font-weight:500;color:#8b7cff}
+.identity-layer{font-size:14px;color:var(--text-secondary);margin:0}
+.identity-org{max-width:46ch;margin:14px auto 0;font-size:12px;line-height:1.45;color:var(--text-secondary);opacity:0.72}
+.oracle-status{font-size:22px;margin:0 0 8px}
+
 @media (max-width:640px) {
   .main { padding:0 18px; }
   /* mobile nav + badge-hide handled by the canonical doc-nav @media(640) above */
@@ -180,6 +203,10 @@ body { position:relative; }
   .section-title { text-align:center; }
   .ag-sub { display:block; font-size:10px; color:var(--text-secondary); opacity:0.7; font-family:var(--mono); margin-top:6px; line-height:1.3; }
   .hero { text-align:center; }
+  .face-top,.face-more{padding-left:18px;padding-right:18px}
+  .face-more{padding-left:18px}
+  .identity-verb{font-size:22px}
+  .identity-mark .oracle-mark{width:112px;height:112px}
   .oracle-kicker-row { justify-content:center; }
   .oracle-staleness { text-align:center; }
   .oracle-status { font-size:26px; }
@@ -192,46 +219,49 @@ body { position:relative; }
 </style>
 </head>
 <body class="doc-page--home">
-<!-- BEGIN canonical-header v1 -->
-<nav class="doc-nav">
-  <div class="doc-nav-inner">
-    <div class="doc-nav-left">
-      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
-    </div>
-    <div class="doc-nav-right">
-      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
-<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a>      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
-      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
-      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
-      <a href="/reference" class="doc-nav-link" data-nav="reference">Reference</a><a href="/dashboard" class="doc-nav-link" data-nav="dashboard">Dashboard</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
-    </div>
-    <div class="doc-nav-far">
-      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-        <span class="dbtn-prefix">powered by</span>
-        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-        <span class="dbtn-wordmark">DEMOS</span>
-      </a>
-    </div>
+<!-- face identity header -->
+<header class="face-top">
+  <div class="face-brand">
+    <a href="/" class="face-oracle"><svg class="oracle-mark" viewBox="0 0 100 100" fill="none" aria-hidden="true"><circle cx="50" cy="50" r="34" stroke="currentColor" stroke-width="3.2"/><circle cx="50" cy="16" r="5.2" fill="currentColor"/><circle cx="79" cy="68" r="5.2" fill="currentColor"/><circle cx="21" cy="68" r="5.2" fill="currentColor"/><path d="M68 28 L32 76" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg><span>ORACLE</span></a>
+    <nav class="face-read" aria-label="Read">
+      <a href="/methodology">reading</a>
+      <a href="/sources">sources</a>
+      <a href="#validators">catalog</a>
+      <a href="/organism">organism</a>
+    </nav>
   </div>
+  <div class="face-live">
+    <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
+    <span class="face-sep">·</span>
+    <span id="hero-staleness" class="face-age">—</span>
+  </div>
+</header>
+<nav class="face-more" aria-label="Pages">
+  <a href="/methodology">Methodology</a>
+  <a href="/about-demos">About Demos</a>
+  <a href="/commerce">Commerce</a>
+  <a href="/agent">Agent</a>
+  <a href="/reference">Reference</a>
+  <a href="/dashboard">Dashboard</a>
+  <a href="/timeline">Timeline</a>
 </nav>
-<!-- END canonical-header v1 -->
 <div class="main">
-  <section class="hero" id="overview">
-    <div class="oracle-kicker-row">
-      <span class="oracle-kicker">Independent · not an official Demos product. Not operated by Kynesys. Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism.</span>
-    </div>
-<!-- §3 COUPLING: "We attest" is permitted while DAHR source-attestation is live (dahrAttest on public-source fetches; state at /health.attestation). It does not claim assessment-state attestation or Hive publication of observation posts. If DAHR is removed, soften to "We observe. We explain." -->
-    <div style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.45;letter-spacing:0.04em;margin-bottom:16px">We observe. We attest. We explain.</div>
-    <div id="hero-status" class="oracle-status loading">Loading...</div>
-    <div id="hero-summary" class="hero-summary"></div>
-    <div id="observability-banner" class="oracle-observability-banner"></div>
-    <div id="hero-staleness" class="oracle-staleness"></div>
-    <p class="hero-summary" id="hero-meter" style="margin-top:10px">Those configured seeds are the only endpoints DNO dials this cycle. Status does not use the catalog.</p>
-    <p class="hero-summary" id="hero-door"><a href="#validators">catalog · find a node</a></p>
+  <section class="hero identity" id="overview">
+    <div class="identity-mark"><svg class="oracle-mark" viewBox="0 0 100 100" fill="none" aria-hidden="true"><circle cx="50" cy="50" r="34" stroke="currentColor" stroke-width="3.2"/><circle cx="50" cy="16" r="5.2" fill="currentColor"/><circle cx="79" cy="68" r="5.2" fill="currentColor"/><circle cx="21" cy="68" r="5.2" fill="currentColor"/><path d="M68 28 L32 76" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg></div>
+    <h1 class="identity-name">DEMOS NETWORK ORACLE</h1>
+    <p class="identity-indep">Independent · not an official Demos product</p>
+<!-- §3 COUPLING: "Attest" is permitted while DAHR source-attestation is live (dahrAttest on public-source fetches; state at /health.attestation). It does not claim assessment-state attestation or Hive publication of observation posts. If DAHR is removed, soften to "Observe. Explain." -->
+    <p class="identity-verb">Observe. Attest. <em>Explain.</em></p>
+    <p class="identity-layer">A watch-only public observability layer.</p>
+    <p class="identity-org">Not operated by Kynesys. Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism.</p>
   </section>
   <section class="section">
     <div class="section-title">This cycle</div>
+    <div id="hero-status" class="oracle-status loading">—</div>
+    <div id="hero-summary" class="hero-summary"></div>
+    <div id="observability-banner" class="oracle-observability-banner"></div>
+    <p class="hero-summary" id="hero-meter">Those configured seeds are the only endpoints DNO dials this cycle. Status does not use the catalog.</p>
+    <p class="hero-summary" id="hero-door"><a href="#validators">catalog · find a node</a></p>
     <div class="cards">
       <div class="signal-card"><div id="card-trend" class="signal-value">—</div><div class="signal-label">trend</div></div>
       <div class="signal-card"><div id="card-risk" class="signal-value">—</div><div class="signal-label">risk</div><div id="risk-factors" style="display:none;margin-top:6px;font-size:10px;color:var(--text-secondary);opacity:0.85;font-family:var(--mono);line-height:1.4"></div></div>
@@ -347,7 +377,7 @@ async function fetchData() {
     if(lb){lb.innerHTML='<span class="nav-live-dot"></span>LIVE';lb.style.borderColor='rgba(0,218,255,0.2)';}
 
     document.getElementById('hero-summary').textContent=org.status_reason||org.summary||'';
-    document.getElementById('hero-staleness').textContent='Updated '+(org.staleness_seconds!=null?org.staleness_seconds+'s ago':'\u2014');
+    document.getElementById('hero-staleness').textContent=(org.staleness_seconds!=null?org.staleness_seconds+'s':'\u2014');
     var pathA=health.publicNodes||[];
     var nSeeds=pathA.length;
     var kSeeds=pathA.filter(function(n){return n&&n.ok;}).length;
