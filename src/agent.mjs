@@ -2517,7 +2517,12 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "application/json");
 
-    if (req.url === "/health") {
+    // F-3: route on pathname so query strings do not 404 exact-match routes.
+    var reqUrl = new URL(req.url, "http://d");
+    var reqPath = reqUrl.pathname;
+    var reqQuery = reqUrl.searchParams;
+
+    if (reqPath === "/health") {
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
       var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
@@ -2572,7 +2577,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       if (staleness.lastCycleAt) healthHdrs["Last-Modified"] = new Date(staleness.lastCycleAt).toUTCString();
       res.writeHead(200, healthHdrs);
       res.end(JSON.stringify(payload, null, 2));
-    } else if (req.url === "/peers") {
+    } else if (reqPath === "/peers") {
       var staleness = getStaleness(); // FIX BUG 7
       var peerHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" };
       if (staleness.lastCycleAt) peerHdrs["Last-Modified"] = new Date(staleness.lastCycleAt).toUTCString();
@@ -2580,14 +2585,14 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       var publicDiscovered = {};
       for (var _pid in discoveredPeers) { publicDiscovered[truncId(_pid)] = toPublicPeer(_pid, discoveredPeers[_pid]); }
       res.end(JSON.stringify({ scope: "public_sanitized", discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
-    } else if (req.url === "/history") {
+    } else if (reqPath === "/history") {
       // Return last 24h of data points
       var last24h = history.slice(-72);
       var staleness = getStaleness(); // FIX BUG 7
       res.writeHead(200);
       res.end(JSON.stringify({ points: last24h.length, data: last24h, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds }, null, 2));
-    } else if (req.url.indexOf("/incidents") === 0) {
-      var incParams = new URLSearchParams(req.url.split("?")[1] || "");
+    } else if (reqPath === "/incidents" || reqPath.indexOf("/incidents/") === 0) {
+      var incParams = reqQuery;
       var incStatus = incParams.get("status") || null;
       var incScope = incParams.get("scope") || "public";
       var incLimit = parseInt(incParams.get("limit") || "50", 10);
@@ -2620,17 +2625,17 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         res.writeHead(200);
         res.end(JSON.stringify({ scope: incScope || "public", total: 0, active: 0, incidents: [], error: incErr.message }, null, 2));
       }
-    } else if (req.url === "/federate" || req.url === "/metrics") {
+    } else if (reqPath === "/federate" || reqPath === "/metrics") {
       var publicMetricsText = buildPublicMetrics(latestPublicRpcObservations, Date.now(), STALE_BOUND);
       res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(publicMetricsText);
-    } else if (req.url === "/consensus" || req.url === "/consensus/") {
+    } else if (reqPath === "/consensus" || reqPath === "/consensus/") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(getConsensusState(), null, 2));
-    } else if (req.url === "/organism/schema") {
+    } else if (reqPath === "/organism/schema") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(ORGANISM_SCHEMA);
-    } else if (req.url === "/organism") {
+    } else if (reqPath === "/organism") {
       // M5: Cache header for agent consumption
       var canonical = computeCanonicalState();
       var organism = {
@@ -2654,24 +2659,24 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       };
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(organism, null, 2));
-    } else if (req.url === "/version") {
+    } else if (reqPath === "/version") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(latestVersionData, null, 2));
-    } else if (req.url === "/docs") {
+    } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML);
-    } else if (req.url === "/") {
+    } else if (reqPath === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "Link": "</organism>; rel=\"alternate\"; type=\"application/json\", </organism/schema>; rel=\"describedby\"" });
       res.end(renderHomepageNoJs(HOMEPAGE_HTML));
-    } else if (req.url === "/home") {
+    } else if (reqPath === "/home") {
       res.writeHead(301, { "Location": "/" });
       res.end();
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(HOMEPAGE_HTML);
-    } else if (req.url === "/sources") {
+    } else if (reqPath === "/sources") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(SOURCES_HTML);
-    } else if (req.url === "/reference") {
+    } else if (reqPath === "/reference") {
       if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
       var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Reference</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
@@ -2888,36 +2893,36 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       h += '</main></body></html>';
       res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
       res.end(h);
-    } else if (req.url === "/agent") {
+    } else if (reqPath === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(AGENT_GUIDE_HTML);
-    } else if (req.url === "/timeline") {
+    } else if (reqPath === "/timeline") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(renderTimelinePage());
-    } else if (req.url === "/about-demos") {
+    } else if (reqPath === "/about-demos") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(ABOUT_DEMOS_HTML);
-    } else if (req.url === "/methodology") {
+    } else if (reqPath === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(METHODOLOGY_HTML);
-    } else if (req.url === "/criteria") {
+    } else if (reqPath === "/criteria") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(CRITERIA_HTML);
-    } else if (req.url === "/criteria.json") {
+    } else if (reqPath === "/criteria.json") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(CRITERIA_JSON);
-    } else if (req.url === "/commerce") {
+    } else if (reqPath === "/commerce") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(COMMERCE_HTML);
-    } else if (req.url === "/commerce/observations") {
+    } else if (reqPath === "/commerce/observations") {
       var pubObs = buildPublicCommerceObservation();
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=30" });
       res.end(JSON.stringify(pubObs, null, 2));
-    } else if (req.url === "/commerce/methodology") {
+    } else if (reqPath === "/commerce/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(COMMERCE_METHODOLOGY_HTML);
-    } else if (req.url.startsWith("/private/commerce/status")) {
-      var pcUrl = new URL(req.url, "http://d"); var pcTk = pcUrl.searchParams.get("token");
+    } else if (reqPath === "/private/commerce/status" || reqPath.indexOf("/private/commerce/status/") === 0) {
+      var pcTk = reqQuery.get("token");
       if (pcTk !== process.env.DNO_ADMIN_TOKEN) { res.writeHead(401); res.end('{"error":"unauthorized"}'); return; }
       try {
         var rawCommerce = readFileSync("data/commerce-last-check.json", "utf8");
@@ -2927,7 +2932,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end('{"error":"commerce-last-check.json not available","detail":"' + (e.message || 'unknown') + '"}');
       }
-    } else if (req.url === "/badge") {
+    } else if (reqPath === "/badge") {
       var bCanonical = computeCanonicalState();
       var bStatus = bCanonical.status;
       var bColor = bStatus === "stable" ? "#4c1" : bStatus === "degraded" ? "#dfb317" : bStatus === "unstable" ? "#e05d44" : "#999";
@@ -2941,7 +2946,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         '<text x="' + (46 + bWidth/2) + '" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + ' ' + bIcon + '</text></svg>';
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
-    } else if (req.url === "/sentinel") {
+    } else if (reqPath === "/sentinel") {
       var sentinelData = { status: "ok", lastCheck: null, recentAlerts: [], dedupFile: "/tmp/sentinel-dedup.json" };
       try {
         if (existsSync("/tmp/sentinel-dedup.json")) {
@@ -2959,7 +2964,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       } catch(e) { sentinelData.error = e.message; }
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(sentinelData, null, 2));
-    } else if (req.url === "/dashboard") {
+    } else if (reqPath === "/dashboard") {
       var dashHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Fleet Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -3385,12 +3390,10 @@ refresh();setInterval(refresh,20000);
 </script></body></html>`;
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(dashHtml);
-    } else if (req.url.indexOf("/history/export") === 0) {} else if (req.url.indexOf("/history/export") === 0) {
+    } else if (reqPath === "/history/export" || reqPath.indexOf("/history/export/") === 0) {
       var expFrom = 0, expTo = Infinity;
-      var fromIdx = req.url.indexOf("from=");
-      var toIdx = req.url.indexOf("to=");
-      if (fromIdx !== -1) expFrom = parseInt(req.url.substring(fromIdx + 5), 10) || 0;
-      if (toIdx !== -1) expTo = parseInt(req.url.substring(toIdx + 3), 10) || Infinity;
+      if (reqQuery.get("from")) expFrom = parseInt(reqQuery.get("from"), 10) || 0;
+      if (reqQuery.get("to")) expTo = parseInt(reqQuery.get("to"), 10) || Infinity;
       var expData = history.filter(function(h) { return h.ts >= expFrom && h.ts <= expTo; });
       var csvLines = ["timestamp,block,tps,online_count"];
       for (var ei = 0; ei < NODE_NAMES.length; ei++) csvLines[0] += "," + NODE_NAMES[ei] + "_healthy," + NODE_NAMES[ei] + "_block";
