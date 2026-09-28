@@ -52,6 +52,7 @@ export function probeErrorCategory(err, httpStatus) {
   if (Number.isInteger(httpStatus)) return "HTTP " + httpStatus;
   if (!err) return "no answer";
   if (err.name === "TimeoutError" || err.name === "AbortError") return "timeout";
+  if (err instanceof RangeError) return "response too large";
   if (err instanceof SyntaxError) return "invalid response";
   return "connection failed";
 }
@@ -150,10 +151,27 @@ export async function resolvePublicProbeOrigin(connection, lookupFn) {
     catch (e) { return null; }
   }
   if (!addrs.length || !addrs.every(isPublicIp)) return null;
-  // A pinned https origin would fail certificate checks for a hostname; https is probed only for IP literals.
-  if (u.protocol === "https:" && !isIP(host)) return null;
+  // Only plain http is probed: a pinned https origin fails its certificate check (hostname) or rarely has one (IP).
+  if (u.protocol !== "http:") return null;
   var ip = addrs[0];
   return u.protocol + "//" + (isIP(ip) === 6 ? "[" + ip + "]" : ip) + (u.port ? ":" + u.port : "");
+}
+
+// Parse a JSON response without holding more than maxBytes of it: a peer that streams an endless body fails with a
+// RangeError instead of exhausting memory.
+export async function readJsonCapped(resp, maxBytes) {
+  var declared = Number(resp.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new RangeError("response larger than " + maxBytes + " bytes");
+  if (!resp.body) return JSON.parse("");
+  var reader = resp.body.getReader(), chunks = [], total = 0;
+  for (;;) {
+    var part = await reader.read();
+    if (part.done) break;
+    total += part.value.byteLength;
+    if (total > maxBytes) { try { await reader.cancel(); } catch (e) {} throw new RangeError("response larger than " + maxBytes + " bytes"); }
+    chunks.push(Buffer.from(part.value));
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
 // Run async jobs with at most `limit` in flight.

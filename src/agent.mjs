@@ -31,7 +31,7 @@ import { Demos } from "@kynesyslabs/demosdk/websdk";
 
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
-import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency } from "./public-safety.mjs";
+import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 
 // --- Logging setup ---
@@ -1533,7 +1533,8 @@ const AGENT_STARTED_AT = Date.now();
 // so a leading seed that stops answering is not mistaken for a stalled chain.
 // compared: DNO has compared heights across rounds (or history shows a static run), so height_static_seconds can be
 // published; advanceKnown: the last advance was observed (or bounded by history), so height_last_advanced_at can be.
-var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false };
+// prevMax: the highest seed height of the last round that had one.
+var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false, prevMax: null };
 
 // FIX BUG 7: staleness helper — hoisted to module scope (reachable by serializer and bot)
 function getStaleness() {
@@ -2054,7 +2055,7 @@ async function probePublicNodes() {
         log("  PublicNode " + name + ": FAIL HTTP " + res.status);
         return Object.assign(base, { ok: false, error: probeErrorCategory(null, res.status) });
       }
-      var data = await res.json();
+      var data = await readJsonCapped(res, INFO_BODY_MAX_BYTES);
       var peerlist = data && Array.isArray(data.peerlist) ? data.peerlist : [];
       // A seed's height is its own peerlist entry. The first listed peer is used only when the seed does
       // not list itself, and height_source says so.
@@ -2085,28 +2086,37 @@ function updateHeightTracker(results, observedAt) {
   if (!names.length) { heightTracker.maxHeight = null; return; }
   var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
   var maxH = hs[hs.length - 1], medH = hs[Math.floor(hs.length / 2)];
+  // A comparison needs something from an earlier round: a seed's own previous answer, or the previous round's highest
+  // height. An advance: some seed reports more than in its own previous answer, or this round's highest height is
+  // above the previous round's (a seed answering for the first time ahead of the others).
   var comparable = names.filter(function(n) { return heightTracker.lastBySeed[n] !== undefined; });
-  var rose = comparable.some(function(n) { return seen[n] > heightTracker.lastBySeed[n]; });
+  var comparedNow = comparable.length > 0 || heightTracker.prevMax !== null;
+  var rose = comparable.some(function(n) { return seen[n] > heightTracker.lastBySeed[n]; })
+    || (heightTracker.prevMax !== null && maxH > heightTracker.prevMax);
   heightTracker.maxHeight = maxH;
+  heightTracker.prevMax = maxH;
   names.forEach(function(n) { heightTracker.lastBySeed[n] = seen[n]; });
   if (!heightTracker.initialized) {
-    // First round with a height: nothing compared yet. Retained history can extend a static run back past a
-    // restart: the median has not increased since the earliest of the most recent consecutive rows whose median is
-    // at least this round's median. A lower row before that run bounds when the last advance happened.
+    // First round with a height after a start: nothing compared yet. Retained history can extend a static run back
+    // past a restart: the median has stayed at exactly this round's median since the earliest of the most recent
+    // consecutive rows at that median; a lower row before that run bounds when the last advance happened. A higher
+    // median (a chain reset, or lagging seeds now in the middle) says nothing about this height, so nothing is claimed
+    // until the next round compares.
     heightTracker.initialized = true;
     heightTracker.advancedAt = observedAt;
     if (sharedDb) {
       try {
         var rows = sharedDb.query("SELECT ts, median_block FROM public_node_history WHERE median_block IS NOT NULL AND ts < ? ORDER BY ts DESC LIMIT 2000").all(observedAt);
         for (var i = 0; i < rows.length; i++) {
-          if (rows[i].median_block < medH) { if (heightTracker.compared) heightTracker.advanceKnown = true; break; }
-          heightTracker.advancedAt = rows[i].ts; heightTracker.compared = true;
+          if (rows[i].median_block === medH) { heightTracker.advancedAt = rows[i].ts; heightTracker.compared = true; continue; }
+          if (rows[i].median_block < medH && heightTracker.compared) heightTracker.advanceKnown = true;
+          break;
         }
       } catch (e) {}
     }
     return;
   }
-  if (comparable.length) heightTracker.compared = true;
+  if (comparedNow) heightTracker.compared = true;
   if (rose) { heightTracker.advancedAt = observedAt; heightTracker.advanceKnown = true; }
 }
 
@@ -2294,7 +2304,7 @@ async function probeDiscoveredFixnetNodes() {
         var resp = await fetch(connUrl + "/info", { signal: AbortSignal.timeout(5000), redirect: "manual" });
         var latencyMs = Date.now() - probedAt;
         if (resp.ok) {
-          var data = await resp.json();
+          var data = await readJsonCapped(resp, INFO_BODY_MAX_BYTES);
           var selfBlock = null;
           if (data.peerlist && Array.isArray(data.peerlist)) {
             var self = data.peerlist.find(function(p) { return p && p.identity === r.identity; });
@@ -2509,6 +2519,7 @@ let nodeVersions = {}; // { "n3": { version: "0.9.8", versionName: "Oxlong Micha
 // sync status and height are what those peerlists reported this round. validator_discoveries keeps every
 // identity ever listed (first_seen, last_seen = last listed). DNO never dials catalog identities.
 const CATALOG_MAX_ROWS = 2000;            // retained identities
+const INFO_BODY_MAX_BYTES = 2 * 1024 * 1024; // /info bodies read from seeds and fixnet peers (a real one is tens of KB)
 const CATALOG_EVICT_AFTER_MS = 30 * 86400000; // at the cap, rows not listed for this long make room for new ones
 const OBSERVATION_HISTORY_MAX_PER_ROUND = 256; // node_observation_history rows written per round (oldest identities first)
 const CATALOG_MAX_NEW_PER_CRAWL = 200;    // a flood of fabricated identities cannot grow the catalog quickly
@@ -2564,7 +2575,8 @@ function catalogFinishCrawl(results, observedAt) {
       var wanted = Math.min(CATALOG_MAX_NEW_PER_CRAWL, ids.filter(function(x) { return known[x] === undefined; }).length);
       var over = retained + wanted - CATALOG_MAX_ROWS;
       if (over > 0) {
-        var stale = sharedDb.query("SELECT identity FROM validator_discoveries WHERE last_seen < ? ORDER BY last_seen ASC LIMIT ?").all(observedAt - CATALOG_EVICT_AFTER_MS, over);
+        var stale = sharedDb.query("SELECT identity FROM validator_discoveries WHERE last_seen < ? ORDER BY last_seen ASC LIMIT ?").all(observedAt - CATALOG_EVICT_AFTER_MS, over + ids.length)
+          .filter(function(row) { return !crawl.listed[row.identity]; }).slice(0, over);   // never one listed in this crawl
         stale.forEach(function(row) { sharedDb.run("DELETE FROM validator_discoveries WHERE identity = ?", [row.identity]); delete known[row.identity]; evicted++; });
         retained -= evicted;
       }
@@ -3173,7 +3185,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
         h += '<section style="margin:28px 0 36px">';
         h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Fixnet probe — discovered hosts</h2>';
-        h += '<p class="sub" style="margin:0 0 8px">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights come from the probe, or from the anchor peerlist for rows not probed. This is not the public testnet catalog.</p>';
+        h += '<p class="sub" style="margin:0 0 8px">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights are the latest reported by the anchor peerlist or by the DNO probe, whichever came last. This is not the public testnet catalog.</p>';
         h += '<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin:0 0 14px">';
         if (fxAgoStr) h += 'Updated ' + fxAgoStr;
         h += '</div>';
@@ -3192,7 +3204,8 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           return (b.block||0) - (a.block||0);
         });
         var fxDiscSorted = fxDiscovered.slice().sort(function(a,b){
-          if (a.online !== b.online) return a.online ? -1 : 1;
+          var ra = a.online ? 0 : a.probed === false ? 2 : 1, rb = b.online ? 0 : b.probed === false ? 2 : 1;  // reachable, unreachable, not probed
+          if (ra !== rb) return ra - rb;
           return (b.block||0) - (a.block||0);
         });
 
@@ -3379,7 +3392,10 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         var dedup = JSON.parse(readFileSync("/tmp/sentinel-dedup.json", "utf8"));
         var sNow = Date.now();
         var recentKeys = Object.keys(dedup).filter(function(k) { return k.charAt(0) !== "_" && typeof dedup[k] === "number" && sNow - dedup[k] < 86400000; });
-        sentinelData = { status: "ok", last_check: typeof dedup._lastCheck === "number" ? new Date(dedup._lastCheck).toISOString() : null, alerts_24h: recentKeys.length };
+        // "ok" only when the sentinel completed a check in the last 15 minutes (it polls every 5); otherwise unknown.
+        var lastCheck = typeof dedup._lastCheck === "number" ? dedup._lastCheck : null;
+        var fresh = lastCheck !== null && sNow - lastCheck < 15 * 60000;
+        sentinelData = { status: fresh ? "ok" : "unknown", last_check: lastCheck !== null ? new Date(lastCheck).toISOString() : null, alerts_24h: fresh ? recentKeys.length : null };
         if (internal) sentinelData.recent_alert_keys = recentKeys;
       } catch (se) { /* file missing or unreadable: status stays unknown */ }
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -3568,7 +3584,7 @@ function render24hSummary(s) {
   if (s.peak_set) {
     var peakLine = s.peak_set.size + ' nodes observed; ' +
                    s.peak_set.avg_reachable.toFixed(1) +
-                   ' reachable on average across ' +
+                   ' answered on average across ' +
                    s.peak_set.cycles + ' cycles';
     rows.push(['Peak observation window', peakLine, '#c9d1d9']);
   }

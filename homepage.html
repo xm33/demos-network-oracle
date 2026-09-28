@@ -1469,7 +1469,7 @@ svg text { font-family: var(--sans); }
     if (body.in_catalog === true) {
       const row = body.row && typeof body.row === 'object' ? body.row : null;
       const fs = row ? parseTime(row.first_seen) : null;
-      out.replaceChildren(`Exact match: DNO's retained catalog holds this key${row && typeof row.display === 'string' ? ` as ${row.display}` : ''}${fs != null ? `, first seen ${stamp(fs)}` : ''}.`);
+      out.replaceChildren(`Exact match: DNO's retained catalog holds this key${row && typeof row.display === 'string' ? ` as ${row.display}` : ''}${fs != null ? `, first recorded ${stamp(fs)}` : ''}.`);
       return;
     }
     if (body.error) { out.replaceChildren('The exact check is unavailable on this DNO instance right now.'); return; }

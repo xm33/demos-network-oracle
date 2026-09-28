@@ -171,6 +171,8 @@ async function runSentinel() {
     } else {
       log("  Clean — no anomalies");
     }
+    // The agent's /sentinel reports "ok" only while this stamp is recent.
+    var stamp = loadDedup(); stamp._lastCheck = Date.now(); saveDedup(stamp);
   } catch(e) { log("Cycle error: " + e.message); }
 }
 

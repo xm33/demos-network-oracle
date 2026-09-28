@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory,
-  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency
+  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped
 } from "./public-safety.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -58,8 +58,13 @@ check("O4 private literal refused", (await resolvePublicProbeOrigin("http://127.
 check("O5 hostname resolving to a private address refused", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8", "10.0.0.5"]))) === null);
 check("O6 hostname resolving to public addresses is pinned to the checked address", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8"]))) === "http://8.8.8.8:53550");
 check("O7 DNS failure refused", (await resolvePublicProbeOrigin("http://node.example:53550", async () => { throw new Error("NXDOMAIN"); })) === null);
-check("O8 https to a hostname is not probed (a pinned address cannot pass its certificate check)", (await resolvePublicProbeOrigin("https://node.example", fakeLookup(["8.8.8.8"]))) === null);
+check("O8 https is not probed (a pinned address cannot pass its certificate check)", (await resolvePublicProbeOrigin("https://node.example", fakeLookup(["8.8.8.8"]))) === null && (await resolvePublicProbeOrigin("https://8.8.8.8")) === null);
 check("O9 IPv6 results are pinned in brackets", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["2606:4700:4700::1111"]))) === "http://[2606:4700:4700::1111]:53550");
+const big = new Response(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(64 * 1024).fill(32)); } }));
+let bigErr = null; try { await readJsonCapped(big, 256 * 1024); } catch (e) { bigErr = e; }
+check("B1 an endless body stops at the cap", bigErr instanceof RangeError && probeErrorCategory(bigErr) === "response too large");
+check("B2 a declared oversize body is refused before reading", await readJsonCapped(new Response("{}", { headers: { "content-length": "9999999" } }), 1024).then(() => false, (e) => e instanceof RangeError));
+check("B3 a small body parses", (await readJsonCapped(new Response('{"a":1}'), 1024)).a === 1);
 let inFlight = 0, maxInFlight = 0;
 await mapWithConcurrency([...Array(20).keys()], 4, async () => { inFlight++; maxInFlight = Math.max(maxInFlight, inFlight); await new Promise((r) => setTimeout(r, 5)); inFlight--; });
 check("C1 concurrency is bounded", maxInFlight === 4, "max " + maxInFlight);
