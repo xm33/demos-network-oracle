@@ -2266,11 +2266,11 @@ async function probeDiscoveredFixnetNodes() {
       var probedAt = Date.now();
       var connUrl = await resolvePublicProbeOrigin(r.connection);
       if (!connUrl) {
-        sharedDb.run("UPDATE fixnet_validator_discoveries SET last_probed_at = ? WHERE identity = ?", [probedAt, r.identity]);
+        sharedDb.run("UPDATE fixnet_validator_discoveries SET last_probed_at = ?, probe_ok = NULL, last_latency_ms = NULL WHERE identity = ?", [probedAt, r.identity]);
         return { ok: false, identity: r.identity, error: "not probed: address not public" };
       }
       try {
-        var resp = await fetch(connUrl + "/info", { signal: AbortSignal.timeout(5000) });
+        var resp = await fetch(connUrl + "/info", { signal: AbortSignal.timeout(5000), redirect: "manual" });
         var latencyMs = Date.now() - probedAt;
         if (resp.ok) {
           var data = await resp.json();
@@ -2280,20 +2280,20 @@ async function probeDiscoveredFixnetNodes() {
             if (self && self.sync) selfBlock = sanitizeHeight(self.sync.block);
           }
           sharedDb.run(
-            "UPDATE fixnet_validator_discoveries SET online = 1, last_block = COALESCE(?, last_block), last_probed_at = ?, last_latency_ms = ? WHERE identity = ?",
+            "UPDATE fixnet_validator_discoveries SET probe_ok = 1, last_block = COALESCE(?, last_block), last_probed_at = ?, last_latency_ms = ? WHERE identity = ?",
             [selfBlock, probedAt, latencyMs, r.identity]
           );
           return { ok: true, identity: r.identity, block: selfBlock, latencyMs: latencyMs };
         } else {
           sharedDb.run(
-            "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
+            "UPDATE fixnet_validator_discoveries SET probe_ok = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
             [probedAt, r.identity]
           );
           return { ok: false, identity: r.identity, error: "HTTP " + resp.status };
         }
       } catch (e) {
         sharedDb.run(
-          "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
+          "UPDATE fixnet_validator_discoveries SET probe_ok = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
           [probedAt, r.identity]
         );
         return { ok: false, identity: r.identity, error: probeErrorCategory(e) };
@@ -2310,13 +2310,16 @@ async function probeDiscoveredFixnetNodes() {
   // Return fresh data (including just-updated rows) for use in UI/API payload
   try {
     var fresh = sharedDb.query(
-      "SELECT identity, connection, first_seen, last_seen, online, last_block, last_probed_at, last_latency_ms FROM fixnet_validator_discoveries ORDER BY last_seen DESC"
+      "SELECT identity, connection, first_seen, last_seen, online, probe_ok, last_block, last_probed_at, last_latency_ms FROM fixnet_validator_discoveries ORDER BY last_seen DESC"
     ).all();
+    // online = DNO's probe answered; reported_online = the anchor's peerlist flag; probed = false when not dialed.
     return (fresh || []).map(function(r) {
       return {
         identity: r.identity,
         connection: r.connection,
-        online: r.online === 1 || r.online === true,
+        online: r.probe_ok === 1,
+        probed: r.probe_ok === 0 || r.probe_ok === 1,
+        reported_online: r.online === 1 || r.online === true,
         block: r.last_block,
         latencyMs: r.last_latency_ms,
         first_seen: r.first_seen,
@@ -2825,8 +2828,9 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     }
     return false;
   }
-  // Fleet-only routes. With INTERNAL_PORT set they are served on the loopback internal listener only.
-  var FLEET_ROUTES = ["/history", "/history/export"];
+  // Fleet-only routes (/history and everything under it). With INTERNAL_PORT set they are served on the loopback
+  // internal listener only.
+  function isFleetRoute(p) { return p === "/history" || p.indexOf("/history/") === 0; }
 
   function handleRequest(req, res, internal) {
     // CORS headers
@@ -2843,7 +2847,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     catch (urlErr) { res.writeHead(400); res.end(JSON.stringify({ error: "Bad request." })); return; }
     var reqPath = reqUrl.pathname;
     var reqQuery = reqUrl.searchParams;
-    if (!internal && INTERNAL_PORT && FLEET_ROUTES.indexOf(reqPath) !== -1) {
+    if (!internal && INTERNAL_PORT && isFleetRoute(reqPath)) {
       res.writeHead(404); res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." })); return;
     }
 
@@ -3135,11 +3139,12 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
         h += '<section style="margin:28px 0 36px">';
         h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Fixnet probe — discovered hosts</h2>';
-        h += '<p class="sub" style="margin:0 0 8px">DNO dialed these fixnet endpoints. reachable here means that probe answered. This is not the public testnet catalog.</p>';
+        h += '<p class="sub" style="margin:0 0 8px">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights come from the probe, or from the anchor peerlist for rows not probed. This is not the public testnet catalog.</p>';
         h += '<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin:0 0 14px">';
         if (fxAgoStr) h += 'Updated ' + fxAgoStr;
         h += '</div>';
-        h += '<p class="sub" style="margin:0 0 6px">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe</p>';
+        var fxNotProbedN = fxDiscovered.filter(function(n){return n.probed === false}).length;
+        h += '<p class="sub" style="margin:0 0 6px">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe' + (fxNotProbedN ? ' · ' + fxNotProbedN + ' not probed' : '') + '</p>';
         h += '<p class="sub" style="margin:0 0 16px">Not a count of the public testnet. Not network size.</p>';
 
 
@@ -3178,6 +3183,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
           var statusColor = isOnline ? "#3fb950" : "#8b949e";   // S2: reachable=green, unreachable=neutral grey (not alarm-red)
           var statusText = isOnline ? "reachable" : "unreachable";   // S2: fixnet probe measures reachability-from-vantage, not liveness
+          if (isDisc && fn.probed === false) { statusColor = "#6b6b6b"; statusText = "not probed"; }
 
 
 
@@ -4016,6 +4022,8 @@ async function main() {
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_fxd_last_seen ON fixnet_validator_discoveries(last_seen)`);
   // v7.3: idempotent migration for databases created before last_latency_ms existed
   try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN last_latency_ms INTEGER"); } catch(e) { /* column exists */ }
+  // DNO's own probe result, kept apart from the anchor-reported online flag: 1 answered, 0 failed, NULL not probed.
+  try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN probe_ok INTEGER"); } catch(e) { /* column exists */ }
 
   // Stage 3a: idempotent schema additions for per-peer stability tracking
   try { sharedDb.run("ALTER TABLE fixnet_validator_discoveries ADD COLUMN observed_cycles INTEGER DEFAULT 0"); } catch(e) { /* column exists */ }

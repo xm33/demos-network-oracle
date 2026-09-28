@@ -56,8 +56,10 @@ const fakeLookup = (answers) => async () => answers.map((address) => ({ address 
 check("O3 IP literal resolved without DNS", (await resolvePublicProbeOrigin("http://8.8.8.8:53550", () => { throw new Error("dns"); })) === "http://8.8.8.8:53550");
 check("O4 private literal refused", (await resolvePublicProbeOrigin("http://127.0.0.1:55225")) === null && (await resolvePublicProbeOrigin("http://169.254.169.254")) === null);
 check("O5 hostname resolving to a private address refused", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8", "10.0.0.5"]))) === null);
-check("O6 hostname resolving to public addresses allowed", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8"]))) === "http://node.example:53550");
+check("O6 hostname resolving to public addresses is pinned to the checked address", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8"]))) === "http://8.8.8.8:53550");
 check("O7 DNS failure refused", (await resolvePublicProbeOrigin("http://node.example:53550", async () => { throw new Error("NXDOMAIN"); })) === null);
+check("O8 https to a hostname is not probed (a pinned address cannot pass its certificate check)", (await resolvePublicProbeOrigin("https://node.example", fakeLookup(["8.8.8.8"]))) === null);
+check("O9 IPv6 results are pinned in brackets", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["2606:4700:4700::1111"]))) === "http://[2606:4700:4700::1111]:53550");
 let inFlight = 0, maxInFlight = 0;
 await mapWithConcurrency([...Array(20).keys()], 4, async () => { inFlight++; maxInFlight = Math.max(maxInFlight, inFlight); await new Promise((r) => setTimeout(r, 5)); inFlight--; });
 check("C1 concurrency is bounded", maxInFlight === 4, "max " + maxInFlight);
@@ -67,6 +69,7 @@ check("S1 agent imports public-safety", /from "\.\/public-safety\.mjs"/.test(SRC
 check("S2 no unescaped toLocaleString() into server-built HTML cells", !/'<td>' \+ \(\w+(\.\w+)? \? \w+(\.\w+)?\.toLocaleString\(\)/.test(SRC));
 check("S3 admin token compared with adminTokenMatches, never read from the query string", /adminTokenMatches\(/.test(SRC) && !/reqQuery\.get\(\s*"token"\s*\)/.test(SRC));
 check("S4 discovered-peer probes resolve their target first", /resolvePublicProbeOrigin\(/.test(SRC));
+check("S4b discovered-peer probes do not follow redirects", /fetch\(connUrl \+ "\/info", \{[^}]*redirect: "manual"/.test(SRC));
 check("S5 request handler is wrapped (a throwing route cannot stop the process)", /function safeHandle\(/.test(SRC) && /createServer\(safeHandle\(/.test(SRC));
 check("S6 /home no longer writes headers twice", !/"Location": "\/" \}\);\s*res\.end\(\);\s*res\.writeHead\(200/.test(SRC));
 check("S7 no IPv4 literal outside loopback in agent.mjs", !/\b(?!127\.0\.0\.1\b)(?!0\.0\.0\.0\b)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(SRC.replace(/"\d+\.\d+\.\d+"/g, "")));

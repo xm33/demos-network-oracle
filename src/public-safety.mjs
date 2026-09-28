@@ -122,6 +122,9 @@ export function isPublicIp(ip) {
 
 // Peer-advertised connection strings become probe targets only when they are a bare origin
 // (http(s)://host:port, no credentials, path, query or fragment) that resolves to public addresses only.
+// resolvePublicProbeOrigin() returns the origin pinned to the address it checked, so the probe connects to that
+// address and the name is not resolved a second time (no DNS rebinding between check and connect). Callers must
+// also refuse redirects (fetch option redirect: "manual"), or a public address could forward the probe inward.
 export function parseProbeOrigin(connection) {
   if (typeof connection !== "string") return null;
   var s = connection.trim();
@@ -147,7 +150,10 @@ export async function resolvePublicProbeOrigin(connection, lookupFn) {
     catch (e) { return null; }
   }
   if (!addrs.length || !addrs.every(isPublicIp)) return null;
-  return u.origin;
+  // A pinned https origin would fail certificate checks for a hostname; https is probed only for IP literals.
+  if (u.protocol === "https:" && !isIP(host)) return null;
+  var ip = addrs[0];
+  return u.protocol + "//" + (isIP(ip) === 6 ? "[" + ip + "]" : ip) + (u.port ? ":" + u.port : "");
 }
 
 // Run async jobs with at most `limit` in flight.
