@@ -19,7 +19,8 @@ function check(name, cond, detail) {
 
 const extract = (start) => { const i = SRC.indexOf(start); if (i < 0) throw new Error("not in agent.mjs: " + start); return SRC.slice(i, SRC.indexOf("\n}\n", i) + 3); };
 const decl = SRC.match(/var heightTracker = \{[^;]*\};\nconst HEIGHT_RECENT_MS = [^;]*;[^\n]*\nconst HEIGHT_WINDOW_MS = [^;]*;/)[0];
-const code = decl + "\n" + extract("function updateHeightTracker(") + extract("function heightMovement(");
+const line = (start) => { const i = SRC.indexOf(start); if (i < 0) throw new Error("not in agent.mjs: " + start); return SRC.slice(i, SRC.indexOf("\n", i) + 1); };
+const code = decl + "\n" + line("function ownHeight(") + extract("function updateHeightTracker(") + extract("function heightMovement(");
 const MONITOR_INTERVAL_MS = Number(SRC.match(/const MONITOR_INTERVAL_MS = parseInt\(process\.env\.MONITOR_INTERVAL_MS \|\| "(\d+)"\)/)[1]);
 const CHAIN_STATIC_RUN_MIN_24H = Number(SRC.match(/var CHAIN_STATIC_RUN_MIN_24H = parseInt\(process\.env\.PHASE_B_CHAIN_STATIC_RUN_MIN \|\| '(\d+)'/)[1]);
 // history: { ts, median_block } rows; the stub applies the query's bound, order and limit.
@@ -31,7 +32,8 @@ function fresh(history) {
   return new Function("sanitizeHeight", "sharedDb", "MONITOR_INTERVAL_MS", "CHAIN_STATIC_RUN_MIN_24H",
     code + "\nreturn { t: heightTracker, update: updateHeightTracker, movement: heightMovement };")(sanitizeHeight, db, MONITOR_INTERVAL_MS, CHAIN_STATIC_RUN_MIN_24H);
 }
-const round = (heights) => Object.entries(heights).map(([name, block]) => ({ name, ok: block !== undefined, block }));
+// A seed's own height comes from its own peerlist entry (height_source "self").
+const round = (heights) => Object.entries(heights).map(([name, block]) => ({ name, ok: block !== undefined, block, height_source: block === undefined ? null : "self" }));
 // The published values: heightMovement() is what computeCanonicalState uses.
 let current = null;
 function published(t, observedAt, anyHeight = true) {
@@ -136,6 +138,20 @@ console.log("\n[" + TAG + "] seeds leaving and joining");
   check("B7 a leader back after more than the window, at its own last height, is no advance", p.staticS === 1020 && p.reason === "unchanged", JSON.stringify(p));
 }
 
+console.log("\n[" + TAG + "] a height taken from a seed's first listed peer");
+{
+  const { t, update } = fresh2(null);
+  update(round({ a: 700, b: 700 }), T0);
+  update(round({ a: 700, b: 700 }), T0 + 20 * S);
+  const firstPeer = round({ a: 700 }).concat([{ name: "b", ok: true, block: 760, height_source: "first_peer" }]);
+  update(firstPeer, T0 + 40 * S);
+  const p = published(t, T0 + 40 * S);
+  check("E1 a first-peer height is not the seed's height: no advance, no new maximum", t.maxHeight === 700 && p.staticS === 40 && p.reason === "aligned" && !("b" in t.lastBySeed && t.lastBySeed.b.h === 760), JSON.stringify({ p, max: t.maxHeight }));
+  update([{ name: "a", ok: true, block: 690, height_source: "first_peer" }, { name: "b", ok: true, block: 690, height_source: "first_peer" }], T0 + 60 * S);
+  const q = published(t, T0 + 60 * S, false);
+  check("E2 a round with first-peer heights only publishes nothing about movement", t.maxHeight === null && q.staticS === null, JSON.stringify({ q, max: t.maxHeight }));
+}
+
 console.log("\n[" + TAG + "] restart with retained history");
 {
   const hist = [];
@@ -161,6 +177,25 @@ console.log("\n[" + TAG + "] restart with retained history");
   update(round({ a: 500, b: 500 }), T0);
   const p = published(t, T0);
   check("D3 a restart after the height moved on: nothing claimed until the next round", p.staticS === null, JSON.stringify(p));
+}
+
+console.log("\n[" + TAG + "] blocks advanced in the last 24 hours (as observed)");
+{
+  const cm = new Function("CHAIN_BUCKET_MIN_24H", "CHAIN_STATIC_RUN_MIN_24H", "CHAIN_ADVANCE_PCT_24H",
+    extract("function computeChainMovement_24h(") + "\nreturn computeChainMovement_24h;")(5, CHAIN_STATIC_RUN_MIN_24H, 0.95);
+  const M = 60 * S, rows = (fn, n = 80) => Array.from({ length: n }, (_, k) => ({ ts: T0 + k * M, median_block: fn(k) }));
+  const steady = cm(rows((k) => 1000 + 15 * k));
+  check("G1 newest median minus oldest", steady.blocks_advanced === 15 * 79 && steady.state === "normal", JSON.stringify(steady));
+  const jitter = cm(rows((k) => 1000 + 15 * k - (k % 2 ? 5 : 0)));
+  check("G2 the median dipping inside the band does not hide it", Number.isInteger(jitter.blocks_advanced) && jitter.blocks_advanced > 0, JSON.stringify(jitter));
+  const reset = cm(rows((k) => (k < 40 ? 900000 + 15 * k : 15 * k)));
+  check("G3 a reset in the window: not published", reset.blocks_advanced === null, JSON.stringify(reset));
+  const back = cm(rows((k) => (k === 30 ? 1000 : 2000 + 15 * k)));
+  check("G4 the median going down by more than the band once: not published", back.blocks_advanced === null, JSON.stringify(back));
+  const lone = cm(rows((k) => 2000 + 15 * k).map((r, k) => (k === 30 ? { ts: r.ts, median_block: 1000, data_quality: "insufficient" } : Object.assign(r, { data_quality: "sufficient" }))));
+  check("G4b a round where one seed alone answered is not a comparison point", lone.blocks_advanced === 15 * 79, JSON.stringify(lone));
+  const none = cm(rows(() => null, 20));
+  check("G5 no heights: no figure", none.blocks_advanced === undefined || none.blocks_advanced === null, JSON.stringify(none));
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

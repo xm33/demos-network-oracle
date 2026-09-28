@@ -214,16 +214,16 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
 '<h1>Demos Network Oracle</h1>' +
 '<p class="sub">Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently disabled.<br>' +
-'Oracle wallet: <code>__AGENT_WALLET__</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
+'Oracle wallet: <code>__AGENT_WALLET__</code> &middot; v' + AGENT_VERSION + '</p>' +
 '<p class="sub">On-chain publication is currently disabled from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
 '<h2>Network</h2>' +
-'<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer. on_chain_publication is currently "disabled" (observation posts are not sent). attestation is a separate field: DAHR source-attestation of observed public sources, when available.</span></div>' +
+'<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer. on_chain_publication is currently "disabled" (observation posts are not sent). attestation is a separate field: DAHR attempted on the cross-check RPCs (available, last_count, last_ok_at), not on the seeds whose answers enter status.</span></div>' +
 '<div class="e"><b>GET /organism</b><span>Default context. Compact public core assessment feed — 17 required fields plus additive 1.1 fields (observed_at, data_quality_reason, height_static_seconds, active_public_conditions, agreement_detail), zero fleet data. ETag / 304 between observations.</span></div>' +
 '<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
 '<div class="e"><b>GET /incidents</b><span>Public incident log. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; active counts every active public record, condition records included (/organism active_incidents does not).</span></div>' +
 '<h2>Validators</h2>' +
-'<div class="e"><b>GET /peers</b><span>Identities listed on the public seed peerlists in the latest crawl — peer-reported height, online flag, readiness flag, sync status and how many public peerlists listed them. Truncated identities; connections are never exposed; never dialed.</span></div>' +
+'<div class="e"><b>GET /peers</b><span>Identities listed on the public seed peerlists in the latest crawl — peer-reported height, online flag, sync status and how many public peerlists listed them. Truncated identities; connections are never exposed; never dialed.</span></div>' +
 '<div class="e"><b>GET /catalog</b><span>Retained catalog (identities listed by a public seed peerlist): first recorded (first_seen), last listed, and what peerlists reported in the latest crawl. Rows recorded before 1.1 appear once a public peerlist lists them again. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations.</span></div>' +
 '<div class="e"><b>GET /catalog/lookup?key=0x…</b><span>Exact check of a full key against the retained catalog and the configured seeds. Returns the sanitized row only.</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alert count for the last 24 h, or unknown when unavailable</span></div>' +
@@ -231,8 +231,8 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
 '<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 assessment model, data sources, limitations</span></div>' +
 '<h2>History</h2>' +
-'<div class="e"><b>GET /history</b><span>Fleet reference history (last 72 cycles). Served on the internal listener when INTERNAL_PORT is set.</span></div>' +
-'<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Optional from/to filters (Unix ms)</span></div>' +
+'<div class="e"><b>GET /history</b><span>Fleet reference history (last 72 cycles). Internal listener only (INTERNAL_PORT); not served publicly.</span></div>' +
+'<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Internal listener only.</span></div>' +
 '<h2>Integration</h2>' +
 '<div class="e"><b>GET /federate</b><span>Prometheus text metrics: oracle implementation version plus public-RPC reachability and probe latency observed from this DNO vantage</span></div>' +
 '<div class="e"><b>GET /badge</b><span>SVG status badge showing observed network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
@@ -260,7 +260,7 @@ var HOME_DQ_REASON = {
   no_observation: "no public observation has completed yet",
   stale: "the last observation is older than 300 s",
   too_few_answers: "fewer than 2 seeds answered",
-  too_few_heights: "fewer than 2 seeds returned a block height"
+  too_few_heights: "fewer than 2 seeds reported their own height"
 };
 var HOME_CARD_LABEL = { trend: "trend", risk: "risk", confidence: "confidence", data_quality: "data quality" };
 function homeTone(key, value) { return (HOME_TONE[key] && HOME_TONE[key][value]) || (value ? "neutral" : "unknown"); }
@@ -485,6 +485,9 @@ for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[String(PUBLIC_NODES[_pn].
 // rows like any other crawl-observed peer (rendered per R-A as discovered-<last4>).
 // Identities are hex; they are compared lower-cased everywhere, so a case variant is not a second identity.
 function isExcludedFromDiscovered(identity) { return !!PUBLIC_NODE_IDENTITIES[String(identity).toLowerCase()]; }
+// A seed's own height: from its own peerlist entry only. A seed that does not list itself has no height here; the
+// first listed peer's height stays on its publicNodes row (height_source "first_peer") and is counted nowhere else.
+function ownHeight(n) { return n && n.ok && n.height_source === "self" ? sanitizeHeight(n.block) : null; }
 var FIXNET_IDENTITIES = {};
 for (var _fx in FIXNET_NODES) { if (FIXNET_NODES[_fx] && FIXNET_NODES[_fx].identity) FIXNET_IDENTITIES[String(FIXNET_NODES[_fx].identity).toLowerCase()] = _fx; }
 
@@ -686,7 +689,6 @@ function toPublicPeer(identity, peer) {
     identity_truncated: truncId(identity),
     block: peer ? sanitizeHeight(peer.block) : null,
     online: !!(peer && peer.online),
-    readiness_flag: peer && typeof peer.ready === "boolean" ? peer.ready : null,
     sync_status: (peer && peer.syncStatus) || null,
     listed_by: (peer && peer.listedBy) || 0,
     first_seen: (peer && peer.firstSeen) || null
@@ -761,9 +763,11 @@ function getValidatorGrowth() {
     network_head: 0,
     public_peerlists_read: catalogLatest.peerlistsRead,
     catalog_crawl_completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null,
+    // online and synced add configured seeds and catalog rows together (1.0 fields, kept for old clients).
+    mixed_fields: { fields: ["online", "synced"], note: "configured seeds and catalog rows added together; kept for 1.x clients. Use monitored_online and monitored_at_head (seeds), discovered and discovered_online (catalog)." },
     validators: []
   };
-  var pubHeights = (latestPublicNodes || []).filter(function(n) { return n.ok; }).map(function(n) { return sanitizeHeight(n.block); }).filter(function(h) { return h !== null; });
+  var pubHeights = (latestPublicNodes || []).map(ownHeight).filter(function(h) { return h !== null; });
   if (pubHeights.length > 0) result.network_head = Math.max.apply(null, pubHeights);
   if (!sharedDb) return result;
   try {
@@ -791,7 +795,7 @@ function getValidatorGrowth() {
     for (var pnName in PUBLIC_NODES) {
       var pnDef = PUBLIC_NODES[pnName];
       var pnLive = (latestPublicNodes || []).find(function(n){ return n.name === pnName; });
-      var block = pnLive && pnLive.ok ? sanitizeHeight(pnLive.block) : null;
+      var block = ownHeight(pnLive);                                     // null when the seed did not list itself
       var online = pnLive ? !!pnLive.ok : false;
       var lag = (block !== null && head > 0) ? head - block : null;
       var fs = firstSeenById[pnDef.identity] || now;
@@ -830,7 +834,6 @@ function getValidatorGrowth() {
         last_listed: pub.last_listed,
         listed_this_cycle: pub.listed_this_cycle,
         listed_by: pub.listed_by,
-        reported_readiness_flag: pub.reported ? pub.reported.readiness_flag : null,
         reported_sync_status: pub.reported ? pub.reported.sync_status : null
       });
       if (ron) { result.online++; result.discovered_online++; }
@@ -921,10 +924,10 @@ function computeCanonicalState() {
   var pubTotal = publicNodes.length;
   var pubOnline = publicNodes.filter(function(n) { return n.ok; });
   var pubReachable = pubOnline.length;                                   // seeds that answered /info
-  var heights = pubOnline.map(function(n) { return sanitizeHeight(n.block); })
-    .filter(function(h) { return h !== null; }).sort(function(a, b) { return a - b; });   // seeds that returned a height
+  var heights = pubOnline.map(ownHeight)
+    .filter(function(h) { return h !== null; }).sort(function(a, b) { return a - b; });   // seeds that returned their own height
 
-  // Data quality: at least two seeds returned a height, and the observation is at most 300 s old.
+  // Data quality: at least two seeds reported their own height, and the observation is at most 300 s old.
   var dataQualityReason = null;
   if (!observedAtMs) dataQualityReason = "no_observation";
   else if (stalenessSeconds > 300) dataQualityReason = "stale";
@@ -935,11 +938,11 @@ function computeCanonicalState() {
     no_observation: "no public observation has completed yet",
     stale: "the last public observation is older than 300 s",
     too_few_answers: "fewer than 2 public nodes answered",
-    too_few_heights: "fewer than 2 public nodes returned a block height"
+    too_few_heights: "fewer than 2 public nodes reported their own block height"
   }[dataQualityReason] || "";
 
   // Agreement compares heights only when data quality is sufficient. In the unknown state total_nodes is
-  // still "seeds that returned a height"; aligned_nodes and block_spread are null because nothing was compared.
+  // still "seeds that reported their own height"; aligned_nodes and block_spread are null because nothing was compared.
   var agreement;
   if (dataQualityReason) {
     agreement = { state: "unknown", aligned_nodes: null, total_nodes: heights.length, median_block: (heights.length === 1 && dataQualityReason !== "stale") ? heights[0] : null, block_spread: null };
@@ -1167,21 +1170,33 @@ function computeChainMovement_24h(rows) {
   var totalBuckets = advancing + nonAdvancing;
   var pctAdvancing = totalBuckets > 0 ? advancing / totalBuckets : 0;
   var longestStaticMin = maxStaticRun * CHAIN_BUCKET_MIN_24H;
+  // Blocks advanced in the window, as observed: newest median minus oldest median, over rounds where at least two
+  // seeds reported their own height (data quality sufficient). Null when there is no pair to compare, or when the
+  // median went down by more than the ±25 agreement band between two such rounds (a reset, or seeds far apart):
+  // one difference would not describe the chain then. No target rate is implied.
+  var medians = rows.filter(function(r) { return r.median_block !== null && r.median_block !== undefined && (r.data_quality === undefined || r.data_quality === "sufficient"); });
+  var blocksAdvanced = medians.length >= 2 ? medians[medians.length - 1].median_block - medians[0].median_block : null;
+  for (var mb = 1; blocksAdvanced !== null && mb < medians.length; mb++) {
+    if (medians[mb].median_block < medians[mb - 1].median_block - 25) blocksAdvanced = null;
+  }
+  if (blocksAdvanced !== null && blocksAdvanced < 0) blocksAdvanced = null;
 
   if (longestStaticMin >= CHAIN_STATIC_RUN_MIN_24H) {
     return {
       state: "interrupted",
       longest_static_minutes: longestStaticMin,
-      pct_advancing: Math.round(pctAdvancing * 100) / 100
+      pct_advancing: Math.round(pctAdvancing * 100) / 100,
+      blocks_advanced: blocksAdvanced
     };
   }
   if (pctAdvancing >= CHAIN_ADVANCE_PCT_24H) {
-    return { state: "normal", pct_advancing: Math.round(pctAdvancing * 100) / 100 };
+    return { state: "normal", pct_advancing: Math.round(pctAdvancing * 100) / 100, blocks_advanced: blocksAdvanced };
   }
   return {
     state: "interrupted",
     pct_advancing: Math.round(pctAdvancing * 100) / 100,
-    reason: "low_advance_ratio"
+    reason: "low_advance_ratio",
+    blocks_advanced: blocksAdvanced
   };
 }
 
@@ -1267,7 +1282,7 @@ function compute24hSummary() {
     }
 
     var blockRows = sharedDb.query(
-      "SELECT ts, median_block FROM public_node_history " +
+      "SELECT ts, median_block, data_quality FROM public_node_history " +
       "WHERE ts > ? AND median_block IS NOT NULL ORDER BY ts ASC"
     ).all(since);
     var chainMovement = computeChainMovement_24h(blockRows);
@@ -1337,7 +1352,7 @@ function recordPublicNodeHistory() {
   try {
     var canonical = computeCanonicalState();
     var nodes = (latestPublicNodes || []).map(function(n) {
-      return { name: n.name, identity: n.identity || null, ok: n.ok || false, block: n.block || null, latency: n.latencyMs || null };
+      return { name: n.name, identity: n.identity || null, ok: n.ok || false, block: ownHeight(n), latency: n.latencyMs || null };
     });
     sharedDb.run(
       "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1471,7 +1486,7 @@ function generateSignals(data, stalenessSeconds) {
       signals.push({ type: "public_node_offline", severity: "info", nodes: pubOffline.map(function(n) { return n.name; }), value: pubOffline.length, message: pubOffline.map(function(n) { return n.name; }).join(", ") + " unreachable" });
     }
     if (pubOnline.length > 0) {
-      var pubBlocks = pubOnline.map(function(n) { return n.block; }).filter(Boolean);
+      var pubBlocks = pubOnline.map(ownHeight).filter(Boolean);
       var pubBlock = pubBlocks.length > 0 ? Math.max.apply(null, pubBlocks) : null;
       if (pubBlock) signals.push({ type: "public_network_block", severity: "info", nodes: pubOnline.map(function(n) { return n.name; }), value: pubBlock, message: "Public network at block " + pubBlock + " (" + pubOnline.length + " nodes online)" });
     }
@@ -2003,10 +2018,11 @@ async function probePublicRPCs(demos) {
     publicRpcStats[rpc.name].total++;
     try {
       var start = Date.now();
-      var res = await fetch(rpc.url, { signal: AbortSignal.timeout(PUBLIC_PROBE_TIMEOUT_MS) });
+      // Configured URLs, but answers from hosts DNO does not run: bodies are capped like the seeds' (decoded size).
+      var res = await fetch(rpc.url, Object.assign({ signal: AbortSignal.timeout(PUBLIC_PROBE_TIMEOUT_MS) }, CAPPED_FETCH_OPTIONS));
       var latencyMs = Date.now() - start;
       if (res.ok) {
-        var data = await res.json();
+        var data = await readJsonCapped(res, INFO_BODY_MAX_BYTES);
         publicRpcStats[rpc.name].reachable++;
         publicRpcStats[rpc.name].totalLatency += latencyMs;
         var block = null;
@@ -2076,7 +2092,7 @@ async function probePublicNodes() {
 // during a stall does not reset it.
 function updateHeightTracker(results, observedAt) {
   var seen = {};
-  (results || []).forEach(function(r) { if (r && r.ok) { var h = sanitizeHeight(r.block); if (h !== null) seen[r.name] = h; } });
+  (results || []).forEach(function(r) { var h = ownHeight(r); if (h !== null) seen[r.name] = h; });
   var names = Object.keys(seen);
   if (!names.length) { heightTracker.maxHeight = null; return; }
   var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
@@ -2538,6 +2554,12 @@ const INFO_BODY_MAX_BYTES = 2 * 1024 * 1024; // /info bodies read from seeds and
 const CATALOG_EVICT_AFTER_MS = 30 * 86400000; // at the cap, rows not listed for this long make room for new ones
 const OBSERVATION_HISTORY_MAX_PER_ROUND = 256; // node_observation_history rows written per round (oldest identities first)
 const CATALOG_MAX_NEW_PER_CRAWL = 200;    // a flood of fabricated identities cannot grow the catalog quickly
+// A new identity is retained only once two distinct public peerlists have listed it (in the same crawl or across
+// crawls), so one poisoned peerlist cannot fill the catalog. Until then it waits here, in memory only: never
+// published, never dialed. The set is bounded; the least recently listed entry is dropped first.
+const CATALOG_MIN_PEERLISTS = 2;
+const CATALOG_PENDING_MAX = 4000;
+var catalogPending = new Map();           // identity -> { sources: [seed names], firstAt }
 var catalogCrawl = null;                  // crawl in progress
 var catalogLatest = { completedAt: null, peerlistsRead: 0, listedCount: 0 };
 
@@ -2564,8 +2586,9 @@ function catalogIngestPeerlist(sourceName, peerlist) {
     var cur = catalogCrawl.listed[identity];
     if (!cur) { catalogCrawl.listed[identity] = { sources: [sourceName], rep: rep }; continue; }
     if (cur.sources.indexOf(sourceName) === -1) cur.sources.push(sourceName);
-    // Several peerlists can describe the same identity: height, readiness flag and sync status come from the
-    // report with the highest height; the online flag is set when any listing peerlist reports it online.
+    // Several peerlists can describe the same identity: height and sync status come from the report with the
+    // highest height; the online flag is set when any listing peerlist reports it online. (The peerlist's
+    // readiness flag is stored but not published: what it means has not been confirmed on a real /info.)
     var anyOnline = cur.rep.online || rep.online;
     if (rep.block !== null && (cur.rep.block === null || rep.block > cur.rep.block)) cur.rep = rep;
     cur.rep.online = anyOnline;
@@ -2581,13 +2604,28 @@ function catalogFinishCrawl(results, observedAt) {
   if (sharedDb) {
     try { sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all().forEach(function(r) { known[r.identity] = r.first_seen; }); } catch (e) {}
   }
-  var retained = Object.keys(known).length, added = 0, skipped = 0, evicted = 0;
+  var retained = Object.keys(known).length, added = 0, skipped = 0, evicted = 0, newlyPending = 0, pendingDropped = 0;
   var next = {};
+  // Two-peerlist rule: merge this crawl's sources for each new identity with what earlier crawls recorded.
+  var promote = {};                        // identity -> first time a public peerlist listed it
+  if (sharedDb) {
+    ids.forEach(function(x) {
+      if (known[x] !== undefined) { catalogPending.delete(x); return; }
+      var pend = catalogPending.get(x), isNew = !pend;
+      if (pend) catalogPending.delete(x); else pend = { sources: [], firstAt: observedAt };
+      crawl.listed[x].sources.forEach(function(s) { if (pend.sources.indexOf(s) === -1) pend.sources.push(s); });
+      if (pend.sources.length >= CATALOG_MIN_PEERLISTS) promote[x] = pend.firstAt;
+      else if (isNew) newlyPending++;
+      catalogPending.set(x, pend);           // re-inserted: most recently listed last
+    });
+    while (catalogPending.size > CATALOG_PENDING_MAX) { catalogPending.delete(catalogPending.keys().next().value); pendingDropped++; }
+  }
+  var inserted = [];
   if (sharedDb) {
     try {
       sharedDb.exec("BEGIN");
       // At the cap, rows no public peerlist has listed for 30 days make room (oldest first); nothing else is removed.
-      var wanted = Math.min(CATALOG_MAX_NEW_PER_CRAWL, ids.filter(function(x) { return known[x] === undefined; }).length);
+      var wanted = Math.min(CATALOG_MAX_NEW_PER_CRAWL, Object.keys(promote).length);
       var over = retained + wanted - CATALOG_MAX_ROWS;
       if (over > 0) {
         var stale = sharedDb.query("SELECT identity FROM validator_discoveries WHERE last_seen < ? ORDER BY last_seen ASC LIMIT ?").all(observedAt - CATALOG_EVICT_AFTER_MS, over + ids.length)
@@ -2598,16 +2636,21 @@ function catalogFinishCrawl(results, observedAt) {
       for (var i = 0; i < ids.length; i++) {
         var id = ids[i], entry = crawl.listed[id], r = entry.rep;
         if (known[id] === undefined) {
-          if (added >= CATALOG_MAX_NEW_PER_CRAWL || retained + added >= CATALOG_MAX_ROWS) { skipped++; continue; }
-          sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection, online, public_listed_since) VALUES (?, ?, ?, ?, ?, ?)", [id, observedAt, observedAt, r.connection || "unknown", r.online ? 1 : 0, observedAt]);
-          known[id] = observedAt; added++;
+          if (promote[id] === undefined) continue;   // listed by one public peerlist so far: pending, not retained
+          if (added >= CATALOG_MAX_NEW_PER_CRAWL || retained + added >= CATALOG_MAX_ROWS) { skipped++; continue; }   // stays pending
+          var firstAt = promote[id];
+          sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection, online, public_listed_since) VALUES (?, ?, ?, ?, ?, ?)", [id, firstAt, observedAt, r.connection || "unknown", r.online ? 1 : 0, firstAt]);
+          known[id] = firstAt; inserted.push(id); added++;
         }
         sharedDb.run("UPDATE validator_discoveries SET last_seen = ?, online = ?, last_block = ?, last_ready = ?, last_sync_status = ?, last_listed_by = ?, connection = COALESCE(?, connection), public_listed_since = COALESCE(public_listed_since, ?) WHERE identity = ?",
           [observedAt, r.online ? 1 : 0, r.block, r.ready === null ? null : (r.ready ? 1 : 0), r.syncStatus, entry.sources.length, r.connection, observedAt, id]);
       }
       sharedDb.exec("COMMIT");
+      Object.keys(promote).forEach(function(x) { if (known[x] !== undefined) catalogPending.delete(x); });
     } catch (e) {
       try { sharedDb.exec("ROLLBACK"); } catch (e2) {}
+      inserted.forEach(function(x) { delete known[x]; });   // not stored: not published either; they stay pending
+      added = 0;
       logError("  [catalog] write failed: " + e.message);
     }
   }
@@ -2619,7 +2662,9 @@ function catalogFinishCrawl(results, observedAt) {
   }
   discoveredPeers = next;
   catalogLatest = { completedAt: observedAt, peerlistsRead: crawl.peerlistsRead, listedCount: Object.keys(next).length };
-  if (added > 0) log("  [catalog] +" + added + " new identit" + (added === 1 ? "y" : "ies") + " from public peerlists");
+  if (added > 0) log("  [catalog] +" + added + " new identit" + (added === 1 ? "y" : "ies") + " listed by at least " + CATALOG_MIN_PEERLISTS + " public peerlists");
+  if (newlyPending > 0) log("  [catalog] " + newlyPending + " new identit" + (newlyPending === 1 ? "y" : "ies") + " listed by one public peerlist only: not retained until a second lists " + (newlyPending === 1 ? "it" : "them") + " (" + catalogPending.size + " waiting)");
+  if (pendingDropped > 0) logError("  [catalog] " + pendingDropped + " waiting identit" + (pendingDropped === 1 ? "y" : "ies") + " dropped: the pending set is full (" + CATALOG_PENDING_MAX + ")");
   if (evicted > 0) log("  [catalog] " + evicted + " identit" + (evicted === 1 ? "y" : "ies") + " not listed for 30 days removed at the cap");
   if (skipped > 0) logError("  [catalog] " + skipped + " new identities not retained (per-crawl or total cap reached)");
 }
@@ -2638,7 +2683,6 @@ function catalogPublicRow(dbRow, nowMs) {
     listed_by: live ? live.listedBy : 0,
     reported: live ? {
       online: live.online,
-      readiness_flag: live.ready,
       sync_status: live.syncStatus,
       height: block,
       height_vs_highest_seed: (block !== null && networkHead !== null) ? block - networkHead : null
@@ -2889,9 +2933,9 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     }
     return false;
   }
-  // Fleet-only routes (/history and everything under it). With INTERNAL_PORT set they are served on the loopback
-  // internal listener only.
-  function isFleetRoute(p) { return p === "/history" || p.indexOf("/history/") === 0; }
+  // Fleet-only routes (/history and everything under it, /dashboard): served on the loopback internal listener only.
+  // The public listener answers 404 for them whether or not INTERNAL_PORT is set.
+  function isFleetRoute(p) { return p === "/history" || p.indexOf("/history/") === 0 || p === "/dashboard" || p.indexOf("/dashboard/") === 0; }
 
   function handleRequest(req, res, internal) {
     // CORS headers
@@ -2908,7 +2952,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     catch (urlErr) { res.writeHead(400); res.end(JSON.stringify({ error: "Bad request." })); return; }
     var reqPath = reqUrl.pathname;
     var reqQuery = reqUrl.searchParams;
-    if (!internal && INTERNAL_PORT && isFleetRoute(reqPath)) {
+    if (!internal && isFleetRoute(reqPath)) {
       res.writeHead(404); res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." })); return;
     }
 
@@ -3120,7 +3164,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(JSON.stringify(latestVersionData, null, 2));
     } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(DOCS_HTML.replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(AGENT_WALLET) : "not connected"));
+      res.end(DOCS_HTML.replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected"));
     } else if (reqPath === MARK_ASSET_PATH) {
       if (!MARK_ASSET) { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": MARK_ASSET.length, "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" });
@@ -3546,8 +3590,8 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
   <span>Demos Network Oracle v${AGENT_VERSION}</span>
   <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span>
   ${latestAttestationState.lastCount > 0
-    ? '<span style="color:#3fb950;font-weight:600">&#10003; DAHR Attested</span>'
-    : '<span style="color:#8b949e;font-weight:600" title="DAHR source-attestation currently unavailable">DAHR attestation unavailable</span>'}
+    ? '<span style="color:#c8c8c8;font-weight:600">DAHR on cross-check RPCs: ' + latestAttestationState.lastCount + '</span>'
+    : '<span style="color:#8b949e;font-weight:600" title="DAHR attestation currently unavailable">DAHR attestation unavailable</span>'}
   <span style="display:flex;align-items:center;gap:5px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:3px 8px;font-size:0.78em">powered by <img src="https://framerusercontent.com/assets/IyyrITqCg67NykDbX6dibaTrhfA.svg" height="14" style="vertical-align:middle;filter:brightness(10)"></span>
   <span style="color:#444">|</span>
   <a href="/docs" style="color:#58a6ff">Docs</a>
@@ -3890,7 +3934,7 @@ refresh();setInterval(refresh,20000);
     internalServer.listen(INTERNAL_PORT, "127.0.0.1", function() { log("  Internal API (fleet routes) listening on 127.0.0.1:" + INTERNAL_PORT); });
     internalServer.on("error", function(err) { logError("Internal server error: " + err.message); });
   } else {
-    log("  Fleet routes (/history, /history/export) are served on the public port; set INTERNAL_PORT to move them to a loopback listener.");
+    log("  Fleet routes (/history, /history/*, /dashboard) are not served: they exist only on the internal listener. Set INTERNAL_PORT to enable it.");
   }
 
   server.listen(HEALTH_PORT, "127.0.0.1", function() {

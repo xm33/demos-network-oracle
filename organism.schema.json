@@ -9,7 +9,7 @@
     { "version": "1.0", "date": "2026-06-11", "change_type": "clarification",
       "notes": "api_version constraint relaxed from const 1.0 to pattern ^1. to allow additive 1.x releases per the stability policy. Correction note: a diverged agreement value was briefly added and removed same-day (commit 52ca4f9, reverted); it originated from a separate legacy agreement computation (exposed as network_agreement on /health, no known consumers) and is not an emittable value of this field. Public agreement states remain strong|moderate|weak|unknown." },
     { "version": "1.1", "date": "2026-09-28", "change_type": "additive",
-      "notes": "Additive fields: data_quality_reason, observed_at, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail; last_24h.critical_public_incidents_in_window. Corrections of meaning, no type changes: staleness_seconds and last_updated are measured from the last completed public observation (previously staleness_seconds counted from the start of the fleet cycle and last_updated was the time of the response); seeds count toward data_quality and agreement only when they return a block height, and a seed's height is its own peerlist entry (the first listed peer when a seed does not list itself, reported as height_source on /health); last_24h.active_critical_public_incidents counts incidents active now (the previous window count moved to critical_public_incidents_in_window). Reason strings say 'answered' where they said 'reachable'." }
+      "notes": "Additive fields: data_quality_reason, observed_at, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail; last_24h.critical_public_incidents_in_window; last_24h.chain_movement.blocks_advanced. Corrections of meaning, no type changes: staleness_seconds and last_updated are measured from the last completed public observation (previously staleness_seconds counted from the start of the fleet cycle and last_updated was the time of the response); seeds count toward data_quality and agreement only when they report their own block height (their own peerlist entry); a seed that does not list itself has no height here (its first listed peer's height stays on its /health row with height_source first_peer and is counted nowhere else); last_24h.active_critical_public_incidents counts incidents active now (the previous window count moved to critical_public_incidents_in_window). Reason strings say 'answered' where they said 'reachable'." }
   ],
   "type": "object",
   "required": ["status","trend","risk","data_quality","confidence","agreement","active_incidents","max_incident_severity","summary","status_reason","risk_factors","confidence_reason","agreement_reason","staleness_seconds","last_updated","api_version","last_24h"],
@@ -20,7 +20,7 @@
     "risk":     { "enum": ["low","elevated","high"], "description": "Resilience / safety margin. By design, insufficient data (status=unknown) maps to risk=elevated: uncertainty resolves to a conservative posture rather than an unknown risk value." },
     "data_quality": { "enum": ["sufficient","insufficient"], "description": "Observability. If insufficient, treat all other values with skepticism." },
     "confidence":   { "enum": ["clear","uncertain"] },
-    "agreement":    { "enum": ["strong","moderate","weak","unknown"], "description": "Block-height alignment among public seeds that returned a height." },
+    "agreement":    { "enum": ["strong","moderate","weak","unknown"], "description": "Block-height alignment among public seeds that reported their own height." },
     "active_incidents": { "type": "integer", "minimum": 0 },
     "max_incident_severity": { "enum": ["none","info","warning","critical"] },
     "summary":           { "type": "string" },
@@ -35,7 +35,7 @@
     "height_last_advanced_at": { "type": ["string","null"], "format": "date-time", "description": "The last observation in which some answering seed reported a higher height than in its previous answer; null until DNO has observed one (for example right after a restart). Additive in 1.1." },
     "height_static_seconds": { "type": ["integer","null"], "minimum": 0, "description": "Seconds since some answering seed last reported a higher height than in its previous answer, as of the last observation. Null when that observation returned no height or nothing has been compared yet; a lower bound while DNO has not observed the last advance. Reported as observed; its cause is not known from here. Additive in 1.1." },
     "active_public_conditions": { "type": "integer", "minimum": 0, "description": "Active public condition records (visibility, degraded, unstable) that DNO opens when its own status changes. Listed on /incidents with kind=condition; not included in active_incidents. Additive in 1.1." },
-    "agreement_detail": { "type": "object", "description": "Counts behind the agreement label. total_nodes = seeds that returned a height. aligned_nodes and block_spread are null when agreement is unknown (heights not compared). Additive in 1.1.",
+    "agreement_detail": { "type": "object", "description": "Counts behind the agreement label. total_nodes = seeds that reported their own height. aligned_nodes and block_spread are null when agreement is unknown (heights not compared). Additive in 1.1.",
       "properties": { "aligned_nodes": { "type": ["integer","null"], "minimum": 0 }, "total_nodes": { "type": "integer", "minimum": 0 }, "median_block": { "type": ["integer","null"], "minimum": 0 }, "block_spread": { "type": ["integer","null"], "minimum": 0 } } },
     "api_version":       { "type": "string", "pattern": "^1\\." },
     "last_24h": {
@@ -59,6 +59,7 @@
             "reason": { "type": "string", "description": "Present on some non-normal states. Examples: no_data, insufficient_buckets, low_advance_ratio." },
             "pct_advancing": { "type": "number" },
             "longest_static_minutes": { "type": "number" },
+            "blocks_advanced": { "type": ["integer","null"], "minimum": 0, "description": "Median height at the newest round in the window minus the oldest, over rounds where at least two seeds reported their own height; as observed from the public seeds. Null when there is no pair to compare, or when the median went down by more than 25 blocks between two such rounds (a reset, or seeds far apart). No target rate. Additive in 1.1." },
             "buckets": { "type": "integer" } } },
         "longest_non_stable_minutes": { "type": ["number","null"], "minimum": 0 },
         "active_critical_public_incidents": { "type": ["integer","null"], "minimum": 0, "description": "Critical public incidents active now." },

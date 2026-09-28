@@ -65,7 +65,9 @@ check("H17 homepage: no IPv4 literal, no full identity, no Demos violet", !IPV4.
 check("H18 homepage: no old seed sentence (DNO dials more than the seeds)", !HOME.includes("only endpoints DNO dials"));
 check("H19 lookup is requested in one place, inside the explicit button's handler", count(HOME, "getJSON('/catalog/lookup") === 1
   && /\$\('lookup-btn'\)\.addEventListener\('click', async \(\) => \{[^}]*?getJSON\('\/catalog\/lookup\?key='/.test(HOME));
-check("H20 public JSON field names avoid the banned word (readiness_flag)", !/\breported_ready\b|^\s+ready: /m.test(SRC.slice(SRC.indexOf("function toPublicPeer"), SRC.indexOf("function toPublicPeer") + 900)) && /readiness_flag:/.test(SRC));
+// R2: what a peerlist's readiness flag means has not been confirmed on a real /info, so it is on no public surface.
+check("H20 no readiness flag in public output (toPublicPeer, catalog rows, validator_growth rows)", !/readiness_flag\s*:|reported_readiness_flag|reported_ready\b/.test(SRC)
+  && !/^\s+ready: /m.test(SRC.slice(SRC.indexOf("function toPublicPeer"), SRC.indexOf("function toPublicPeer") + 900)));
 
 console.log("\n[" + TAG + "] served (base: " + BASE + ")");
 async function get(path, headers) { const r = await fetch(BASE + path, { headers: headers || {} }); let body = null; try { body = await r.clone().json(); } catch (e) { body = await r.text(); } return { status: r.status, headers: r.headers, body }; }
@@ -87,8 +89,8 @@ try {
   check("S5 agreement in the unknown state carries no comparison", ag.state !== "unknown" || (ag.aligned_nodes === null && ag.block_spread === null));
   const vg = health.validator_growth || {};
   const rows = (vg.validators || []).filter((v) => !v.monitored);
-  check("S6 catalog rows in /health carry the 1.1 fields", rows.every((v) => typeof v.listed_this_cycle === "boolean" && Number.isInteger(v.listed_by) && "first_seen" in v && "last_listed" in v && "reported_readiness_flag" in v && "reported_sync_status" in v), rows.length + " rows");
-  check("S7 rows not listed this crawl carry no reported values", rows.filter((v) => !v.listed_this_cycle).every((v) => v.block === null && v.online === false && v.reported_readiness_flag === null && v.reported_sync_status === null && v.sync_pct === null));
+  check("S6 catalog rows in /health carry the 1.1 fields", rows.every((v) => typeof v.listed_this_cycle === "boolean" && Number.isInteger(v.listed_by) && "first_seen" in v && "last_listed" in v && !("reported_readiness_flag" in v) && "reported_sync_status" in v), rows.length + " rows");
+  check("S7 rows not listed this crawl carry no reported values", rows.filter((v) => !v.listed_this_cycle).every((v) => v.block === null && v.online === false && v.reported_sync_status === null && v.sync_pct === null));
   check("S8 listed_by never exceeds public peerlists read", rows.every((v) => v.listed_by <= (vg.public_peerlists_read || 0)));
 
   const cat = (await get("/catalog")).body;
@@ -130,7 +132,24 @@ try {
 
   const peers = (await get("/peers")).body;
   const allKeys = keysDeep([peers, health, cat]);
-  check("S24 no public JSON key named 'ready'", !allKeys.includes("ready") && !allKeys.includes("reported_ready"));
+  check("S24 no public JSON key naming readiness", !allKeys.some((k) => /ready|readiness/i.test(k)), allKeys.filter((k) => /ready|readiness/i.test(k)).slice(0, 3).join(","));
+  // R4: fleet data is not on the public listener, whatever INTERNAL_PORT is.
+  check("S31 /dashboard is not on the public listener", (await get("/dashboard")).status === 404 && (await get("/dashboard/")).status === 404);
+  // R5: the two 1.0 counts that add seeds and catalog rows together say so.
+  check("S32 validator_growth labels online and synced as mixed", vg.mixed_fields && Array.isArray(vg.mixed_fields.fields) && vg.mixed_fields.fields.join(",") === "online,synced" && typeof vg.mixed_fields.note === "string");
+  // R7: blocks advanced in the window, as observed; no rate.
+  const cm = o.last_24h && o.last_24h.chain_movement;
+  check("S33 last_24h blocks_advanced is null or a non-negative integer when chain movement is known", !cm || cm.state === "unknown" || (cm.blocks_advanced === null || (Number.isInteger(cm.blocks_advanced) && cm.blocks_advanced >= 0)), JSON.stringify(cm));
+  // R1: a seed that did not list itself has no height; its first listed peer's height is on its row only.
+  const pn = health.publicNodes || [];
+  const own = pn.filter((n) => n.ok && n.height_source === "self" && Number.isInteger(n.block)).length;
+  check("S34 agreement counts only seeds that reported their own height", (o.agreement_detail || {}).total_nodes === own, (o.agreement_detail || {}).total_nodes + " vs " + own);
+  const firstPeer = pn.filter((n) => n.height_source === "first_peer").map((n) => n.name);
+  const vgSeeds = (vg.validators || []).filter((v) => v.monitored && firstPeer.includes(v.display));
+  check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));
+  const docs = await get("/docs");
+  const docsHtml = typeof docs.body === "string" ? docs.body : "";
+  check("S36 /docs prints no full wallet or identity and no /dashboard link", docs.status === 200 && !FULL_ID.test(docsHtml) && !/0x[0-9a-fA-F]{40}\b/.test(docsHtml) && !/href="\/dashboard"/.test(docsHtml));
 
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
