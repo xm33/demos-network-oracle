@@ -306,6 +306,7 @@ svg text { font-family: var(--sans); }
 .nodes .num { text-align: right; font-family: var(--mono); font-size: 0.875rem; white-space: nowrap; }
 .nodes .name { font-weight: 500; color: var(--metal-2); }
 .nodes .dim { font-family: var(--sans); white-space: nowrap; }
+.nodes .src-note { display: block; font: 400 0.75rem/1.4 var(--sans); color: var(--mute); white-space: nowrap; }
 .reach { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .nodes .empty td { color: var(--metal-1); padding-block: 20px; }
 
@@ -1256,6 +1257,7 @@ svg text { font-family: var(--sans); }
         display, source: display.toLowerCase().indexOf('community') === 0 ? 'Community' : 'Kynesys',
         status: r.online === true ? ['ok', 'reachable'] : ['bad', 'unreachable'],
         block: hasBlock ? r.block : null, sync: hasBlock && isNum(r.sync_pct) ? r.sync_pct : null,
+        fromPeer: hasBlock && !!pn && pn.height_source === 'first_peer',
         latency: pn && pn.ok === true && isNum(pn.latencyMs) ? pn.latencyMs : null,
         uptime: isNum(r.uptime_7d) ? r.uptime_7d : null,
       };
@@ -1268,7 +1270,8 @@ svg text { font-family: var(--sans); }
       el('td', { class: 'first', 'data-label': 'Validator' }, el('span', { class: 'name', text: x.display })),
       el('td', { 'data-label': 'Source' }, x.source),
       el('td', { 'data-label': 'Status' }, el('span', { class: 'reach' }, ind(x.status[0]), el('span', { text: x.status[1] }))),
-      el('td', { class: 'num', 'data-label': 'Block' }, x.block != null ? fmtInt(x.block) : dim('not observed')),
+      el('td', { class: 'num', 'data-label': 'Block' }, x.block != null ? fmtInt(x.block) : dim('not observed'),
+        x.fromPeer ? el('span', { class: 'src-note', text: 'height of its first listed peer' }) : null),
       el('td', { class: 'num', 'data-label': 'Sync' }, x.sync != null ? `${x.sync}%` : dim('not observed')),
       el('td', { class: 'num', 'data-label': 'Latency' },
         x.latency != null ? `${fmtInt(x.latency)} ms` : el('span', null, el('span', { 'aria-hidden': 'true', text: '—' }), el('span', { class: 'sr', text: 'no latency this cycle' }))),
