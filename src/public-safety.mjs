@@ -9,6 +9,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { lookup as dnsLookup } from "node:dns/promises";
+import { gunzipSync, inflateSync, brotliDecompressSync } from "node:zlib";
 
 // ---- identities --------------------------------------------------------------------------------------
 // A Demos identity is 0x followed by 64 hex characters. Anything else from a peerlist is not stored.
@@ -52,8 +53,8 @@ export function probeErrorCategory(err, httpStatus) {
   if (Number.isInteger(httpStatus)) return "HTTP " + httpStatus;
   if (!err) return "no answer";
   if (err.name === "TimeoutError" || err.name === "AbortError") return "timeout";
-  if (err instanceof RangeError) return "response too large";
-  if (err instanceof SyntaxError) return "invalid response";
+  if (err.name === "ResponseTooLarge") return "response too large";
+  if (err instanceof SyntaxError || err instanceof RangeError) return "invalid response";  // RangeError: e.g. nesting too deep
   return "connection failed";
 }
 
@@ -157,21 +158,45 @@ export async function resolvePublicProbeOrigin(connection, lookupFn) {
   return u.protocol + "//" + (isIP(ip) === 6 ? "[" + ip + "]" : ip) + (u.port ? ":" + u.port : "");
 }
 
-// Parse a JSON response without holding more than maxBytes of it: a peer that streams an endless body fails with a
-// RangeError instead of exhausting memory.
+// Bodies DNO reads from peers are capped. Fetch them with CAPPED_FETCH_OPTIONS (the runtime must not expand a
+// compressed body before the cap applies; identity encoding is requested), then parse with readJsonCapped(): at most
+// maxBytes are read from the wire and at most maxBytes are produced by decompression. Past the cap the error is
+// named ResponseTooLarge; a peer streaming an endless or highly compressed body cannot exhaust memory.
+export const CAPPED_FETCH_OPTIONS = Object.freeze({ decompress: false, headers: Object.freeze({ "Accept-Encoding": "identity" }) });
+function responseTooLarge(maxBytes) { var e = new Error("response larger than " + maxBytes + " bytes"); e.name = "ResponseTooLarge"; return e; }
 export async function readJsonCapped(resp, maxBytes) {
   var declared = Number(resp.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) throw new RangeError("response larger than " + maxBytes + " bytes");
-  if (!resp.body) return JSON.parse("");
-  var reader = resp.body.getReader(), chunks = [], total = 0;
-  for (;;) {
-    var part = await reader.read();
-    if (part.done) break;
-    total += part.value.byteLength;
-    if (total > maxBytes) { try { await reader.cancel(); } catch (e) {} throw new RangeError("response larger than " + maxBytes + " bytes"); }
-    chunks.push(Buffer.from(part.value));
+  if (Number.isFinite(declared) && declared > maxBytes) throw responseTooLarge(maxBytes);
+  var raw = Buffer.alloc(0);
+  if (resp.body) {
+    var reader = resp.body.getReader(), chunks = [], total = 0;
+    for (;;) {
+      var part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > maxBytes) { try { await reader.cancel(); } catch (e) {} throw responseTooLarge(maxBytes); }
+      chunks.push(Buffer.from(part.value));
+    }
+    raw = Buffer.concat(chunks);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  var enc = String(resp.headers.get("content-encoding") || "").trim().toLowerCase();
+  var i = 0; while (i < raw.length && (raw[i] === 32 || raw[i] === 9 || raw[i] === 10 || raw[i] === 13)) i++;
+  var plain = !enc || enc === "identity" || raw[i] === 123 || raw[i] === 91;   // "{" or "[": not encoded, or already decoded
+  var text;
+  if (plain) text = raw.toString("utf8");
+  else {
+    var zopts = { maxOutputLength: maxBytes };
+    try {
+      if (enc === "gzip" || enc === "x-gzip") text = gunzipSync(raw, zopts).toString("utf8");
+      else if (enc === "deflate") text = inflateSync(raw, zopts).toString("utf8");
+      else if (enc === "br") text = brotliDecompressSync(raw, zopts).toString("utf8");
+      else throw new SyntaxError("unsupported content-encoding");
+    } catch (e) {
+      if (e && e.code === "ERR_BUFFER_TOO_LARGE") throw responseTooLarge(maxBytes);
+      throw new SyntaxError("body could not be decoded");
+    }
+  }
+  return JSON.parse(text);
 }
 
 // Run async jobs with at most `limit` in flight.

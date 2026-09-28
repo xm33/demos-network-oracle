@@ -31,7 +31,7 @@ import { Demos } from "@kynesyslabs/demosdk/websdk";
 
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
-import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped } from "./public-safety.mjs";
+import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 
 // --- Logging setup ---
@@ -1037,16 +1037,9 @@ function computeCanonicalState() {
   // Null when the latest observation returned no height (nothing to compare). A static height is reported as
   // observed; its cause is not known from here, so it does not change status.
   // Before any comparison (first round after a start) both stay null. Without an observed advance the static
-  // duration is counted from the first round that showed the current height: a lower bound.
-  var heightStaticSeconds = null;
-  var heightAdvancedAtIso = heightTracker.advanceKnown && heightTracker.advancedAt ? new Date(heightTracker.advancedAt).toISOString() : null;
-  if (heightTracker.compared && heightTracker.advancedAt && observedAtMs && heights.length > 0) {
-    heightStaticSeconds = Math.max(0, Math.round((observedAtMs - heightTracker.advancedAt) / 1000));
-  }
-  // "Heights advancing" only when an advance was observed within the last two rounds; "height unchanged" only past
-  // the static threshold; otherwise status_reason says neither.
-  var heightsAdvancing = heightStaticSeconds !== null && heightTracker.advanceKnown && heightStaticSeconds <= 2 * Math.round(MONITOR_INTERVAL_MS / 1000);
-  var heightsStatic = heightStaticSeconds !== null && heightStaticSeconds >= CHAIN_STATIC_RUN_MIN_24H * 60;
+  // duration is counted from the first round that showed the current height: a lower bound. See heightMovement().
+  var hm = heightMovement(observedAtMs, heights.length > 0);
+  var heightStaticSeconds = hm.staticSeconds, heightAdvancedAtIso = hm.advancedAtIso, heightsAdvancing = hm.advancing, heightsStatic = hm.stalled;
   var staticText = heightStaticSeconds === null ? "" : "height unchanged for " + Math.floor(heightStaticSeconds / 60) + " min";
 
   var summary;
@@ -1533,8 +1526,10 @@ const AGENT_STARTED_AT = Date.now();
 // so a leading seed that stops answering is not mistaken for a stalled chain.
 // compared: DNO has compared heights across rounds (or history shows a static run), so height_static_seconds can be
 // published; advanceKnown: the last advance was observed (or bounded by history), so height_last_advanced_at can be.
-// prevMax: the highest seed height of the last round that had one.
-var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false, prevMax: null };
+// lastBySeed: each seed's last answer { h, at }.
+var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false };
+const HEIGHT_RECENT_MS = 3 * MONITOR_INTERVAL_MS;   // a seed's own previous answer is compared only when this recent
+const HEIGHT_WINDOW_MS = 10 * 60000;                 // a new or returning seed is compared with answers from this window
 
 // FIX BUG 7: staleness helper — hoisted to module scope (reachable by serializer and bot)
 function getStaleness() {
@@ -2049,7 +2044,7 @@ async function probePublicNodes() {
     var base = { name: name, identity: node.identity, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" };
     var start = Date.now();
     try {
-      var res = await fetch(node.url + "/info", { signal: AbortSignal.timeout(5000) });
+      var res = await fetch(node.url + "/info", Object.assign({ signal: AbortSignal.timeout(5000) }, CAPPED_FETCH_OPTIONS));
       var latencyMs = Date.now() - start;
       if (!res.ok) {
         log("  PublicNode " + name + ": FAIL HTTP " + res.status);
@@ -2086,16 +2081,19 @@ function updateHeightTracker(results, observedAt) {
   if (!names.length) { heightTracker.maxHeight = null; return; }
   var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
   var maxH = hs[hs.length - 1], medH = hs[Math.floor(hs.length / 2)];
-  // A comparison needs something from an earlier round: a seed's own previous answer, or the previous round's highest
-  // height. An advance: some seed reports more than in its own previous answer, or this round's highest height is
-  // above the previous round's (a seed answering for the first time ahead of the others).
-  var comparable = names.filter(function(n) { return heightTracker.lastBySeed[n] !== undefined; });
-  var comparedNow = comparable.length > 0 || heightTracker.prevMax !== null;
-  var rose = comparable.some(function(n) { return seen[n] > heightTracker.lastBySeed[n]; })
-    || (heightTracker.prevMax !== null && maxH > heightTracker.prevMax);
+  // An advance: a seed reports more than in its own recent previous answer, or a seed with no recent answer of its
+  // own (new, or back after a gap) reports more than any seed answered within the window. A seed that skipped a
+  // round and comes back at the same height, or one that returns at the height the others stalled on, is no advance.
+  var last = heightTracker.lastBySeed, recentMax = null;
+  for (var k in last) if (observedAt - last[k].at <= HEIGHT_WINDOW_MS && (recentMax === null || last[k].h > recentMax)) recentMax = last[k].h;
+  var comparedNow = false, rose = false;
+  names.forEach(function(n) {
+    var prev = last[n];
+    if (prev && observedAt - prev.at <= HEIGHT_RECENT_MS) { comparedNow = true; if (seen[n] > prev.h) rose = true; }
+    else if (recentMax !== null) { comparedNow = true; if (seen[n] > recentMax) rose = true; }
+  });
   heightTracker.maxHeight = maxH;
-  heightTracker.prevMax = maxH;
-  names.forEach(function(n) { heightTracker.lastBySeed[n] = seen[n]; });
+  names.forEach(function(n) { last[n] = { h: seen[n], at: observedAt }; });
   if (!heightTracker.initialized) {
     // First round with a height after a start: nothing compared yet. Retained history can extend a static run back
     // past a restart: the median has stayed at exactly this round's median since the earliest of the most recent
@@ -2118,6 +2116,20 @@ function updateHeightTracker(results, observedAt) {
   }
   if (comparedNow) heightTracker.compared = true;
   if (rose) { heightTracker.advancedAt = observedAt; heightTracker.advanceKnown = true; }
+}
+
+// Published height movement, derived from heightTracker: seconds without an advance (null before any comparison or
+// when this observation returned no height), when the last observed advance happened, and the two status_reason
+// phrases ("Heights advancing" within the last two rounds; "height unchanged" past the static threshold).
+function heightMovement(observedAtMs, anyHeight) {
+  var t = heightTracker;
+  var staticSeconds = t.compared && t.advancedAt && observedAtMs && anyHeight ? Math.max(0, Math.round((observedAtMs - t.advancedAt) / 1000)) : null;
+  return {
+    staticSeconds: staticSeconds,
+    advancedAtIso: t.advanceKnown && t.advancedAt ? new Date(t.advancedAt).toISOString() : null,
+    advancing: staticSeconds !== null && t.advanceKnown && staticSeconds <= 2 * Math.round(MONITOR_INTERVAL_MS / 1000),
+    stalled: staticSeconds !== null && staticSeconds >= CHAIN_STATIC_RUN_MIN_24H * 60
+  };
 }
 
 // Public observation round: Path A seeds, catalog crawl, public history and public incidents. Runs on its own
@@ -2301,7 +2313,7 @@ async function probeDiscoveredFixnetNodes() {
         return { ok: false, identity: r.identity, error: "not probed: address not public" };
       }
       try {
-        var resp = await fetch(connUrl + "/info", { signal: AbortSignal.timeout(5000), redirect: "manual" });
+        var resp = await fetch(connUrl + "/info", Object.assign({ signal: AbortSignal.timeout(5000), redirect: "manual" }, CAPPED_FETCH_OPTIONS));
         var latencyMs = Date.now() - probedAt;
         if (resp.ok) {
           var data = await readJsonCapped(resp, INFO_BODY_MAX_BYTES);

@@ -7,8 +7,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory,
-  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped
+  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS
 } from "./public-safety.mjs";
+import { gzipSync } from "node:zlib";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(__dir, "agent.mjs"), "utf8");
@@ -60,11 +61,21 @@ check("O6 hostname resolving to public addresses is pinned to the checked addres
 check("O7 DNS failure refused", (await resolvePublicProbeOrigin("http://node.example:53550", async () => { throw new Error("NXDOMAIN"); })) === null);
 check("O8 https is not probed (a pinned address cannot pass its certificate check)", (await resolvePublicProbeOrigin("https://node.example", fakeLookup(["8.8.8.8"]))) === null && (await resolvePublicProbeOrigin("https://8.8.8.8")) === null);
 check("O9 IPv6 results are pinned in brackets", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["2606:4700:4700::1111"]))) === "http://[2606:4700:4700::1111]:53550");
+const errOf = async (p) => { try { await p; return null; } catch (e) { return e; } };
 const big = new Response(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(64 * 1024).fill(32)); } }));
-let bigErr = null; try { await readJsonCapped(big, 256 * 1024); } catch (e) { bigErr = e; }
-check("B1 an endless body stops at the cap", bigErr instanceof RangeError && probeErrorCategory(bigErr) === "response too large");
-check("B2 a declared oversize body is refused before reading", await readJsonCapped(new Response("{}", { headers: { "content-length": "9999999" } }), 1024).then(() => false, (e) => e instanceof RangeError));
+const bigErr = await errOf(readJsonCapped(big, 256 * 1024));
+check("B1 an endless body stops at the cap", bigErr && bigErr.name === "ResponseTooLarge" && probeErrorCategory(bigErr) === "response too large");
+const declErr = await errOf(readJsonCapped(new Response("{}", { headers: { "content-length": "9999999" } }), 1024));
+check("B2 a declared oversize body is refused before reading", declErr && declErr.name === "ResponseTooLarge");
 check("B3 a small body parses", (await readJsonCapped(new Response('{"a":1}'), 1024)).a === 1);
+const bomb = gzipSync(Buffer.alloc(64 * 1024 * 1024, 32));                 // 64 MB of spaces, about 64 KB compressed
+const bombErr = await errOf(readJsonCapped(new Response(bomb, { headers: { "content-encoding": "gzip" } }), 256 * 1024));
+check("B4 a compressed bomb stops at the cap after decompression", bombErr && bombErr.name === "ResponseTooLarge", bombErr && bombErr.message);
+check("B5 a small gzip body parses", (await readJsonCapped(new Response(gzipSync(Buffer.from('{"b":2}')), { headers: { "content-encoding": "gzip" } }), 1024)).b === 2);
+check("B6 a body the runtime already decoded still parses", (await readJsonCapped(new Response(' {"c":3}', { headers: { "content-encoding": "gzip" } }), 1024)).c === 3);
+const deep = await errOf(readJsonCapped(new Response("[".repeat(200000) + "]".repeat(200000)), 1024 * 1024));
+check("B7 a deeply nested body is an invalid response, not a large one", deep === null || probeErrorCategory(deep) === "invalid response", deep && deep.name);
+check("B8 capped fetches ask for identity encoding and no runtime decompression", CAPPED_FETCH_OPTIONS.decompress === false && CAPPED_FETCH_OPTIONS.headers["Accept-Encoding"] === "identity");
 let inFlight = 0, maxInFlight = 0;
 await mapWithConcurrency([...Array(20).keys()], 4, async () => { inFlight++; maxInFlight = Math.max(maxInFlight, inFlight); await new Promise((r) => setTimeout(r, 5)); inFlight--; });
 check("C1 concurrency is bounded", maxInFlight === 4, "max " + maxInFlight);
@@ -74,7 +85,8 @@ check("S1 agent imports public-safety", /from "\.\/public-safety\.mjs"/.test(SRC
 check("S2 no unescaped toLocaleString() into server-built HTML cells", !/'<td>' \+ \(\w+(\.\w+)? \? \w+(\.\w+)?\.toLocaleString\(\)/.test(SRC));
 check("S3 admin token compared with adminTokenMatches, never read from the query string", /adminTokenMatches\(/.test(SRC) && !/reqQuery\.get\(\s*"token"\s*\)/.test(SRC));
 check("S4 discovered-peer probes resolve their target first", /resolvePublicProbeOrigin\(/.test(SRC));
-check("S4b discovered-peer probes do not follow redirects", /fetch\(connUrl \+ "\/info", \{[^}]*redirect: "manual"/.test(SRC));
+check("S4b discovered-peer probes do not follow redirects and read capped bodies", /fetch\(connUrl \+ "\/info", Object\.assign\(\{[^}]*redirect: "manual"[^)]*CAPPED_FETCH_OPTIONS/.test(SRC) && /readJsonCapped\(resp, INFO_BODY_MAX_BYTES\)/.test(SRC));
+check("S4c seed probes read capped bodies", /fetch\(node\.url \+ "\/info", Object\.assign\(\{[^}]*\}, CAPPED_FETCH_OPTIONS\)\)/.test(SRC) && /readJsonCapped\(res, INFO_BODY_MAX_BYTES\)/.test(SRC));
 check("S5 request handler is wrapped (a throwing route cannot stop the process)", /function safeHandle\(/.test(SRC) && /createServer\(safeHandle\(/.test(SRC));
 check("S6 /home no longer writes headers twice", !/"Location": "\/" \}\);\s*res\.end\(\);\s*res\.writeHead\(200/.test(SRC));
 check("S7 no IPv4 literal outside loopback in agent.mjs", !/\b(?!127\.0\.0\.1\b)(?!0\.0\.0\.0\b)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(SRC.replace(/"\d+\.\d+\.\d+"/g, "")));

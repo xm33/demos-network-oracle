@@ -1,5 +1,6 @@
 // height-movement.test.mjs — HEIGHT_MOVEMENT guard: when DNO may say heights advanced, and for how long they have not.
-// Runs the real updateHeightTracker() from agent.mjs (extracted from the source) against synthetic rounds.
+// Runs the real heightTracker, updateHeightTracker() and heightMovement() from agent.mjs (extracted from the source,
+// with the source's default intervals) against synthetic rounds and a history table that honours the query's bounds.
 // Run: bun src/height-movement.test.mjs   (executable harness, not `bun test`)
 
 import { readFileSync } from "node:fs";
@@ -16,28 +17,33 @@ function check(name, cond, detail) {
   else { failed++; console.log("  FAIL " + name + (detail ? "  — " + detail : "")); }
 }
 
-const decl = SRC.match(/var heightTracker = \{[^;]*\};/)[0];
-const fnStart = SRC.indexOf("function updateHeightTracker(");
-const fnSrc = SRC.slice(fnStart, SRC.indexOf("\n}\n", fnStart) + 3);
-const INTERVAL_S = 20, STATIC_MIN = 5;
-// history: rows newest first, as the query returns them ({ ts, median_block }).
+const extract = (start) => { const i = SRC.indexOf(start); if (i < 0) throw new Error("not in agent.mjs: " + start); return SRC.slice(i, SRC.indexOf("\n}\n", i) + 3); };
+const decl = SRC.match(/var heightTracker = \{[^;]*\};\nconst HEIGHT_RECENT_MS = [^;]*;[^\n]*\nconst HEIGHT_WINDOW_MS = [^;]*;/)[0];
+const code = decl + "\n" + extract("function updateHeightTracker(") + extract("function heightMovement(");
+const MONITOR_INTERVAL_MS = Number(SRC.match(/const MONITOR_INTERVAL_MS = parseInt\(process\.env\.MONITOR_INTERVAL_MS \|\| "(\d+)"\)/)[1]);
+const CHAIN_STATIC_RUN_MIN_24H = Number(SRC.match(/var CHAIN_STATIC_RUN_MIN_24H = parseInt\(process\.env\.PHASE_B_CHAIN_STATIC_RUN_MIN \|\| '(\d+)'/)[1]);
+// history: { ts, median_block } rows; the stub applies the query's bound, order and limit.
 function fresh(history) {
-  const db = history ? { query: () => ({ all: () => history }) } : null;
-  return new Function("sanitizeHeight", "sharedDb", decl + "\n" + fnSrc + "\nreturn { t: heightTracker, update: updateHeightTracker };")(sanitizeHeight, db);
+  const db = history ? { query: (sql) => ({ all: (bound) => {
+    if (!/ts < \? ORDER BY ts DESC LIMIT 2000/.test(sql)) throw new Error("unexpected history query: " + sql);
+    return history.filter((r) => r.ts < bound).sort((a, b) => b.ts - a.ts).slice(0, 2000);
+  } }) } : null;
+  return new Function("sanitizeHeight", "sharedDb", "MONITOR_INTERVAL_MS", "CHAIN_STATIC_RUN_MIN_24H",
+    code + "\nreturn { t: heightTracker, update: updateHeightTracker, movement: heightMovement };")(sanitizeHeight, db, MONITOR_INTERVAL_MS, CHAIN_STATIC_RUN_MIN_24H);
 }
 const round = (heights) => Object.entries(heights).map(([name, block]) => ({ name, ok: block !== undefined, block }));
-// The published values, as computeCanonicalState derives them.
+// The published values: heightMovement() is what computeCanonicalState uses.
+let current = null;
 function published(t, observedAt, anyHeight = true) {
-  const staticS = t.compared && t.advancedAt && anyHeight ? Math.max(0, Math.round((observedAt - t.advancedAt) / 1000)) : null;
-  const advancing = staticS !== null && t.advanceKnown && staticS <= 2 * INTERVAL_S;
-  const stalled = staticS !== null && staticS >= STATIC_MIN * 60;
-  return { staticS, advancedAt: t.advanceKnown ? t.advancedAt : null, reason: advancing ? "advancing" : stalled ? "unchanged" : "aligned" };
+  const m = current.movement(observedAt, anyHeight);
+  return { staticS: m.staticSeconds, advancedAt: m.advancedAtIso ? Date.parse(m.advancedAtIso) : null, reason: m.advancing ? "advancing" : m.stalled ? "unchanged" : "aligned" };
 }
+function fresh2(history) { current = fresh(history); return current; }
 const T0 = 1_800_000_000_000, S = 1000;
 
 console.log("\n[" + TAG + "] start, advance, static");
 {
-  const { t, update } = fresh(null);
+  const { t, update } = fresh2(null);
   update(round({ a: 100, b: 100 }), T0);
   let p = published(t, T0);
   check("A1 first round after a start: nothing claimed", p.staticS === null && p.advancedAt === null && p.reason === "aligned", JSON.stringify(p));
@@ -52,7 +58,7 @@ console.log("\n[" + TAG + "] start, advance, static");
   check("A4 six minutes without a higher height: unchanged", p.staticS === 360 && p.reason === "unchanged", JSON.stringify(p));
 }
 {
-  const { t, update } = fresh(null);
+  const { t, update } = fresh2(null);
   update(round({ a: 100, b: 100 }), T0);
   update(round({ a: 100, b: 100 }), T0 + 20 * S);
   const p = published(t, T0 + 20 * S);
@@ -61,7 +67,7 @@ console.log("\n[" + TAG + "] start, advance, static");
 
 console.log("\n[" + TAG + "] seeds leaving and joining");
 {
-  const { t, update } = fresh(null);
+  const { t, update } = fresh2(null);
   update(round({ a: 200, b: 190 }), T0);
   update(round({ a: 201, b: 191 }), T0 + 20 * S);
   update(round({ b: 191 }), T0 + 40 * S);
@@ -72,7 +78,7 @@ console.log("\n[" + TAG + "] seeds leaving and joining");
   check("B2 the remaining seed advancing is seen", p.staticS === 0, JSON.stringify(p));
 }
 {
-  const { t, update } = fresh(null);
+  const { t, update } = fresh2(null);
   update(round({ a: 300 }), T0);
   update(round({ a: 300 }), T0 + 20 * S);
   update(round({ b: 305 }), T0 + 40 * S);
@@ -80,7 +86,7 @@ console.log("\n[" + TAG + "] seeds leaving and joining");
   check("B3 a seed answering for the first time above the last round's highest height is an advance", p.staticS === 0, JSON.stringify(p));
 }
 {
-  const { t, update } = fresh(null);
+  const { t, update } = fresh2(null);
   update(round({ a: 395000, b: 395000 }), T0);
   update(round({ a: 395001, b: 395001 }), T0 + 20 * S);
   update(round({ a: 5, b: 5 }), T0 + 40 * S);
@@ -89,11 +95,36 @@ console.log("\n[" + TAG + "] seeds leaving and joining");
   check("C1 a chain reset is followed by the next advance, not a long stall", p.staticS === 0 && t.maxHeight === 6, JSON.stringify(p));
 }
 {
-  const { t, update } = fresh(null);
+  const { t, update } = fresh2(null);
   update(round({ a: 100, b: 100 }), T0);
   update(round({ a: undefined, b: undefined }), T0 + 20 * S);
   const p = published(t, T0 + 20 * S, false);
   check("C2 a round without any height publishes nothing about movement", p.staticS === null && t.maxHeight === null, JSON.stringify(p));
+}
+
+{
+  const { t, update } = fresh2(null);
+  update(round({ a: 501, b: 500 }), T0);
+  for (let k = 1; k <= 18; k++) update(round({ a: 501, b: 500 }), T0 + k * 20 * S);
+  let p = published(t, T0 + 360 * S);
+  const before = p.staticS;
+  update(round({ b: 500 }), T0 + 380 * S);                   // the leader times out for one round
+  update(round({ a: 501, b: 500 }), T0 + 400 * S);           // and comes back at the same height
+  p = published(t, T0 + 400 * S);
+  check("B4 a leader that skips a round during a stall does not reset the clock", before === 360 && p.staticS === 400 && p.reason === "unchanged", JSON.stringify({ before, p }));
+  for (let k = 21; k <= 25; k++) update(round({ b: 500 }), T0 + k * 20 * S);   // absent for five rounds
+  update(round({ a: 501, b: 500 }), T0 + 520 * S);
+  p = published(t, T0 + 520 * S);
+  check("B5 nor after a longer absence", p.staticS === 520 && p.reason === "unchanged", JSON.stringify(p));
+}
+{
+  const { t, update } = fresh2(null);
+  update(round({ a: 480, b: 480 }), T0);
+  update(round({ b: 500 }), T0 + 20 * S);
+  for (let k = 2; k <= 20; k++) update(round({ b: 500 }), T0 + k * 20 * S);     // b stalls at 500; a is away
+  update(round({ a: 500, b: 500 }), T0 + 420 * S);                               // a returns at the stalled height
+  const p = published(t, T0 + 420 * S);
+  check("B6 a seed back after a long gap at the height the others stalled on is no advance", p.staticS === 400 && p.reason === "unchanged", JSON.stringify(p));
 }
 
 console.log("\n[" + TAG + "] restart with retained history");
@@ -101,7 +132,8 @@ console.log("\n[" + TAG + "] restart with retained history");
   const hist = [];
   for (let k = 1; k <= 30; k++) hist.push({ ts: T0 - k * 20 * S, median_block: 500 });   // 10 minutes at 500
   hist.push({ ts: T0 - 31 * 20 * S, median_block: 499 });
-  const { t, update } = fresh(hist);
+  hist.push({ ts: T0, median_block: 501 }, { ts: T0 + 20 * S, median_block: 501 });   // rows at or after this round are outside the query's bound
+  const { t, update } = fresh2(hist);
   update(round({ a: 500, b: 500 }), T0);
   const p = published(t, T0);
   check("D1 a restart during a stall keeps the run and its start", p.staticS === 600 && p.advancedAt === T0 - 30 * 20 * S && p.reason === "unchanged", JSON.stringify(p));
@@ -109,14 +141,14 @@ console.log("\n[" + TAG + "] restart with retained history");
 {
   const hist = [];
   for (let k = 1; k <= 2000; k++) hist.push({ ts: T0 - k * 20 * S, median_block: 395000 - k });
-  const { t, update } = fresh(hist);
+  const { t, update } = fresh2(hist);
   update(round({ a: 12, b: 12 }), T0);
   const p = published(t, T0);
   check("D2 a restart after a chain reset claims nothing from the old chain", p.staticS === null && p.reason === "aligned", JSON.stringify(p));
 }
 {
   const hist = [{ ts: T0 - 20 * S, median_block: 480 }, { ts: T0 - 40 * S, median_block: 479 }];
-  const { t, update } = fresh(hist);
+  const { t, update } = fresh2(hist);
   update(round({ a: 500, b: 500 }), T0);
   const p = published(t, T0);
   check("D3 a restart after the height moved on: nothing claimed until the next round", p.staticS === null, JSON.stringify(p));
