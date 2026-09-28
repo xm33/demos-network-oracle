@@ -631,7 +631,7 @@ function toPublicPeer(identity, peer) {
     identity_truncated: truncId(identity),
     block: peer ? sanitizeHeight(peer.block) : null,
     online: !!(peer && peer.online),
-    ready: peer && typeof peer.ready === "boolean" ? peer.ready : null,
+    readiness_flag: peer && typeof peer.ready === "boolean" ? peer.ready : null,
     sync_status: (peer && peer.syncStatus) || null,
     listed_by: (peer && peer.listedBy) || 0,
     first_seen: (peer && peer.firstSeen) || null
@@ -775,7 +775,7 @@ function getValidatorGrowth() {
         last_listed: pub.last_listed,
         listed_this_cycle: pub.listed_this_cycle,
         listed_by: pub.listed_by,
-        reported_ready: pub.reported ? pub.reported.ready : null,
+        reported_readiness_flag: pub.reported ? pub.reported.readiness_flag : null,
         reported_sync_status: pub.reported ? pub.reported.sync_status : null
       });
       if (ron) { result.online++; result.discovered_online++; }
@@ -978,12 +978,12 @@ function computeCanonicalState() {
     } catch(trendErr) { trend = "unknown"; }
   }
 
-  // Height movement as observed: seconds since the highest reported height last increased. A static height is
-  // reported as observed; its cause is not known from here, so it does not change status.
-  var heightStaticSeconds = null, heightAdvancedAtIso = null;
-  if (heightTracker.advancedAt && observedAtMs) {
+  // Height movement as observed: seconds since some seed last reported a higher height than in its previous answer.
+  // Null when the latest observation returned no height (nothing to compare). A static height is reported as
+  // observed; its cause is not known from here, so it does not change status.
+  var heightStaticSeconds = null, heightAdvancedAtIso = heightTracker.advancedAt ? new Date(heightTracker.advancedAt).toISOString() : null;
+  if (heightTracker.advancedAt && observedAtMs && heights.length > 0) {
     heightStaticSeconds = Math.max(0, Math.round((observedAtMs - heightTracker.advancedAt) / 1000));
-    heightAdvancedAtIso = new Date(heightTracker.advancedAt).toISOString();
   }
   var heightsAdvancing = heightStaticSeconds !== null && heightStaticSeconds < CHAIN_STATIC_RUN_MIN_24H * 60;
   var staticText = heightStaticSeconds === null ? "" : "height unchanged for " + Math.floor(heightStaticSeconds / 60) + " min";
@@ -1466,8 +1466,10 @@ let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
 // observed_at and Last-Modified are measured from here, never from the start of the fleet cycle.
 let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
-// Highest height any answering seed reported, and when it last increased (for height_static_seconds).
-var heightTracker = { maxHeight: null, advancedAt: null, initialized: false };
+// Height movement. maxHeight is the highest height a seed reported in the latest round (null when no seed returned
+// one); advancedAt is the last round in which some seed reported a higher height than in its own previous answer,
+// so a leading seed that stops answering is not mistaken for a stalled chain.
+var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {} };
 
 // FIX BUG 7: staleness helper — hoisted to module scope (reachable by serializer and bot)
 function getStaleness() {
@@ -2008,15 +2010,20 @@ async function probePublicNodes() {
   return results;
 }
 
-// Highest height any answering seed reported this round, and when it last increased. On the first round it
-// is initialized from retained public history, so a restart during a stall does not reset the clock.
+// Per round: the highest height a seed reported, and whether some seed reported a higher height than in its own
+// previous answer. On the first round with a height the clock starts from retained public history, so a restart
+// during a stall does not reset it.
 function updateHeightTracker(results, observedAt) {
-  var hs = (results || []).filter(function(r) { return r && r.ok; }).map(function(r) { return sanitizeHeight(r.block); }).filter(function(h) { return h !== null; });
-  if (!hs.length) return;
-  var maxH = Math.max.apply(null, hs);
-  if (!heightTracker.initialized || maxH < heightTracker.maxHeight - 1000) {  // first round, or a chain reset
+  var seen = {};
+  (results || []).forEach(function(r) { if (r && r.ok) { var h = sanitizeHeight(r.block); if (h !== null) seen[r.name] = h; } });
+  var names = Object.keys(seen);
+  if (!names.length) { heightTracker.maxHeight = null; return; }
+  var maxH = Math.max.apply(null, names.map(function(n) { return seen[n]; }));
+  var rose = names.some(function(n) { var prev = heightTracker.lastBySeed[n]; return prev !== undefined && seen[n] > prev; });
+  heightTracker.maxHeight = maxH;
+  names.forEach(function(n) { heightTracker.lastBySeed[n] = seen[n]; });
+  if (!heightTracker.initialized) {  // first round with a height: start from the retained history
     heightTracker.initialized = true;
-    heightTracker.maxHeight = maxH;
     heightTracker.advancedAt = observedAt;
     if (sharedDb) {
       try {
@@ -2026,7 +2033,7 @@ function updateHeightTracker(results, observedAt) {
     }
     return;
   }
-  if (maxH > heightTracker.maxHeight) { heightTracker.maxHeight = maxH; heightTracker.advancedAt = observedAt; }
+  if (rose) heightTracker.advancedAt = observedAt;
 }
 
 // Public observation round: Path A seeds, catalog crawl, public history and public incidents. Runs on its own
@@ -2449,9 +2456,11 @@ function catalogIngestPeerlist(sourceName, peerlist) {
     var cur = catalogCrawl.listed[identity];
     if (!cur) { catalogCrawl.listed[identity] = { sources: [sourceName], rep: rep }; continue; }
     if (cur.sources.indexOf(sourceName) === -1) cur.sources.push(sourceName);
-    // Several peerlists can describe the same identity: keep the report with the highest height.
+    // Several peerlists can describe the same identity: height, readiness flag and sync status come from the
+    // report with the highest height; the online flag is set when any listing peerlist reports it online.
+    var anyOnline = cur.rep.online || rep.online;
     if (rep.block !== null && (cur.rep.block === null || rep.block > cur.rep.block)) cur.rep = rep;
-    else if (rep.online && !cur.rep.online) cur.rep.online = true;
+    cur.rep.online = anyOnline;
   }
 }
 
@@ -2511,7 +2520,7 @@ function catalogPublicRow(dbRow, nowMs) {
     listed_by: live ? live.listedBy : 0,
     reported: live ? {
       online: live.online,
-      ready: live.ready,
+      readiness_flag: live.ready,
       sync_status: live.syncStatus,
       height: block,
       height_vs_highest_seed: (block !== null && networkHead !== null) ? block - networkHead : null
