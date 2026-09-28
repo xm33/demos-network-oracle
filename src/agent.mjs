@@ -2082,15 +2082,18 @@ function updateHeightTracker(results, observedAt) {
   var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
   var maxH = hs[hs.length - 1], medH = hs[Math.floor(hs.length / 2)];
   // An advance: a seed reports more than in its own recent previous answer, or a seed with no recent answer of its
-  // own (new, or back after a gap) reports more than any seed answered within the window. A seed that skipped a
-  // round and comes back at the same height, or one that returns at the height the others stalled on, is no advance.
+  // own (new, or back after a gap) reports more than both its own last answer and every answer seen within the
+  // window. A seed that skipped rounds and comes back at the same height, or one that returns at the height the
+  // others stalled on, is no advance.
   var last = heightTracker.lastBySeed, recentMax = null;
   for (var k in last) if (observedAt - last[k].at <= HEIGHT_WINDOW_MS && (recentMax === null || last[k].h > recentMax)) recentMax = last[k].h;
   var comparedNow = false, rose = false;
   names.forEach(function(n) {
     var prev = last[n];
-    if (prev && observedAt - prev.at <= HEIGHT_RECENT_MS) { comparedNow = true; if (seen[n] > prev.h) rose = true; }
-    else if (recentMax !== null) { comparedNow = true; if (seen[n] > recentMax) rose = true; }
+    if (prev && observedAt - prev.at <= HEIGHT_RECENT_MS) { comparedNow = true; if (seen[n] > prev.h) rose = true; return; }
+    var ref = recentMax;
+    if (prev && (ref === null || prev.h > ref)) ref = prev.h;
+    if (ref !== null) { comparedNow = true; if (seen[n] > ref) rose = true; }
   });
   heightTracker.maxHeight = maxH;
   names.forEach(function(n) { last[n] = { h: seen[n], at: observedAt }; });

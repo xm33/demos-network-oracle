@@ -126,6 +126,15 @@ console.log("\n[" + TAG + "] seeds leaving and joining");
   const p = published(t, T0 + 420 * S);
   check("B6 a seed back after a long gap at the height the others stalled on is no advance", p.staticS === 400 && p.reason === "unchanged", JSON.stringify(p));
 }
+{
+  const { t, update } = fresh2(null);
+  update(round({ a: 510, b: 500 }), T0);
+  update(round({ a: 510, b: 500 }), T0 + 20 * S);
+  for (let k = 2; k <= 50; k++) update(round({ b: 500 }), T0 + k * 20 * S);     // the leader is away for 16 minutes
+  update(round({ a: 510, b: 500 }), T0 + 1020 * S);                              // and returns at its own height
+  const p = published(t, T0 + 1020 * S);
+  check("B7 a leader back after more than the window, at its own last height, is no advance", p.staticS === 1020 && p.reason === "unchanged", JSON.stringify(p));
+}
 
 console.log("\n[" + TAG + "] restart with retained history");
 {
