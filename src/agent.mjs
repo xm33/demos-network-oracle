@@ -224,7 +224,7 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /incidents</b><span>Public incident log. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; active counts every active public record, condition records included (/organism active_incidents does not).</span></div>' +
 '<h2>Validators</h2>' +
 '<div class="e"><b>GET /peers</b><span>Identities listed on the public seed peerlists in the latest crawl — peer-reported height, online flag, readiness flag, sync status and how many public peerlists listed them. Truncated identities; connections are never exposed; never dialed.</span></div>' +
-'<div class="e"><b>GET /catalog</b><span>Retained catalog (identities listed by a public seed peerlist): first recorded (first_seen), last listed, and what peerlists reported in the latest crawl. Rows recorded before 1.1 appear once a public peerlist lists them again. ?q= filters by the end of a display name or a truncated key.</span></div>' +
+'<div class="e"><b>GET /catalog</b><span>Retained catalog (identities listed by a public seed peerlist): first recorded (first_seen), last listed, and what peerlists reported in the latest crawl. Rows recorded before 1.1 appear once a public peerlist lists them again. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations.</span></div>' +
 '<div class="e"><b>GET /catalog/lookup?key=0x…</b><span>Exact check of a full key against the retained catalog and the configured seeds. Returns the sanitized row only.</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alert count for the last 24 h, or unknown when unavailable</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
@@ -2984,8 +2984,16 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(JSON.stringify({ scope: "public_sanitized", listed: "latest public crawl", crawl: { completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null, public_peerlists_read: catalogLatest.peerlistsRead }, discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
     } else if (reqPath === "/catalog") {
       // Retained catalog, sanitized. Optional ?q= filters by the end of the display name or by the published
-      // characters of a truncated key (0xabcd…1234). Full keys are never returned.
+      // characters of a truncated key (0xabcd…1234); ?listed=now|not by whether the latest crawl listed the row.
+      // Full keys are never returned. ETag / 304 between observations, like /organism.
+      var listedParam = reqQuery.get("listed");
+      if (listedParam !== null && listedParam !== "now" && listedParam !== "not") { res.writeHead(400); res.end(JSON.stringify({ error: "listed must be now or not" })); return; }
+      var catV = observationValidators("catalog");
+      var catHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "ETag": catV.etag };
+      if (catV.lastModified) catHdrs["Last-Modified"] = catV.lastModified;
+      if (notModified(req, res, catV, catHdrs)) return;
       var cat = getPublicCatalog();
+      if (listedParam) { cat.rows = cat.rows.filter(function(r) { return listedParam === "now" ? r.listed_this_cycle : !r.listed_this_cycle; }); cat.listed = listedParam; }
       var q = (reqQuery.get("q") || "").trim().toLowerCase().replace(/^discovered-/, "");
       if (q) {
         if (q.length > 80 || !/^[0-9a-fx.\u2026]+$/.test(q)) { res.writeHead(400); res.end(JSON.stringify({ error: "q accepts hex characters, 0x, or a truncated key" })); return; }
@@ -2998,7 +3006,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         });
         cat.query = q;
       }
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, catHdrs);
       res.end(JSON.stringify(cat, null, 2));
     } else if (reqPath === "/catalog/lookup") {
       // Exact check of a full key against retained identities; answers yes/no and the sanitized row only.

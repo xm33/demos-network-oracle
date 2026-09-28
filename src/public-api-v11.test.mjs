@@ -108,6 +108,11 @@ try {
     check("S16 /catalog?q=<last 4> finds that row", q.rows.some((r) => r.display === cat.rows[0].display));
   }
 
+  const now = (await get("/catalog?listed=now")).body, not = (await get("/catalog?listed=not")).body;
+  check("S28 /catalog?listed=now|not split the rows by the latest crawl", now.rows.every((r) => r.listed_this_cycle) && not.rows.every((r) => !r.listed_this_cycle) && now.rows.length + not.rows.length === cat.rows.length, now.rows.length + " + " + not.rows.length + " vs " + cat.rows.length);
+  check("S29 /catalog?listed= rejects other values", (await get("/catalog?listed=yes")).status === 400);
+  const catRes = await get("/catalog"), catTag = catRes.headers.get("etag");
+  check("S30 /catalog answers 304 to its own ETag", !!catTag && (await get("/catalog", { "If-None-Match": catTag })).status === 304, catTag);
   const inv = (await get("/catalog/lookup?key=0x1234")).body;
   check("S17 lookup: an invalid key is reported invalid", inv.valid_key === false && inv.in_catalog === false);
   const rnd = "0x" + createHash("sha256").update("dno-test-" + Date.now()).digest("hex");
