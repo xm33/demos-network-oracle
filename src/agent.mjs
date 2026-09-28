@@ -246,25 +246,79 @@ let publishTimestamps = []; // rolling window of publish times
 
 var HOMEPAGE_HTML = "";
 try { HOMEPAGE_HTML = readFileSync("homepage.html", "utf8"); } catch(e) { HOMEPAGE_HTML = "<html><body><h1>Homepage not found</h1></body></html>"; }
+// Server-side fill for readers without JavaScript (and for agents that fetch / as HTML). Each replacement targets
+// one exact marker in homepage.html; src/public-api-v11.test.mjs asserts every marker is present exactly once.
+var HOME_TONE = {
+  status: { stable: "ok", degraded: "warn", unstable: "bad", unknown: "unknown" },
+  trend: { improving: "ok", stable: "neutral", worsening: "warn", unknown: "unknown" },
+  risk: { low: "ok", elevated: "warn", high: "bad" },
+  confidence: { clear: "ok", uncertain: "warn" },
+  data_quality: { sufficient: "ok", insufficient: "warn" },
+  agreement: { strong: "ok", moderate: "warn", weak: "bad", unknown: "unknown" }
+};
+var HOME_DQ_REASON = {
+  no_observation: "no public observation has completed yet",
+  stale: "the last observation is older than 300 s",
+  too_few_answers: "fewer than 2 seeds answered",
+  too_few_heights: "fewer than 2 seeds returned a block height"
+};
+var HOME_CARD_LABEL = { trend: "trend", risk: "risk", confidence: "confidence", data_quality: "data quality" };
+function homeTone(key, value) { return (HOME_TONE[key] && HOME_TONE[key][value]) || (value ? "neutral" : "unknown"); }
+function homeCardMarker(key) {
+  return '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p>';
+}
+var HOME_MARKERS = {
+  panel: '<div class="panel" id="panel" data-state="pending">',
+  status: '<span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span>',
+  reason: '<p class="status-reason" id="status-reason" data-src="api" aria-live="polite">The first request to /organism is in flight.</p>',
+  seeds: '<p class="seeds" id="seeds-line">Awaiting first reading of /health.</p>',
+  insufficient: '<p class="insufficient" id="insufficient" hidden>',
+  agreement: '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
+  live: '<span id="live-text">connecting</span>',
+  cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality") }
+};
 function renderHomepageNoJs(html) {
   try {
     var c = computeCanonicalState();
-    function esc(s) {
-      return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    if (!c.observed_at) return html;            // nothing observed yet: the page's own pending state is accurate
+    var e = escHtml;
+    html = html.replace(HOME_MARKERS.panel, '<div class="panel" id="panel" data-state="live">');
+    html = html.replace(HOME_MARKERS.status, '<span class="ind" id="status-ind" data-tone="' + homeTone("status", c.status) + '"></span><span id="status-value">' + e(String(c.status || "unknown").toUpperCase()) + '</span>');
+    html = html.replace(HOME_MARKERS.reason, '<p class="status-reason" id="status-reason" data-src="api" aria-live="polite">' + e(c.status_reason || c.summary || "No reason published in this reading.") + '</p>');
+    var nodes = latestPublicNodes || [];
+    if (nodes.length) {
+      var k = nodes.filter(function(n) { return n.ok; }).length;
+      html = html.replace(HOME_MARKERS.seeds, '<p class="seeds" id="seeds-line">' + k + ' of ' + nodes.length + ' seeds answered. Those ' + nodes.length + ' are the only endpoints whose answers enter status. Status does not use the catalog.</p>');
     }
-    var status = esc(c.status || "unknown");
-    var risk = esc(c.risk || "—");
-    var ag = esc((c.agreement && c.agreement.state) || "—");
-    var summary = esc(c.summary || "");
-    html = html.replace('<div id="hero-status" class="oracle-status loading">Loading...</div>', '<div id="hero-status" class="oracle-status">' + status + '</div>');
-    html = html.replace('<div id="hero-summary" class="hero-summary"></div>', '<div id="hero-summary" class="hero-summary">' + summary + '</div>');
-    html = html.replace('<div id="card-risk" class="signal-value">—</div>', '<div id="card-risk" class="signal-value">' + risk + '</div>');
-    html = html.replace('<div id="ag-state" class="ag-value">—</div>', '<div id="ag-state" class="ag-value">' + ag + '</div>');
+    if (c.data_quality === "insufficient") html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
+    var subs = {
+      trend: "",
+      risk: (c.risk_factors || []).join(" · "),
+      confidence: c.confidence_reason || "",
+      data_quality: c.data_quality_reason ? (HOME_DQ_REASON[c.data_quality_reason] || "") : ""
+    };
+    for (var key in HOME_MARKERS.cards) {
+      var val = c[key] || "unknown";
+      html = html.replace(HOME_MARKERS.cards[key], '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="' + homeTone(key, c[key]) + '"></span><span class="val">' + e(val) + '</span></p><p class="s" data-src="api"' + (subs[key] ? '' : ' hidden') + '>' + e(subs[key]) + '</p>');
+    }
+    var ag = (c.agreement && c.agreement.state) || "unknown";
+    html = html.replace(HOME_MARKERS.agreement, '<span class="ind" id="ag-ind" data-tone="' + homeTone("agreement", ag) + '"></span><span id="ag-state">' + e(ag) + '</span>');
+    html = html.replace(HOME_MARKERS.live, '<span id="live-text">as of ' + e(c.observed_at.slice(11, 19)) + ' UTC</span>');
     return html;
-  } catch (e) {
+  } catch (err) {
     return html;
   }
 }
+// The locked DNO mark (assets/dno-mark.jpg, the owner's file byte-for-byte). The homepage references it at this
+// path; it is served only when the file on disk is the locked file.
+const MARK_ASSET_SHA256 = "f72aa72bf49ba8eecdc4d8b49218e09343c7107f5ae144e3e11ad0d92cae5c51";
+const MARK_ASSET_PATH = "/assets/dno-mark-" + MARK_ASSET_SHA256.slice(0, 8) + ".jpg";
+var MARK_ASSET = null;
+try {
+  var markBytes = readFileSync("assets/dno-mark.jpg");
+  if (createHash("sha256").update(markBytes).digest("hex") === MARK_ASSET_SHA256) MARK_ASSET = markBytes;
+  else console.error("[homepage] assets/dno-mark.jpg is not the locked mark; it will not be served");
+} catch (e) { MARK_ASSET = null; }
 var SOURCES_HTML = "";
 try { SOURCES_HTML = readFileSync("sources.html", "utf8"); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
 
@@ -2994,6 +3048,10 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(DOCS_HTML.replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(AGENT_WALLET) : "not connected"));
+    } else if (reqPath === MARK_ASSET_PATH) {
+      if (!MARK_ASSET) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": MARK_ASSET.length, "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" });
+      res.end(MARK_ASSET);
     } else if (reqPath === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "Link": "</organism>; rel=\"alternate\"; type=\"application/json\", </organism/schema>; rel=\"describedby\"" });
       res.end(renderHomepageNoJs(HOMEPAGE_HTML));
