@@ -735,7 +735,7 @@ async function publishAnnouncement() {
     "3. Include payload.data with: nodesReachable, blockHeight, latencyMs, issuesDetected\n\n" +
     "Consensus published as SIGNAL when 3+ reporters submit, or every 24h. " +
     "All consensus signals are DAHR-attested.\n\n" +
-    "Query endpoint: http://193.77.169.106:55225/consensus";
+    "Query endpoint: https://demos-oracle.com/consensus";
 
   var post = {
     cat: "OBSERVATION",

@@ -30,6 +30,8 @@ import { Demos } from "@kynesyslabs/demosdk/websdk";
 
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
+import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency } from "./public-safety.mjs";
+import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -109,7 +111,9 @@ const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000")
 const STALE_MULTIPLIER = 3; // public-RPC freshness multiplier
 const STALE_BOUND = STALE_MULTIPLIER * MONITOR_INTERVAL_MS; // derived from cycle cadence; passed explicitly to buildPublicMetrics
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://127.0.0.1:9091";
-const LOCAL_INFO_URL = "http://127.0.0.1:53550/info";
+// Local node /info. Set LOCAL_INFO_URL in .env or export it from fleet.config.mjs; the loopback default
+// assumes the node listens on this host. No address literal lives in public source.
+const LOCAL_INFO_URL = process.env.LOCAL_INFO_URL || FLEET_CONFIG.LOCAL_INFO_URL || "http://127.0.0.1:53550/info";
 const LOCAL_NODE_NAME = process.env.LOCAL_NODE_NAME || "n3";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
@@ -590,6 +594,11 @@ var FLEET_NODE_NAMES = NODE_NAMES;
 
 // Public display name. Operator aliases are not a public identifier.
 // truncId is shared by getValidatorGrowth and the /community route.
+// Heights in server-built HTML: only a sanitized integer is ever formatted into a cell.
+function heightCell(value) {
+  var h = sanitizeHeight(value);
+  return h === null ? "\u2014" : h.toLocaleString("en-US");
+}
 function truncId(id) {
   if (!id || id.length < 12) return id || "\u2014";
   return id.substring(0, 6) + "\u2026" + id.substring(id.length - 4);
@@ -1914,10 +1923,10 @@ async function probeFixnetNodes() {
         if (data.peerlist && Array.isArray(data.peerlist)) {
           var selfEntry = data.peerlist.find(function(p) { return p.identity === node.identity; });
           if (selfEntry && selfEntry.sync) {
-            block = selfEntry.sync.block;
+            block = sanitizeHeight(selfEntry.sync.block);
           } else if (data.peerlist[0] && data.peerlist[0].sync) {
             // Fallback: first peer (anchor convention)
-            block = data.peerlist[0].sync.block;
+            block = sanitizeHeight(data.peerlist[0].sync.block);
           }
         }
         var identityMatch = data.identity === node.identity;
@@ -1929,7 +1938,7 @@ async function probeFixnetNodes() {
           ok: true,
           latencyMs: latencyMs,
           block: block,
-          version: data.version || "?",
+          version: sanitizeLabel(data.version, 32) || "?",
           peers: data.peerlist ? data.peerlist.length : 0,
           identityMatch: identityMatch,
           source_type: node.source_type,
@@ -1955,7 +1964,7 @@ async function probeFixnetNodes() {
     } catch (err) {
       results.push({
         name: name, url: node.url, host: node.host, identity: node.identity, ok: false,
-        error: err.name === "TimeoutError" ? "Timeout" : err.message,
+        error: probeErrorCategory(err),
         source_type: node.source_type, trust_tier: node.trust_tier, operator: node.operator
       });
       log("  FixnetNode " + name + ": FAIL " + err.message);
@@ -1976,14 +1985,14 @@ function discoverFixnetValidators(anchorInfoData) {
   for (var i = 0; i < anchorInfoData.peerlist.length; i++) {
     var peer = anchorInfoData.peerlist[i];
     var identity = peer && peer.identity;
-    if (!identity) continue;
+    if (!isValidIdentity(identity)) continue;
 
     // Skip known identities (monitored fixnet, monitored testnet, or known fleet)
     if (isExcludedFromDiscovered(identity)) continue;
 
     var connection = peer.connection && peer.connection.string ? peer.connection.string : null;
-    var block = peer.sync && peer.sync.block ? peer.sync.block : null;
-    var online = peer.status && peer.status.online ? 1 : 0;
+    var block = sanitizeHeight(peer.sync && peer.sync.block);
+    var online = peer.status && peer.status.online === true ? 1 : 0;
 
     try {
       var existing = sharedDb.query("SELECT identity FROM fixnet_validator_discoveries WHERE identity = ?").get(identity);
@@ -2034,11 +2043,17 @@ async function probeDiscoveredFixnetNodes() {
     return (now - r.last_probed_at) >= PROBE_INTERVAL_MS;
   });
 
-  // Probe all due nodes in parallel with a bounded timeout (5s per probe)
-  var probePromises = due.map(function(r) {
+  // Probe due nodes with a bounded timeout (5 s per probe), at most 64 per cycle and 8 at a time.
+  // A peer-advertised address is dialed only when it is a bare http(s) origin that resolves to public
+  // addresses; anything else (loopback, private ranges, metadata addresses, paths) is never fetched.
+  var probeJobs = due.slice(0, 64).map(function(r) {
     return (async function() {
       var probedAt = Date.now();
-      var connUrl = r.connection.replace(/\/$/, "");
+      var connUrl = await resolvePublicProbeOrigin(r.connection);
+      if (!connUrl) {
+        sharedDb.run("UPDATE fixnet_validator_discoveries SET last_probed_at = ? WHERE identity = ?", [probedAt, r.identity]);
+        return { ok: false, identity: r.identity, error: "not probed: address not public" };
+      }
       try {
         var resp = await fetch(connUrl + "/info", { signal: AbortSignal.timeout(5000) });
         var latencyMs = Date.now() - probedAt;
@@ -2046,8 +2061,8 @@ async function probeDiscoveredFixnetNodes() {
           var data = await resp.json();
           var selfBlock = null;
           if (data.peerlist && Array.isArray(data.peerlist)) {
-            var self = data.peerlist.find(function(p) { return p.identity === r.identity; });
-            if (self && self.sync) selfBlock = self.sync.block;
+            var self = data.peerlist.find(function(p) { return p && p.identity === r.identity; });
+            if (self && self.sync) selfBlock = sanitizeHeight(self.sync.block);
           }
           sharedDb.run(
             "UPDATE fixnet_validator_discoveries SET online = 1, last_block = COALESCE(?, last_block), last_probed_at = ?, last_latency_ms = ? WHERE identity = ?",
@@ -2066,14 +2081,15 @@ async function probeDiscoveredFixnetNodes() {
           "UPDATE fixnet_validator_discoveries SET online = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
           [probedAt, r.identity]
         );
-        return { ok: false, identity: r.identity, error: e.message || String(e) };
+        return { ok: false, identity: r.identity, error: probeErrorCategory(e) };
       }
-    })();
+    });
   });
 
-  if (probePromises.length > 0) {
-    await Promise.all(probePromises);
-    log("  [fixnet-discovery] probed " + probePromises.length + " discovered node(s)");
+  if (probeJobs.length > 0) {
+    var probeResults = await mapWithConcurrency(probeJobs, 8, function(job) { return job(); });
+    var skipped = probeResults.filter(function(x) { return x && x.error === "not probed: address not public"; }).length;
+    log("  [fixnet-discovery] probed " + (probeJobs.length - skipped) + " discovered node(s)" + (skipped ? ", " + skipped + " skipped (address not public)" : ""));
   }
 
   // Return fresh data (including just-updated rows) for use in UI/API payload
@@ -2512,13 +2528,19 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 // ---- end public metrics contract ----
 
 
-  var server = createServer(function(req, res) {
+  function handleRequest(req, res, internal) {
     // CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "application/json");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
 
     // F-3: route on pathname so query strings do not 404 exact-match routes.
-    var reqUrl = new URL(req.url, "http://d");
+    // Origin-form targets get a fixed origin prefix, so paths such as "//" parse instead of throwing.
+    var reqUrl;
+    try { reqUrl = new URL(String(req.url || "/").charAt(0) === "/" ? "http://d" + req.url : String(req.url)); }
+    catch (urlErr) { res.writeHead(400); res.end(JSON.stringify({ error: "Bad request." })); return; }
     var reqPath = reqUrl.pathname;
     var reqQuery = reqUrl.searchParams;
 
@@ -2671,8 +2693,6 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     } else if (reqPath === "/home") {
       res.writeHead(301, { "Location": "/" });
       res.end();
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(HOMEPAGE_HTML);
     } else if (reqPath === "/sources") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(SOURCES_HTML);
@@ -2825,7 +2845,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           // Status
           h += '<td><span style="color:'+statusColor+'">\u25cf</span> ' + statusText + '</td>';
           // Block
-          h += '<td>' + (block ? block.toLocaleString() : "\u2014") + '</td>';
+          h += '<td>' + heightCell(block) + '</td>';
           // Sync
           h += '<td' + (syncPct !== null ? ' style="color:'+syncColor+syncOpacity+'"' : '') + '>' + (syncPct !== null ? syncPct + "%" : "\u2014") + '</td>';
           // Latency
@@ -2879,7 +2899,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           h += '<tr>';
           h += '<td style="font-family:var(--mono);font-size:11px">' + esc(truncId(dv.identity)) + '</td>';
           h += '<td><span class="pill" style="color:' + dvStatusColor + ';background:' + dvStatusBg + ';border-color:' + dvStatusColor + '44">' + dvStatusText + '</span></td>';
-          h += '<td>' + (dv.block ? dv.block.toLocaleString() : "\u2014") + '</td>';
+          h += '<td>' + heightCell(dv.block) + '</td>';
           h += '<td style="color:' + dvSyncColor + '">' + dvSyncPct + '%</td>';
           h += '</tr>';
         }
@@ -2922,8 +2942,9 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(COMMERCE_METHODOLOGY_HTML);
     } else if (reqPath === "/private/commerce/status" || reqPath.indexOf("/private/commerce/status/") === 0) {
-      var pcTk = reqQuery.get("token");
-      if (pcTk !== process.env.DNO_ADMIN_TOKEN) { res.writeHead(401); res.end('{"error":"unauthorized"}'); return; }
+      res.removeHeader("Access-Control-Allow-Origin");
+      var pcTk = req.headers["x-dno-admin-token"];
+      if (!adminTokenMatches(Array.isArray(pcTk) ? pcTk[0] : pcTk, DNO_ADMIN_TOKEN)) { res.writeHead(401); res.end('{"error":"unauthorized"}'); return; }
       try {
         var rawCommerce = readFileSync("data/commerce-last-check.json", "utf8");
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
@@ -3413,7 +3434,22 @@ refresh();setInterval(refresh,20000);
       res.writeHead(404);
       res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." }));
     }
-  });
+  }
+
+  // A route that throws must not take the process down: answer 500 and keep serving.
+  function safeHandle(internal) {
+    return function(req, res) {
+      try { handleRequest(req, res, internal); }
+      catch (err) {
+        logError("[http] " + String(req.method) + " " + String(req.url || "").slice(0, 120) + " failed: " + (err && err.message ? err.message : String(err)));
+        try {
+          if (!res.headersSent) { res.writeHead(500, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Internal error." })); }
+          else if (!res.writableEnded) res.end();
+        } catch (e2) {}
+      }
+    };
+  }
+  var server = createServer(safeHandle(false));
 
   server.listen(HEALTH_PORT, "127.0.0.1", function() {
     log("  Health API listening on port " + HEALTH_PORT);
@@ -3530,6 +3566,8 @@ async function main() {
   log("  Demos RPC: " + RPC_URL);
   log("  Telegram: " + (TELEGRAM_BOT_TOKEN ? "ENABLED" : "DISABLED"));
   log("  Features: anomaly detection, validator discovery, honest-uncertainty assessment");
+  if (DNO_ADMIN_TOKEN && DNO_ADMIN_TOKEN.length < MIN_ADMIN_TOKEN_LENGTH) log("  Admin routes: DISABLED (DNO_ADMIN_TOKEN shorter than " + MIN_ADMIN_TOKEN_LENGTH + " characters)");
+  else log("  Admin routes: " + (DNO_ADMIN_TOKEN ? "token set (send it in the X-DNO-Admin-Token header)" : "DISABLED (DNO_ADMIN_TOKEN not set)"));
   log("  Fixes: shared DB, write budget, staleness, atomic history, log rotation");
   log("===============================================================");
 
@@ -4343,8 +4381,16 @@ async function pollTelegram() {
   }
 }
 
+// A stray exception or rejection is logged; the observation loop and the HTTP server keep running.
+process.on("unhandledRejection", function(reason) {
+  logError("[process] unhandled rejection: " + (reason && reason.message ? reason.message : String(reason)));
+});
+process.on("uncaughtException", function(err) {
+  logError("[process] uncaught exception: " + (err && err.stack ? err.stack.split("\n").slice(0, 3).join(" | ") : String(err)));
+});
+
 main().catch(function(err) {
-  logError("Fatal error:", err);
+  logError("Fatal error: " + (err && err.stack ? err.stack : String(err)));
   process.exit(1);
 });
 

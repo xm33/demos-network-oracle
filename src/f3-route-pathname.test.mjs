@@ -21,7 +21,8 @@ check("S4 /organism matches pathname", /reqPath\s*===\s*"\/organism"/.test(SRC) 
 check("S5 /peers matches pathname", /reqPath\s*===\s*"\/peers"/.test(SRC) && !/req\.url\s*===\s*"\/peers"/.test(SRC));
 check("S6 no leftover exact req.url === routes", !/req\.url\s*===/.test(SRC));
 check("S7 incidents still read query", /reqQuery/.test(SRC) && /incidents/.test(SRC));
-check("S8 commerce token still read", /reqQuery\.get\(\s*"token"\s*\)/.test(SRC) || /searchParams\.get\(\s*"token"\s*\)/.test(SRC));
+// v4: the admin token moved from the query string (logged by proxies) to a request header.
+check("S8 admin token read from the X-DNO-Admin-Token header, never the query string", /req\.headers\["x-dno-admin-token"\]/.test(SRC) && !/reqQuery\.get\(\s*"token"\s*\)/.test(SRC) && !/searchParams\.get\(\s*"token"\s*\)/.test(SRC));
 check("S9 export from/to readable", /history\/export/.test(SRC) && (/reqQuery\.get\(\s*"from"\s*\)/.test(SRC) || /searchParams\.get\(\s*"from"\s*\)/.test(SRC)));
 
 function pathOf(u) { return new URL(u, "http://d").pathname; }
