@@ -55,7 +55,8 @@ console.log(`\n[${TAG}] static invariants`);
 // S1 is scoped to the unique route-shaped handler source line rather than a file-wide
 // serializer reference. Source-text analysis, not a liveness proof: the line-anchored
 // regex rejects ordinary '//'-commented copies (a comment cannot begin with '}').
-const ROUTE_RE = /^\s*\}\s*else if\s*\(req\.url === "\/federate"\s*\|\|\s*req\.url === "\/metrics"\)\s*\{\s*$/gm;
+// Routes match on the parsed pathname since the F-3 refactor (reqPath); the legacy req.url form is still accepted.
+const ROUTE_RE = /^\s*\}\s*else if\s*\((?:req\.url|reqPath) === "\/federate"\s*\|\|\s*(?:req\.url|reqPath) === "\/metrics"\)\s*\{\s*$/gm;
 const routeMatches = [...SRC.matchAll(ROUTE_RE)];
 check("S1a public route-shaped handler line present exactly once",
       routeMatches.length === 1, "matches=" + routeMatches.length);

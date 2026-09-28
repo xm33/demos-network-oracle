@@ -44,7 +44,8 @@ function check(name, cond, detail = "") {
 }
 
 function hasSelfResponder(src) {
-  return /req\.url\s*===\s*["']\/self["']/.test(src);
+  // Routes match on the parsed pathname since the F-3 refactor (reqPath); both forms are detected.
+  return /(?:req\.url|reqPath)\s*===\s*["']\/self["']/.test(src);
 }
 
 function hasSelfLiteral(src) {
@@ -87,10 +88,10 @@ check(
 
 // S5 — mutation sensitivity, entirely in memory.
 // Reinsert a synthetic /self matcher immediately before an existing route.
-const mutationAnchor = '} else if (req.url === "/organism/schema") {';
+const mutationAnchor = '} else if (reqPath === "/organism/schema") {';
 const mutated = SRC.replace(
   mutationAnchor,
-  '} else if (req.url === "/self") {\n' +
+  '} else if (reqPath === "/self") {\n' +
     '      res.writeHead(200, { "Content-Type": "application/json" });\n' +
     '      res.end(JSON.stringify({ synthetic: true }));\n' +
     '    ' + mutationAnchor
