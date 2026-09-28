@@ -22,6 +22,7 @@ import { EXPECTED_FLEET, FIXNET_NODES, FLEET_RPC_FALLBACKS, FLEET_CROSS_VALIDATI
     } }
 }
 import { readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync, statSync } from "fs";
+import { createHash } from "crypto";
 import { join } from "path";
 import { createServer } from "http";
 import { Database } from "bun:sqlite"; // FIX BUG 3: shared DB handle
@@ -61,7 +62,12 @@ var CHAIN_ADVANCE_PCT_24H = parseFloat(process.env.PHASE_B_CHAIN_ADVANCE_PCT || 
 
 // Coverage gate — hide all numerics below this fraction of expected cycles.
 var COVERAGE_GATE_24H = 0.50;
-var EXPECTED_CYCLES_24H = 4320; // 86400s / 20s probe cadence
+// Public API version. 1.x is additive-only (organism.schema.json x-changelog); 1.1 adds observation-time and
+// catalog fields and corrects field meanings documented there.
+var API_VERSION = "1.1";
+
+// Expected public observation rounds in 24 h, from the configured cadence (4320 at 20 s).
+function expectedCycles24h() { return Math.max(1, Math.round(86400000 / MONITOR_INTERVAL_MS)); }
 
 // Cache for /health and /organism so back-to-back requests share one DB pass.
 var last24hCache = { value: null, computedAt: 0 };
@@ -129,6 +135,8 @@ const DAILY_SUMMARY_CYCLES = 4320;
 
 // HTTP health endpoint
 const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8080");
+// Optional loopback-only listener for fleet routes, fleet incident scopes and sentinel detail (see /history).
+const INTERNAL_PORT = parseInt(process.env.INTERNAL_PORT || "0", 10) || 0;
 
 // Agent profile
 let AGENT_WALLET = "0xbdb3e8189a62dce62229bf3badbf01e5bdb3fbeb22f6f59f4c7c2edafe802a45"; // will be updated after wallet connect
@@ -360,8 +368,8 @@ function buildPublicCommerceObservation() {
 }
 
 if (!MNEMONIC) {
-  logError("DEMOS_MNEMONIC is required. Set it in .env");
-  process.exit(1);
+  // Public observation does not need a wallet. Without one the agent runs as a public observer only.
+  logError("DEMOS_MNEMONIC is not set: public observation and the HTTP API run; wallet, fleet cycle and publishing are off.");
 }
 
 if (!EXPECTED_FLEET || Object.keys(EXPECTED_FLEET).length === 0) {
@@ -420,6 +428,8 @@ for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identit
 // Ruling 2026-09-08: excludes monitored PUBLIC nodes only. Fleet identities are discovered
 // rows like any other crawl-observed peer (rendered per R-A as discovered-<last4>).
 function isExcludedFromDiscovered(identity) { return !!PUBLIC_NODE_IDENTITIES[identity]; }
+var FIXNET_IDENTITIES = {};
+for (var _fx in FIXNET_NODES) { if (FIXNET_NODES[_fx] && FIXNET_NODES[_fx].identity) FIXNET_IDENTITIES[FIXNET_NODES[_fx].identity] = _fx; }
 
 let latestFixnetNodes = []; // updated each cycle
 let latestDiscoveredFixnet = []; // fixnet peers discovered via anchor peerlist crawl
@@ -529,6 +539,8 @@ function evaluatePublicIncidents() {
     var canonical = computeCanonicalState();
     var c = publicIncidentCounters;
     var obsBad = (canonical.status === "unknown" || canonical.data_quality === "insufficient");
+    // Visibility record text names the observed cause (no answer, no height, stale) without the word "reachable".
+    var visibilityText = "Insufficient public visibility: " + String(canonical.status_reason || "").replace(/^Insufficient data: /, "") + ".";
 
     // One-time adoption/backfill guard. Flag is only set once sharedDb exists,
     // so a DB-not-ready first cycle retries instead of silently skipping forever.
@@ -548,7 +560,7 @@ function evaluatePublicIncidents() {
               if (brk.c === 0) minTs = new Date(row.t).toISOString();
             }
           } catch (e) {}
-          var desc = "Insufficient public visibility: fewer than 2 public nodes reachable." + (minTs ? " Continuous since earliest retained public observation; actual start may be earlier." : "");
+          var desc = visibilityText + (minTs ? " Continuous since earliest retained public observation; actual start may be earlier." : "");
           var inc = openIncident("warning", [PUBLIC_VISIBILITY_MARKER], desc, null);
           if (inc && minTs) {
             inc.startedAt = minTs; // in-memory too, so eventual resolve duration is honest
@@ -562,7 +574,7 @@ function evaluatePublicIncidents() {
     // Observability hysteresis
     if (obsBad) { c.obsBad++; c.obsGood = 0; } else { c.obsGood++; c.obsBad = 0; }
     if (!activeIncidents[PUBLIC_VISIBILITY_MARKER] && c.obsBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
-      openIncident("warning", [PUBLIC_VISIBILITY_MARKER], "Insufficient public visibility: fewer than 2 public nodes reachable.", null);
+      openIncident("warning", [PUBLIC_VISIBILITY_MARKER], visibilityText, null);
     }
     if (activeIncidents[PUBLIC_VISIBILITY_MARKER] && c.obsGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
       resolveIncident(PUBLIC_VISIBILITY_MARKER, null);
@@ -615,19 +627,34 @@ function toPublicPeer(identity, peer) {
   return {
     display: resolveNodeDisplay({ identity: identity }),
     identity_truncated: truncId(identity),
-    block: (peer && peer.block) || null,
-    online: (peer && peer.online) || false,
+    block: peer ? sanitizeHeight(peer.block) : null,
+    online: !!(peer && peer.online),
+    ready: peer && typeof peer.ready === "boolean" ? peer.ready : null,
+    sync_status: (peer && peer.syncStatus) || null,
+    listed_by: (peer && peer.listedBy) || 0,
     first_seen: (peer && peer.firstSeen) || null
   };
 }
+// One scope classifier for every surface (/incidents, /organism, last_24h, /timeline): an incident is fleet when
+// its description marks a fleet reference/chain issue, or when every affected node is a fleet name: the
+// configured fleet, a retired alias from FLEET_NODES_24H, or the fleet "CHAIN" key.
+function isFleetName(n) { return FLEET_NODE_NAMES.indexOf(n) !== -1 || FLEET_NODES_24H.has(n) || n === "CHAIN"; }
+function incidentScope(description, affectedNodes) {
+  if (description && (description.indexOf("Fleet reference") === 0 || description === "Chain-level issue detected")) return "fleet";
+  if (Array.isArray(affectedNodes) && affectedNodes.length > 0 && affectedNodes.every(isFleetName)) return "fleet";
+  return "public";
+}
 function getPublicActiveIncidentIds() {
   return Object.values(activeIncidents).filter(function(i) {
-    // Exclude fleet chain incidents from public count
-    if (i.description && (i.description.indexOf("Fleet reference") === 0 || i.description === "Chain-level issue detected")) return false;
-    // Exclude fleet node incidents
-    if (i.affectedNodes && i.affectedNodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); })) return false;
-    return true;
+    return incidentScope(i.description, i.affectedNodes) === "public";
   }).map(function(i) { return i.id; });
+}
+// Active public condition records (visibility / degraded / unstable markers). They are public incidents on
+// /incidents and /timeline but are excluded from active_incidents, which feeds status.
+function countActivePublicConditions() {
+  return Object.values(activeIncidents).filter(function(i) {
+    return isPublicConditionMarker(i) && incidentScope(i.description, i.affectedNodes) === "public";
+  }).length;
 }
 
 function determineSeverity(offlineCount, chainIssues, lagCount) {
@@ -637,6 +664,36 @@ function determineSeverity(offlineCount, chainIssues, lagCount) {
 }
 
 // Load incident counter from DB on startup
+// Seven-day reliability per monitored seed, computed once every few public rounds instead of on every request
+// (parsing a week of history per /health request cost ~80 ms on the HTTP path).
+var validatorUptimeCache = { byName: {}, computedAt: 0 };
+function refreshValidatorUptimeCache(force) {
+  var now = Date.now();
+  if (!sharedDb || (!force && now - validatorUptimeCache.computedAt < 5 * 60000)) return;
+  var histStats = {};
+  try {
+    var cutoff = now - 7 * 86400000;
+    var histRows = sharedDb.query("SELECT node_states FROM public_node_history WHERE ts > ?").all(cutoff);
+    if (histRows.length > 10) {
+      for (var hi = 0; hi < histRows.length; hi++) {
+        var hnodes;
+        try { hnodes = JSON.parse(histRows[hi].node_states); } catch (pe) { continue; }
+        for (var ni = 0; ni < hnodes.length; ni++) {
+          var nd = hnodes[ni];
+          if (!nd || !nd.name) continue;
+          var hst = histStats[nd.name] || (histStats[nd.name] = { total: 0, online: 0, latencySum: 0, latencyCount: 0 });
+          hst.total++;
+          if (nd.ok) {
+            hst.online++;
+            if (nd.latency && nd.latency > 0) { hst.latencySum += nd.latency; hst.latencyCount++; }
+          }
+        }
+      }
+    }
+  } catch (hErr) { log("  [m6] History error: " + hErr.message); }
+  validatorUptimeCache = { byName: histStats, computedAt: now };
+}
+
 function getValidatorGrowth() {
   var result = {
     today: 0, week: 0, month: 0, total: 0,
@@ -645,10 +702,12 @@ function getValidatorGrowth() {
     monitored_online: 0, monitored_at_head: 0,
     discovered: 0, discovered_online: 0,
     network_head: 0,
+    public_peerlists_read: catalogLatest.peerlistsRead,
+    catalog_crawl_completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null,
     validators: []
   };
-  var pubOnline = (latestPublicNodes || []).filter(function(n) { return n.ok && n.block; });
-  if (pubOnline.length > 0) result.network_head = Math.max.apply(null, pubOnline.map(function(n) { return n.block; }));
+  var pubHeights = (latestPublicNodes || []).filter(function(n) { return n.ok; }).map(function(n) { return sanitizeHeight(n.block); }).filter(function(h) { return h !== null; });
+  if (pubHeights.length > 0) result.network_head = Math.max.apply(null, pubHeights);
   if (!sharedDb) return result;
   try {
     var now = Date.now();
@@ -656,43 +715,35 @@ function getValidatorGrowth() {
     var weekAgo = now - 604800000;
     var monthAgo = now - 2592000000; // 30 days
     // v7.4: counts from validator_discoveries EXCLUDING monitored identities (clean discovered count)
-    // Filter in JS — simpler than parameterized NOT IN, and the row count is small
-    var allRows = sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all();
-    var discRows = allRows.filter(function(r) {
-      return !isExcludedFromDiscovered(r.identity);
-    });
+    var allRows = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries ORDER BY first_seen").all();
+    var discRows = allRows.filter(function(r) { return !isExcludedFromDiscovered(r.identity) && isValidIdentity(r.identity); });
     result.total = discRows.length;
     result.today = discRows.filter(function(r){ return r.first_seen > dayAgo }).length;
     result.week = discRows.filter(function(r){ return r.first_seen > weekAgo }).length;
     result.month = discRows.filter(function(r){ return r.first_seen > monthAgo }).length;
     result.discovered = discRows.length;
 
+    var firstSeenById = {};
+    allRows.forEach(function(r) { firstSeenById[r.identity] = r.first_seen; });
     var syncedCount = 0;
     var validators = [];
+    var head = result.network_head;
+    function syncPct(block) { return (block !== null && head > 0) ? Math.round((block / head) * 1000) / 10 : null; }
 
-    // v7.4 Pass 1: Emit ALL monitored nodes (from PUBLIC_NODES), regardless of DB state.
-    // Ensures kyne-node3b etc. always appear even if they never got peer-crawled.
-    var pubIdToName = {};
-    for (var pn in PUBLIC_NODES) { pubIdToName[PUBLIC_NODES[pn].identity] = pn; }
-    var monitoredFirstSeen = {};
-    try {
-      var monRows = sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all();
-      for (var mri = 0; mri < monRows.length; mri++) { monitoredFirstSeen[monRows[mri].identity] = monRows[mri].first_seen; }
-    } catch(ee){}
+    // Pass 1: every monitored seed (from PUBLIC_NODES), regardless of DB state.
     for (var pnName in PUBLIC_NODES) {
       var pnDef = PUBLIC_NODES[pnName];
       var pnLive = (latestPublicNodes || []).find(function(n){ return n.name === pnName; });
-      var block = pnLive && pnLive.block ? pnLive.block : null;
+      var block = pnLive && pnLive.ok ? sanitizeHeight(pnLive.block) : null;
       var online = pnLive ? !!pnLive.ok : false;
-      var lag = (block && result.network_head > 0) ? result.network_head - block : null;
-      var syncPct = (block && result.network_head > 0) ? Math.round((block / result.network_head) * 1000) / 10 : 0;
-      var fs = monitoredFirstSeen[pnDef.identity] || now;
+      var lag = (block !== null && head > 0) ? head - block : null;
+      var fs = firstSeenById[pnDef.identity] || now;
       validators.push({
         display: pnName,
         identity: pnDef.identity,
         block: block,
         lag: lag,
-        sync_pct: syncPct,
+        sync_pct: syncPct(block),          // null when no height was observed (was 0)
         online: online,
         monitored: true,
         first_seen_hours_ago: Math.round((now - fs) / 3600000)
@@ -701,57 +752,38 @@ function getValidatorGrowth() {
       if (online && lag !== null && lag < 100) { syncedCount++; result.monitored_at_head++; }
     }
 
-    // v7.4 Pass 2: Iterate DB for DISCOVERED-only rows (exclude monitored identities)
-    var dbRows = sharedDb.query("SELECT identity, first_seen, connection FROM validator_discoveries ORDER BY first_seen").all();
-    for (var vi = 0; vi < dbRows.length; vi++) {
-      var row = dbRows[vi];
-      var identity = row.identity;
-      if (isExcludedFromDiscovered(identity)) continue; // skip monitored (already pushed in Pass 1)
-      var display = resolveNodeDisplay({ identity: identity });   // DISPLAY_PRIVACY: name/fleet/discovered-xxxx, never host:port
-      var block = null, online = false;
-      if (discoveredPeers[identity]) {
-        block = discoveredPeers[identity].block || null;
-        online = discoveredPeers[identity].online || false;
-      }
-      var lag = (block && result.network_head > 0) ? result.network_head - block : null;
-      var syncPct = (block && result.network_head > 0) ? Math.round((block / result.network_head) * 1000) / 10 : 0;
+    // Pass 2: retained catalog rows. Reported fields come from the latest crawl only; an identity not listed
+    // this round carries no online flag and no height, just first seen and last listed.
+    for (var vi = 0; vi < discRows.length; vi++) {
+      var row = discRows[vi];
+      var pub = catalogPublicRow(row, now);
+      var rb = pub.reported ? pub.reported.height : null;
+      var rlag = (rb !== null && head > 0) ? head - rb : null;
+      var ron = !!(pub.reported && pub.reported.online);
       validators.push({
-        display: display,
-        identity: identity,
-        block: block,
-        lag: lag,
-        sync_pct: syncPct,
-        online: online,
+        display: pub.display,
+        identity: row.identity,
+        block: rb,
+        lag: rlag,
+        sync_pct: syncPct(rb),
+        online: ron,
         monitored: false,
-        first_seen_hours_ago: Math.round((now - row.first_seen) / 3600000)
+        first_seen_hours_ago: Math.round((now - row.first_seen) / 3600000),
+        first_seen: pub.first_seen,
+        last_listed: pub.last_listed,
+        listed_this_cycle: pub.listed_this_cycle,
+        listed_by: pub.listed_by,
+        reported_ready: pub.reported ? pub.reported.ready : null,
+        reported_sync_status: pub.reported ? pub.reported.sync_status : null
       });
-      if (online) { result.online++; result.discovered_online++; }
-      if (online && lag !== null && lag < 100) syncedCount++;
+      if (ron) { result.online++; result.discovered_online++; }
+      if (ron && rlag !== null && rlag < 100) syncedCount++;
     }
-    // M6: Historical reliability from public_node_history
-    var histStats = {};
-    try {
-      var cutoff = now - 7 * 86400000;
-      var histRows = sharedDb.query("SELECT node_states FROM public_node_history WHERE ts > ? ORDER BY ts DESC").all(cutoff);
-      if (histRows.length > 10) {
-        for (var hi = 0; hi < histRows.length; hi++) {
-          var hnodes = JSON.parse(histRows[hi].node_states);
-          for (var ni = 0; ni < hnodes.length; ni++) {
-            var nd = hnodes[ni];
-            if (!histStats[nd.name]) histStats[nd.name] = { total: 0, online: 0, latencySum: 0, latencyCount: 0 };
-            var hst = histStats[nd.name];
-            hst.total++;
-            if (nd.ok) {
-              hst.online++;
-              if (nd.latency && nd.latency > 0) { hst.latencySum += nd.latency; hst.latencyCount++; }
-            }
-          }
-        }
-      }
-    } catch(hErr) { log("  [m6] History error: " + hErr.message); }
+
+    // M6: seven-day reliability for the monitored seeds (history holds public seeds only).
+    refreshValidatorUptimeCache(false);
     for (var vj = 0; vj < validators.length; vj++) {
-      var vName = validators[vj].display;
-      var vhs = histStats[vName];
+      var vhs = validators[vj].monitored ? validatorUptimeCache.byName[validators[vj].display] : null;
       if (vhs && vhs.total > 10) {
         validators[vj].uptime_7d = Math.round((vhs.online / vhs.total) * 1000) / 10;
         validators[vj].avg_latency_7d = vhs.latencyCount > 0 ? Math.round(vhs.latencySum / vhs.latencyCount) : null;
@@ -765,9 +797,41 @@ function getValidatorGrowth() {
     result.validators = validators;
     result.synced = syncedCount;
     return result;
-  } catch(e) { return result; }
+  } catch(e) { log("  [growth] error: " + e.message); return result; }
 }
 
+// Public catalog (GET /catalog): retained identities, sanitized, with what peerlists reported this round.
+function getPublicCatalog() {
+  var out = { scope: "retained_catalog", crawl: { completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null, public_peerlists_read: catalogLatest.peerlistsRead, listed_this_cycle: catalogLatest.listedCount }, notes: [
+    "retained catalog \u2014 identities seen on a public peerlist. Not this-cycle. Not a census.",
+    "Seen on a public peerlist. Not a validator list. Not a stake list. Not an official-node list.",
+    "Reported fields are what the listing peerlists reported this cycle. DNO does not dial catalog identities."
+  ], rows: [] };
+  if (!sharedDb) return out;
+  try {
+    var now = Date.now();
+    var rows = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries").all()
+      .filter(function(r) { return !isExcludedFromDiscovered(r.identity) && isValidIdentity(r.identity); });
+    out.rows = rows.map(function(r) { return catalogPublicRow(r, now); })
+      .sort(function(a, b) { return a.display.localeCompare(b.display) || a.identity_truncated.localeCompare(b.identity_truncated); });
+  } catch (e) { log("  [catalog] read error: " + e.message); }
+  return out;
+}
+
+// Exact-key lookup (GET /catalog/lookup?key=0x...): confirms whether a full key is in the retained catalog or
+// is a configured seed, without publishing any full key. Anyone can already read full keys on a peerlist.
+function lookupCatalogKey(key) {
+  if (!isValidIdentity(key)) return { valid_key: false, in_catalog: false, configured_seed: null, row: null };
+  var k = key.toLowerCase();
+  for (var name in PUBLIC_NODES) {
+    if (String(PUBLIC_NODES[name].identity).toLowerCase() === k) return { valid_key: true, in_catalog: false, configured_seed: name, row: null };
+  }
+  if (!sharedDb) return { valid_key: true, in_catalog: false, configured_seed: null, row: null };
+  try {
+    var row = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries WHERE lower(identity) = ?").get(k);
+    return { valid_key: true, in_catalog: !!row, configured_seed: null, row: row ? catalogPublicRow(row, Date.now()) : null };
+  } catch (e) { return { valid_key: true, in_catalog: false, configured_seed: null, row: null, error: "lookup unavailable" }; }
+}
 
 // === Layer 2: Canonical assessment model ===
 /**
@@ -793,53 +857,59 @@ function getValidatorGrowth() {
  */
 function computeCanonicalState() {
   var publicNodes = latestPublicNodes || [];
-  var stalenessSeconds = lastCycleAt ? Math.round((Date.now() - lastCycleAt) / 1000) : 0;
-  var pubOnline = publicNodes.filter(function(n) { return n.ok; });
+  var nowMs = Date.now();
+  var observedAtMs = lastPublicObservedAt || null;
+  // Whole seconds since the last completed public observation (since agent start before the first one).
+  var stalenessSeconds = Math.max(0, Math.round((nowMs - (observedAtMs || AGENT_STARTED_AT)) / 1000));
   var pubTotal = publicNodes.length;
-  var pubReachable = pubOnline.length;
+  var pubOnline = publicNodes.filter(function(n) { return n.ok; });
+  var pubReachable = pubOnline.length;                                   // seeds that answered /info
+  var heights = pubOnline.map(function(n) { return sanitizeHeight(n.block); })
+    .filter(function(h) { return h !== null; }).sort(function(a, b) { return a - b; });   // seeds that returned a height
 
-  var data_quality = "sufficient";
-  if (pubReachable < 2) data_quality = "insufficient";
-  if (stalenessSeconds > 300) data_quality = "insufficient";
+  // Data quality: at least two seeds returned a height, and the observation is at most 300 s old.
+  var dataQualityReason = null;
+  if (!observedAtMs) dataQualityReason = "no_observation";
+  else if (stalenessSeconds > 300) dataQualityReason = "stale";
+  else if (pubReachable < 2) dataQualityReason = "too_few_answers";
+  else if (heights.length < 2) dataQualityReason = "too_few_heights";
+  var data_quality = dataQualityReason ? "insufficient" : "sufficient";
+  var unknownText = {
+    no_observation: "no public observation has completed yet",
+    stale: "the last public observation is older than 300 s",
+    too_few_answers: "fewer than 2 public nodes answered",
+    too_few_heights: "fewer than 2 public nodes returned a block height"
+  }[dataQualityReason] || "";
 
+  // Agreement compares heights only when data quality is sufficient. In the unknown state total_nodes is
+  // still "seeds that returned a height"; aligned_nodes and block_spread are null because nothing was compared.
   var agreement;
-  if (pubReachable < 2) {
-    agreement = { state: "unknown", aligned_nodes: pubReachable, total_nodes: pubTotal, median_block: null, block_spread: 0 };
+  if (dataQualityReason) {
+    agreement = { state: "unknown", aligned_nodes: null, total_nodes: heights.length, median_block: (heights.length === 1 && dataQualityReason !== "stale") ? heights[0] : null, block_spread: null };
   } else {
-    var blocks = pubOnline.map(function(n) { return n.block; }).filter(Boolean).sort(function(a, b) { return a - b; });
-    if (blocks.length < 2) {
-      agreement = { state: "unknown", aligned_nodes: blocks.length, total_nodes: pubTotal, median_block: blocks[0] || null, block_spread: 0 };
-    } else {
-      var medianBlock = blocks[Math.floor(blocks.length / 2)];
-      var blockSpread = blocks[blocks.length - 1] - blocks[0];
-      var alignedCount = 0;
-      for (var ai = 0; ai < blocks.length; ai++) { if (Math.abs(blocks[ai] - medianBlock) <= 25) alignedCount++; }
-      var agState;
-      if (alignedCount === blocks.length && blockSpread <= 20) agState = "strong";
-      else if (alignedCount >= Math.ceil(blocks.length * 0.6)) agState = "moderate";
-      else agState = "weak";
-      agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: blocks.length, median_block: medianBlock, block_spread: blockSpread, max_block: blocks[blocks.length - 1], min_block: blocks[0] };
-    }
+    var medianBlock = heights[Math.floor(heights.length / 2)];
+    var blockSpread = heights[heights.length - 1] - heights[0];
+    var alignedCount = heights.filter(function(h) { return Math.abs(h - medianBlock) <= 25; }).length;
+    var agState;
+    if (alignedCount === heights.length && blockSpread <= 20) agState = "strong";
+    else if (alignedCount >= Math.ceil(heights.length * 0.6)) agState = "moderate";
+    else agState = "weak";
+    agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: heights.length, median_block: medianBlock, block_spread: blockSpread, max_block: heights[heights.length - 1], min_block: heights[0] };
   }
 
   var confidence = "clear";
   var confidenceReason = "Observed public signals agree";
   if (data_quality === "insufficient") {
     confidence = "uncertain";
-    confidenceReason = "Insufficient reachable public nodes to cross-check";
-  } else if (pubReachable === 1) {
-    confidenceReason = "Single reachable public node — no cross-check performed";
-  } else if (pubReachable >= 2) {
-    var pubBlocks = pubOnline.map(function(n) { return n.block; }).filter(Boolean);
-    if (pubBlocks.length >= 2 && Math.max.apply(null, pubBlocks) - Math.min.apply(null, pubBlocks) > 50) {
-      confidence = "uncertain";
-      confidenceReason = "Reachable public nodes report widely different block heights";
-    }
+    confidenceReason = "No cross-check: " + unknownText;
+  } else if (heights[heights.length - 1] - heights[0] > 50) {
+    confidence = "uncertain";
+    confidenceReason = "Public nodes report block heights more than 50 blocks apart";
   }
 
+  // Public incidents that feed status: public scope, excluding DNO's own condition records (which follow status).
   var publicActiveIncs = Object.values(activeIncidents).filter(function(inc) {
-    if (inc.description && (inc.description.indexOf("Fleet reference") === 0 || inc.description === "Chain-level issue detected")) return false;
-    if (inc.affectedNodes && inc.affectedNodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); })) return false;
+    if (incidentScope(inc.description, inc.affectedNodes) !== "public") return false;
     if (isPublicConditionMarker(inc)) return false;
     return true;
   });
@@ -857,7 +927,7 @@ function computeCanonicalState() {
   var status;
   if (data_quality === "insufficient") status = "unknown";
   else if (max_incident_severity === "critical" || agreement.state === "weak") status = "unstable";
-  else if (pubReachable === 1 || max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
+  else if (max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
   else status = "stable";
 
   // Risk = resilience / safety margin
@@ -868,11 +938,13 @@ function computeCanonicalState() {
   else if (status === "degraded" || max_incident_severity === "warning" || confidence === "uncertain" || agreement.state === "moderate" || (pubTotal > 2 && pubTotal - pubReachable > 1)) risk = "elevated";
   else risk = "low";
 
-  // M4: Trend computation from public node history
+  // M4: Trend — current cycle against the average of up to 15 previous cycles, all inside a bounded window,
+  // so a restart or a gap resets trend to unknown instead of comparing against rows from before the gap.
   var trend = "unknown";
   if (data_quality === "sufficient" && sharedDb) {
     try {
-      var histRows = sharedDb.query("SELECT nodes_reachable, nodes_total, agreement_state, block_spread FROM public_node_history ORDER BY ts DESC LIMIT 15 OFFSET 1").all();
+      var trendSince = nowMs - Math.round(24 * MONITOR_INTERVAL_MS);
+      var histRows = sharedDb.query("SELECT nodes_reachable, nodes_total, agreement_state, block_spread FROM public_node_history WHERE ts > ? ORDER BY ts DESC LIMIT 15 OFFSET 1").all(trendSince);
       if (histRows.length >= 10) {
         // Map agreement to numeric: strong=3, moderate=2, weak=1, unknown=0
         function agNum(s) { return s === "strong" ? 3 : s === "moderate" ? 2 : s === "weak" ? 1 : 0; }
@@ -888,7 +960,7 @@ function computeCanonicalState() {
         var curAg = agNum(agreement.state);
         var curSpread = agreement.block_spread || 0;
         var improving = 0, worsening = 0;
-        // Signal 1: nodes reachable
+        // Signal 1: nodes answering
         if (pubReachable > avgReachable + 0.3) improving++;
         else if (pubReachable < avgReachable - 0.3) worsening++;
         // Signal 2: agreement strength
@@ -904,40 +976,46 @@ function computeCanonicalState() {
     } catch(trendErr) { trend = "unknown"; }
   }
 
-  var summary;
-  if (status === "unknown") summary = "Insufficient data — fewer than 2 public nodes reachable";
-  else if (status === "stable" && publicIncidentCount === 0) {
-    if (pubReachable === pubTotal) summary = "Network operable. All " + pubTotal + " public nodes reachable and aligned.";
-    else if (pubReachable === 2) summary = "Network operable. 2 of " + pubTotal + " public nodes reachable; both aligned.";
-    else summary = "Network operable. " + pubReachable + " of " + pubTotal + " public nodes reachable; all reachable nodes aligned.";
+  // Height movement as observed: seconds since the highest reported height last increased. A static height is
+  // reported as observed; its cause is not known from here, so it does not change status.
+  var heightStaticSeconds = null, heightAdvancedAtIso = null;
+  if (heightTracker.advancedAt && observedAtMs) {
+    heightStaticSeconds = Math.max(0, Math.round((observedAtMs - heightTracker.advancedAt) / 1000));
+    heightAdvancedAtIso = new Date(heightTracker.advancedAt).toISOString();
   }
-  else if (status === "degraded") {
+  var heightsAdvancing = heightStaticSeconds !== null && heightStaticSeconds < CHAIN_STATIC_RUN_MIN_24H * 60;
+  var staticText = heightStaticSeconds === null ? "" : "height unchanged for " + Math.floor(heightStaticSeconds / 60) + " min";
+
+  var summary;
+  if (status === "unknown") summary = "Insufficient data: " + unknownText + ".";
+  else if (status === "stable") {
+    summary = "Network operable. " + (pubReachable === pubTotal ? "All " + pubTotal : pubReachable + " of " + pubTotal) + " public nodes answered; heights aligned.";
+    if (publicIncidentCount > 0) summary += " " + publicIncidentCount + " info-level incident" + (publicIncidentCount === 1 ? "" : "s") + " active.";
+    if (heightStaticSeconds !== null && !heightsAdvancing) summary += " " + staticText.charAt(0).toUpperCase() + staticText.slice(1) + ".";
+  }
+  else {
     var offCount = pubTotal - pubReachable;
-    if (offCount > 0) {
-      summary = "Network partially operable. " + offCount + " of " + pubTotal + " public node" + (offCount === 1 ? "" : "s") + " unreachable; agreement " + agreement.state + ".";
-    } else {
-      summary = "Network partially operable. " + publicIncidentCount + " active incident" + (publicIncidentCount === 1 ? "" : "s") + "; agreement " + agreement.state + ".";
-    }
-  } else if (status === "unstable") {
-    summary = "Network operability impaired. " + publicIncidentCount + " active incident" + (publicIncidentCount === 1 ? "" : "s") + "; agreement " + agreement.state + ".";
-  } else {
-    summary = "Network state unknown. " + pubReachable + " of " + pubTotal + " public nodes reachable.";
+    var parts = [];
+    if (offCount > 0) parts.push(offCount + " of " + pubTotal + " public node" + (offCount === 1 ? "" : "s") + " did not answer");
+    if (publicIncidentCount > 0) parts.push(publicIncidentCount + " active incident" + (publicIncidentCount === 1 ? "" : "s"));
+    parts.push("agreement " + agreement.state);
+    summary = (status === "degraded" ? "Network partially operable. " : "Network operability impaired. ") + parts.join("; ") + ".";
   }
 
   var statusReason = "";
-  if (status === "stable") statusReason = "Blocks advancing; reachable nodes aligned";
-  else if (status === "unstable") statusReason = agreement.state === "weak" ? "Significant disagreement among reachable nodes" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
-  else if (status === "degraded") statusReason = pubReachable === 1 ? "A public node is advancing; broader visibility is limited" : max_incident_severity === "warning" ? "Warning-level incidents active" : "Agreement reduced among reachable nodes";
-  else statusReason = "Insufficient data to assess network state";
+  if (status === "stable") statusReason = heightStaticSeconds === null ? "Public nodes aligned" : heightsAdvancing ? "Heights advancing; public nodes aligned" : "Public nodes aligned; " + staticText;
+  else if (status === "unstable") statusReason = agreement.state === "weak" ? "Significant disagreement among public node heights" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
+  else if (status === "degraded") statusReason = max_incident_severity === "warning" ? "Warning-level incidents active" : "Agreement reduced among public nodes";
+  else statusReason = "Insufficient data: " + unknownText;
   var riskFactors = [];
-  if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("Only " + pubReachable + " of " + pubTotal + " public nodes reachable — limited cross-checking");
+  if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("Only " + pubReachable + " of " + pubTotal + " public nodes answered — limited cross-checking");
   if (max_incident_severity === "warning") riskFactors.push("warning-level incidents active");
   if (max_incident_severity === "critical") riskFactors.push("critical incidents active");
   if (agreement.state === "moderate") riskFactors.push("agreement is moderate, not strong");
-  var agreementReason = "";
-  if (agreement.state === "unknown") agreementReason = "Fewer than 2 reachable nodes";
-  else agreementReason = agreement.aligned_nodes + " of " + agreement.total_nodes + " reachable nodes within ±25 blocks of median (spread: " + agreement.block_spread + " blocks)";
-  return { status: status, trend: trend, risk: risk, data_quality: data_quality, confidence: confidence, confidence_reason: confidenceReason, agreement: agreement, active_incidents: publicIncidentCount, max_incident_severity: max_incident_severity, summary: summary, status_reason: statusReason, risk_factors: riskFactors, agreement_reason: agreementReason, staleness_seconds: stalenessSeconds, last_updated: new Date().toISOString(), api_version: "1.0" };
+  var agreementReason = agreement.state === "unknown"
+    ? "Not compared: " + unknownText
+    : agreement.aligned_nodes + " of " + agreement.total_nodes + " public nodes with a height within ±25 blocks of the median (spread: " + agreement.block_spread + " blocks)";
+  return { status: status, trend: trend, risk: risk, data_quality: data_quality, data_quality_reason: dataQualityReason, confidence: confidence, confidence_reason: confidenceReason, agreement: agreement, active_incidents: publicIncidentCount, active_public_conditions: countActivePublicConditions(), max_incident_severity: max_incident_severity, summary: summary, status_reason: statusReason, risk_factors: riskFactors, agreement_reason: agreementReason, staleness_seconds: stalenessSeconds, observed_at: observedAtMs ? new Date(observedAtMs).toISOString() : null, height_last_advanced_at: heightAdvancedAtIso, height_static_seconds: heightStaticSeconds, last_updated: new Date(observedAtMs || AGENT_STARTED_AT).toISOString(), api_version: API_VERSION };
 }
 
 // ============================================================================
@@ -948,7 +1026,7 @@ function escapeHtmlTL(t) { return String(t).replace(/&/g,"&amp;").replace(/</g,"
 function renderTimelinePage() {
   var events = [];
   try {
-    var rows = sharedDb.query("SELECT id,status,severity,started_at,resolved_at,duration_seconds,description,affected_nodes FROM incidents WHERE started_at >= ? ORDER BY started_at DESC LIMIT 500").all(INCIDENT_RECONCILIATION_START_AT); // LIMIT: pagination can come later if volume grows
+    var rows = sharedDb.query("SELECT id,status,severity,started_at,resolved_at,duration_seconds,description,affected_nodes FROM incidents WHERE started_at >= ? ORDER BY started_at DESC LIMIT 5000").all(INCIDENT_RECONCILIATION_START_AT); // LIMIT: pagination can come later if volume grows
     for (var i = 0; i < rows.length; i++) {
       if (isFleetIncident_24h(rows[i])) continue;
       events.push({ d: rows[i].started_at, kind: "incident", r: rows[i] });
@@ -978,25 +1056,13 @@ function renderTimelinePage() {
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet"><style>:root{--bg:#0a0a0a;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff;--surface:#101010;--brand:#2B36D9;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;margin:0;padding:0 16px 60px}.wrap{max-width:1100px;margin:0 auto}' + CANONICAL_HEADER_CSS + 'h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body>' + renderHeader("timeline", DEMOS_BADGE) + '<div class="wrap"><h1>Network Observation Timeline</h1><div class="sub">Many signals. One observed view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div>' + "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>" + '<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div></body></html>';
 }
 function isFleetIncident_24h(inc) {
-  if (inc.description && (
-      inc.description.indexOf("Fleet reference") === 0 ||
-      inc.description === "Chain-level issue detected"
-  )) return true;
-
   var affected;
   try {
-    affected = typeof inc.affected_nodes === 'string'
-      ? JSON.parse(inc.affected_nodes)
-      : inc.affected_nodes;
+    affected = typeof inc.affected_nodes === 'string' ? JSON.parse(inc.affected_nodes) : inc.affected_nodes;
   } catch (e) {
-    return false;
+    affected = null;
   }
-
-  if (!Array.isArray(affected) || affected.length === 0) return false;
-  for (var i = 0; i < affected.length; i++) {
-    if (!FLEET_NODES_24H.has(affected[i])) return false;
-  }
-  return true;
+  return incidentScope(inc.description, affected) === "fleet";
 }
 
 function computeChainMovement_24h(rows) {
@@ -1020,12 +1086,18 @@ function computeChainMovement_24h(rows) {
 
   var advancing = 0, nonAdvancing = 0, currentStaticRun = 0, maxStaticRun = 0;
 
+  // Each bucket is compared with the end of the previous bucket, so a bucket holding a single row (window
+  // edges, the bucket in progress, the first row after a gap) is not mistaken for a static height.
+  var prevLast = null;
   for (var k = 0; k < bucketKeys.length; k++) {
     var b = buckets[bucketKeys[k]];
     var first = b[0].median_block;
     var last = b[b.length - 1].median_block;
+    var base = prevLast !== null ? prevLast : (b.length >= 2 ? first : null);
+    prevLast = last;
+    if (base === null || last === null) continue;   // nothing to compare against yet
 
-    if (last !== null && first !== null && last > first) {
+    if (last > base) {
       advancing++;
       if (currentStaticRun > maxStaticRun) maxStaticRun = currentStaticRun;
       currentStaticRun = 0;
@@ -1060,25 +1132,28 @@ function computeChainMovement_24h(rows) {
 function computeLongestNonStable_24h(rows) {
   if (!rows || rows.length < 2) return 0;
   var longestMs = 0, runStart = null, runLastTs = null;
+  var gapMs = 3 * MONITOR_INTERVAL_MS;   // no observation for three rounds ends a run: a gap is not "non-stable"
 
   for (var i = 0; i < rows.length; i++) {
     var s = rows[i].status;
     var nonStable = (s === "unstable" || s === "degraded");
+    var gapBefore = runLastTs !== null && rows[i].ts - runLastTs > gapMs;
 
-    if (nonStable) {
+    if (nonStable && !gapBefore) {
       if (runStart === null) runStart = rows[i].ts;
       runLastTs = rows[i].ts;
     } else {
       if (runStart !== null) {
-        var runMs = (runLastTs - runStart) + 20000;
+        var runMs = (runLastTs - runStart) + MONITOR_INTERVAL_MS;
         if (runMs > longestMs) longestMs = runMs;
         runStart = null;
         runLastTs = null;
       }
+      if (nonStable) { runStart = rows[i].ts; runLastTs = rows[i].ts; }   // a run resumes after a gap
     }
   }
   if (runStart !== null) {
-    var openRunMs = (runLastTs - runStart) + 20000;
+    var openRunMs = (runLastTs - runStart) + MONITOR_INTERVAL_MS;
     if (openRunMs > longestMs) longestMs = openRunMs;
   }
   return Math.floor(longestMs / 60000);
@@ -1103,14 +1178,14 @@ function compute24hSummary() {
     ).get(since, since);
 
     var observedCycles = (aggRow && aggRow.observed_cycles) || 0;
-    var coverage = observedCycles / EXPECTED_CYCLES_24H;
+    var coverage = observedCycles / expectedCycles24h();
 
     if (coverage < COVERAGE_GATE_24H) {
       return {
         sufficient: false,
         coverage_pct: Math.round(coverage * 1000) / 10,
         observed_cycles: observedCycles,
-        expected_cycles: EXPECTED_CYCLES_24H,
+        expected_cycles: expectedCycles24h(),
         message: "Insufficient observation in the last 24 hours — building baseline.",
         computed_at: nowIso
       };
@@ -1149,11 +1224,11 @@ function compute24hSummary() {
     var incidentRows = sharedDb.query(
       "SELECT id, severity, status, started_at, resolved_at, affected_nodes, description " +
       "FROM incidents " +
-      "WHERE severity = 'critical' AND started_at <= ? " +
+      "WHERE severity = 'critical' AND started_at >= ? AND started_at <= ? " +
       "  AND (status = 'active' OR resolved_at >= ?)"
-    ).all(nowIso, sinceIso);
+    ).all(INCIDENT_RECONCILIATION_START_AT, nowIso, sinceIso);
 
-    var activeCriticalPublic = 0;
+    var activeCriticalPublic = 0, criticalPublicInWindow = 0;
     var malformedIncidents = 0;
     for (var i = 0; i < incidentRows.length; i++) {
       var inc = incidentRows[i];
@@ -1162,7 +1237,10 @@ function compute24hSummary() {
         if (!Array.isArray(parsed)) { malformedIncidents++; continue; }
       } catch (e) { malformedIncidents++; continue; }
 
-      if (!isFleetIncident_24h(inc)) activeCriticalPublic++;
+      if (!isFleetIncident_24h(inc)) {
+        criticalPublicInWindow++;                                  // active now, or resolved inside the window
+        if (inc.status === "active") activeCriticalPublic++;      // active now
+      }
     }
     if (malformedIncidents > 0) {
       log("[24h] " + malformedIncidents + " incident rows had malformed affected_nodes");
@@ -1172,12 +1250,13 @@ function compute24hSummary() {
       sufficient: true,
       coverage_pct: Math.round(coverage * 1000) / 10,
       observed_cycles: observedCycles,
-      expected_cycles: EXPECTED_CYCLES_24H,
+      expected_cycles: expectedCycles24h(),
       typical_set_size: typical,
       peak_set: peakInfo,
       chain_movement: chainMovement,
       longest_non_stable_minutes: longestNonStableMin,
       active_critical_public_incidents: activeCriticalPublic,
+      critical_public_incidents_in_window: criticalPublicInWindow,
       computed_at: nowIso
     };
   } catch (e) {
@@ -1191,7 +1270,7 @@ function getLast24h() {
   if (last24hCache.value && (now - last24hCache.computedAt) < LAST_24H_TTL_MS) {
     return last24hCache.value;
   }
-  last24hCache.value = compute24hSummary();
+  last24hCache.value = compute24hSummary() || { sufficient: false, message: "Last 24 hours could not be computed.", computed_at: new Date(now).toISOString() };
   last24hCache.computedAt = now;
   return last24hCache.value;
 }
@@ -1231,11 +1310,13 @@ function recordPublicNodeHistory() {
 // (enforced by observation-isolation.test.mjs, L1_OBSERVATION_ISOLATION).
 // Mirrors recordPublicNodeHistory's append+prune idiom. Single INSERT per peer —
 // do NOT replicate the validator_discoveries double-INSERT at 2491-2493.
+var observationHistoryPrunedAt = 0;
 function recordObservationHistory() {
   if (!sharedDb) return;
   try {
     var now = Date.now();
-    var peers = Object.values(discoveredPeers || {});
+    var peers = Object.values(discoveredPeers || {});    // listed in the latest crawl only
+    sharedDb.exec("BEGIN");
     for (var i = 0; i < peers.length; i++) {
       var p = peers[i];
       if (!p || !p.identity) continue;
@@ -1244,9 +1325,16 @@ function recordObservationHistory() {
         [now, p.identity, p.online ? 1 : 0, (p.block != null ? p.block : null)]
       );
     }
-    var cutoff = now - OBSERVATION_HISTORY_RETENTION_DAYS * 86400000;
-    sharedDb.run("DELETE FROM node_observation_history WHERE ts < ?", [cutoff]);
-  } catch (e) { log("  [obs-history] write error: " + e.message); }
+    sharedDb.exec("COMMIT");
+    if (now - observationHistoryPrunedAt > 3600000) {
+      observationHistoryPrunedAt = now;
+      var cutoff = now - OBSERVATION_HISTORY_RETENTION_DAYS * 86400000;
+      sharedDb.run("DELETE FROM node_observation_history WHERE ts < ?", [cutoff]);
+    }
+  } catch (e) {
+    try { sharedDb.exec("ROLLBACK"); } catch (e2) {}
+    log("  [obs-history] write error: " + e.message);
+  }
 }
 
 function generateSignals(data, stalenessSeconds) {
@@ -1332,11 +1420,11 @@ function generateSignals(data, stalenessSeconds) {
     }
   }
 
-  // Crawl-visible this cycle (public /health message; type remains discovered_validators)
+  // Crawl-visible this cycle = listed on the public peerlists read this round (type remains discovered_validators)
   var discovered = Object.values(discoveredPeers || {});
   if (discovered.length > 0) {
     var onlineDiscovered = discovered.filter(function(p) { return p.online; });
-    signals.push({ type: "discovered_validators", severity: "info", nodes: discovered.map(function(p) { return p.identity.substring(0,12)+"..."; }), value: discovered.length, message: discovered.length + " crawl-visible this cycle (" + onlineDiscovered.length + " online)" });
+    signals.push({ type: "discovered_validators", severity: "info", nodes: discovered.map(function(p) { return truncIdentity(p.identity); }), value: discovered.length, message: discovered.length + " crawl-visible this cycle (" + onlineDiscovered.length + " reported online)" });
   }
 
   // All healthy (fleet only — public node signals don't affect this)
@@ -1371,12 +1459,18 @@ let dailyBlockStart = null;
 let dailySummaryCounter = 0;
 
 // FIX BUG 7: Track when last cycle ran
-let lastCycleAt = 0;
+let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
+// Public observation clock: set when a round of Path A probes completes. staleness_seconds, last_updated,
+// observed_at and Last-Modified are measured from here, never from the start of the fleet cycle.
+let lastPublicObservedAt = 0;
+const AGENT_STARTED_AT = Date.now();
+// Highest height any answering seed reported, and when it last increased (for height_static_seconds).
+var heightTracker = { maxHeight: null, advancedAt: null, initialized: false };
 
 // FIX BUG 7: staleness helper — hoisted to module scope (reachable by serializer and bot)
 function getStaleness() {
-  if (!lastCycleAt) return { lastCycleAt: null, stalenessSeconds: null };
-  return { lastCycleAt: lastCycleAt, stalenessSeconds: Math.round((Date.now() - lastCycleAt) / 1000) };
+  if (!lastPublicObservedAt) return { lastCycleAt: null, stalenessSeconds: null };
+  return { lastCycleAt: lastPublicObservedAt, stalenessSeconds: Math.round((Date.now() - lastPublicObservedAt) / 1000) };
 }
 
 function expectedConnStr(name) {
@@ -1724,7 +1818,7 @@ async function publish(demos, post, attestations) {
 
   for (var attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      var result = await demos.store(payload);
+      var result = await withTimeout(demos.store(payload), 20000, "store");
       // FIX BUG 4: Extract and return the actual tx hash
       var txHash = (result && result.hash) ? result.hash : null;
       lastPublishAt = Date.now();
@@ -1758,8 +1852,8 @@ async function publish(demos, post, attestations) {
   for (var fi = 0; fi < fallbackList.length; fi++) {
     try {
       log("  RPC failover: trying " + fallbackList[fi]);
-      await demos.connect(fallbackList[fi]);
-      var fbResult = await demos.store(payload);
+      await withTimeout(demos.connect(fallbackList[fi]), 20000, "RPC connect");
+      var fbResult = await withTimeout(demos.store(payload), 20000, "store");
       var fbHash = (fbResult && fbResult.hash) ? fbResult.hash : null;
       lastPublishAt = Date.now();
       publishTimestamps.push(Date.now());
@@ -1770,7 +1864,7 @@ async function publish(demos, post, attestations) {
       return fbHash || "confirmed";
     } catch (ferr) {
       logError("  RPC failover " + fallbackList[fi] + " failed: " + ferr.message);
-      try { await demos.connect(activeRpcUrl); } catch(re) {}
+      try { await withTimeout(demos.connect(activeRpcUrl), 20000, "RPC connect"); } catch(re) {}
     }
   }
 
@@ -1805,27 +1899,26 @@ async function dahrAttest(demos, url, method) {
       return null;
     }
 
-    var dahr = await demos.web2.createDahr();
-    var result = await dahr.startProxy({ url: url, method: method || "GET" });
+    var dahr = await withTimeout(demos.web2.createDahr(), 20000, "DAHR create");
+    var result = await withTimeout(dahr.startProxy({ url: url, method: method || "GET" }), 30000, "DAHR proxy");
 
-    // The SDK returns: { result: 200, response: { data: { valid, reference_block, transaction }, signature: {...}, rpc_public_key: {...} } }
-    var resp = result.response || {};
-    var respData = resp.data || {};
-    var sig = resp.signature || {};
-    var refBlock = respData.reference_block || null;
-
-    if (dahrAvailable === null) {
-      log("  DAHR: attestation available and working. ref_block=" + refBlock);
+    // SDK 4.x returns the proxied response fields plus txHash: { status, responseHash, responseHeadersHash,
+    // requestHash?, statusText, headers, txHash }. Without a transaction hash nothing was attested.
+    var txHash = result && typeof result.txHash === "string" && result.txHash ? result.txHash : null;
+    if (!txHash) {
+      log("  DAHR: no transaction hash returned; not counted as an attestation.");
+      return null;
+    }
+    if (dahrAvailable !== true) {
+      log("  DAHR: attestation available and working. tx=" + txHash.substring(0, 12) + "...");
       dahrAvailable = true;
     }
 
     return {
       url: url,
-      referenceBlock: refBlock,
-      valid: respData.valid || null,
-      signature: sig.data || null,
-      signatureType: sig.type || null,
-      rpcPublicKey: resp.rpc_public_key ? resp.rpc_public_key.data : null,
+      txHash: txHash,
+      responseHash: typeof result.responseHash === "string" ? result.responseHash : null,
+      status: Number.isInteger(result.status) ? result.status : null,
       timestamp: Date.now(),
     };
   } catch (err) {
@@ -1880,32 +1973,91 @@ async function probePublicRPCs(demos) {
 }
 
 async function probePublicNodes() {
-  var results = [];
-  for (var name in PUBLIC_NODES) {
+  // All seeds are dialed in parallel (5 s timeout each), so one slow seed cannot delay the others.
+  var names = Object.keys(PUBLIC_NODES);
+  var results = await Promise.all(names.map(async function(name) {
     var node = PUBLIC_NODES[name];
+    var base = { name: name, identity: node.identity, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" };
+    var start = Date.now();
     try {
-      var start = Date.now();
       var res = await fetch(node.url + "/info", { signal: AbortSignal.timeout(5000) });
       var latencyMs = Date.now() - start;
-      if (res.ok) {
-        var data = await res.json();
-        var block = null;
-        if (data.peerlist && data.peerlist[0] && data.peerlist[0].sync) {
-          block = data.peerlist[0].sync.block;
-        }
-        var identityMatch = data.identity === node.identity;
-        results.push({ name: name, identity: node.identity, ok: true, latencyMs: latencyMs, block: block, version: data.version || "?", peers: data.peerlist ? data.peerlist.length : 0, identityMatch: identityMatch, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
-        log("  PublicNode " + name + ": OK " + latencyMs + "ms block=" + (block||"?") + " peers=" + (data.peerlist?data.peerlist.length:0));
-      } else {
-        results.push({ name: name, identity: node.identity, ok: false, error: "HTTP " + res.status, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
+      if (!res.ok) {
         log("  PublicNode " + name + ": FAIL HTTP " + res.status);
+        return Object.assign(base, { ok: false, error: probeErrorCategory(null, res.status) });
       }
-    } catch(err) {
-      results.push({ name: name, identity: node.identity, ok: false, error: err.name === "TimeoutError" ? "Timeout" : err.message, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" });
-      log("  PublicNode " + name + ": FAIL " + err.message);
+      var data = await res.json();
+      var peerlist = data && Array.isArray(data.peerlist) ? data.peerlist : [];
+      // A seed's height is its own peerlist entry. The first listed peer is used only when the seed does
+      // not list itself, and height_source says so.
+      var block = null, heightSource = null;
+      var selfEntry = peerlist.find(function(p) { return p && p.identity === node.identity; });
+      if (selfEntry && selfEntry.sync) { block = sanitizeHeight(selfEntry.sync.block); if (block !== null) heightSource = "self"; }
+      if (block === null && peerlist[0] && peerlist[0].sync) { block = sanitizeHeight(peerlist[0].sync.block); if (block !== null) heightSource = "first_peer"; }
+      var identityMatch = !!data && data.identity === node.identity;
+      catalogIngestPeerlist(name, peerlist);
+      log("  PublicNode " + name + ": OK " + latencyMs + "ms block=" + (block === null ? "?" : block) + " (" + (heightSource || "none") + ") peers=" + peerlist.length);
+      return Object.assign(base, { ok: true, latencyMs: latencyMs, block: block, height_source: heightSource, version: sanitizeLabel(data && data.version, 32) || "?", peers: peerlist.length, identityMatch: identityMatch });
+    } catch (err) {
+      log("  PublicNode " + name + ": FAIL " + probeErrorCategory(err));
+      return Object.assign(base, { ok: false, error: probeErrorCategory(err) });
     }
-  }
+  }));
   return results;
+}
+
+// Highest height any answering seed reported this round, and when it last increased. On the first round it
+// is initialized from retained public history, so a restart during a stall does not reset the clock.
+function updateHeightTracker(results, observedAt) {
+  var hs = (results || []).filter(function(r) { return r && r.ok; }).map(function(r) { return sanitizeHeight(r.block); }).filter(function(h) { return h !== null; });
+  if (!hs.length) return;
+  var maxH = Math.max.apply(null, hs);
+  if (!heightTracker.initialized || maxH < heightTracker.maxHeight - 1000) {  // first round, or a chain reset
+    heightTracker.initialized = true;
+    heightTracker.maxHeight = maxH;
+    heightTracker.advancedAt = observedAt;
+    if (sharedDb) {
+      try {
+        var rows = sharedDb.query("SELECT ts, median_block FROM public_node_history WHERE median_block IS NOT NULL ORDER BY ts DESC LIMIT 2000").all();
+        for (var i = 0; i < rows.length; i++) { if (rows[i].median_block < maxH) break; heightTracker.advancedAt = rows[i].ts; }
+      } catch (e) {}
+    }
+    return;
+  }
+  if (maxH > heightTracker.maxHeight) { heightTracker.maxHeight = maxH; heightTracker.advancedAt = observedAt; }
+}
+
+// Public observation round: Path A seeds, catalog crawl, public history and public incidents. Runs on its own
+// loop, before the wallet connects and independent of the fleet/SDK cycle, so neither can delay it.
+async function publicObservationCycle() {
+  catalogBeginCrawl();
+  var publicNodeResults = await probePublicNodes();
+  latestPublicNodes = publicNodeResults;
+  lastPublicObservedAt = Date.now();
+  catalogFinishCrawl(publicNodeResults, lastPublicObservedAt);
+  updateHeightTracker(publicNodeResults, lastPublicObservedAt);
+  recordPublicNodeHistory();
+  recordObservationHistory();
+  evaluatePublicIncidents();
+  refreshValidatorUptimeCache();
+}
+function startPublicObservationLoop() {
+  async function tick() {
+    var started = Date.now();
+    try { await publicObservationCycle(); }
+    catch (err) { logError("[public] observation round failed: " + (err && err.message ? err.message : String(err))); }
+    setTimeout(tick, Math.max(1000, MONITOR_INTERVAL_MS - (Date.now() - started)));
+  }
+  tick();
+}
+
+// Rejects when an SDK call does not settle in time; the underlying call is left to finish on its own.
+function withTimeout(promise, ms, label) {
+  var timer;
+  return Promise.race([
+    promise,
+    new Promise(function(_, reject) { timer = setTimeout(function() { reject(new Error((label || "call") + " timed out after " + ms + " ms")); }, ms); })
+  ]).finally(function() { clearTimeout(timer); });
 }
 
 async function probeFixnetNodes() {
@@ -1987,8 +2139,8 @@ function discoverFixnetValidators(anchorInfoData) {
     var identity = peer && peer.identity;
     if (!isValidIdentity(identity)) continue;
 
-    // Skip known identities (monitored fixnet, monitored testnet, or known fleet)
-    if (isExcludedFromDiscovered(identity)) continue;
+    // Skip known identities (monitored testnet seeds and the configured fixnet/fleet nodes)
+    if (isExcludedFromDiscovered(identity) || FIXNET_IDENTITIES[identity]) continue;
 
     var connection = peer.connection && peer.connection.string ? peer.connection.string : null;
     var block = sanitizeHeight(peer.sync && peer.sync.block);
@@ -2261,44 +2413,108 @@ function detectAnomalies(data) {
 }
 
 // --- Validator discovery (crawl peer lists for unknown nodes) ---
-let discoveredPeers = {}; // { identity: { firstSeen, lastSeen, connection, ... } }
+let discoveredPeers = {}; // identities listed in the latest public crawl: { identity: { firstSeen, lastSeen, connection, online, ready, syncStatus, block, listedBy } }
 let nodeVersions = {}; // { "n3": { version: "0.9.8", versionName: "Oxlong Michael" }, ... }
 
-function discoverValidators(infoData) {
-  if (!infoData || !infoData.peerlist) return [];
-  var newPeers = [];
+// --- Public catalog crawl ------------------------------------------------------------------------------
+// Source: the peerlists of the Path A seeds only, read once per public observation round (no extra requests).
+// discoveredPeers holds the identities listed in the latest completed crawl, nothing older: its online, ready,
+// sync status and height are what those peerlists reported this round. validator_discoveries keeps every
+// identity ever listed (first_seen, last_seen = last listed). DNO never dials catalog identities.
+const CATALOG_MAX_ROWS = 5000;            // retained identities
+const CATALOG_MAX_NEW_PER_CRAWL = 200;    // a flood of fabricated identities cannot grow the catalog quickly
+var catalogCrawl = null;                  // crawl in progress
+var catalogLatest = { completedAt: null, peerlistsRead: 0, listedCount: 0 };
 
-  for (var i = 0; i < infoData.peerlist.length; i++) {
-    var peer = infoData.peerlist[i];
-    var identity = peer.identity;
-    if (!identity) continue;
+function catalogBeginCrawl() {
+  catalogCrawl = { peerlistsRead: 0, listed: {} };
+}
 
-    // Check if this is a known fleet or public node
-    if (isExcludedFromDiscovered(identity)) continue;
+function catalogIngestPeerlist(sourceName, peerlist) {
+  if (!catalogCrawl || !Array.isArray(peerlist)) return;
+  catalogCrawl.peerlistsRead++;
+  for (var i = 0; i < peerlist.length; i++) {
+    var peer = peerlist[i];
+    var identity = peer && peer.identity;
+    if (!isValidIdentity(identity) || isExcludedFromDiscovered(identity)) continue;
+    var rep = {
+      online: !!(peer.status && peer.status.online === true),
+      ready: peer.status && typeof peer.status.ready === "boolean" ? peer.status.ready : null,
+      syncStatus: sanitizeLabel(peer.sync && peer.sync.status, 24),
+      block: sanitizeHeight(peer.sync && peer.sync.block),
+      connection: peer.connection && typeof peer.connection.string === "string" ? peer.connection.string.slice(0, 200) : null
+    };
+    var cur = catalogCrawl.listed[identity];
+    if (!cur) { catalogCrawl.listed[identity] = { sources: [sourceName], rep: rep }; continue; }
+    if (cur.sources.indexOf(sourceName) === -1) cur.sources.push(sourceName);
+    // Several peerlists can describe the same identity: keep the report with the highest height.
+    if (rep.block !== null && (cur.rep.block === null || rep.block > cur.rep.block)) cur.rep = rep;
+    else if (rep.online && !cur.rep.online) cur.rep.online = true;
+  }
+}
 
-    // Unknown peer — track it
-    if (!discoveredPeers[identity]) {
-      discoveredPeers[identity] = {
-        identity: identity,
-        firstSeen: Date.now(),
-        lastSeen: Date.now(),
-        connection: peer.connection ? peer.connection.string : "unknown",
-        online: peer.status ? peer.status.online : false,
-        block: peer.sync ? peer.sync.block : null,
-      };
-      newPeers.push(identity.substring(0, 16) + "...");
-      log("  Discovery: new peer " + identity.substring(0, 16) + "... via " + (peer.connection ? peer.connection.string : "?"));
-      // Persist to DB
-      if (sharedDb) { try { sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection) VALUES (?, ?, ?, ?)", [identity, Date.now(), Date.now(), peer.connection ? peer.connection.string : "unknown"]); } catch(e) {} }
-    } else {
-      discoveredPeers[identity].lastSeen = Date.now();
-      discoveredPeers[identity].online = peer.status ? peer.status.online : false;
-      discoveredPeers[identity].block = peer.sync ? peer.sync.block : null;
-      if (sharedDb) { try { sharedDb.run("UPDATE validator_discoveries SET last_seen=?, online=? WHERE identity=?", [Date.now(), peer.status ? (peer.status.online ? 1 : 0) : 0, identity]); } catch(e) {} }
+function catalogFinishCrawl(results, observedAt) {
+  var crawl = catalogCrawl;
+  catalogCrawl = null;
+  if (!crawl) return;
+  var ids = Object.keys(crawl.listed);
+  var known = {};
+  if (sharedDb) {
+    try { sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all().forEach(function(r) { known[r.identity] = r.first_seen; }); } catch (e) {}
+  }
+  var retained = Object.keys(known).length, added = 0, skipped = 0;
+  var next = {};
+  if (sharedDb) {
+    try {
+      sharedDb.exec("BEGIN");
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i], entry = crawl.listed[id], r = entry.rep;
+        if (known[id] === undefined) {
+          if (added >= CATALOG_MAX_NEW_PER_CRAWL || retained + added >= CATALOG_MAX_ROWS) { skipped++; continue; }
+          sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection, online) VALUES (?, ?, ?, ?, ?)", [id, observedAt, observedAt, r.connection || "unknown", r.online ? 1 : 0]);
+          known[id] = observedAt; added++;
+        }
+        sharedDb.run("UPDATE validator_discoveries SET last_seen = ?, online = ?, last_block = ?, last_ready = ?, last_sync_status = ?, last_listed_by = ?, connection = COALESCE(?, connection) WHERE identity = ?",
+          [observedAt, r.online ? 1 : 0, r.block, r.ready === null ? null : (r.ready ? 1 : 0), r.syncStatus, entry.sources.length, r.connection, id]);
+      }
+      sharedDb.exec("COMMIT");
+    } catch (e) {
+      try { sharedDb.exec("ROLLBACK"); } catch (e2) {}
+      logError("  [catalog] write failed: " + e.message);
     }
   }
+  for (var j = 0; j < ids.length; j++) {
+    var cid = ids[j];
+    if (known[cid] === undefined) continue;   // over the cap: not retained, not published
+    var e = crawl.listed[cid];
+    next[cid] = { identity: cid, firstSeen: known[cid], lastSeen: observedAt, connection: e.rep.connection, online: e.rep.online, ready: e.rep.ready, syncStatus: e.rep.syncStatus, block: e.rep.block, listedBy: e.sources.length };
+  }
+  discoveredPeers = next;
+  catalogLatest = { completedAt: observedAt, peerlistsRead: crawl.peerlistsRead, listedCount: Object.keys(next).length };
+  if (added > 0) log("  [catalog] +" + added + " new identit" + (added === 1 ? "y" : "ies") + " from public peerlists");
+  if (skipped > 0) logError("  [catalog] " + skipped + " new identities not retained (per-crawl or total cap reached)");
+}
 
-  return newPeers;
+// Public catalog row (no connection string, no full identity). Reported fields only when listed this round.
+function catalogPublicRow(dbRow, nowMs) {
+  var live = discoveredPeers[dbRow.identity] || null;
+  var networkHead = heightTracker.maxHeight;
+  var block = live ? live.block : null;
+  return {
+    display: resolveNodeDisplay({ identity: dbRow.identity }),
+    identity_truncated: truncIdentity(dbRow.identity),
+    first_seen: dbRow.first_seen ? new Date(dbRow.first_seen).toISOString() : null,
+    last_listed: dbRow.last_seen ? new Date(dbRow.last_seen).toISOString() : null,
+    listed_this_cycle: !!live,
+    listed_by: live ? live.listedBy : 0,
+    reported: live ? {
+      online: live.online,
+      ready: live.ready,
+      sync_status: live.syncStatus,
+      height: block,
+      height_vs_highest_seed: (block !== null && networkHead !== null) ? block - networkHead : null
+    } : null
+  };
 }
 
 // --- HTTP Health Endpoint ---
@@ -2528,6 +2744,25 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 // ---- end public metrics contract ----
 
 
+  // Observation-based validators: a new public round or fleet cycle changes the ETag. A client that sends the
+  // previous ETag gets 304 until DNO has observed something new (staleness can then be computed locally from
+  // observed_at). Last-Modified is the observation time.
+  function observationValidators(route) {
+    var tag = 'W/"' + route + "-" + (lastPublicObservedAt || 0) + "-" + cycleCount + '"';
+    return { etag: tag, lastModified: lastPublicObservedAt ? new Date(lastPublicObservedAt).toUTCString() : null };
+  }
+  function notModified(req, res, v, headers) {
+    var inm = req.headers["if-none-match"];
+    if (inm && inm.split(/\s*,\s*/).indexOf(v.etag) !== -1) {
+      var h = { "ETag": v.etag, "Cache-Control": headers["Cache-Control"] || "public, max-age=5", "Access-Control-Allow-Origin": "*" };
+      if (v.lastModified) h["Last-Modified"] = v.lastModified;
+      res.writeHead(304, h); res.end(); return true;
+    }
+    return false;
+  }
+  // Fleet-only routes. With INTERNAL_PORT set they are served on the loopback internal listener only.
+  var FLEET_ROUTES = ["/history", "/history/export"];
+
   function handleRequest(req, res, internal) {
     // CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -2543,8 +2778,12 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     catch (urlErr) { res.writeHead(400); res.end(JSON.stringify({ error: "Bad request." })); return; }
     var reqPath = reqUrl.pathname;
     var reqQuery = reqUrl.searchParams;
+    if (!internal && INTERNAL_PORT && FLEET_ROUTES.indexOf(reqPath) !== -1) {
+      res.writeHead(404); res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." })); return;
+    }
 
     if (reqPath === "/health") {
+      if (notModified(req, res, observationValidators("health"), {})) return;
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
       var healthSignals = generateSignals(latestHealthData, staleness.stalenessSeconds);
@@ -2566,6 +2805,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         risk_factors: canonical.risk_factors,
         confidence_reason: canonical.confidence_reason,
         agreement_reason: canonical.agreement_reason,
+        data_quality_reason: canonical.data_quality_reason,
+        observed_at: canonical.observed_at,
+        height_last_advanced_at: canonical.height_last_advanced_at,
+        height_static_seconds: canonical.height_static_seconds,
+        active_public_conditions: canonical.active_public_conditions,
         // === Derived ===
         publicNodes: (latestPublicNodes || []).map(function(n) {
           var o = {};
@@ -2593,10 +2837,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
         on_chain_publication: SUPERCOLONY_ENABLED ? "unavailable" : "disabled",
-        legacy: {},
       };
       var healthHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" };
-      if (staleness.lastCycleAt) healthHdrs["Last-Modified"] = new Date(staleness.lastCycleAt).toUTCString();
+      var healthV = observationValidators("health");
+      healthHdrs["ETag"] = healthV.etag;
+      if (healthV.lastModified) healthHdrs["Last-Modified"] = healthV.lastModified;
       res.writeHead(200, healthHdrs);
       res.end(JSON.stringify(payload, null, 2));
     } else if (reqPath === "/peers") {
@@ -2606,7 +2851,30 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, peerHdrs);
       var publicDiscovered = {};
       for (var _pid in discoveredPeers) { publicDiscovered[truncId(_pid)] = toPublicPeer(_pid, discoveredPeers[_pid]); }
-      res.end(JSON.stringify({ scope: "public_sanitized", discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
+      res.end(JSON.stringify({ scope: "public_sanitized", listed: "latest public crawl", crawl: { completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null, public_peerlists_read: catalogLatest.peerlistsRead }, discovered: publicDiscovered, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds, privacy: { connection_exposed: false, full_identity_exposed: false } }, null, 2));
+    } else if (reqPath === "/catalog") {
+      // Retained catalog, sanitized. Optional ?q= filters by the end of the display name or by the published
+      // characters of a truncated key (0xabcd…1234). Full keys are never returned.
+      var cat = getPublicCatalog();
+      var q = (reqQuery.get("q") || "").trim().toLowerCase().replace(/^discovered-/, "");
+      if (q) {
+        if (q.length > 80 || !/^[0-9a-fx.\u2026]+$/.test(q)) { res.writeHead(400); res.end(JSON.stringify({ error: "q accepts hex characters, 0x, or a truncated key" })); return; }
+        var tm = q.match(/^(0x[0-9a-f]*)(?:\u2026|\.{2,3})([0-9a-f]*)$/);
+        cat.rows = cat.rows.filter(function(r) {
+          var pre = r.identity_truncated.slice(0, 6).toLowerCase(), suf = r.identity_truncated.slice(-4).toLowerCase();
+          if (tm) return (tm[1].length <= 2 || pre.indexOf(tm[1]) === 0 || tm[1].indexOf(pre) === 0) && (!tm[2] || suf.slice(-tm[2].length) === tm[2].slice(-4));
+          if (q.indexOf("0x") === 0) return q.length <= 2 || pre.indexOf(q) === 0 || q.indexOf(pre) === 0;
+          return suf.indexOf(q) !== -1;
+        });
+        cat.query = q;
+      }
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(cat, null, 2));
+    } else if (reqPath === "/catalog/lookup") {
+      // Exact check of a full key against retained identities; answers yes/no and the sanitized row only.
+      var lkKey = (reqQuery.get("key") || "").trim();
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(lookupCatalogKey(lkKey), null, 2));
     } else if (reqPath === "/history") {
       // Return last 24h of data points
       var last24h = history.slice(-72);
@@ -2614,38 +2882,55 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200);
       res.end(JSON.stringify({ points: last24h.length, data: last24h, lastCycleAt: staleness.lastCycleAt, stalenessSeconds: staleness.stalenessSeconds }, null, 2));
     } else if (reqPath === "/incidents" || reqPath.indexOf("/incidents/") === 0) {
-      var incParams = reqQuery;
-      var incStatus = incParams.get("status") || null;
-      var incScope = incParams.get("scope") || "public";
-      var incLimit = parseInt(incParams.get("limit") || "50", 10);
+      // Parameters are validated; scope and status are applied before the limit. The public listener serves
+      // scope=public only (fleet incidents name fleet nodes); fleet and all are available on the internal listener.
+      var incStatus = reqQuery.get("status");
+      var incScope = reqQuery.get("scope") || "public";
+      var incLimitRaw = reqQuery.get("limit");
+      var incLimit = incLimitRaw === null ? 50 : Number(incLimitRaw);
+      var incBad = null;
+      if (incStatus !== null && incStatus !== "active" && incStatus !== "resolved") incBad = "status must be active or resolved";
+      else if (["public", "fleet", "all"].indexOf(incScope) === -1) incBad = "scope must be public";
+      else if (incScope !== "public" && !internal) incBad = "only scope=public is served on the public API";
+      else if (!Number.isInteger(incLimit) || incLimit < 1 || incLimit > 500) incBad = "limit must be an integer from 1 to 500";
+      if (incBad) { res.writeHead(400); res.end(JSON.stringify({ error: incBad })); return; }
       try {
-        var incQuery = "SELECT * FROM incidents";
+        var incQuery = "SELECT * FROM incidents WHERE 1 = 1";
         var incArgs = [];
-        if (incStatus) { incQuery += " WHERE status = ?"; incArgs.push(incStatus); }
-        incQuery += " ORDER BY rowid DESC LIMIT ?";
-        incArgs.push(incLimit);
+        if (incStatus) { incQuery += " AND status = ?"; incArgs.push(incStatus); }
+        // Public scope follows the 2026-04-23 reconciliation boundary, like /timeline and last_24h.
+        if (incScope === "public") { incQuery += " AND started_at >= ?"; incArgs.push(INCIDENT_RECONCILIATION_START_AT); }
+        incQuery += " ORDER BY rowid DESC LIMIT 5000";
         var incRows = sharedDb.prepare(incQuery).all(...incArgs);
-        var incResults = incRows.map(function(r) {
-          var nodes = JSON.parse(r.affected_nodes || "[]");
-          var isFleet = (r.description && (r.description.indexOf("Fleet reference") === 0 || r.description === "Chain-level issue detected")) || (nodes.length > 0 && nodes.every(function(n) { return FLEET_NODE_NAMES.includes(n); }));
-          return {
-            id: r.id, status: r.status, severity: r.severity, scope: isFleet ? "fleet" : "public",
+        var incResults = [];
+        for (var ii = 0; ii < incRows.length; ii++) {
+          var r = incRows[ii];
+          var nodes;
+          try { nodes = JSON.parse(r.affected_nodes || "[]"); } catch (pe) { nodes = []; }
+          var rowScope = incidentScope(r.description, nodes);
+          if (incScope !== "all" && rowScope !== incScope) continue;
+          var alerts;
+          try { alerts = JSON.parse(r.alerts || "[]"); } catch (ae) { alerts = []; }
+          incResults.push({
+            id: r.id, status: r.status, severity: r.severity, scope: rowScope,
+            kind: isPublicConditionMarker({ affectedNodes: nodes }) ? "condition" : "incident",
             startedAt: r.started_at, resolvedAt: r.resolved_at,
             durationSeconds: r.duration_seconds,
             affectedNodes: nodes,
             description: r.description,
             detectedBlock: r.detected_block, resolvedBlock: r.resolved_block,
-            alerts: JSON.parse(r.alerts || "[]")
-          };
-        });
-        if (incScope === "public") incResults = incResults.filter(function(i) { return i.scope === "public"; });
-        else if (incScope === "fleet") incResults = incResults.filter(function(i) { return i.scope === "fleet"; });
+            alerts: alerts
+          });
+        }
+        var matched = incResults.length;
+        incResults = incResults.slice(0, incLimit);
         var activeCount = incScope === "public" ? getPublicActiveIncidentIds().length : incScope === "fleet" ? Object.keys(activeIncidents).length - getPublicActiveIncidentIds().length : Object.keys(activeIncidents).length;
         res.writeHead(200);
-        res.end(JSON.stringify({ scope: incScope, total: incResults.length, active: activeCount, incidents: incResults }, null, 2));
+        res.end(JSON.stringify({ scope: incScope, total: matched, returned: incResults.length, active: activeCount, active_public_conditions: countActivePublicConditions(), incidents: incResults }, null, 2));
       } catch(incErr) {
-        res.writeHead(200);
-        res.end(JSON.stringify({ scope: incScope || "public", total: 0, active: 0, incidents: [], error: incErr.message }, null, 2));
+        logError("[incidents] query failed: " + incErr.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ scope: incScope, total: 0, active: 0, incidents: [], error: "incidents unavailable" }, null, 2));
       }
     } else if (reqPath === "/federate" || reqPath === "/metrics") {
       var publicMetricsText = buildPublicMetrics(latestPublicRpcObservations, Date.now(), STALE_BOUND);
@@ -2659,6 +2944,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(ORGANISM_SCHEMA);
     } else if (reqPath === "/organism") {
       // M5: Cache header for agent consumption
+      if (notModified(req, res, observationValidators("organism"), {})) return;
       var canonical = computeCanonicalState();
       var organism = {
         status: canonical.status,
@@ -2677,9 +2963,19 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         staleness_seconds: canonical.staleness_seconds,
         last_updated: canonical.last_updated,
         api_version: canonical.api_version,
-        last_24h: getLast24h()
+        last_24h: getLast24h(),
+        // additive in 1.1
+        data_quality_reason: canonical.data_quality_reason,
+        observed_at: canonical.observed_at,
+        height_last_advanced_at: canonical.height_last_advanced_at,
+        height_static_seconds: canonical.height_static_seconds,
+        active_public_conditions: canonical.active_public_conditions,
+        agreement_detail: { aligned_nodes: canonical.agreement.aligned_nodes, total_nodes: canonical.agreement.total_nodes, median_block: canonical.agreement.median_block, block_spread: canonical.agreement.block_spread }
       };
-      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" });
+      var orgV = observationValidators("organism");
+      var orgHdrs = { "Content-Type": "application/json", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "ETag": orgV.etag };
+      if (orgV.lastModified) orgHdrs["Last-Modified"] = orgV.lastModified;
+      res.writeHead(200, orgHdrs);
       res.end(JSON.stringify(organism, null, 2));
     } else if (reqPath === "/version") {
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -2968,21 +3264,15 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
     } else if (reqPath === "/sentinel") {
-      var sentinelData = { status: "ok", lastCheck: null, recentAlerts: [], dedupFile: "/tmp/sentinel-dedup.json" };
+      // Counts only on the public listener: alert keys name fleet nodes. Unknown when the sentinel file is unreadable.
+      var sentinelData = { status: "unknown", last_check: null, alerts_24h: null };
       try {
-        if (existsSync("/tmp/sentinel-dedup.json")) {
-          var dedup = JSON.parse(readFileSync("/tmp/sentinel-dedup.json", "utf8"));
-          var now = Date.now();
-          var recent = Object.entries(dedup)
-            .filter(function(e) { return now - e[1] < 24 * 60 * 60 * 1000; })
-            .sort(function(a, b) { return b[1] - a[1]; })
-            .slice(0, 10)
-            .map(function(e) { return { key: e[0], ts: e[1], ago: Math.round((now - e[1]) / 60000) + "min ago" }; });
-          sentinelData.recentAlerts = recent;
-          sentinelData.lastCheck = dedup._lastCheck || null;
-          sentinelData.alertCount24h = recent.length;
-        }
-      } catch(e) { sentinelData.error = e.message; }
+        var dedup = JSON.parse(readFileSync("/tmp/sentinel-dedup.json", "utf8"));
+        var sNow = Date.now();
+        var recentKeys = Object.keys(dedup).filter(function(k) { return k.charAt(0) !== "_" && typeof dedup[k] === "number" && sNow - dedup[k] < 86400000; });
+        sentinelData = { status: "ok", last_check: typeof dedup._lastCheck === "number" ? new Date(dedup._lastCheck).toISOString() : null, alerts_24h: recentKeys.length };
+        if (internal) sentinelData.recent_alert_keys = recentKeys;
+      } catch (se) { /* file missing or unreadable: status stays unknown */ }
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(sentinelData, null, 2));
     } else if (reqPath === "/dashboard") {
@@ -3450,6 +3740,13 @@ refresh();setInterval(refresh,20000);
     };
   }
   var server = createServer(safeHandle(false));
+  if (INTERNAL_PORT) {
+    var internalServer = createServer(safeHandle(true));
+    internalServer.listen(INTERNAL_PORT, "127.0.0.1", function() { log("  Internal API (fleet routes) listening on 127.0.0.1:" + INTERNAL_PORT); });
+    internalServer.on("error", function(err) { logError("Internal server error: " + err.message); });
+  } else {
+    log("  Fleet routes (/history, /history/export) are served on the public port; set INTERNAL_PORT to move them to a loopback listener.");
+  }
 
   server.listen(HEALTH_PORT, "127.0.0.1", function() {
     log("  Health API listening on port " + HEALTH_PORT);
@@ -3493,7 +3790,7 @@ let sharedDb = null;
 
 async function checkBalance(demos) {
   try {
-    var info = await demos.getAddressInfo(AGENT_WALLET);
+    var info = await withTimeout(demos.getAddressInfo(AGENT_WALLET), 10000, "getAddressInfo");
     if (!info || info.response === "Method not implemented: getAddressInfo") {
       log("  Balance check: getAddressInfo not implemented on this node version — skipping");
       return;
@@ -3758,6 +4055,11 @@ async function main() {
     block       INTEGER
   )`);
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_obs_history_id_ts ON node_observation_history (identity, ts)`);
+  sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_obs_history_ts ON node_observation_history (ts)`);
+  // v4 catalog columns: what the listing peerlists reported the last time the identity was listed.
+  ["last_block INTEGER", "last_ready INTEGER", "last_sync_status TEXT", "last_listed_by INTEGER"].forEach(function(col) {
+    try { sharedDb.run("ALTER TABLE validator_discoveries ADD COLUMN " + col); } catch (e) { /* column exists */ }
+  });
   log("  Observation tables ready");
 
   // v6.4: Load incident counter from DB
@@ -3767,9 +4069,23 @@ async function main() {
   // Start health API server
   startHealthServer();
 
+  // Public observation starts now, before and independent of the wallet.
+  startPublicObservationLoop();
+  if (!MNEMONIC) { log("  Wallet: not configured. Running as a public observer only."); return; }
+
   var demos = new Demos();
-  await demos.connect(RPC_URL);
-  await demos.connectWallet(MNEMONIC);
+  // The wallet is needed for balance checks, DAHR and publishing only. A failed or stalled connection is
+  // retried every 60 s; it never stops the process or the public observation loop.
+  for (var walletAttempt = 1; ; walletAttempt++) {
+    try {
+      await withTimeout(demos.connect(RPC_URL), 20000, "RPC connect");
+      await withTimeout(demos.connectWallet(MNEMONIC), 20000, "wallet connect");
+      break;
+    } catch (walletErr) {
+      logError("[wallet] connect attempt " + walletAttempt + " failed: " + walletErr.message + ". Public observation continues; retrying in 60 s.");
+      await sleep(60000);
+    }
+  }
   AGENT_WALLET = demos.getAddress();
   log("  Agent wallet: " + AGENT_WALLET);
   log("Wallet connected. Agent is live.\n");
@@ -3820,7 +4136,7 @@ async function main() {
       // Reconnect to primary RPC if on fallback
       if (activeRpcUrl !== RPC_URL) {
         try {
-          await demos.connect(RPC_URL);
+          await withTimeout(demos.connect(RPC_URL), 20000, "RPC connect");
           activeRpcUrl = RPC_URL;
           log("  Reconnected to primary RPC: " + RPC_URL);
         } catch(rpcErr) {
@@ -3877,8 +4193,6 @@ async function main() {
           };
         })
       };
-      var publicNodeResults = await probePublicNodes();
-      latestPublicNodes = publicNodeResults;
       // --- Probe fleet fixnet (additive, independent of testnet polling) ---
       try {
         latestFixnetNodes = await probeFixnetNodes();
@@ -3895,10 +4209,7 @@ async function main() {
       }
 
 
-      // M3: Record public node observation snapshot
-      recordPublicNodeHistory();
-      recordObservationHistory();
-      evaluatePublicIncidents();
+      // M3: public history, observation history and public incidents are written by the public loop.
 
       // --- Check explorer (every cycle, lightweight) ---
       var explorerResult = await checkExplorer();
@@ -3968,30 +4279,7 @@ async function main() {
         }
       } catch(e) { log("  Signal alert error: " + e.message); }
 
-      // --- Validator discovery ---
-      if (!data.skip && data.nodeReports) {
-        // Crawl n3's own peerlist
-        var localInfo = null;
-        try {
-          var lr = await fetch(LOCAL_INFO_URL, { signal: AbortSignal.timeout(5000) });
-          localInfo = await lr.json();
-          var newFromLocal = discoverValidators(localInfo);
-          if (newFromLocal.length > 0) log("  Discovery: " + newFromLocal.length + " new peer(s) from local node");
-        } catch(e) { log("  Discovery: local info fetch failed: " + e.message); }
-
-        // Crawl public node peerlists for additional validators
-        for (var pnName in PUBLIC_NODES) {
-          try {
-            var pnr = await fetch(PUBLIC_NODES[pnName].url + "/info", { signal: AbortSignal.timeout(5000) });
-            var pnInfo = await pnr.json();
-            var newFromPn = discoverValidators(pnInfo);
-            if (newFromPn.length > 0) log("  Discovery: " + newFromPn.length + " new peer(s) from " + pnName);
-          } catch(e) {}
-        }
-
-        var totalDiscovered = Object.keys(discoveredPeers).length;
-        if (totalDiscovered > 0) log("  Discovery: " + totalDiscovered + " total non-fleet validators tracked");
-      }
+      // --- Validator discovery: the public catalog is crawled in the public observation loop (Path A only) ---
 
       // --- Anomaly detection ---
       if (!data.skip) {
@@ -4275,8 +4563,17 @@ async function main() {
     }
   }
 
-  await cycle();
-  setInterval(cycle, MONITOR_INTERVAL_MS);
+  // One fleet cycle at a time. The next starts MONITOR_INTERVAL_MS after the previous one began, or as soon as
+  // it ends if it overran. A cycle still running after FLEET_CYCLE_MAX_MS is logged and no longer waited for.
+  var FLEET_CYCLE_MAX_MS = Math.max(120000, 6 * MONITOR_INTERVAL_MS);
+  async function fleetLoop() {
+    var started = Date.now(), finished = false;
+    var run = cycle().then(function() { finished = true; }, function() { finished = true; });
+    await Promise.race([run, sleep(FLEET_CYCLE_MAX_MS)]);
+    if (!finished) logError("[fleet] cycle still running after " + Math.round(FLEET_CYCLE_MAX_MS / 1000) + " s; starting the next one");
+    setTimeout(fleetLoop, Math.max(1000, MONITOR_INTERVAL_MS - (Date.now() - started)));
+  }
+  await fleetLoop();
   log("\nMonitoring every " + (MONITOR_INTERVAL_MS / 1000 / 60) + " min, publishing every " + (INTERVAL_MS / 1000 / 60) + " min. Agent running...\n");
   // (Removed 2026-04-24: old stale-CHAIN startup SQL replaced by rehydrate+reconcile pattern)
   await checkLatestVersion();
