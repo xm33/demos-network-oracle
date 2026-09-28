@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
 const HEALTH_URL = process.env.SENTINEL_HEALTH_URL || "http://127.0.0.1:55225";
+// Fleet history is served on the agent's loopback internal listener when INTERNAL_PORT is set (404 on the public port).
+const HISTORY_URL = process.env.SENTINEL_HISTORY_URL || (process.env.INTERNAL_PORT ? "http://127.0.0.1:" + process.env.INTERNAL_PORT : HEALTH_URL);
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -48,7 +50,8 @@ async function fetchHealth() {
 }
 
 async function fetchHistory() {
-  var r = await fetch(HEALTH_URL + "/history", { signal: AbortSignal.timeout(8000) });
+  var r = await fetch(HISTORY_URL + "/history", { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error("history answered HTTP " + r.status + " at " + HISTORY_URL + " (set SENTINEL_HISTORY_URL or INTERNAL_PORT)");
   var d = await r.json();
   return d.data || [];
 }

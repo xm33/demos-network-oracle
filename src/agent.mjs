@@ -139,7 +139,7 @@ const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8080");
 const INTERNAL_PORT = parseInt(process.env.INTERNAL_PORT || "0", 10) || 0;
 
 // Agent profile
-let AGENT_WALLET = "0xbdb3e8189a62dce62229bf3badbf01e5bdb3fbeb22f6f59f4c7c2edafe802a45"; // will be updated after wallet connect
+let AGENT_WALLET = null; // set after wallet connect; /docs says "not connected" until then
 function parseInstanceRole(rawRole) {
   if (rawRole == null || rawRole === "") {
     return { raw: rawRole == null ? null : rawRole, normalized: null, effective: "primary", can_publish: true, warning: "INSTANCE_ROLE absent; defaulting to primary for backward compatibility." };
@@ -221,10 +221,10 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 '<div class="e"><b>GET /organism</b><span>Default context. Compact public core assessment feed — 17 required fields plus additive 1.1 fields (observed_at, data_quality_reason, height_static_seconds, active_public_conditions, agreement_detail), zero fleet data. ETag / 304 between observations.</span></div>' +
 '<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
-'<div class="e"><b>GET /incidents</b><span>Public incident log. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions.</span></div>' +
+'<div class="e"><b>GET /incidents</b><span>Public incident log. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; active counts every active public record, condition records included (/organism active_incidents does not).</span></div>' +
 '<h2>Validators</h2>' +
 '<div class="e"><b>GET /peers</b><span>Identities listed on the public seed peerlists in the latest crawl — peer-reported height, online flag, readiness flag, sync status and how many public peerlists listed them. Truncated identities; connections are never exposed; never dialed.</span></div>' +
-'<div class="e"><b>GET /catalog</b><span>Retained catalog (identities seen on a public peerlist): first seen, last listed, and what peerlists reported this cycle. ?q= filters by the end of a display name or a truncated key.</span></div>' +
+'<div class="e"><b>GET /catalog</b><span>Retained catalog (identities listed by a public seed peerlist): first recorded (first_seen), last listed, and what peerlists reported in the latest crawl. Rows recorded before 1.1 appear once a public peerlist lists them again. ?q= filters by the end of a display name or a truncated key.</span></div>' +
 '<div class="e"><b>GET /catalog/lookup?key=0x…</b><span>Exact check of a full key against the retained catalog and the configured seeds. Returns the sanitized row only.</span></div>' +
 '<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alert count for the last 24 h, or unknown when unavailable</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
@@ -474,7 +474,7 @@ const PUBLIC_NODES = {
   },
 };
 var PUBLIC_NODE_IDENTITIES = {};
-for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identity] = _pn; }
+for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[String(PUBLIC_NODES[_pn].identity).toLowerCase()] = _pn; }
 
 
 
@@ -483,9 +483,10 @@ for (var _pn in PUBLIC_NODES) { PUBLIC_NODE_IDENTITIES[PUBLIC_NODES[_pn].identit
 // Discovered-set exclusion predicate — the ONLY definition of "not a discovered row".
 // Ruling 2026-09-08: excludes monitored PUBLIC nodes only. Fleet identities are discovered
 // rows like any other crawl-observed peer (rendered per R-A as discovered-<last4>).
-function isExcludedFromDiscovered(identity) { return !!PUBLIC_NODE_IDENTITIES[identity]; }
+// Identities are hex; they are compared lower-cased everywhere, so a case variant is not a second identity.
+function isExcludedFromDiscovered(identity) { return !!PUBLIC_NODE_IDENTITIES[String(identity).toLowerCase()]; }
 var FIXNET_IDENTITIES = {};
-for (var _fx in FIXNET_NODES) { if (FIXNET_NODES[_fx] && FIXNET_NODES[_fx].identity) FIXNET_IDENTITIES[FIXNET_NODES[_fx].identity] = _fx; }
+for (var _fx in FIXNET_NODES) { if (FIXNET_NODES[_fx] && FIXNET_NODES[_fx].identity) FIXNET_IDENTITIES[String(FIXNET_NODES[_fx].identity).toLowerCase()] = _fx; }
 
 let latestFixnetNodes = []; // updated each cycle
 let latestDiscoveredFixnet = []; // fixnet peers discovered via anchor peerlist crawl
@@ -771,8 +772,8 @@ function getValidatorGrowth() {
     var weekAgo = now - 604800000;
     var monthAgo = now - 2592000000; // 30 days
     // v7.4: counts from validator_discoveries EXCLUDING monitored identities (clean discovered count)
-    var allRows = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries ORDER BY first_seen").all();
-    var discRows = allRows.filter(function(r) { return !isExcludedFromDiscovered(r.identity) && isValidIdentity(r.identity); });
+    var allRows = sharedDb.query("SELECT identity, first_seen, last_seen, public_listed_since FROM validator_discoveries ORDER BY first_seen").all();
+    var discRows = allRows.filter(function(r) { return r.public_listed_since != null && !isExcludedFromDiscovered(r.identity) && isValidIdentity(r.identity); });
     result.total = discRows.length;
     result.today = discRows.filter(function(r){ return r.first_seen > dayAgo }).length;
     result.week = discRows.filter(function(r){ return r.first_seen > weekAgo }).length;
@@ -784,7 +785,7 @@ function getValidatorGrowth() {
     var syncedCount = 0;
     var validators = [];
     var head = result.network_head;
-    function syncPct(block) { return (block !== null && head > 0) ? Math.round((block / head) * 1000) / 10 : null; }
+    function syncPct(block) { return (block !== null && head > 0) ? Math.min(100, Math.round((block / head) * 1000) / 10) : null; }
 
     // Pass 1: every monitored seed (from PUBLIC_NODES), regardless of DB state.
     for (var pnName in PUBLIC_NODES) {
@@ -866,7 +867,7 @@ function getPublicCatalog() {
   if (!sharedDb) return out;
   try {
     var now = Date.now();
-    var rows = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries").all()
+    var rows = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries WHERE public_listed_since IS NOT NULL").all()
       .filter(function(r) { return !isExcludedFromDiscovered(r.identity) && isValidIdentity(r.identity); });
     out.rows = rows.map(function(r) { return catalogPublicRow(r, now); })
       .sort(function(a, b) { return a.display.localeCompare(b.display) || a.identity_truncated.localeCompare(b.identity_truncated); });
@@ -884,7 +885,7 @@ function lookupCatalogKey(key) {
   }
   if (!sharedDb) return { valid_key: true, in_catalog: false, configured_seed: null, row: null };
   try {
-    var row = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries WHERE lower(identity) = ?").get(k);
+    var row = sharedDb.query("SELECT identity, first_seen, last_seen FROM validator_discoveries WHERE lower(identity) = ? AND public_listed_since IS NOT NULL").get(k);
     return { valid_key: true, in_catalog: !!row, configured_seed: null, row: row ? catalogPublicRow(row, Date.now()) : null };
   } catch (e) { return { valid_key: true, in_catalog: false, configured_seed: null, row: null, error: "lookup unavailable" }; }
 }
@@ -1035,11 +1036,17 @@ function computeCanonicalState() {
   // Height movement as observed: seconds since some seed last reported a higher height than in its previous answer.
   // Null when the latest observation returned no height (nothing to compare). A static height is reported as
   // observed; its cause is not known from here, so it does not change status.
-  var heightStaticSeconds = null, heightAdvancedAtIso = heightTracker.advancedAt ? new Date(heightTracker.advancedAt).toISOString() : null;
-  if (heightTracker.advancedAt && observedAtMs && heights.length > 0) {
+  // Before any comparison (first round after a start) both stay null. Without an observed advance the static
+  // duration is counted from the first round that showed the current height: a lower bound.
+  var heightStaticSeconds = null;
+  var heightAdvancedAtIso = heightTracker.advanceKnown && heightTracker.advancedAt ? new Date(heightTracker.advancedAt).toISOString() : null;
+  if (heightTracker.compared && heightTracker.advancedAt && observedAtMs && heights.length > 0) {
     heightStaticSeconds = Math.max(0, Math.round((observedAtMs - heightTracker.advancedAt) / 1000));
   }
-  var heightsAdvancing = heightStaticSeconds !== null && heightStaticSeconds < CHAIN_STATIC_RUN_MIN_24H * 60;
+  // "Heights advancing" only when an advance was observed within the last two rounds; "height unchanged" only past
+  // the static threshold; otherwise status_reason says neither.
+  var heightsAdvancing = heightStaticSeconds !== null && heightTracker.advanceKnown && heightStaticSeconds <= 2 * Math.round(MONITOR_INTERVAL_MS / 1000);
+  var heightsStatic = heightStaticSeconds !== null && heightStaticSeconds >= CHAIN_STATIC_RUN_MIN_24H * 60;
   var staticText = heightStaticSeconds === null ? "" : "height unchanged for " + Math.floor(heightStaticSeconds / 60) + " min";
 
   var summary;
@@ -1047,7 +1054,7 @@ function computeCanonicalState() {
   else if (status === "stable") {
     summary = "Network operable. " + (pubReachable === pubTotal ? "All " + pubTotal : pubReachable + " of " + pubTotal) + " public nodes answered; heights aligned.";
     if (publicIncidentCount > 0) summary += " " + publicIncidentCount + " info-level incident" + (publicIncidentCount === 1 ? "" : "s") + " active.";
-    if (heightStaticSeconds !== null && !heightsAdvancing) summary += " " + staticText.charAt(0).toUpperCase() + staticText.slice(1) + ".";
+    if (heightsStatic) summary += " " + staticText.charAt(0).toUpperCase() + staticText.slice(1) + ".";
   }
   else {
     var offCount = pubTotal - pubReachable;
@@ -1059,7 +1066,7 @@ function computeCanonicalState() {
   }
 
   var statusReason = "";
-  if (status === "stable") statusReason = heightStaticSeconds === null ? "Public nodes aligned" : heightsAdvancing ? "Heights advancing; public nodes aligned" : "Public nodes aligned; " + staticText;
+  if (status === "stable") statusReason = heightsAdvancing ? "Heights advancing; public nodes aligned" : heightsStatic ? "Public nodes aligned; " + staticText : "Public nodes aligned";
   else if (status === "unstable") statusReason = agreement.state === "weak" ? "Significant disagreement among public node heights" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
   else if (status === "degraded") statusReason = max_incident_severity === "warning" ? "Warning-level incidents active" : "Agreement reduced among public nodes";
   else statusReason = "Insufficient data: " + unknownText;
@@ -1371,7 +1378,8 @@ function recordObservationHistory() {
   if (!sharedDb) return;
   try {
     var now = Date.now();
-    var peers = Object.values(discoveredPeers || {});    // listed in the latest crawl only
+    // Listed in the latest crawl only; bounded per round, identities first recorded earliest first.
+    var peers = Object.values(discoveredPeers || {}).sort(function(a, b) { return (a.firstSeen || 0) - (b.firstSeen || 0); }).slice(0, OBSERVATION_HISTORY_MAX_PER_ROUND);
     sharedDb.exec("BEGIN");
     for (var i = 0; i < peers.length; i++) {
       var p = peers[i];
@@ -1523,7 +1531,9 @@ const AGENT_STARTED_AT = Date.now();
 // Height movement. maxHeight is the highest height a seed reported in the latest round (null when no seed returned
 // one); advancedAt is the last round in which some seed reported a higher height than in its own previous answer,
 // so a leading seed that stops answering is not mistaken for a stalled chain.
-var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {} };
+// compared: DNO has compared heights across rounds (or history shows a static run), so height_static_seconds can be
+// published; advanceKnown: the last advance was observed (or bounded by history), so height_last_advanced_at can be.
+var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false };
 
 // FIX BUG 7: staleness helper — hoisted to module scope (reachable by serializer and bot)
 function getStaleness() {
@@ -2049,10 +2059,11 @@ async function probePublicNodes() {
       // A seed's height is its own peerlist entry. The first listed peer is used only when the seed does
       // not list itself, and height_source says so.
       var block = null, heightSource = null;
-      var selfEntry = peerlist.find(function(p) { return p && p.identity === node.identity; });
+      var nodeId = String(node.identity).toLowerCase();
+      var selfEntry = peerlist.find(function(p) { return p && typeof p.identity === "string" && p.identity.toLowerCase() === nodeId; });
       if (selfEntry && selfEntry.sync) { block = sanitizeHeight(selfEntry.sync.block); if (block !== null) heightSource = "self"; }
       if (block === null && peerlist[0] && peerlist[0].sync) { block = sanitizeHeight(peerlist[0].sync.block); if (block !== null) heightSource = "first_peer"; }
-      var identityMatch = !!data && data.identity === node.identity;
+      var identityMatch = !!data && typeof data.identity === "string" && data.identity.toLowerCase() === nodeId;
       catalogIngestPeerlist(name, peerlist);
       log("  PublicNode " + name + ": OK " + latencyMs + "ms block=" + (block === null ? "?" : block) + " (" + (heightSource || "none") + ") peers=" + peerlist.length);
       return Object.assign(base, { ok: true, latencyMs: latencyMs, block: block, height_source: heightSource, version: sanitizeLabel(data && data.version, 32) || "?", peers: peerlist.length, identityMatch: identityMatch });
@@ -2072,22 +2083,31 @@ function updateHeightTracker(results, observedAt) {
   (results || []).forEach(function(r) { if (r && r.ok) { var h = sanitizeHeight(r.block); if (h !== null) seen[r.name] = h; } });
   var names = Object.keys(seen);
   if (!names.length) { heightTracker.maxHeight = null; return; }
-  var maxH = Math.max.apply(null, names.map(function(n) { return seen[n]; }));
-  var rose = names.some(function(n) { var prev = heightTracker.lastBySeed[n]; return prev !== undefined && seen[n] > prev; });
+  var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
+  var maxH = hs[hs.length - 1], medH = hs[Math.floor(hs.length / 2)];
+  var comparable = names.filter(function(n) { return heightTracker.lastBySeed[n] !== undefined; });
+  var rose = comparable.some(function(n) { return seen[n] > heightTracker.lastBySeed[n]; });
   heightTracker.maxHeight = maxH;
   names.forEach(function(n) { heightTracker.lastBySeed[n] = seen[n]; });
-  if (!heightTracker.initialized) {  // first round with a height: start from the retained history
+  if (!heightTracker.initialized) {
+    // First round with a height: nothing compared yet. Retained history can extend a static run back past a
+    // restart: the median has not increased since the earliest of the most recent consecutive rows whose median is
+    // at least this round's median. A lower row before that run bounds when the last advance happened.
     heightTracker.initialized = true;
     heightTracker.advancedAt = observedAt;
     if (sharedDb) {
       try {
-        var rows = sharedDb.query("SELECT ts, median_block FROM public_node_history WHERE median_block IS NOT NULL ORDER BY ts DESC LIMIT 2000").all();
-        for (var i = 0; i < rows.length; i++) { if (rows[i].median_block < maxH) break; heightTracker.advancedAt = rows[i].ts; }
+        var rows = sharedDb.query("SELECT ts, median_block FROM public_node_history WHERE median_block IS NOT NULL AND ts < ? ORDER BY ts DESC LIMIT 2000").all(observedAt);
+        for (var i = 0; i < rows.length; i++) {
+          if (rows[i].median_block < medH) { if (heightTracker.compared) heightTracker.advanceKnown = true; break; }
+          heightTracker.advancedAt = rows[i].ts; heightTracker.compared = true;
+        }
       } catch (e) {}
     }
     return;
   }
-  if (rose) heightTracker.advancedAt = observedAt;
+  if (comparable.length) heightTracker.compared = true;
+  if (rose) { heightTracker.advancedAt = observedAt; heightTracker.advanceKnown = true; }
 }
 
 // Public observation round: Path A seeds, catalog crawl, public history and public incidents. Runs on its own
@@ -2203,6 +2223,7 @@ function discoverFixnetValidators(anchorInfoData) {
     if (!isValidIdentity(identity)) continue;
 
     // Skip known identities (monitored testnet seeds and the configured fixnet/fleet nodes)
+    identity = identity.toLowerCase();
     if (isExcludedFromDiscovered(identity) || FIXNET_IDENTITIES[identity]) continue;
 
     var connection = peer.connection && peer.connection.string ? peer.connection.string : null;
@@ -2487,7 +2508,9 @@ let nodeVersions = {}; // { "n3": { version: "0.9.8", versionName: "Oxlong Micha
 // discoveredPeers holds the identities listed in the latest completed crawl, nothing older: its online, ready,
 // sync status and height are what those peerlists reported this round. validator_discoveries keeps every
 // identity ever listed (first_seen, last_seen = last listed). DNO never dials catalog identities.
-const CATALOG_MAX_ROWS = 5000;            // retained identities
+const CATALOG_MAX_ROWS = 2000;            // retained identities
+const CATALOG_EVICT_AFTER_MS = 30 * 86400000; // at the cap, rows not listed for this long make room for new ones
+const OBSERVATION_HISTORY_MAX_PER_ROUND = 256; // node_observation_history rows written per round (oldest identities first)
 const CATALOG_MAX_NEW_PER_CRAWL = 200;    // a flood of fabricated identities cannot grow the catalog quickly
 var catalogCrawl = null;                  // crawl in progress
 var catalogLatest = { completedAt: null, peerlistsRead: 0, listedCount: 0 };
@@ -2502,7 +2525,9 @@ function catalogIngestPeerlist(sourceName, peerlist) {
   for (var i = 0; i < peerlist.length; i++) {
     var peer = peerlist[i];
     var identity = peer && peer.identity;
-    if (!isValidIdentity(identity) || isExcludedFromDiscovered(identity)) continue;
+    if (!isValidIdentity(identity)) continue;
+    identity = identity.toLowerCase();
+    if (isExcludedFromDiscovered(identity)) continue;
     var rep = {
       online: !!(peer.status && peer.status.online === true),
       ready: peer.status && typeof peer.status.ready === "boolean" ? peer.status.ready : null,
@@ -2530,20 +2555,28 @@ function catalogFinishCrawl(results, observedAt) {
   if (sharedDb) {
     try { sharedDb.query("SELECT identity, first_seen FROM validator_discoveries").all().forEach(function(r) { known[r.identity] = r.first_seen; }); } catch (e) {}
   }
-  var retained = Object.keys(known).length, added = 0, skipped = 0;
+  var retained = Object.keys(known).length, added = 0, skipped = 0, evicted = 0;
   var next = {};
   if (sharedDb) {
     try {
       sharedDb.exec("BEGIN");
+      // At the cap, rows no public peerlist has listed for 30 days make room (oldest first); nothing else is removed.
+      var wanted = Math.min(CATALOG_MAX_NEW_PER_CRAWL, ids.filter(function(x) { return known[x] === undefined; }).length);
+      var over = retained + wanted - CATALOG_MAX_ROWS;
+      if (over > 0) {
+        var stale = sharedDb.query("SELECT identity FROM validator_discoveries WHERE last_seen < ? ORDER BY last_seen ASC LIMIT ?").all(observedAt - CATALOG_EVICT_AFTER_MS, over);
+        stale.forEach(function(row) { sharedDb.run("DELETE FROM validator_discoveries WHERE identity = ?", [row.identity]); delete known[row.identity]; evicted++; });
+        retained -= evicted;
+      }
       for (var i = 0; i < ids.length; i++) {
         var id = ids[i], entry = crawl.listed[id], r = entry.rep;
         if (known[id] === undefined) {
           if (added >= CATALOG_MAX_NEW_PER_CRAWL || retained + added >= CATALOG_MAX_ROWS) { skipped++; continue; }
-          sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection, online) VALUES (?, ?, ?, ?, ?)", [id, observedAt, observedAt, r.connection || "unknown", r.online ? 1 : 0]);
+          sharedDb.run("INSERT OR IGNORE INTO validator_discoveries (identity, first_seen, last_seen, connection, online, public_listed_since) VALUES (?, ?, ?, ?, ?, ?)", [id, observedAt, observedAt, r.connection || "unknown", r.online ? 1 : 0, observedAt]);
           known[id] = observedAt; added++;
         }
-        sharedDb.run("UPDATE validator_discoveries SET last_seen = ?, online = ?, last_block = ?, last_ready = ?, last_sync_status = ?, last_listed_by = ?, connection = COALESCE(?, connection) WHERE identity = ?",
-          [observedAt, r.online ? 1 : 0, r.block, r.ready === null ? null : (r.ready ? 1 : 0), r.syncStatus, entry.sources.length, r.connection, id]);
+        sharedDb.run("UPDATE validator_discoveries SET last_seen = ?, online = ?, last_block = ?, last_ready = ?, last_sync_status = ?, last_listed_by = ?, connection = COALESCE(?, connection), public_listed_since = COALESCE(public_listed_since, ?) WHERE identity = ?",
+          [observedAt, r.online ? 1 : 0, r.block, r.ready === null ? null : (r.ready ? 1 : 0), r.syncStatus, entry.sources.length, r.connection, observedAt, id]);
       }
       sharedDb.exec("COMMIT");
     } catch (e) {
@@ -2560,6 +2593,7 @@ function catalogFinishCrawl(results, observedAt) {
   discoveredPeers = next;
   catalogLatest = { completedAt: observedAt, peerlistsRead: crawl.peerlistsRead, listedCount: Object.keys(next).length };
   if (added > 0) log("  [catalog] +" + added + " new identit" + (added === 1 ? "y" : "ies") + " from public peerlists");
+  if (evicted > 0) log("  [catalog] " + evicted + " identit" + (evicted === 1 ? "y" : "ies") + " not listed for 30 days removed at the cap");
   if (skipped > 0) logError("  [catalog] " + skipped + " new identities not retained (per-crawl or total cap reached)");
 }
 
@@ -2644,12 +2678,12 @@ async function checkLatestVersion() {
     latestVersionData.checkedAt = new Date().toISOString();
     log("  Version check: latest GitHub commit is " + latestVersionData.latestCommit + " — " + latestVersionData.latestMessage);
   } catch(e) { log("  Version check failed: " + e.message); }
-  try {
-    var lr = await fetch(LOCAL_INFO_URL, { signal: AbortSignal.timeout(3000) });
-    var ld = await lr.json();
-    latestVersionData.nodeVersion = ld.version || null;
-    latestVersionData.nodeVersionName = ld.version_name || null;
-  } catch(e) {}
+  // Node software version as the answering public seeds report it (most common value); fleet nodes are not read here.
+  var seedVersions = {};
+  (latestPublicNodes || []).forEach(function(n) { if (n && n.ok && n.version && n.version !== "?") seedVersions[n.version] = (seedVersions[n.version] || 0) + 1; });
+  var topVersion = Object.keys(seedVersions).sort(function(a, b) { return seedVersions[b] - seedVersions[a]; })[0] || null;
+  latestVersionData.nodeVersion = topVersion;
+  latestVersionData.nodeVersionName = null;
 }
 
 function startHealthServer() {
@@ -2969,7 +3003,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         if (incStatus) { incQuery += " AND status = ?"; incArgs.push(incStatus); }
         // Public scope follows the 2026-04-23 reconciliation boundary, like /timeline and last_24h.
         if (incScope === "public") { incQuery += " AND started_at >= ?"; incArgs.push(INCIDENT_RECONCILIATION_START_AT); }
-        incQuery += " ORDER BY rowid DESC LIMIT 5000";
+        incQuery += " ORDER BY rowid DESC";   // scope is decided per row below, so no LIMIT before it
         var incRows = sharedDb.prepare(incQuery).all(...incArgs);
         var incResults = [];
         for (var ii = 0; ii < incRows.length; ii++) {
@@ -3265,20 +3299,20 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           var dvStatusColor = dvOnline ? "#d97706" : "#98a2b3";
           var dvStatusBg = dvOnline ? "rgba(217,119,6,0.08)" : "rgba(152,162,179,0.08)";
           var dvStatusText = dvOnline ? "reported online" : "not reported";
-          var dvSyncPct = dv.sync_pct != null ? dv.sync_pct : 0;
-          var dvSyncColor = dvSyncPct >= 99.9 ? "#22C55E" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
+          var dvSyncPct = typeof dv.sync_pct === "number" ? dv.sync_pct : null;
+          var dvSyncColor = dvSyncPct === null ? "#98a2b3" : dvSyncPct >= 99.9 ? "#22C55E" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
           h += '<tr>';
           h += '<td style="font-family:var(--mono);font-size:11px">' + esc(truncId(dv.identity)) + '</td>';
           h += '<td><span class="pill" style="color:' + dvStatusColor + ';background:' + dvStatusBg + ';border-color:' + dvStatusColor + '44">' + dvStatusText + '</span></td>';
           h += '<td>' + heightCell(dv.block) + '</td>';
-          h += '<td style="color:' + dvSyncColor + '">' + dvSyncPct + '%</td>';
+          h += '<td style="color:' + dvSyncColor + '">' + (dvSyncPct === null ? "not reported" : dvSyncPct + "%") + '</td>';
           h += '</tr>';
         }
         h += '</tbody></table></div>';
       }
       h += '</div>';
 
-      h += '<footer>Demos Network Oracle &middot; API v1.0 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> &middot; <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>';
+      h += '<footer>Demos Network Oracle &middot; API v1.1 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> &middot; <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>';
       h += "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>";
       h += '<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>';
       h += '</main></body></html>';
@@ -3584,8 +3618,9 @@ async function refresh(){
       var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
       mg.innerHTML+='<div class="metric"><div class="label">Network Block</div><div class="value">'+(na.max_block||na.median_block||"?")+'</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Agreement</div><div class="value" style="color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Public Nodes</div><div class="value">'+na.aligned_nodes+'/'+na.total_nodes+' aligned</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Block Spread</div><div class="value" style="color:'+(na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+na.block_spread+'</div></div>';
+      var compared=typeof na.aligned_nodes==="number"&&typeof na.block_spread==="number";
+      mg.innerHTML+='<div class="metric"><div class="label">Public Nodes</div><div class="value">'+(compared?na.aligned_nodes+'/'+na.total_nodes+' aligned':'not computed')+'</div></div>';
+      mg.innerHTML+='<div class="metric"><div class="label">Block Spread</div><div class="value" style="color:'+(!compared?"#8b949e":na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+(compared?na.block_spread:'not computed')+'</div></div>';
     }
     var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
     mg.innerHTML+='<div class="metric"><div class="label">Risk</div><div class="value" style="color:'+riskCol+'">'+d.risk.toUpperCase()+'</div></div>';
@@ -3600,16 +3635,14 @@ async function refresh(){
       var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
       var html='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Aligned</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+na.aligned_nodes+'/'+na.total_nodes+'</div></div>';
+      var cmp=typeof na.aligned_nodes==="number"&&typeof na.block_spread==="number";
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Aligned</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(cmp?na.aligned_nodes+'/'+na.total_nodes:'not computed')+'</div></div>';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Median Block</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(na.median_block||"?")+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Block Spread</div><div style="font-size:1.1em;font-weight:bold;color:'+(na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+na.block_spread+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement %</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+(na.total_nodes>0?Math.round(na.aligned_nodes/na.total_nodes*100):0)+'%</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Block Spread</div><div style="font-size:1.1em;font-weight:bold;color:'+(!cmp?"#8b949e":na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+(cmp?na.block_spread:'not computed')+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement %</div><div style="font-size:1.1em;font-weight:bold;color:'+(cmp?agCol:"#8b949e")+'">'+(cmp&&na.total_nodes>0?Math.round(na.aligned_nodes/na.total_nodes*100)+'%':'not computed')+'</div></div>';
       html+='</div>';
-      if(na.outlier_nodes&&na.outlier_nodes.length>0){
-        html+='<div style="font-size:0.82em;color:#d29922;margin-top:4px">⚠ Outliers: '+na.outlier_nodes.map(function(o){return o.name+' ('+o.block+', lag '+o.lag+')'}).join(', ')+'</div>';
-      } else {
-        html+='<div style="font-size:0.82em;color:#3fb950;margin-top:4px">✅ All public nodes aligned with network head</div>';
-      }
+      // The API's own reason string; no aligned/outlier claim of the dashboard's own.
+      html+='<div style="font-size:0.82em;color:#8b949e;margin-top:4px">'+escD(d.agreement_reason||"")+'</div>';
       agBox.innerHTML=html;
     }
 
@@ -3709,19 +3742,20 @@ async function refresh(){
     var sr=await fetch("/sentinel");var sd=await sr.json();
     var sb=document.getElementById("sentinel-status");
     if(sb){
-      var alerts=sd.recentAlerts||[];
+      // /sentinel on the public listener: { status, last_check, alerts_24h } (counts only), or status "unknown".
+      var known=sd&&sd.status==="ok"&&typeof sd.alerts_24h==="number";
+      var n24=known?sd.alerts_24h:null;
       var html='<div style="display:flex;gap:16px;margin-bottom:12px">';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Alerts 24h</div><div style="font-size:1.4em;font-weight:bold;color:'+(alerts.length===0?"#3fb950":"#f85149")+'">'+(alerts.length)+'</div></div>';
+      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Alerts 24h</div><div style="font-size:1.4em;font-weight:bold;color:'+(!known?"#8b949e":n24===0?"#3fb950":"#f85149")+'">'+(known?n24:"unknown")+'</div></div>';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Poll interval</div><div style="font-size:1.4em;font-weight:bold;color:#c9d1d9">5min</div></div>';
       html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Detectors</div><div style="font-size:1.4em;font-weight:bold;color:#c9d1d9">5</div></div>';
       html+='</div>';
-      if(alerts.length===0){
+      if(!known){
+        html+='<div style="color:#8b949e;font-size:0.85em">Sentinel state unknown: its record could not be read.</div>';
+      } else if(n24===0){
         html+='<div style="color:#3fb950;font-size:0.85em">\u2705 No anomalies detected in last 24h</div>';
       } else {
-        html+='<div style="font-size:0.8em;color:#8b949e;margin-bottom:6px">Recent alerts:</div>';
-        alerts.slice(0,5).forEach(function(a){
-          html+='<div style="font-size:0.82em;padding:4px 0;border-bottom:1px solid #21262d;color:#f85149">\u26a0\ufe0f '+a.key+' <span style="color:#8b949e">('+a.ago+')</span></div>';
-        });
+        html+='<div style="font-size:0.82em;color:#8b949e">'+n24+' alert key'+(n24===1?'':'s')+' in the last 24 h. Details are on the internal listener.</div>';
       }
       sb.innerHTML=html;
     }
@@ -4131,7 +4165,9 @@ async function main() {
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_obs_history_id_ts ON node_observation_history (identity, ts)`);
   sharedDb.run(`CREATE INDEX IF NOT EXISTS idx_node_obs_history_ts ON node_observation_history (ts)`);
   // v4 catalog columns: what the listing peerlists reported the last time the identity was listed.
-  ["last_block INTEGER", "last_ready INTEGER", "last_sync_status TEXT", "last_listed_by INTEGER"].forEach(function(col) {
+  // public_listed_since: the first public (Path A) crawl that listed the row. Rows recorded before 1.1 have none
+  // until a public peerlist lists them again (1.0 also read DNO's own node's peerlist), and are not published until then.
+  ["last_block INTEGER", "last_ready INTEGER", "last_sync_status TEXT", "last_listed_by INTEGER", "public_listed_since INTEGER"].forEach(function(col) {
     try { sharedDb.run("ALTER TABLE validator_discoveries ADD COLUMN " + col); } catch (e) { /* column exists */ }
   });
   log("  Observation tables ready");

@@ -144,7 +144,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <div class="note"><b>Example:</b> status: stable · risk: elevated · confidence: clear<br>Interpretation: network is operational, but redundancy is reduced.</div>
 
 <h2>Trust Calibration</h2>
-<p>These checks calibrate how much a consumer should rely on this observation. They are not a score, rank, or certification.</p>
+<p>These checks describe how complete this observation is. DNO informs context; it does not advise, predict, score, certify, or decide action.</p>
 <p>Before relying on the assessment, check:</p>
 <p><code>data_quality</code> — if <span class="val">insufficient</span>, treat all values with skepticism.</p>
 <p><code>staleness_seconds</code> — if high, data may not reflect current reality.</p>
@@ -153,10 +153,10 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 
 <h2>Polling Guidance</h2>
 <p>The Oracle observes every 20 seconds, so polling more often than every 10–30 seconds returns the same observation. <code>/organism</code> and <code>/health</code> send an <code>ETag</code> and <code>Last-Modified</code> set to the observation time; a request with <code>If-None-Match</code> gets <code>304</code> until a new observation exists.</p>
-<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long no answering seed has reported a higher height than in its previous answer (null when the latest observation returned no height); the cause is not known from here.</p>
+<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long no answering seed has reported a higher height than in its previous answer (null when the latest observation returned no height or nothing has been compared yet; a lower bound until DNO has observed an advance); the cause is not known from here.</p>
 <p>Respect the <code>Cache-Control: public, max-age=5</code> header. Do not poll faster than every 5 seconds.</p>
 <p>For less time-sensitive consumers, polling every 60 seconds is sufficient.</p>
-<p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is observation export, not a ranking.</p>
+<p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is an export of observations, nothing more.</p>
 
 <h2>Consumption Examples</h2>
 <p><b>curl</b></p>
@@ -176,7 +176,7 @@ if state['data_quality'] == 'insufficient':
 <h2>Other Endpoints</h2>
 <p><code>/health</code> — full diagnostic with agreement details, public nodes, signals, reference data.</p>
 <p><code>/incidents</code> — public incident log (<code>?status=active|resolved</code>, <code>?limit=1–500</code>). Rows with <code>kind: "condition"</code> are DNO's own condition records (visibility, degraded, unstable); they are counted in <code>active_public_conditions</code>, not in <code>active_incidents</code>.</p>
-<p><code>/catalog</code> — retained catalog of identities seen on the public seed peerlists, with what those peerlists reported this cycle (<code>?q=</code> filters by the end of a display name or a truncated key). <code>/catalog/lookup?key=0x…</code> checks a full key exactly and returns only the sanitized row. Catalog identities are never dialed.</p>
+<p><code>/catalog</code> — retained catalog of identities seen on the public seed peerlists, with what those peerlists reported this cycle (<code>?q=</code> filters by the end of a display name or a truncated key). <code>/catalog/lookup?key=0x…</code> checks a full key exactly and returns only the sanitized row. Catalog identities are never dialed. <code>first_seen</code> is when DNO first recorded the identity and <code>last_listed</code> the last public crawl that listed it; rows recorded before 1.1 (when DNO also read its own node's peerlist) appear once a public seed peerlist lists them again. The <code>reported</code> block exists only for identities listed in the latest crawl: height, readiness flag and sync status come from the listing with the highest height, and the online flag is set when any listing peerlist reports it online.</p>
 <p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from the core network assessment).</p>
 <p><code>/methodology</code> — how the Oracle makes assessments.</p>
 <p><code>/commerce/methodology</code> — how commerce observation works.</p>
@@ -190,7 +190,7 @@ if state['data_quality'] == 'insufficient':
 
 <p><b>Insufficient data quality</b> — When <code>data_quality</code> is <span class="val">insufficient</span>, the Oracle cannot see enough public nodes to form a credible assessment. All other fields are still present but should be treated as low-confidence. Status will be <span class="val">unknown</span> and risk will be <span class="val">elevated</span>.</p>
 
-<p><b>Timeouts</b> — Set a reasonable timeout (5–10 seconds). If the Oracle doesn't respond, the last response received remains the latest observation available to your agent.</p>
+<p><b>Timeouts</b> — DNO's own endpoints normally answer in well under a second. If the Oracle does not respond, the last response received remains the latest observation available to your agent; <code>observed_at</code> in it says how old that observation is.</p>
 
 <div class="warn"><b>Never assume the Oracle is always available.</b> Design your agent to degrade gracefully when the Oracle is unreachable or returning stale data.</div>
 
@@ -343,7 +343,7 @@ GET /commerce/observations  →  authority states (Layer 2, separate from the co
 <h2>Design Principle</h2>
 <div class="note">This API describes state. It does not suggest actions.<br>The Oracle publishes its core assessment. Your agent interprets it.<br>DNO informs context; it does not advise, predict, score, certify, or decide action.</div>
 
-<footer class="doc-footer">Demos Network Oracle · API v1.0 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
+<footer class="doc-footer">Demos Network Oracle · API v1.1 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
 </main>
 <script>
 document.querySelectorAll('.val').forEach(function(el){
