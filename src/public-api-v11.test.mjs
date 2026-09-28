@@ -119,7 +119,9 @@ try {
   check("S20 /incidents rows carry kind and public scope", inc.status === 200 && inc.body.incidents.every((i) => ["incident", "condition"].includes(i.kind) && i.scope === "public"));
   check("S21 /incidents counts condition records", Number.isInteger(inc.body.active_public_conditions) && inc.body.active_public_conditions === o.active_public_conditions, inc.body.active_public_conditions + " vs " + o.active_public_conditions);
   check("S22 /incidents rejects bad parameters", (await get("/incidents?status=open")).status === 400 && (await get("/incidents?limit=0")).status === 400 && (await get("/incidents?scope=fleet")).status === 400);
+  // Fleet history must not be public: these fail until INTERNAL_PORT moves /history to the loopback listener.
   check("S23 fleet history is not on the public listener", (await get("/history")).status === 404);
+  check("S27 nor anything under /history", (await get("/history/")).status === 404 && (await get("/history/export")).status === 404 && (await get("/history/export/x")).status === 404);
 
   const peers = (await get("/peers")).body;
   const allKeys = keysDeep([peers, health, cat]);

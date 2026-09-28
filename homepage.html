@@ -1153,7 +1153,7 @@ svg text { font-family: var(--sans); }
     if (ps && isNum(ps.size)) {
       const full = isNum(ps.avg_reachable) && isNum(ps.cycles);
       items.push(item('peak observation window', el('span', { text: full
-        ? `${ps.size} nodes observed; ${ps.avg_reachable} reachable on average across ${ps.cycles} cycles`
+        ? `${ps.size} nodes observed; ${ps.avg_reachable} answered on average across ${ps.cycles} cycles`
         : `${ps.size} nodes observed; the average and cycle count were not reported` })));
     }
     const cm = l.chain_movement && typeof l.chain_movement.state === 'string' ? l.chain_movement.state : 'unknown';
@@ -1222,7 +1222,9 @@ svg text { font-family: var(--sans); }
     const all = vg && Array.isArray(vg.validators) ? vg.validators : null;
     catalog.rows = (all || []).filter((v) => v && v.monitored !== true).map(catalogRow).filter(Boolean)
       .sort((x, y) => x.suffix.localeCompare(y.suffix) || x.prefix.localeCompare(y.prefix));
-    catalog.rows.forEach((r, i) => { r.key = `${r.prefix}${r.suffix}#${i}`; });
+    // Row keys: the published characters plus an occurrence count, so an open card survives rows sorting in before it.
+    const seenKeys = {};
+    catalog.rows.forEach((r) => { const k = `${r.prefix}${r.suffix}`; seenKeys[k] = (seenKeys[k] || 0) + 1; r.key = `${k}#${seenKeys[k]}`; });
     const seedRows = (all || []).filter((v) => v && v.monitored === true);
     catalog.seeds = seedRows.map((v) => String(v.display || '')).filter(Boolean);
     catalog.seedRows = seedRows.map((v) => { const p = parseIdentity(v.identity); return p ? { name: String(v.display || 'unnamed'), prefix: p.prefix, suffix: p.suffix } : null; }).filter(Boolean);
@@ -1340,7 +1342,7 @@ svg text { font-family: var(--sans); }
     const notListed = 'not listed in the latest crawl';
     const rows = [
       ['published identity', el('span', { class: 'mono', text: `${r.prefix}…${r.suffix}` })],
-      ['first seen', r.firstSeen != null ? `${stamp(r.firstSeen)} · ${ago(now - r.firstSeen)}` : 'not reported'],
+      ['first recorded', r.firstSeen != null ? `${stamp(r.firstSeen)} · ${ago(now - r.firstSeen)}` : 'not reported'],
     ];
     if (r.listed) rows.push(['last listed', `in the latest crawl${r.listedBy != null ? `, by ${r.listedBy}${read != null ? ` of ${plural(read, 'public peerlist', 'public peerlists')} read` : ` public peerlist${r.listedBy === 1 ? '' : 's'}`}` : ''}`]);
     else rows.push(['last listed', r.lastListed != null ? `${stamp(r.lastListed)} · ${ago(now - r.lastListed)}` : 'not reported']);
