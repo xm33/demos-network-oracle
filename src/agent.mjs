@@ -214,28 +214,30 @@ var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos N
 'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
 '<h1>Demos Network Oracle</h1>' +
 '<p class="sub">Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently disabled.<br>' +
-'Oracle wallet: <code>' + AGENT_WALLET + '</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
+'Oracle wallet: <code>__AGENT_WALLET__</code> &middot; v' + AGENT_VERSION + ' &middot; <a href="/dashboard" style="color:#22d3ee">Dashboard</a></p>' +
 '<p class="sub">On-chain publication is currently disabled from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
 '<h2>Network</h2>' +
 '<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer. on_chain_publication is currently "disabled" (observation posts are not sent). attestation is a separate field: DAHR source-attestation of observed public sources, when available.</span></div>' +
-'<div class="e"><b>GET /organism</b><span>Default context. Compact public core assessment feed — 17 fields, zero fleet data, optimized for agents</span></div>' +
+'<div class="e"><b>GET /organism</b><span>Default context. Compact public core assessment feed — 17 required fields plus additive 1.1 fields (observed_at, data_quality_reason, height_static_seconds, active_public_conditions, agreement_detail), zero fleet data. ETag / 304 between observations.</span></div>' +
 '<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
 '<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
-'<div class="e"><b>GET /incidents</b><span>Incident log with scope filtering — public (default), fleet, or all</span></div>' +
+'<div class="e"><b>GET /incidents</b><span>Public incident log. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions.</span></div>' +
 '<h2>Validators</h2>' +
-'<div class="e"><b>GET /peers</b><span>Discovered set — crawl output, not a registry. Truncated identity, block, first seen (connections are never exposed)</span></div>' +
-'<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alerts, detectors, last 24h summary</span></div>' +
+'<div class="e"><b>GET /peers</b><span>Identities listed on the public seed peerlists in the latest crawl — peer-reported height, online flag, readiness flag, sync status and how many public peerlists listed them. Truncated identities; connections are never exposed; never dialed.</span></div>' +
+'<div class="e"><b>GET /catalog</b><span>Retained catalog (identities seen on a public peerlist): first seen, last listed, and what peerlists reported this cycle. ?q= filters by the end of a display name or a truncated key.</span></div>' +
+'<div class="e"><b>GET /catalog/lookup?key=0x…</b><span>Exact check of a full key against the retained catalog and the configured seeds. Returns the sanitized row only.</span></div>' +
+'<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alert count for the last 24 h, or unknown when unavailable</span></div>' +
 '<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
 '<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
 '<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 assessment model, data sources, limitations</span></div>' +
 '<h2>History</h2>' +
-'<div class="e"><b>GET /history</b><span>Last 72 health cycles as JSON</span></div>' +
+'<div class="e"><b>GET /history</b><span>Fleet reference history (last 72 cycles). Served on the internal listener when INTERNAL_PORT is set.</span></div>' +
 '<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Optional from/to filters (Unix ms)</span></div>' +
 '<h2>Integration</h2>' +
 '<div class="e"><b>GET /federate</b><span>Prometheus text metrics: oracle implementation version plus public-RPC reachability and probe latency observed from this DNO vantage</span></div>' +
 '<div class="e"><b>GET /badge</b><span>SVG status badge showing observed network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
 '<div class="e"><b>GET /version</b><span>Running agent version vs latest GitHub commit</span></div>' +
-'<footer>All endpoints return JSON unless noted. Monitoring interval: 20s. Publishing interval: 20 min. API version: 1.0. Oracle is strictly watch-only. DNO informs context; it does not advise, predict, score, certify, or decide action.</footer></body></html>';
+'<footer>All endpoints return JSON unless noted. Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s. Publishing interval: ' + Math.round(INTERVAL_MS / 60000) + ' min. API version: ' + API_VERSION + '. Oracle is strictly watch-only. DNO informs context; it does not advise, predict, score, certify, or decide action.</footer></body></html>';
 
 // FIX BUG 6: Write budget constants (SuperColony rate limits)
 const DAILY_PUBLISH_LIMIT = 15;
@@ -2982,7 +2984,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(JSON.stringify(latestVersionData, null, 2));
     } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(DOCS_HTML);
+      res.end(DOCS_HTML.replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(AGENT_WALLET) : "not connected"));
     } else if (reqPath === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "Link": "</organism>; rel=\"alternate\"; type=\"application/json\", </organism/schema>; rel=\"describedby\"" });
       res.end(renderHomepageNoJs(HOMEPAGE_HTML));
@@ -3395,7 +3397,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 </div>
 
 <div class="footer" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
-  <span>Demos Network Oracle v${AGENT_VERSION} &bull; ${INSTANCE_ROLE.toUpperCase()}</span>
+  <span>Demos Network Oracle v${AGENT_VERSION}</span>
   <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span>
   ${latestAttestationState.lastCount > 0
     ? '<span style="color:#3fb950;font-weight:600">&#10003; DAHR Attested</span>'
@@ -3434,11 +3436,9 @@ function drawChart(hist){
   if(t0)ctx.fillText(t0.toLocaleTimeString(),PAD,H-2);
   if(t1){ctx.textAlign="right";ctx.fillText(t1.toLocaleTimeString(),W-4,H-2);}
 }
-var FLEET_NODES = NODE_NAMES;
-function isFleetIncident(inc) {
-  if(inc.description && (inc.description.indexOf("Fleet reference")===0 || inc.description === "Chain-level issue detected")) return true;
-  return inc.affectedNodes && inc.affectedNodes.length > 0 && inc.affectedNodes.every(function(n){ return FLEET_NODES.includes(n); });
-}
+// Incidents arrive already scoped by the server (/incidents serves public scope on the public listener).
+function isFleetIncident(inc) { return inc && inc.scope === "fleet"; }
+function escD(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function render24hSummary(s) {
   if (!s) return '<div style="color:#8b949e;font-size:0.85em">Summary unavailable.</div>';
 
@@ -3555,23 +3555,22 @@ async function refresh(){
     if(gb&&d.validator_growth){
       var vg=d.validator_growth;
       var gh='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Identities</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.total+'</div></div>';
-      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Online</div><div style="font-size:1.1em;font-weight:bold;color:#3fb950">'+vg.online+'</div></div>';
-      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Synced</div><div style="font-size:1.1em;font-weight:bold;color:'+(vg.synced>0?'#3fb950':'#d29922')+'">'+vg.synced+'</div></div>';
-      gh+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Monitored</div><div style="font-size:1.1em;font-weight:bold;color:#58a6ff">'+vg.monitored+'</div></div>';
+      // Catalog and probed seeds are separate populations; their counts are never added or mixed.
+      function card(label,val){return '<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">'+label+'</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+escD(val)+'</div></div>';}
+      gh+=card('seen',vg.discovered)+card('seeds answered',vg.monitored_online)+card('at head',vg.monitored_at_head)+card('configured seeds',vg.monitored);
       gh+='</div>';
-      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:8px">all-time crawl-observed identities, including ones no longer reachable</div>';
-      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:12px">+'+vg.today+' today \u00b7 +'+vg.week+' this week</div>';
+      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:8px">retained catalog \u2014 identities seen on a public peerlist. Not this-cycle. Not a census. Catalog rows are peer-reported and never dialed.</div>';
+      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:12px">+'+vg.today+' today \u00b7 +'+vg.week+' this week \u00b7 +'+vg.month+' this month</div>';
       if(vg.validators&&vg.validators.length>0){
         gh+='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Validator</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Sync</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Status</th><th style="color:#8b949e;text-align:right;padding:4px 8px;border-bottom:1px solid #21262d">Since</th></tr></thead><tbody>';
         vg.validators.forEach(function(v){
-          var syncCol=v.sync_pct>=95?'#2dd4a0':v.sync_pct>=80?'#d97706':'#EF4444';
-          var statusIcon=v.monitored?'\u2705 monitored':v.sync_pct>=95?'\u2705 ready':v.sync_pct>=80?'\ud83d\udd04 catching up':'\ud83d\udd04 syncing';
+          // No grades: seeds show what DNO dialed; catalog rows show what a peerlist reported this cycle.
+          var statusText=v.monitored?(v.online?'probed seed \u00b7 answered':'probed seed \u00b7 no answer'):(v.listed_this_cycle?(v.online?'reported online':'not reported'):'not listed this cycle');
           var since=v.first_seen_hours_ago<24?v.first_seen_hours_ago+'h ago':Math.round(v.first_seen_hours_ago/24)+'d ago';
-          gh+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+v.display+'</b></td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(v.block?v.block.toLocaleString():'?')+'</td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;color:'+syncCol+'">'+v.sync_pct+'%</td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+statusIcon+'</td>';
+          gh+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+escD(v.display)+'</b></td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(typeof v.block==='number'?v.block.toLocaleString():'not observed')+'</td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;color:#8b949e">'+(v.monitored&&typeof v.sync_pct==='number'?v.sync_pct+'%':'\u2014')+'</td>';
+          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+statusText+'</td>';
           gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;text-align:right;color:#8b949e">'+since+'</td></tr>';
         });
         gh+='</tbody></table>';

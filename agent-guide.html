@@ -96,13 +96,13 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
   "agreement": "unknown",
   "active_incidents": 0,
   "max_incident_severity": "none",
-  "summary": "Insufficient data — fewer than 2 public nodes reachable",
-  "status_reason": "Insufficient data to assess network state",
+  "summary": "Insufficient data: fewer than 2 public nodes answered.",
+  "status_reason": "Insufficient data: fewer than 2 public nodes answered",
   "risk_factors": [
-    "Only 1 of 5 public nodes reachable — limited cross-checking"
+    "Only 1 of 3 public nodes answered — limited cross-checking"
   ],
-  "confidence_reason": "Insufficient reachable public nodes to cross-check",
-  "agreement_reason": "Fewer than 2 reachable nodes",
+  "confidence_reason": "No cross-check: fewer than 2 public nodes answered",
+  "agreement_reason": "Not compared: fewer than 2 public nodes answered",
   "staleness_seconds": 1,
   "last_updated": "2026-06-10T08:28:38.773Z",
   "api_version": "1.0",
@@ -152,7 +152,8 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <div class="warn">When <code>data_quality</code> is <span class="val">insufficient</span>, status will be <span class="val">unknown</span> and risk will be <span class="val">elevated</span>. This is intentional — the Oracle treats missing data as a reason for caution.</div>
 
 <h2>Polling Guidance</h2>
-<p>Recommended interval: <b>10–30 seconds</b>. The Oracle updates every 20 seconds.</p>
+<p>The Oracle observes every 20 seconds, so polling more often than every 10–30 seconds returns the same observation. <code>/organism</code> and <code>/health</code> send an <code>ETag</code> and <code>Last-Modified</code> set to the observation time; a request with <code>If-None-Match</code> gets <code>304</code> until a new observation exists.</p>
+<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long the highest reported height has not increased; the cause is not known from here.</p>
 <p>Respect the <code>Cache-Control: public, max-age=5</code> header. Do not poll faster than every 5 seconds.</p>
 <p>For less time-sensitive consumers, polling every 60 seconds is sufficient.</p>
 <p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is observation export, not a ranking.</p>
@@ -174,7 +175,8 @@ if state['data_quality'] == 'insufficient':
 
 <h2>Other Endpoints</h2>
 <p><code>/health</code> — full diagnostic with agreement details, public nodes, signals, reference data.</p>
-<p><code>/incidents</code> — incident log. Default scope: public. Use <code>?scope=all</code> for fleet.</p>
+<p><code>/incidents</code> — public incident log (<code>?status=active|resolved</code>, <code>?limit=1–500</code>). Rows with <code>kind: "condition"</code> are DNO's own condition records (visibility, degraded, unstable); they are counted in <code>active_public_conditions</code>, not in <code>active_incidents</code>.</p>
+<p><code>/catalog</code> — retained catalog of identities seen on the public seed peerlists, with what those peerlists reported this cycle (<code>?q=</code> filters by the end of a display name or a truncated key). <code>/catalog/lookup?key=0x…</code> checks a full key exactly and returns only the sanitized row. Catalog identities are never dialed.</p>
 <p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from the core network assessment).</p>
 <p><code>/methodology</code> — how the Oracle makes assessments.</p>
 <p><code>/commerce/methodology</code> — how commerce observation works.</p>
@@ -184,34 +186,34 @@ if state['data_quality'] == 'insufficient':
 
 <p><b>HTTP errors</b> — The Oracle may return 502/503 during restarts (typically &lt;30 seconds). Retry with exponential backoff.</p>
 
-<p><b>Stale data</b> — If <code>staleness_seconds</code> exceeds 120, the Oracle may be restarting or experiencing issues. The data is still valid but may not reflect the current moment. Your agent should flag this.</p>
+<p><b>Stale data</b> — If <code>staleness_seconds</code> exceeds 120, the Oracle may be restarting or experiencing issues. The data describes the last observation, not the current moment.</p>
 
 <p><b>Insufficient data quality</b> — When <code>data_quality</code> is <span class="val">insufficient</span>, the Oracle cannot see enough public nodes to form a credible assessment. All other fields are still present but should be treated as low-confidence. Status will be <span class="val">unknown</span> and risk will be <span class="val">elevated</span>.</p>
 
-<p><b>Timeouts</b> — Set a reasonable timeout (5–10 seconds). If the Oracle doesn't respond, your agent should fall back to its last known state or a safe default, not crash.</p>
+<p><b>Timeouts</b> — Set a reasonable timeout (5–10 seconds). If the Oracle doesn't respond, the last response received remains the latest observation available to your agent.</p>
 
 <div class="warn"><b>Never assume the Oracle is always available.</b> Design your agent to degrade gracefully when the Oracle is unreachable or returning stale data.</div>
 
 <h2>Edge Cases</h2>
-<p>These state combinations are real and your agent should handle them explicitly:</p>
+<p>These state combinations occur:</p>
 
 <p><b><code>status: stable</code> + <code>risk: elevated</code></b><br>
-The network is working, but resilience is reduced. Fewer nodes than ideal are reachable. The chain functions, but a single additional failure could cause degradation. Your agent should continue operating but with heightened caution.</p>
+Heights are aligned, and redundancy is reduced: fewer seeds answered than are configured, or confidence is uncertain.</p>
 
 <p><b><code>status: unknown</code> + <code>data_quality: insufficient</code></b><br>
-The Oracle cannot see enough public nodes to assess the network. This is not "the network is down" — it is "the Oracle cannot tell." Your agent should not assume the worst. It should wait and retry, or fall back to the last known good state.</p>
+The Oracle cannot see enough public nodes to assess the network. This is not "the network is down" — it is "the Oracle cannot tell." <code>data_quality_reason</code> says why.</p>
 
 <p><b><code>status: stable</code> + <code>confidence: uncertain</code></b><br>
-The Oracle has visibility but the signals are contradictory. Nodes may report different block heights or mixed health. The assessment says "stable" but with reduced certainty. Your agent should consume this data but flag it for human review.</p>
+The Oracle has visibility but the signals are contradictory. Nodes may report different block heights or mixed health. The assessment says "stable" with reduced certainty.</p>
 
 <p><b><code>agreement: unknown</code></b><br>
-Fewer than 2 public nodes are reachable, so consensus cannot be measured. This often accompanies <code>data_quality: insufficient</code>. It does not mean validators disagree — it means the Oracle cannot observe enough to tell.</p>
+Fewer than 2 public nodes returned a block height, so heights were not compared. This often accompanies <code>data_quality: insufficient</code>. It does not mean validators disagree — it means the Oracle cannot observe enough to tell.</p>
 
 <p><b><code>trend: unknown</code></b><br>
 Not enough recent history to compute a trend. Common after Oracle restarts or data gaps. Trend resets to <span class="val">unknown</span> until enough consecutive observations accumulate. This is normal, not an error.</p>
 
 <p><b><code>staleness_seconds</code> &gt; 60</b><br>
-The Oracle's last observation is more than a minute old. Possible causes: Oracle restarting, high load, network issues between the Oracle and its data sources. The data is still the best available — it's just not fresh. Your agent should note this and poll again shortly.</p>
+The Oracle's last observation is more than a minute old. Possible causes: Oracle restarting, high load, network issues between the Oracle and its data sources. The data is the last observation; it is not fresh.</p>
 
 <h2>Production Python Example</h2>
 <pre>import requests
@@ -282,11 +284,11 @@ def assess_reliability(state):
 state = fetch_oracle_state()
 check = assess_reliability(state)
 if check["reliable"]:
-    # Safe to use state["status"], state["risk"], etc.
+    # state["status"], state["risk"], etc. describe the latest observation
     pass
 else:
     logger.info(f"Oracle data unreliable: {check['reason']}")
-    # Fall back to last known state or safe default</pre>
+    # Keep the last observation received</pre>
 
 <h2>Combining Endpoints</h2>
 <p>The default context is <a href="/organism">GET /organism</a>.</p>

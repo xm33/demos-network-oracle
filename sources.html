@@ -122,7 +122,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
   </div>
   <p class="layer-desc">All fixnet validators except the Kynesys anchor are treated as discovered observations. This includes anonymous peers surfaced via the anchor&apos;s peerlist. On the fixnet reference path, discovered rows are probed for reachability, height, and latency. That sentence does not apply to the public testnet catalog. Public testnet catalog rows are copied from seed peerlists (online bit, advertised height). DNO does not dial those identities. Not probed. Neither layer enters status, risk, or agreement.</p>
   <div class="layer-detail">Trust origin on fixnet: the Kynesys anchor only &middot; All other fixnet sources are observed</div>
-  <div class="layer-detail">Operator names appear in the Validator column when operators have self-identified. Naming is cosmetic and does not imply promotion, approval, or elevated trust.</div>
+  <div class="layer-detail">Discovered rows are shown as discovered- plus the last 4 characters of the identity. No operator names are shown.</div>
 </div>
 
 <h2>Separation Rules</h2>
@@ -136,7 +136,7 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
   <a href="/incidents" class="ep">/incidents</a>
   <a href="/peers" class="ep">/peers</a>
   <a href="/badge" class="ep">/badge</a>
-  <a href="/self" class="ep">/self</a>
+  <a href="/catalog" class="ep">/catalog</a>
 </div>
 
 <h2>Attestation</h2>

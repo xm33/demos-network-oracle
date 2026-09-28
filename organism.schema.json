@@ -7,7 +7,9 @@
     { "version": "1.0", "date": "2026-06-10", "change_type": "initial",
       "notes": "Initial public contract. Testnet-era schema. 17 required top-level fields; all enums verified against source code." },
     { "version": "1.0", "date": "2026-06-11", "change_type": "clarification",
-      "notes": "api_version constraint relaxed from const 1.0 to pattern ^1. to allow additive 1.x releases per the stability policy. Correction note: a diverged agreement value was briefly added and removed same-day (commit 52ca4f9, reverted); it originated from a separate legacy agreement computation (exposed as network_agreement on /health, no known consumers) and is not an emittable value of this field. Public agreement states remain strong|moderate|weak|unknown." }
+      "notes": "api_version constraint relaxed from const 1.0 to pattern ^1. to allow additive 1.x releases per the stability policy. Correction note: a diverged agreement value was briefly added and removed same-day (commit 52ca4f9, reverted); it originated from a separate legacy agreement computation (exposed as network_agreement on /health, no known consumers) and is not an emittable value of this field. Public agreement states remain strong|moderate|weak|unknown." },
+    { "version": "1.1", "date": "2026-09-28", "change_type": "additive",
+      "notes": "Additive fields: data_quality_reason, observed_at, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail; last_24h.critical_public_incidents_in_window. Corrections of meaning, no type changes: staleness_seconds and last_updated are measured from the last completed public observation (previously the start of an observation cycle); seeds count toward data_quality and agreement only when they return a block height, and a seed's height is its own peerlist entry; last_24h.active_critical_public_incidents counts incidents active now (the previous window count moved to critical_public_incidents_in_window). Reason strings say 'answered' where they said 'reachable'." }
   ],
   "type": "object",
   "required": ["status","trend","risk","data_quality","confidence","agreement","active_incidents","max_incident_severity","summary","status_reason","risk_factors","confidence_reason","agreement_reason","staleness_seconds","last_updated","api_version","last_24h"],
@@ -26,8 +28,15 @@
     "risk_factors":      { "type": "array", "items": { "type": "string" } },
     "confidence_reason": { "type": "string" },
     "agreement_reason":  { "type": "string" },
-    "staleness_seconds": { "type": "integer", "minimum": 0, "description": "Whole seconds since last observation cycle; use for freshness judgment." },
-    "last_updated":      { "type": "string", "format": "date-time" },
+    "staleness_seconds": { "type": "integer", "minimum": 0, "description": "Whole seconds since the last completed public observation (since agent start before the first one); use for freshness judgment." },
+    "last_updated":      { "type": "string", "format": "date-time", "description": "Time of the last completed public observation (agent start before the first one)." },
+    "data_quality_reason": { "enum": [null,"no_observation","stale","too_few_answers","too_few_heights"], "description": "Why data_quality is insufficient; null when sufficient. Additive in 1.1." },
+    "observed_at":       { "type": ["string","null"], "format": "date-time", "description": "Time of the last completed public observation; null before the first one. Additive in 1.1." },
+    "height_last_advanced_at": { "type": ["string","null"], "format": "date-time", "description": "When the highest height reported by an answering seed last increased. Additive in 1.1." },
+    "height_static_seconds": { "type": ["integer","null"], "minimum": 0, "description": "Seconds the highest reported height has not increased, as of the last observation. Reported as observed; its cause is not known from here. Additive in 1.1." },
+    "active_public_conditions": { "type": "integer", "minimum": 0, "description": "Active public condition records (visibility, degraded, unstable) that DNO opens when its own status changes. Listed on /incidents with kind=condition; not included in active_incidents. Additive in 1.1." },
+    "agreement_detail": { "type": "object", "description": "Counts behind the agreement label. total_nodes = seeds that returned a height. aligned_nodes and block_spread are null when agreement is unknown (heights not compared). Additive in 1.1.",
+      "properties": { "aligned_nodes": { "type": ["integer","null"], "minimum": 0 }, "total_nodes": { "type": "integer", "minimum": 0 }, "median_block": { "type": ["integer","null"], "minimum": 0 }, "block_spread": { "type": ["integer","null"], "minimum": 0 } } },
     "api_version":       { "type": "string", "pattern": "^1\\." },
     "last_24h": {
       "type": "object",
@@ -52,7 +61,9 @@
             "longest_static_minutes": { "type": "number" },
             "buckets": { "type": "integer" } } },
         "longest_non_stable_minutes": { "type": ["number","null"], "minimum": 0 },
-        "active_critical_public_incidents": { "type": ["integer","null"], "minimum": 0 },
+        "active_critical_public_incidents": { "type": ["integer","null"], "minimum": 0, "description": "Critical public incidents active now." },
+        "critical_public_incidents_in_window": { "type": ["integer","null"], "minimum": 0, "description": "Critical public incidents active now or resolved inside the window. Additive in 1.1." },
+        "message": { "type": "string" },
         "computed_at": { "type": "string", "format": "date-time" }
       }
     }
