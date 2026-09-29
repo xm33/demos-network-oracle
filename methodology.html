@@ -1,94 +1,55 @@
-<!DOCTYPE html><html><head>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet"><meta charset="utf-8"><title>Demos Network Oracle — Methodology</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='18' r='4' fill='%232B36D9'/%3E%3Ccircle cx='18' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='82' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='50' cy='50' r='5.5' fill='%232B36D9'/%3E%3C/svg%3E">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-:root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--brand:#2B36D9;--accent:#00DAFF;--warning:#d97706;--critical:#EF4444;--improving:var(--accent);--degraded:var(--warning);--unstable:var(--critical);--mono:'Source Code Pro',monospace;--sans:'Inter',system-ui,sans-serif}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;line-height:1.7}
-main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
-h1{font-family:var(--mono);font-size:32px;font-weight:600;letter-spacing:-0.03em;line-height:1.05;margin:0 0 8px;color:var(--text-primary)}
-.sub{color:var(--text-secondary);margin-bottom:2rem;font-size:14px;line-height:1.7}
-h2{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;color:var(--text-primary);margin:36px 0 12px;padding-top:16px;border-top:1px solid var(--border)}
-h3{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text-primary);margin:18px 0 6px}
-p{color:var(--text-secondary);font-size:14px;line-height:1.72;margin:0 0 12px}
-table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
-th{color:var(--text-secondary);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase}
-td{padding:8px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--text-primary)}
-.val{display:inline-block;padding:1px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--improving);font-family:var(--mono);font-size:12px;font-weight:500}
-.note{margin:14px 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text-secondary);font-size:13px;line-height:1.6}
-.warn{margin:14px 0;padding:12px 14px;border:1px solid rgba(217,119,6,0.3);border-radius:10px;background:var(--surface);color:var(--text-secondary);font-size:13px;line-height:1.6}
-a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}
-a:hover{border-bottom-color:var(--improving)}
-a:hover{text-decoration:underline}
-code{font-family:var(--mono);color:var(--text-primary);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px}
-footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
-/* BEGIN canonical-header-css v1 */
-/* Navbar (doc-nav component) */
-.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
-.doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
-.doc-nav-left{order:1}
-.doc-nav-right{order:2;margin-left:auto}
-.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
-.doc-nav-brand:hover{text-decoration:none;opacity:0.9}
-.doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
-.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-.doc-nav-link[aria-current="page"]{opacity:0.5}
-.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
-.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
-.demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
-.demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
-.dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
-.dbtn-logo { height:16px; width:auto; opacity:1; }
-.dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
-/* END canonical-header-css v1 */
-@media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:26px}h2{font-size:16px;margin-top:28px}}
-@media(max-width:640px){.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}
-.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body class="doc-page doc-page--methodology">
-<!-- BEGIN canonical-header v1 -->
-<nav class="doc-nav">
-  <div class="doc-nav-inner">
-    <div class="doc-nav-left">
-      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Methodology · Demos Network Oracle</title>
+<!--dno:head-->
+</head>
+<body>
+<!--dno:header:methodology-->
+<main id="main">
+  <header class="doc-head">
+    <div class="wrap">
+      <div>
+        <h1>How the Oracle Works</h1>
+        
+        <div class="doc-intro"><p class="doc-lede">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
+<p>Methodology v1.1 · 2026-09-28 · aligned with <a href="/organism/schema">/organism contract v1.1</a></p></div>
+      </div>
     </div>
-    <div class="doc-nav-right">
-      <a href="/methodology" class="doc-nav-link" data-nav="methodology" aria-current="page">Methodology</a>
-<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a>      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
-      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
-      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
-      <a href="/reference" class="doc-nav-link" data-nav="reference">Reference</a><a href="/dashboard" class="doc-nav-link" data-nav="dashboard">Dashboard</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
-    </div>
-    <div class="doc-nav-far">
-      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-        <span class="dbtn-prefix">powered by</span>
-        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-        <span class="dbtn-wordmark">DEMOS</span>
-      </a>
-    </div>
-  </div>
-</nav>
-<!-- END canonical-header v1 -->
-<main>
-<h1>How the Oracle Works</h1>
-<p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Many signals. One observed view.</p>
-<p class="sub">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
-<p style="color:var(--text-secondary);font-size:12px;margin-top:-8px;margin-bottom:20px">Methodology v1.1 · 2026-09-28 · aligned with <a href="/organism/schema">/organism contract v1.1</a></p>
+  </header>
+  <div class="wrap doc-grid">
+    <details class="toc" open>
+      <summary>On this page</summary>
+      <ol>
+        <li><a href="#what-the-oracle-is">What the Oracle Is</a></li>
+        <li><a href="#what-it-measures">What It Measures</a></li>
+        <li><a href="#published-observation-parameters">Published observation parameters</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#public-vs-reference-separation">Public vs Reference Separation</a></li>
+        <li><a href="#interpretation-model">Interpretation Model</a></li>
+        <li><a href="#explanation-layer">Explanation Layer</a></li>
+        <li><a href="#historical-metrics">Historical Metrics</a></li>
+        <li><a href="#last-24-hours-summary">Last 24 Hours Summary</a></li>
+        <li><a href="#scope-and-limits">Scope and Limits</a></li>
+        <li><a href="#understanding-uncertainty">Understanding Uncertainty</a></li>
+        <li><a href="#known-limitations">Known Limitations</a></li>
+        <li><a href="#methodology-changelog">Methodology Changelog</a></li>
+        <li><a href="#how-to-use-the-data">How to Use the Data</a></li>
+      </ol>
+    </details>
+    <article class="prose">
+<section id="what-the-oracle-is">
 <h2>What the Oracle Is</h2>
-<p>The Demos Network Oracle (DNO) is a public observability layer for the Demos blockchain testnet. It watches the network's public validator nodes, measures whether they agree on the state of the chain, tracks specific problems, and publishes what it finds.</p>
+<p>The Demos Network Oracle (DNO) is a public observability layer for the Demos blockchain testnet. It reads the network's public seeds from outside, measures whether the heights they report agree, tracks specific problems, and publishes what it finds.</p>
 <p>The Oracle is strictly watch-only. It observes, interprets, and summarizes. It does not command validators, does not advise operators, and does not make predictions about what will happen next. It publishes network state as neutral facts. What anyone does with those facts is their decision.</p>
 <p>The Oracle is independent. It is not operated by the Demos core team. It does not control any downstream system. Any agent, builder, or person can consume its output and form their own conclusions.</p>
-<div class="note">DNO also publishes a versioned <a href="/criteria">Criteria Catalog</a> — the definitions of its observation criteria (C1–C6), available as data at <a href="/criteria.json">/criteria.json</a>.</div>
+<div class="aside">DNO also publishes a versioned <a href="/criteria">Criteria Catalog</a> — the definitions of its observation criteria (C1–C6), available as data at <a href="/criteria.json">/criteria.json</a>.</div>
+</section>
+<section id="what-it-measures">
 <h2>What It Measures</h2>
 <p>Every Oracle assessment is built from seven independent concepts. Each answers exactly one question about the network. No two concepts overlap — if you can express something by combining two other concepts, it is not given its own field.</p>
-<table><thead><tr><th>Concept</th><th>Question</th><th>Possible values</th></tr></thead><tbody>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Concept</th><th>Question</th><th>Possible values</th></tr></thead><tbody>
 <tr><td><b>Status</b></td><td>What is the network's condition right now?</td><td><span class="val">stable · degraded · unstable · unknown</span></td></tr>
 <tr><td><b>Trend</b></td><td>Is the condition changing?</td><td><span class="val">improving · stable · worsening · unknown</span></td></tr>
 <tr><td><b>Risk</b></td><td>How dangerous is the current state?</td><td><span class="val">low · elevated · high</span></td></tr>
@@ -96,40 +57,41 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <tr><td><b>Confidence</b></td><td>Do the observed signals agree with each other?</td><td><span class="val">clear · uncertain</span></td></tr>
 <tr><td><b>Agreement</b></td><td>Do the public seeds report aligned block heights?</td><td><span class="val">strong · moderate · weak · unknown</span></td></tr>
 <tr><td><b>Incidents</b></td><td>What specific problems are active?</td><td><span class="val">info · warning · critical</span></td></tr>
-</tbody></table>
-<h3>Status</h3>
+</tbody></table></div>
+<h3 id="what-it-measures-status">Status</h3>
 <p>Status describes current network operability — whether the chain is functioning right now. It is not a direct measure of network size or validator count.</p>
-<p><span class="val">stable</span> — At least two public seeds returned a block height, their heights agree (strong agreement), and no warning or critical public incident is active. One seed not answering does not by itself change status. <code>status_reason</code> says "Heights advancing" only when some seed reported a higher height within the last two observation rounds. When no answering seed has reported a higher height for 5 minutes, it says "height unchanged for N min" and <code>height_static_seconds</code> carries the duration; the cause of a static height is not known from here, so it does not change status. Right after a restart nothing has been compared yet: <code>height_static_seconds</code> is null until the next round, and until DNO observes an advance it counts from the first round that showed the current height (a lower bound).</p>
+<p><span class="val">stable</span> — At least two public seeds reported their own block height, their heights agree (strong agreement), and no warning or critical public incident is active. One seed not answering does not by itself change status. <code>status_reason</code> says "Heights advancing" only when some seed reported a higher height within the last two observation rounds. When no answering seed has reported a higher height for 5 minutes, it says "height unchanged for N min" and <code>height_static_seconds</code> carries the duration; the cause of a static height is not known from here, so it does not change status. Right after a restart nothing has been compared yet: <code>height_static_seconds</code> is null until the next round, and until DNO observes an advance it counts from the first round that showed the current height (a lower bound).</p>
 <p><span class="val">degraded</span> — Agreement is moderate, or a warning-level public incident is active.</p>
 <p><span class="val">unstable</span> — A critical public incident is active, or agreement is weak.</p>
 <p><span class="val">unknown</span> — The Oracle cannot determine the network's condition. This happens when fewer than two public seeds answered with a block height, or when the last observation is more than 300 seconds old. <code>data_quality_reason</code> names which. This is not a health judgment — it is an explicit statement that the Oracle does not have enough information.</p>
-<h3>Trend</h3>
+<h3 id="what-it-measures-trend">Trend</h3>
 <p>Trend tells you whether the situation is getting better, holding steady, or getting worse, based on comparing the current observation against recent history. It is purely backward-looking — it describes what has changed, never what will change.</p>
 <p>Trend compares the current observation with the average of up to 15 previous observations inside a short recent window, and needs at least 10 of them. After a restart or data gap, trend is <span class="val">unknown</span> until enough recent history accumulates.</p>
-<h3>Risk</h3>
+<h3 id="what-it-measures-risk">Risk</h3>
 <p>Risk describes how dangerous the current observed state is. It is a snapshot — it characterizes the present moment, not a forecast.</p>
 <p><span class="val">low</span> — No significant exposure. <span class="val">elevated</span> — Reduced margin observed (see <code>risk_factors</code>). A fault is not confirmed. <span class="val">high</span> — The network is materially impaired.</p>
 <p>When status is <span class="val">unknown</span>, risk defaults to <span class="val">elevated</span>. The Oracle treats the absence of information as a reason for caution — but not alarm. On a testnet where <span class="val">unknown</span> is a normal occurrence, defaulting to <span class="val">high</span> would desensitize consumers.</p>
-<h3>Data quality</h3>
+<h3 id="what-it-measures-data-quality">Data quality</h3>
 <p>Data quality measures whether the Oracle can see the network properly. It answers: did enough public nodes respond, recently enough, to form a credible assessment?</p>
-<p><span class="val">sufficient</span> — At least two public seeds answered with a block height in the latest observation, and it is at most 300 s old. <span class="val">insufficient</span> — Fewer seeds answered, fewer returned a height, or the last completed observation is older than 300 s (<code>data_quality_reason</code>: <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>, <span class="val">stale</span>, <span class="val">no_observation</span>). When data quality is insufficient, status is set to <span class="val">unknown</span>.</p>
-<h3>Confidence</h3>
+<p><span class="val">sufficient</span> — At least two public seeds reported their own block height in the latest observation, and it is at most 300 s old. <span class="val">insufficient</span> — Fewer seeds answered, fewer reported their own height, or the last completed observation is older than 300 s (<code>data_quality_reason</code>: <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>, <span class="val">stale</span>, <span class="val">no_observation</span>). When data quality is insufficient, status is set to <span class="val">unknown</span>.</p>
+<h3 id="what-it-measures-confidence">Confidence</h3>
 <p>Confidence measures whether the observed signals agree with each other. The Oracle may have full visibility (data quality is sufficient) but see contradictory information — nodes reporting divergent block heights, mixed health signals. That is a confidence problem.</p>
 <p><span class="val">clear</span> — Signals are consistent and unambiguous. <span class="val">uncertain</span> — Signals conflict or are ambiguous. Status and risk are still published, but should be consumed with caution.</p>
-<div class="note"><b>Data quality ≠ confidence.</b> "I can't see enough" is a data quality problem. "What I see is contradictory" is a confidence problem. A network can have sufficient data quality but uncertain confidence (full visibility, conflicting data) — or insufficient data quality but clear confidence (limited data, but what's visible is consistent).</div>
-<h3>Agreement</h3>
-<p>Agreement measures whether the public validators are producing a coherent, shared chain. It is computed only from <b>public seeds that answered with a block height</b>; a seed's height is its own peerlist entry; a seed that does not list itself is represented by the first peer it lists, and <code>height_source</code> on /health says which (<span class="val">self</span> or <span class="val">first_peer</span>). Seeds that did not answer, and catalog identities (never dialed), do not count as disagreement. Agreement is derived from those heights — specifically, how many are within 25 blocks of the median (the middle height, or the upper of the two middle heights when the count is even).</p>
-<p><span class="val">strong</span> — All or nearly all observed public nodes are aligned. <span class="val">moderate</span> — Most agree, but some divergence exists. <span class="val">weak</span> — Significant divergence. <span class="val">unknown</span> — Fewer than two public seeds returned a height; heights were not compared (<code>aligned_nodes</code> and <code>block_spread</code> are null).</p>
+<div class="aside"><b>Data quality ≠ confidence.</b> "I can't see enough" is a data quality problem. "What I see is contradictory" is a confidence problem. A network can have sufficient data quality but uncertain confidence (full visibility, conflicting data) — or insufficient data quality but clear confidence (limited data, but what's visible is consistent).</div>
+<h3 id="what-it-measures-agreement">Agreement</h3>
+<p>Agreement measures whether the heights the public seeds report agree. It is computed only from <b>public seeds that reported their own height</b>: a seed's height is its own peerlist entry. A seed that does not list itself has no height here. Its first listed peer's height stays on its /health row (<code>height_source</code> <span class="val">first_peer</span>) and is counted nowhere: not in <code>total_nodes</code>, <code>aligned_nodes</code>, the median or the spread. Seeds that did not answer, and peer-listed identities (never dialed), do not count as disagreement. Agreement is derived from those heights — specifically, how many are within 25 blocks of the median (the middle height, or the upper of the two middle heights when the count is even).</p>
+<p><span class="val">strong</span> — All or nearly all observed public nodes are aligned. <span class="val">moderate</span> — Most agree, but some divergence exists. <span class="val">weak</span> — Significant divergence. <span class="val">unknown</span> — Fewer than two public seeds reported their own height; heights were not compared (<code>aligned_nodes</code> and <code>block_spread</code> are null).</p>
 <p>The Oracle publishes the underlying data alongside the label: aligned node count, total node count, median block height, and block spread. At current network size, calculated percentages would be misleadingly precise, so the Oracle publishes counts instead.</p>
-<h3>Incidents</h3>
+<h3 id="what-it-measures-incidents">Incidents</h3>
 <p>Incidents are discrete, named events — a specific node going offline, a chain stall, a detected partition. They have a severity (<span class="val">info</span>, <span class="val">warning</span>, <span class="val">critical</span>) and a lifecycle (opened → active → resolved).</p>
 <p>General conditions like "the network is slow" are not incidents — they are captured by status, risk, and agreement. Incidents point to specific, identifiable problems.</p>
 <p>Severity is assessed relative to current network size. One node going offline in a set of five is more significant than in a set of fifty.</p>
-<div class="note">Incidents are state-driven and persist across restarts. The Oracle reconciles each active incident against current observations every cycle, rather than relying only on transition events. A consequence: an incident may remain active for extended periods when the underlying condition does not resolve — for example, a block-stall may be detected and kept active even while all nodes remain individually healthy and reachable. "All nodes healthy" does not always mean "the network is producing blocks."</div>
-
+<div class="aside">Incidents are state-driven and persist across restarts. The Oracle reconciles each active incident against current observations every cycle, rather than relying only on transition events. A consequence: an incident may remain active for extended periods when the underlying condition does not resolve — for example, a block-stall may be detected and kept active even while all nodes remain individually healthy and reachable. "All nodes healthy" does not always mean "the network is producing blocks."</div>
+</section>
+<section id="published-observation-parameters">
 <h2>Published observation parameters</h2>
-<p>DNO&apos;s floor, not Demos&apos; forge quorum. These are <code>agent.mjs</code> constants at the current pin. They are DNO&apos;s own bounds, not Demos protocol requirements, and not a score.</p>
-<table><thead><tr><th>Token</th><th>Value</th><th>What it is</th></tr></thead><tbody>
+<p>DNO&apos;s floor, not Demos&apos; forge quorum. These are <code>agent.mjs</code> constants at the current pin. They are DNO&apos;s own bounds, not Demos protocol requirements, and they grade no one.</p>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Token</th><th>Value</th><th>What it is</th></tr></thead><tbody>
 <tr><td>vantage floor</td><td>2 public answers with a block height</td><td>else data_quality insufficient</td></tr>
 <tr><td>cycle</td><td>20 s</td><td>MONITOR_INTERVAL_MS</td></tr>
 <tr><td>probe timeout</td><td>5 s</td><td>seed /info abort</td></tr>
@@ -142,134 +104,142 @@ footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--b
 <tr><td>static height</td><td>5 min without an increase</td><td>status_reason says "height unchanged for N min"; status unchanged</td></tr>
 <tr><td>trend window</td><td>10–15 previous observations within the last 24 cycles</td><td>else trend unknown</td></tr>
 <tr><td>24h static bucket</td><td>5 min</td><td>last_24h clock</td></tr>
-</tbody></table>
+</tbody></table></div>
+</section>
+<section id="how-it-works">
 <h2>How It Works</h2>
 <p>The Oracle runs a continuous observation cycle. Every 20 seconds, it:</p>
-<p>1. Fetches each configured public seed's /info in parallel — whether it answered, its own block height, software version and peer count. The same peerlists feed the retained catalog; catalog identities are never dialed.<br>
-2. Computes network agreement from the observed block heights.<br>
+<p>1. Fetches each configured public seed's /info in parallel — whether it answered, its own block height, software version and peer count. The same peerlists feed the catalog of peer-listed identities, which are never dialed; a new identity is kept only after two public peerlists have listed it.<br>
+2. Computes agreement from the seeds' own block heights.<br>
 3. Checks for active incidents — new problems, resolved problems.<br>
 4. Runs the public state computation — derives all seven concepts from the raw observations.<br>
 5. Updates all API endpoints with the new state.</p>
-<p>When attestation is available, the Oracle attests observed public sources on-chain via DAHR. Attestation state is published at /health.</p>
+<p>DAHR (the Demos Data Agnostic HTTPS Relay) is attempted on the cross-check RPCs, not on the seeds whose answers enter status. <code>/health</code> reports it in <code>attestation</code> (<code>available</code>, <code>last_count</code>, <code>last_ok_at</code>); <code>/organism</code> carries no attestation. While <code>on_chain_publication</code> is <span class="val">disabled</span>, nothing is posted on chain. What one DAHR call records is on <a href="/about-demos#dahr">About Demos</a>.</p>
 <p>The public state computation is a single function that takes public node observations as input and produces all seven values as output. Fleet data never enters this function. The computation is deterministic — given the same observations, it always produces the same assessment.</p>
+</section>
+<section id="public-vs-reference-separation">
 <h2>Public vs Reference Separation</h2>
 <p>This is the most important structural rule in the Oracle. It governs everything.</p>
-<h3>Public network (primary observation basis)</h3>
+<h3 id="public-vs-reference-separation-public-network-pr">Public network (primary observation basis)</h3>
 <p>All top-level assessments — status, trend, risk, data quality, confidence, agreement — are derived exclusively from public network observations. Public assessment uses the configured Kynesys seed URLs. Independent of DNO: true. Independent of each other: false. One org.</p>
-<h3>Reference fleet (internal context)</h3>
+<h3 id="public-vs-reference-separation-reference-fleet-i">Reference fleet (internal context)</h3>
 <p>The Oracle operator (XM33) also runs a fleet of validator nodes. These provide internal context and infrastructure health monitoring. Fleet data never influences the public assessment and is not part of the public feeds.</p>
 <p>The fleet is a reference layer because it is operated by a single entity, may be on a different chain state than the public network, and its health does not represent public network health. Fleet nodes that appear in public crawl output are additionally listed in the discovered table, resolved identically to other discovered peers, as described under Discovered but unmonitored validators.</p>
-<h3>How separation is enforced</h3>
+<h3 id="public-vs-reference-separation-how-separation-is">How separation is enforced</h3>
 <p>In the API: the compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
-<p>In the dashboard: public data is presented first. Fleet data is in a collapsed "Reference Layer" section, clearly labeled.</p>
+<p>Fleet views (<code>/dashboard</code>, <code>/history</code> and everything under it) are served on DNO's internal listener only; the public site answers 404 for them.</p>
+</section>
+<section id="interpretation-model">
 <h2>Interpretation Model</h2>
 <p>The Oracle separates <b>operability</b> from <b>resilience</b>:</p>
-<p>• <b>Status</b> describes whether the chain is functioning now.<br>• <b>Risk</b> describes how fragile that observed state is.<br>• <b>Agreement</b> measures alignment among public seeds that answered with a height.<br>• <b>Catalog identities</b> are never dialed and do not enter status, risk or agreement.</p>
+<p>• <b>Status</b> describes whether the chain is functioning now.<br>• <b>Risk</b> describes how fragile that observed state is.<br>• <b>Agreement</b> measures alignment among public seeds that reported their own height.<br>• <b>Peer-listed identities</b> are never dialed and do not enter status, risk or agreement.</p>
 <p>This prevents low public node reachability from being misread as immediate chain instability. A network can be <span class="val">stable</span> with <span class="val">elevated</span> risk — meaning: the chain works, but resilience is reduced.</p>
-
+</section>
+<section id="explanation-layer">
 <h2>Explanation Layer</h2>
 <p>The Oracle provides explanatory fields alongside its categorical assessments. These fields are intended to improve interpretability for human readers and machine consumers.</p>
-<h3>status_reason</h3>
+<h3 id="explanation-layer-status-reason">status_reason</h3>
 <p>Explains the primary observed basis for the current status. Examples: <span class="val">Heights advancing; public nodes aligned</span>, <span class="val">Public nodes aligned; height unchanged for 12 min</span>, <span class="val">Insufficient data: fewer than 2 public nodes answered</span>.</p>
-<h3>risk_factors</h3>
+<h3 id="explanation-layer-risk-factors">risk_factors</h3>
 <p>Lists active observed contributors to current network fragility or reduced resilience. This array may be empty when no material risk factors are currently detected.</p>
-<h3>agreement_reason</h3>
-<p>Describes the alignment basis used in the agreement assessment. Example: <span class="val">3 of 3 public nodes with a height within ±25 blocks of the median (spread: 0 blocks)</span>; when heights were not compared: <span class="val">Not compared: fewer than 2 public nodes returned a block height</span>.</p>
-<h3>confidence_reason</h3>
+<h3 id="explanation-layer-agreement-reason">agreement_reason</h3>
+<p>Describes the alignment basis used in the agreement assessment. Example: <span class="val">3 of 3 public nodes with a height within ±25 blocks of the median (spread: 0 blocks)</span>; when heights were not compared: <span class="val">Not compared: fewer than 2 public nodes reported their own block height</span>.</p>
+<h3 id="explanation-layer-confidence-reason">confidence_reason</h3>
 <p>Explains why confidence is <span class="val">clear</span> or <span class="val">uncertain</span>. Typical values: <span class="val">Observed public signals agree</span> (clear), <span class="val">No cross-check: fewer than 2 public nodes answered</span> (uncertain, insufficient data), or <span class="val">Public nodes report block heights more than 50 blocks apart</span> (uncertain, divergent heights).</p>
 <p>These explanatory fields summarize current observed conditions. They do not constitute guarantees, certification, or operational advice.</p>
-
+</section>
+<section id="historical-metrics">
 <h2>Historical Metrics</h2>
 <p>The Oracle displays rolling historical metrics derived from its own observation cycles over the current history window.</p>
 <p><span class="val">uptime_7d</span> — percentage of observed cycles in the last seven days in which the configured seed answered (seeds only; catalog identities are never dialed).</p>
 <p><span class="val">avg_latency_7d</span> — average response latency across successful observed cycles.</p>
 <p>These historical metrics are observational summaries only. They do not constitute endorsement, certification, or recommendation of any validator or operator. Early values should be interpreted cautiously until sufficient history has accumulated. Historical metrics do not change the core assessment model unless explicitly stated.</p>
-<div class="note">Rolling observed history. Early values may refine over time.</div>
-
-
+<div class="aside">Rolling observed history. Early values may refine over time.</div>
+</section>
+<section id="last-24-hours-summary">
 <h2>Last 24 Hours Summary</h2>
 <p>The "Last 24 Hours" panel on the homepage surfaces aggregate observation from the most recent 24 hours of probe cycles. All fields derive from the public node history table and the public-scope incidents table.</p>
 
-<h3>Public nodes observed</h3>
+<h3 id="last-24-hours-summary-public-nodes-observed">Public nodes observed</h3>
 <p>The number of public nodes that returned a usable response in each probe cycle. This reflects what the Oracle observed in probe cycles, not the total number of validators in the network. "Typically N" is the most common observed count across the window. "Peak M" is the largest count observed at any point.</p>
 
-<h3>Peak observation window</h3>
-<p>When the typical and peak counts differ, this row reports how often the larger set was assembled and how many of those nodes were reachable on average. It frames observation quality, not network failure: "5 nodes observed; 1.0 reachable on average across 156 cycles" means the Oracle managed to assemble a 5-node observation 156 times in 24 hours, and during those cycles, on average one of the five was reachable.</p>
+<h3 id="last-24-hours-summary-peak-observation-window">Peak observation window</h3>
+<p>When the typical and peak counts differ, this row reports how often the larger set was assembled and how many of those nodes answered on average. It frames observation quality, not network failure: "5 nodes observed; 1.0 answered on average across 156 cycles" means the Oracle managed to assemble a 5-node observation 156 times in 24 hours, and during those cycles, on average one of the five answered.</p>
 
-<h3>Chain movement</h3>
+<h3 id="last-24-hours-summary-chain-movement">Chain movement</h3>
 <p>Categorical: <em>normal</em>, <em>interrupted</em>, or <em>unknown</em>. Computed by bucketing the 24-hour window into 5-minute intervals and checking whether the median block number advanced within each bucket. <em>Normal</em> requires advance in at least 95% of buckets and no static run of 5+ minutes. <em>Interrupted</em> fires on either threshold. <em>Unknown</em> indicates fewer than 12 buckets of data — typically during partial windows.</p>
 
-<h3>Longest non-stable interval</h3>
+<h3 id="last-24-hours-summary-longest-non-stable-interva">Longest non-stable interval</h3>
 <p>The longest contiguous run of cycles where the Oracle's computed status was "unstable" or "degraded". Cycles in "unknown" state break the run because "unknown" indicates an observation gap, not network state.</p>
 
-<h3>Active critical public incidents</h3>
+<h3 id="last-24-hours-summary-active-critical-public-inc">Active critical public incidents</h3>
 <p>Critical-severity incidents that were open at any point during the window and affect at least one non-fleet node. Fleet-internal incidents are excluded.</p>
 
-<h3>Coverage</h3>
+<h3 id="last-24-hours-summary-coverage">Coverage</h3>
 <p>The fraction of expected probe cycles actually observed in the window (86,400 seconds / 20-second cadence = 4,320 expected cycles). When coverage drops below 50%, all numerical fields are hidden until the rolling window is sufficiently observed.</p>
-
+</section>
+<section id="scope-and-limits">
 <h2>Scope and Limits</h2>
 <p>The Oracle is a watch-only observability system. It summarizes observed network conditions and historical measurements but does not provide financial, operational, legal, or governance advice.</p>
 <p>Inclusion of a validator in Oracle outputs does not imply endorsement, approval, or certification.</p>
 <p>Oracle outputs are based on externally observable signals available during each measurement cycle. Public endpoint availability, temporary network conditions, or incomplete visibility may affect results. Outputs should be interpreted as structured observed assessments, not guarantees of present or future validator behavior.</p>
-
+</section>
+<section id="understanding-uncertainty">
 <h2>Understanding Uncertainty</h2>
 <p>The Oracle treats uncertainty as a first-class output. On a young testnet with small, evolving node coverage, partial visibility is a normal operating condition — not an error.</p>
 <p>The Oracle starts from caution and earns stronger claims through sustained observation. It prefers honest uncertainty over artificial precision.</p>
-<h3>Three kinds of uncertainty</h3>
+<h3 id="understanding-uncertainty-three-kinds-of-uncerta">Three kinds of uncertainty</h3>
 <p><b>Insufficient data.</b> The Oracle does not have enough information to form an assessment. Too few public nodes responded, or the Oracle just started and hasn't completed a full cycle yet. Effect: data quality → <span class="val">insufficient</span>, status → <span class="val">unknown</span>, risk → <span class="val">elevated</span>.</p>
 <p><b>Stale data.</b> The Oracle has data, but it may be too old to reflect current reality. Observation failures, network timeouts, or process interruptions can cause staleness. The Oracle always publishes how many seconds ago it last observed the network (<code>staleness_seconds</code>) so consumers can apply their own freshness judgment.</p>
 <p><b>Contradictory data.</b> The Oracle has fresh, sufficient data, but the signals conflict — nodes report different block heights, mixed health signals. This is often the most informative kind of uncertainty, because it frequently signals a real network event. A related variant: when only one public node is reachable, confidence is also <span class="val">uncertain</span> — not because signals conflict, but because there is no second source to cross-check against. Effect: confidence → <span class="val">uncertain</span>, but data quality remains <span class="val">sufficient</span>. The problem is in the network or in coverage, not in the Oracle's ability to observe.</p>
-<h3>The unknown contract</h3>
+<h3 id="understanding-uncertainty-the-unknown-contract">The unknown contract</h3>
 <p>When the Oracle reports <span class="val">unknown</span>, <span class="val">insufficient</span>, or <span class="val">uncertain</span> for any field:</p>
 <p>1. The value is explicitly stated — never omitted, never null.<br>
 2. No guess, default, or cached value is substituted.<br>
 3. Consumers can rely on these states as stable, intentional signals — not bugs.</p>
+</section>
+<section id="known-limitations">
 <h2>Known Limitations</h2>
 <p>DEMOS is a young testnet. The Oracle is designed for this reality and makes no claims beyond what it can observe.</p>
-<p><b>Small public node set.</b> The Oracle currently monitors the Kynesys public validators. Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
-<p><b>Discovered but unmonitored validators.</b> The Oracle discovers new validators via peer list crawling. Some may be online but not yet added to formal monitoring. The Network Growth panel on the dashboard shows their sync progress. A discovered row is crawl observation, not a promise of public monitoring.</p>
+<p><b>Small public node set.</b> The Oracle currently reads three public Kynesys seeds. Assessments use coarse-grained categories that match this resolution. As the network grows, finer granularity will be added without structural changes.</p>
+<p><b>Peer-listed identities.</b> The public seeds' peerlists name other identities. DNO keeps each one after two public peerlists have listed it, records its first and last listing, and never dials it. A row is a peerlist observation: not a row of the on-chain validators table (DNO does not read it), not a census of Demos beta, and not a promise of monitoring. The peerlists also carry a second status flag whose meaning DNO has not confirmed; it is not published.</p>
 <p>The discovered table lists every peer observed in crawl output that is not one of the monitored public nodes shown above it. This includes any peers operated by the oracle's operator; such peers are resolved and displayed identically to all other discovered peers, and are not otherwise identified.</p>
 <p><b>Observable coverage only.</b> The Oracle can only assess what it can reach. Nodes that are firewalled, on private networks, or not yet discovered are invisible. The Oracle is honest about this — <span class="val">unknown</span> and <span class="val">insufficient</span> are always explicitly stated.</p>
 <p><b>No prediction.</b> The Oracle describes what is, not what will be. Even trend is backward-looking. Predictive signals may be added as a separate, clearly labeled layer in the future — never merged into the core assessment model.</p>
 <p><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b></p>
+</section>
+<section id="methodology-changelog">
 <h2>Methodology Changelog</h2>
-<p><b>v1.1 — 2026-09-28.</b> Seeds are counted toward data quality and agreement only when they return a block height, and a seed's height is its own peerlist entry (the first listed peer was used before). Staleness and <code>last_updated</code> are measured from the last completed public observation. Status reasons name the cause of insufficient data and say "height unchanged for N min" instead of "blocks advancing" when heights are static. Trend history is bounded to a recent window. The 24-hour chain-movement buckets no longer read a single-row bucket as static. <code>active_public_conditions</code> counts DNO's own condition records, which <code>active_incidents</code> excludes.</p>
+<p><b>v1.1 — 2026-09-28.</b> Seeds are counted toward data quality and agreement only when they report their own block height (their own peerlist entry); a seed that does not list itself has no height there, and its first listed peer's height is shown on its /health row only. A new peer-listed identity is kept only after two public peerlists have listed it. The peerlists' unconfirmed second status flag is no longer published. <code>/dashboard</code> and <code>/history</code> are internal only. <code>last_24h.chain_movement.blocks_advanced</code> reports blocks advanced as observed, with no target rate; <code>validator_growth.mixed_fields</code> labels the two 1.0 counts that add seeds and peer-listed identities together. Staleness and <code>last_updated</code> are measured from the last completed public observation. Status reasons name the cause of insufficient data and say "height unchanged for N min" instead of "blocks advancing" when heights are static. Trend history is bounded to a recent window. The 24-hour chain-movement buckets no longer read a single-row bucket as static. <code>active_public_conditions</code> counts DNO's own condition records, which <code>active_incidents</code> excludes.</p>
 <p><b>v1.0 — 2026-06-11.</b> Initial versioned methodology. All numeric thresholds stated on this page (5-minute buckets, 12-bucket minimum, 95% advance ratio, 5-minute static-run limit, two-node reachability minimum) verified against source code on this date. Going forward, any change to the assessment logic receives a dated entry here; changes that affect the /organism contract also receive an x-changelog entry in the schema.</p>
+</section>
+<section id="how-to-use-the-data">
 <h2>How to Use the Data</h2>
-<h3>For builders and operators</h3>
-<p>The dashboard at <a href="/dashboard">/dashboard</a> provides a visual overview. The banner shows current status with risk and confidence context. The Network Agreement panel shows whether validators agree. The Network Growth panel tracks validator discovery and sync progress.</p>
-<p>The <a href="/health">/health</a> endpoint provides full diagnostic data — canonical fields at the top level, then derived detail: public seeds, signals, validator growth with the retained catalog, and the attestation state.</p>
-<h3>For agents and automated consumers</h3>
+<h3 id="how-to-use-the-data-for-builders-and-operators">For builders and operators</h3>
+<p>The homepage at <a href="/">/</a> shows the live reading: status with its reason, the four inputs and the one path into status, each seed against the median, the last 24 hours, the peer-listed identities and the probed seeds, incidents, and the API.</p>
+<p>The <a href="/health">/health</a> endpoint provides full diagnostic data — canonical fields at the top level, then derived detail: public seeds (with <code>height_source</code>), signals, <code>validator_growth</code> (seed counts and peer-listed identities; its <code>online</code> and <code>synced</code> add both populations and are listed in <code>mixed_fields</code>), and the attestation state.</p>
+<h3 id="how-to-use-the-data-for-agents-and-automated-con">For agents and automated consumers</h3>
 <p>The <a href="/organism">/organism</a> endpoint is the primary agent feed. It returns 17 required top-level fields (plus additive 1.1 fields) and no fleet data. Most fields are flat values; <code>risk_factors</code> is an array and <code>last_24h</code> is a small summary object. Every top-level field is always present. The 17 required fields are never null; the additive 1.1 fields (<code>observed_at</code>, <code>data_quality_reason</code>, <code>height_last_advanced_at</code>, <code>height_static_seconds</code>) are null when there is nothing to report.</p>
 <p>The simplest consumption pattern is the <b>minimal triple</b>: read <code>status</code> + <code>risk</code> + <code>confidence</code>. These three fields give you the complete network picture in three values. Your agent decides what to do with them — the Oracle never tells you.</p>
 <p>For trust calibration: check <code>data_quality</code> before relying on the assessment. Check <code>staleness_seconds</code> to know how fresh the data is. If data quality is <span class="val">insufficient</span>, treat all other values with skepticism.</p>
 <p>For incident awareness: <code>active_incidents</code> gives the count, <code>max_incident_severity</code> tells you the worst active problem without needing to fetch the full incident list.</p>
-<div class="note"><b>API endpoints</b><br>
+<div class="aside"><b>API endpoints</b><br>
 Agent feed: <a href="/organism">/organism</a> — 17 required fields, public-only, a new observation every 20 seconds (ETag / 304 between observations).<br>
 Contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema, stability policy, changelog. The schema is the binding contract; this page is the explanation. If they ever disagree, the schema governs and the discrepancy is a bug.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope; condition records marked <code>kind: "condition"</code>.<br>
-Retained catalog: <a href="/catalog">/catalog</a> — identities seen on the public seed peerlists; <code>/catalog/lookup?key=</code> checks a full key exactly.<br>
+Peer-listed identities: <a href="/catalog">/catalog</a> — identities listed on the public seeds' peerlists; <code>/catalog/lookup?key=</code> checks a full key exactly.<br>
 API documentation: <a href="/docs">/docs</a><br>
 Agent guide: <a href="/agent">/agent</a><br>
 
 Oracle sources: <a href="/sources">/sources</a> — where the observations come from.<br>
 Observation timeline: <a href="/timeline">/timeline</a> — generated public observation record.<br>
-Reference surface: <a href="/reference">/reference</a> — discovered validators and fixnet observation context (not part of core assessment).<br>
+Reference surface: <a href="/reference">/reference</a> — the fixnet probe and the peer-listed identities, in two tables (not part of the core assessment).<br>
 API version: <code>1.1</code></div>
-<footer class="doc-footer">Demos Network Oracle · API v1.1 · <a href="/methodology">Methodology</a> · <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> <span class="xm33-sep"> · </span><span class="xm33-block"><span class="xm33-dot">· </span>Built by XM33<span class="xm33-dot"> ·</span></span></footer>
-<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a></main>
-<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div><script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class="nav-live-dot" style="background:#d29922"></span>STALE';}}).catch(function(){p.innerHTML='<span class="nav-live-dot" style="background:#6b7280"></span>OFFLINE';});})();</script></body></html>
-<script>
-document.querySelectorAll('.val').forEach(function(el){
-  var v = el.textContent.trim().toLowerCase();
-  var green = ['stable','low','clear','sufficient','strong','improving','info','none'];
-  var orange = ['degraded','elevated','uncertain','insufficient','moderate','warning'];
-  var red = ['unstable','high','worsening','weak','critical'];
-  if (green.indexOf(v) !== -1) el.style.color = '#22C55E';
-  else if (orange.indexOf(v) !== -1) el.style.color = '#d97706';
-  else if (red.indexOf(v) !== -1) el.style.color = '#EF4444';
-  else el.style.color = '#98a2b3';
-});
-</script>
+</section>
+    </article>
+  </div>
+</main>
+<!--dno:footer-->
+</body>
+</html>

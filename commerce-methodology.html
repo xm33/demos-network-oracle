@@ -1,40 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Commerce Methodology — Demos Network Oracle</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<title>Commerce Methodology · Demos Network Oracle</title>
+<!--dno:head-->
 <style>
-:root { --bg:#0a0a0a; --surface:#101010; --border:#1a1a1a; --text:#e5e7eb; --text-primary:#e5e7eb; --text-secondary:#98a2b3; --improving:#00DAFF; --mono:'Source Code Pro',monospace; --sans:Inter,system-ui,sans-serif; --brand:#2B36D9; }
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.6;}
+:root { --text: var(--ink); --text-primary: var(--ink); --text-secondary: var(--mute); --border: var(--line); --improving: var(--metal-1); }
 .container{max-width:1100px;margin:0 auto;padding:0 24px;}
-/* BEGIN canonical-header-css v1 */
-/* Navbar (doc-nav component) */
-.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
-.doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
-.doc-nav-left{order:1}
-.doc-nav-right{order:2;margin-left:auto}
-.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
-.doc-nav-brand:hover{text-decoration:none;opacity:0.9}
-.doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
-.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-.doc-nav-link[aria-current="page"]{opacity:0.5}
-.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
-.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
-.demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
-.demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
-.dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
-.dbtn-logo { height:16px; width:auto; opacity:1; }
-.dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
-/* END canonical-header-css v1 */
+
 .hero{padding:48px 0 36px;border-bottom:1px solid var(--border);}
 .page-kicker{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:12px;}
 .page-title{font-family:var(--sans);font-size:28px;font-weight:600;margin-bottom:14px;}
@@ -48,40 +21,23 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
 .state-table th{text-align:left;padding:8px 12px;color:var(--text-secondary);font-size:10px;letter-spacing:0.08em;border-bottom:1px solid var(--border);}
 .state-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
 .disclaimer{font-family:var(--mono);font-size:11px;color:var(--text-secondary);padding:20px;border:1px solid var(--border);border-radius:8px;margin-top:24px;line-height:1.7;background:var(--surface);}
-.footer{padding:24px 0;font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.6;}
 @media(max-width:640px){ .page-title{font-size:22px;} }
-.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}
+
+.page-kicker, .section-title, .status-card .label, .authority-table th, .state-table th { letter-spacing: 0; text-transform: none; font-family: var(--sans); font-size: 0.8125rem; }
+.page-title { font-weight: 500; color: var(--metal-2); }
+.page-intro, .content { font-family: var(--sans); font-size: 0.9375rem; color: var(--metal-1); }
+.disclaimer { font-family: var(--sans); font-size: 0.875rem; border-radius: var(--radius); }
+.status-card { border-radius: var(--radius); background: var(--bg-2); }
+.testnet-badge { border-radius: var(--radius); }
 </style>
 </head>
-<body class="doc-page doc-page--commerce">
-  <!-- BEGIN canonical-header v1 -->
-  <nav class="doc-nav">
-    <div class="doc-nav-inner">
-      <div class="doc-nav-left">
-        <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-        <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
-      </div>
-      <div class="doc-nav-right">
-        <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
-        <a href="/commerce" class="doc-nav-link" data-nav="commerce" aria-current="page">Commerce</a>
-        <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
-        <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
-        <a href="/reference" class="doc-nav-link" data-nav="reference">Reference</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
-      </div>
-      <div class="doc-nav-far">
-      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-        <span class="dbtn-prefix">powered by</span>
-        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-        <span class="dbtn-wordmark">DEMOS</span>
-      </a>
-    </div>
-    </div>
-  </nav>
-  <!-- END canonical-header v1 -->
+<body>
+<!--dno:header:commerce-->
+<main id="main">
 <div class="container">
 
   <section class="hero">
-    <div class="page-kicker">COMMERCE METHODOLOGY</div>
+    <div class="page-kicker">Commerce methodology</div>
     <h1 class="page-title">How Commerce Observation Works</h1>
     <p class="page-intro">
       The Demos agent commerce protocol uses a set of public attestation authorities — independent third-party services like GLEIF, FINRA, and the ECB — for credential verification and reference data. The Oracle monitors whether these authority endpoints are reachable.
@@ -89,7 +45,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   </section>
 
   <section class="section">
-    <div class="section-title">WHAT THE ORACLE OBSERVES</div>
+    <div class="section-title">What the oracle observes</div>
     <div class="content">
       <p>The Oracle runs a dedicated probe service that periodically contacts public API endpoints operated by independent attestation authorities. For each authority, it records whether the endpoint responded, how quickly it responded, and whether the response matched the expected format.</p>
       <p>These authorities include organizations like the Global Legal Entity Identifier Foundation (GLEIF), the Financial Industry Regulatory Authority (FINRA), the European Central Bank (ECB), and the Federal Risk and Authorization Management Program (FedRAMP), among others. All probed endpoints are publicly accessible APIs operated by these independent organizations — the Oracle does not require special access.</p>
@@ -98,28 +54,28 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   </section>
 
   <section class="section">
-    <div class="section-title">REACHABILITY STATES</div>
+    <div class="section-title">Reachability states</div>
     <div class="content">
       <p>Each authority endpoint is classified into one of these states after every probe cycle:</p>
     </div>
     <table class="state-table">
-      <thead><tr><th>STATE</th><th>MEANING</th></tr></thead>
+      <thead><tr><th>State</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td style="color:#22C55E;">healthy</td><td>Endpoint responded within timeout with expected status code and data format.</td></tr>
-        <tr><td style="color:rgba(217,119,6,1);">degraded</td><td>Endpoint responded but with concerning signals — rate-limited, slow, or partial data.</td></tr>
-        <tr><td style="color:#EF4444;">unavailable</td><td>Endpoint did not respond or returned server errors.</td></tr>
+        <tr><td style="color:var(--operable);">healthy</td><td>Endpoint responded within timeout with expected status code and data format.</td></tr>
+        <tr><td style="color:var(--elevated-risk);">degraded</td><td>Endpoint responded but with concerning signals — rate-limited, slow, or partial data.</td></tr>
+        <tr><td style="color:var(--degraded);">unavailable</td><td>Endpoint did not respond or returned server errors.</td></tr>
         <tr><td style="color:var(--text-secondary);">unknown</td><td>Probe has not yet run or results are stale.</td></tr>
       </tbody>
     </table>
   </section>
 
   <section class="section">
-    <div class="section-title">FRESHNESS</div>
+    <div class="section-title">Freshness</div>
     <div class="content">
       <p>Some authorities publish data on known cadences. The Oracle tracks whether the last observation is within the authority's expected update window.</p>
     </div>
     <table class="state-table">
-      <thead><tr><th>STATE</th><th>MEANING</th></tr></thead>
+      <thead><tr><th>State</th><th>Meaning</th></tr></thead>
       <tbody>
         <tr><td>fresh</td><td>Last observation is within the authority's expected update window.</td></tr>
         <tr><td>stale</td><td>Last observation exceeds the expected update window.</td></tr>
@@ -130,24 +86,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   </section>
 
   <section class="section">
-    <div class="section-title">OVERALL ASSESSMENT</div>
+    <div class="section-title">Overall assessment</div>
     <div class="content">
       <p>The Oracle derives an overall commerce observability state from the individual probe results:</p>
     </div>
     <table class="state-table">
-      <thead><tr><th>STATE</th><th>CONDITION</th></tr></thead>
+      <thead><tr><th>State</th><th>Condition</th></tr></thead>
       <tbody>
-        <tr><td style="color:#22C55E;">healthy</td><td>90% or more of probed authorities are reachable.</td></tr>
-        <tr><td style="color:rgba(217,119,6,1);">degraded</td><td>70% or more are responding, but some with issues.</td></tr>
-        <tr><td style="color:rgba(217,119,6,1);">partial</td><td>40–69% are responding.</td></tr>
-        <tr><td style="color:#EF4444;">unavailable</td><td>Fewer than 40% are responding.</td></tr>
+        <tr><td style="color:var(--operable);">healthy</td><td>90% or more of probed authorities are reachable.</td></tr>
+        <tr><td style="color:var(--elevated-risk);">degraded</td><td>70% or more are responding, but some with issues.</td></tr>
+        <tr><td style="color:var(--elevated-risk);">partial</td><td>40–69% are responding.</td></tr>
+        <tr><td style="color:var(--degraded);">unavailable</td><td>Fewer than 40% are responding.</td></tr>
         <tr><td style="color:var(--text-secondary);">unknown</td><td>No probes have been executed yet.</td></tr>
       </tbody>
     </table>
   </section>
 
   <section class="section">
-    <div class="section-title">LAYER SEPARATION</div>
+    <div class="section-title">Layer separation</div>
     <div class="content">
       <p><strong>Commerce observation is Layer 2.</strong> It is completely separate from the Oracle's core network assessment (Layer 1). The Oracle's homepage status, trend, risk, agreement, confidence, and data quality assessments are derived exclusively from public validator nodes. Commerce probe data has no influence on these assessments.</p>
       <p>This separation is architectural, not cosmetic. The commerce probe runner is a separate process from the network monitoring agent. Different code, different cycle, different output file, different failure domain.</p>
@@ -155,7 +111,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   </section>
 
   <section class="section">
-    <div class="section-title">WHAT THE ORACLE DOES NOT DO</div>
+    <div class="section-title">What the oracle does not do</div>
     <div class="content">
       <p>The Oracle does not certify that any counterparty, transaction, or commerce flow is safe, legal, or compliant. It does not perform sanctions screening. It does not verify individual commerce claims. It does not recommend transactions.</p>
       <p>The Oracle observes whether the public infrastructure that the Demos commerce protocol depends on is reachable. That is the beginning and the end of its commerce observation mandate.</p>
@@ -163,7 +119,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   </section>
 
   <section class="section">
-    <div class="section-title">TESTNET CONTEXT</div>
+    <div class="section-title">Testnet context</div>
     <div class="content">
       <p>The Demos agent commerce protocol is currently in development on testnet. The authority endpoints probed by the Oracle are production public APIs operated by independent third parties — they are not testnet infrastructure. The Oracle bridges both contexts: it probes real-world infrastructure while being transparent that the commerce protocol using that infrastructure is not yet on mainnet.</p>
     </div>
@@ -174,11 +130,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
     <br><br>
     <a href="/commerce" style="color:var(--text-secondary);">← Back to Commerce Overview</a>
   </div>
-
-  <div class="footer">
-    <a href="https://demos.sh" style="color:var(--text-secondary);text-decoration:none;">demos.sh</a> · <a href="/" style="color:var(--text-secondary);text-decoration:none;">Oracle</a> · Built by XM33
-  </div>
 </div>
-<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>
+</main>
+<!--dno:footer-->
+
 </body>
 </html>

@@ -1,48 +1,21 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Commerce Infrastructure — Demos Network Oracle</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<title>Commerce Infrastructure · Demos Network Oracle</title>
+<!--dno:head-->
 <style>
-:root { --bg:#0a0a0a; --surface:#101010; --border:#1a1a1a; --text:#e5e7eb; --text-primary:#e5e7eb; --text-secondary:#98a2b3; --improving:#00DAFF; --mono:'Source Code Pro',monospace; --sans:Inter,system-ui,sans-serif; --brand:#2B36D9; }
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.6;}
+:root { --text: var(--ink); --text-primary: var(--ink); --text-secondary: var(--mute); --border: var(--line); --improving: var(--metal-1); }
 .container{max-width:1100px;margin:0 auto;padding:0 24px;}
 
-/* BEGIN canonical-header-css v1 */
-/* Navbar (doc-nav component) */
-.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
-.doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
-.doc-nav-left{order:1}
-.doc-nav-right{order:2;margin-left:auto}
-.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
-.doc-nav-brand:hover{text-decoration:none;opacity:0.9}
-.doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
-.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-.doc-nav-link[aria-current="page"]{opacity:0.5}
-.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
-.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
-.demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
-.demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
-.dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
-.dbtn-logo { height:16px; width:auto; opacity:1; }
-.dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
-/* END canonical-header-css v1 */
+
 
 /* Content */
 .hero{padding:48px 0 36px;border-bottom:1px solid var(--border);}
 .page-kicker{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:12px;}
 .page-title{font-family:var(--sans);font-size:28px;font-weight:600;margin-bottom:14px;}
 .page-intro{font-family:var(--mono);font-size:13px;color:var(--text-secondary);max-width:72ch;line-height:1.7;}
-.testnet-badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:3px 10px;border:1px solid rgba(217,119,6,0.3);border-radius:999px;color:rgba(217,119,6,0.9);margin-top:14px;letter-spacing:0.06em;}
+.testnet-badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:3px 10px;border:1px solid #5A4A1A;border-radius:999px;color:var(--elevated-risk);margin-top:14px;letter-spacing:0.06em;}
 
 .section{padding:32px 0;border-bottom:1px solid var(--border);}
 .section-title{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:18px;}
@@ -57,16 +30,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
 .authority-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;}
 .authority-table th{text-align:left;padding:8px 12px;color:var(--text-secondary);font-size:10px;letter-spacing:0.08em;border-bottom:1px solid var(--border);}
 .authority-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
-.authority-table .state-healthy{color:#22C55E;}
-.authority-table .state-degraded{color:rgba(217,119,6,1);}
-.authority-table .state-unavailable{color:#EF4444;}
+.authority-table .state-healthy{color:var(--operable);}
+.authority-table .state-degraded{color:var(--elevated-risk);}
+.authority-table .state-unavailable{color:var(--degraded);}
 .authority-table .state-unknown{color:var(--text-secondary);}
 
 /* Disclaimer */
 .disclaimer{font-family:var(--mono);font-size:11px;color:var(--text-secondary);padding:20px;border:1px solid var(--border);border-radius:8px;margin-top:24px;line-height:1.7;background:var(--surface);}
 
 /* Footer */
-.footer{padding:24px 0;font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.6;}
 
 .loading{opacity:0.4;font-style:italic;}
 
@@ -75,62 +47,46 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   .status-grid{grid-template-columns:1fr;}
   .authority-table{font-size:11px;}
 }
-.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}
+
+.page-kicker, .section-title, .status-card .label, .authority-table th, .state-table th { letter-spacing: 0; text-transform: none; font-family: var(--sans); font-size: 0.8125rem; }
+.page-title { font-weight: 500; color: var(--metal-2); }
+.page-intro, .content { font-family: var(--sans); font-size: 0.9375rem; color: var(--metal-1); }
+.disclaimer { font-family: var(--sans); font-size: 0.875rem; border-radius: var(--radius); }
+.status-card { border-radius: var(--radius); background: var(--bg-2); }
+.testnet-badge { border-radius: var(--radius); }
 </style>
 </head>
-<body class="doc-page doc-page--commerce">
-  <!-- BEGIN canonical-header v1 -->
-  <nav class="doc-nav">
-    <div class="doc-nav-inner">
-      <div class="doc-nav-left">
-        <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-        <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
-      </div>
-      <div class="doc-nav-right">
-        <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
-<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a>        <a href="/commerce" class="doc-nav-link" data-nav="commerce" aria-current="page">Commerce</a>
-        <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
-        <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
-        <a href="/reference" class="doc-nav-link" data-nav="reference">Reference</a><a href="/dashboard" class="doc-nav-link" data-nav="dashboard">Dashboard</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
-      </div>
-      <div class="doc-nav-far">
-      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-        <span class="dbtn-prefix">powered by</span>
-        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-        <span class="dbtn-wordmark">DEMOS</span>
-      </a>
-    </div>
-    </div>
-  </nav>
-  <!-- END canonical-header v1 -->
+<body>
+<!--dno:header:commerce-->
+<main id="main">
 <div class="container">
 
   <section class="hero">
-    <div class="page-kicker">COMMERCE INFRASTRUCTURE OBSERVABILITY</div>
+    <div class="page-kicker">Commerce infrastructure observability</div>
     <h1 class="page-title">Attestation Authority Reachability</h1>
     <p class="page-intro">
       The Oracle monitors the public endpoints of attestation authorities used by the Demos agent commerce protocol. It probes these endpoints every 5 minutes and reports whether they are reachable, responsive, and returning expected data.
     </p>
-    <div class="testnet-badge">TESTNET OBSERVATION</div>
+    <div class="testnet-badge">Testnet observation</div>
   </section>
 
   <section class="section">
-    <div class="section-title">OVERALL STATE</div>
+    <div class="section-title">Overall state</div>
     <div class="status-grid">
       <div class="status-card">
-        <div class="label">OBSERVABILITY</div>
+        <div class="label">Observability</div>
         <div class="value loading" id="obs-state">Loading...</div>
       </div>
       <div class="status-card">
-        <div class="label">DATA QUALITY</div>
+        <div class="label">Data quality</div>
         <div class="value loading" id="obs-dq">—</div>
       </div>
       <div class="status-card">
-        <div class="label">CONFIDENCE</div>
+        <div class="label">Confidence</div>
         <div class="value loading" id="obs-conf">—</div>
       </div>
       <div class="status-card">
-        <div class="label">AUTHORITIES OBSERVED</div>
+        <div class="label">Authorities observed</div>
         <div class="value loading" id="obs-count">—</div>
       </div>
     </div>
@@ -138,19 +94,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   </section>
 
   <section class="section">
-    <div class="section-title">AUTHORITY REACHABILITY</div>
+    <div class="section-title">Authority reachability</div>
+    <div class="tbl-wrap">
     <table class="authority-table">
       <thead>
-        <tr><th>AUTHORITY</th><th>CATEGORY</th><th>STATE</th><th>FRESHNESS</th><th>OBSERVED</th></tr>
+        <tr><th>Authority</th><th>Category</th><th>State</th><th>Freshness</th><th>Observed</th></tr>
       </thead>
       <tbody id="auth-table-body">
         <tr><td colspan="5" class="loading">Loading...</td></tr>
       </tbody>
     </table>
+    </div>
   </section>
 
   <section class="section">
-    <div class="section-title">WHAT THIS IS NOT</div>
+    <div class="section-title">What this is not</div>
     <p style="font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:1.7;max-width:72ch;">
       This page shows infrastructure reachability — whether the public API endpoints that the Demos commerce protocol depends on are responding. It does not certify counterparties, verify commerce claims, provide legal advice, or recommend transactions. The commerce protocol is in development on testnet. Commerce observations do not influence the Oracle's core network assessments.
     </p>
@@ -161,12 +119,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
     <br><br>
     <a href="/commerce/methodology" style="color:var(--text-secondary);">How commerce observation works →</a>
   </div>
-
-  <div class="footer">
-    <a href="https://demos.sh" style="color:var(--text-secondary);text-decoration:none;">demos.sh</a> · <a href="/" style="color:var(--text-secondary);text-decoration:none;">Oracle</a> · Built by XM33
-  </div>
 </div>
-
+</main>
+<!--dno:footer-->
 <script>
 (async function(){
   try {
@@ -177,9 +132,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
     var stateEl = document.getElementById('obs-state');
     stateEl.textContent = (d.commerce_observability_state || 'unknown').toUpperCase();
     stateEl.classList.remove('loading');
-    if (d.commerce_observability_state === 'healthy') stateEl.style.color = '#22C55E';
-    else if (d.commerce_observability_state === 'degraded') stateEl.style.color = 'rgba(217,119,6,1)';
-    else if (d.commerce_observability_state === 'unavailable') stateEl.style.color = '#EF4444';
+    if (d.commerce_observability_state === 'healthy') stateEl.style.color = 'var(--operable)';
+    else if (d.commerce_observability_state === 'degraded') stateEl.style.color = 'var(--elevated-risk)';
+    else if (d.commerce_observability_state === 'unavailable') stateEl.style.color = 'var(--degraded)';
     else stateEl.style.color = 'var(--text-secondary)';
 
     var dqEl = document.getElementById('obs-dq');
@@ -202,17 +157,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
     // Authority table
     if (d.authorities && d.authorities.length > 0) {
       var tbody = document.getElementById('auth-table-body');
-      tbody.innerHTML = '';
+      tbody.replaceChildren();
       d.authorities.forEach(function(a) {
-        var stateClass = 'state-' + (a.reachability || 'unknown');
         var obsTime = a.observed_at ? new Date(a.observed_at).toLocaleTimeString() : '—';
-        tbody.innerHTML += '<tr>' +
-          '<td>' + (a.name || a.authority_id) + '</td>' +
-          '<td>' + (a.category || '—') + '</td>' +
-          '<td class="' + stateClass + '">' + (a.reachability || 'unknown') + '</td>' +
-          '<td>' + (a.freshness || '—') + '</td>' +
-          '<td>' + obsTime + '</td>' +
-          '</tr>';
+        var tr = document.createElement('tr');
+        [String(a.name || a.authority_id || '—'), String(a.category || '—'), String(a.reachability || 'unknown'), String(a.freshness || '—'), obsTime].forEach(function(text, i) {
+          var td = document.createElement('td');
+          td.textContent = text;
+          if (i === 2) td.className = 'state-' + (/^[a-z]+$/.test(text) ? text : 'unknown');
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
       });
     }
   } catch(e) {
@@ -222,6 +177,5 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
   }
 })();
 </script>
-<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>
 </body>
 </html>

@@ -1,584 +1,538 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>About Demos • Demos Network Oracle</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --about-bg: #0a0c10;
-      --about-panel: #12151b;
-      --about-border: rgba(255, 255, 255, 0.08);
-      --about-border-strong: rgba(255, 255, 255, 0.14);
-      --about-text: #e6e8eb;
-      --about-muted: #9aa0a8;
-      --about-code-bg: #1a1f26;
-      --surface: #101010;
-      --brand: #2B36D9;
-      --text-primary: #e6e8eb;
-      --text-secondary: #9aa0a8;
-      --mono: 'Source Code Pro', monospace;
-    }
+<meta charset="utf-8">
+<title>About Demos · Demos Network Oracle</title>
+<meta name="description" content="What the Demos docs say about validators, per-block shards, node health and DAHR, and which of those DNO can see from outside. Every protocol statement links to its source.">
+<!--dno:head-->
+<style>
+/* About Demos: page figures. Tokens and type come from the site kit. */
+.lanes .fig-body { display: grid; gap: 0; padding: 0; }
+.lane { padding: 18px; }
+.lane-k { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-weight: 500; color: var(--metal-2); margin-bottom: 14px; }
+.lane-k .tag { margin-left: 0; }
+.flow { display: grid; grid-template-columns: repeat(var(--steps, 5), minmax(0, 1fr)); gap: 0; counter-reset: none; }
+.flow > li { position: relative; display: grid; gap: 4px; align-content: start; padding: 12px 22px 12px 12px; border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+.flow > li + li { border-left: 0; }
+.flow > li:not(:last-child)::after { content: ""; position: absolute; right: -6px; top: 50%; width: 10px; height: 10px; border-top: 1px solid var(--metal-0); border-right: 1px solid var(--metal-0); background: var(--bg); transform: translateY(-50%) rotate(45deg); z-index: 1; }
+.flow b { font-weight: 500; color: var(--ink); font-size: 0.9375rem; }
+.flow span { font-size: 0.8125rem; color: var(--mute); line-height: 1.4; }
+.flow .to-status { border-color: var(--metal-0); }
+.lane--inside .flow > li { border-style: dashed; border-color: #3A3A3A; background: transparent; }
+.lane--inside .flow > li + li { border-left: 0; }
+.lane--inside .flow b { color: var(--metal-1); }
+.wall { position: relative; margin: 0 18px; border-top: 1px dashed var(--unknown); }
+.wall span { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); padding: 2px 10px; background: var(--bg-2); font: 400 0.75rem/1.4 var(--mono); color: var(--mute); white-space: nowrap; }
 
-    body {
-      margin: 0;
-      background: var(--about-bg);
-      color: var(--about-text);
-      font-family: Inter, system-ui, -apple-system, sans-serif;
-      line-height: 1.7;
-    }
+.sm { display: grid; grid-template-columns: minmax(0, 1fr) 9.5rem minmax(0, 1fr) 9.5rem minmax(0, 1fr); align-items: center; }
+.sm-state { display: grid; gap: 4px; justify-items: start; padding: 14px 16px; border: 1px solid var(--line); background: var(--bg); color: var(--metal-1); text-align: left; font: inherit; cursor: pointer; border-radius: var(--radius); }
+.sm-state b { font: 500 1rem/1.2 var(--mono); color: var(--metal-2); letter-spacing: 0.02em; }
+.sm-state span { font: 400 0.75rem/1.3 var(--mono); color: var(--mute); }
+.sm-state:hover { border-color: var(--metal-0); }
+.sm-state[aria-pressed="true"] { border-color: var(--metal-1); background: var(--elevated); }
+.sm-state[aria-pressed="true"] b { color: var(--ink); }
+.sm-arrow { position: relative; height: 1px; background: var(--metal-0); margin: 0 6px; }
+.sm-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; width: 8px; height: 8px; border-top: 1px solid var(--metal-0); border-right: 1px solid var(--metal-0); transform: rotate(45deg); }
+.sm-arrow span { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font: 400 0.6875rem/1.3 var(--mono); color: var(--mute); white-space: nowrap; }
+.sm-meaning { margin-top: 16px; padding: 12px 0 0; border-top: 1px solid var(--line); color: var(--ink); min-height: 3.2em; }
+.sm-meaning .by { display: block; margin-top: 4px; font: 400 0.8125rem/1.4 var(--mono); color: var(--mute); }
+.sm-moves { margin-top: 12px; }
+.sm-moves tr { transition: opacity 160ms linear; }
+.sm-moves tr[data-dim="true"] { opacity: 0.35; }
+.sm-moves td:first-child { white-space: nowrap; font-family: var(--mono); font-size: 0.8125rem; }
 
-    .about-demos-page {
-      padding-top: 36px;
-      padding-bottom: 80px;
-    }
+.sd-steps { display: grid; gap: 0; }
+.sd-steps > li { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: 8px 20px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.sd-steps > li:first-child { padding-top: 0; }
+.sd-steps > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.sd-steps .k { font-size: 0.8125rem; color: var(--mute); padding-top: 3px; }
+.sd-hashes { display: grid; gap: 2px; font: 400 0.8125rem/1.5 var(--mono); color: var(--metal-1); }
+.sd-seed { font: 400 0.8125rem/1.5 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.sd-set, .sd-shard { display: flex; flex-wrap: wrap; gap: 8px; }
+.sd-v { display: inline-grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--metal-0); border-radius: 50%; background: var(--elevated); color: var(--ink); font: 500 0.875rem/1 var(--mono); cursor: pointer; }
+.sd-v:hover { border-color: var(--metal-1); }
+.sd-v[data-v="exited"] { background: transparent; border: 1px dashed var(--unknown); color: var(--unknown); cursor: not-allowed; }
+.sd-v[data-v="skipped"] { background: transparent; border-color: var(--unknown); color: var(--mute); text-decoration: line-through; }
+.sd-order { display: flex; flex-wrap: wrap; gap: 4px 6px; font: 400 0.8125rem/1.6 var(--mono); color: var(--mute); }
+.sd-order b { color: var(--ink); font-weight: 500; }
+.sd-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.8125rem; color: var(--mute); }
+.sd-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--metal-0); background: var(--elevated); vertical-align: -2px; margin-right: 6px; }
+.sd-legend i.x { background: transparent; border-style: dashed; border-color: var(--unknown); }
+.sd-legend i.s { background: transparent; border-color: var(--unknown); }
 
-    /* BEGIN canonical-header-css v1 */
-    .doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
-    .doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
-    .doc-nav-left{order:1}
-    .doc-nav-right{order:2;margin-left:auto}
-    .doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-    .doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
-    .doc-nav-brand:hover{text-decoration:none;opacity:0.9}
-    .doc-logo{width:30px;height:30px;color:var(--text-primary)}
-    .doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
-    .doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-    .doc-nav-link[aria-current="page"]{opacity:0.5}
-    .doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
-    .nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-    .nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-    .doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
-    .demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
-    .demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
-    .dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
-    .dbtn-logo { height:16px; width:auto; opacity:1; }
-    .dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
-    @media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
-    /* END canonical-header-css v1 */
+.seqlist { display: grid; gap: 0; margin: 4px 0 18px; }
+.seqlist > li { display: grid; grid-template-columns: 2rem 13rem minmax(0, 1fr); gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--line); align-items: baseline; }
+.seqlist > li:last-child { border-bottom: 1px solid var(--line); }
+.seqlist .n { font: 500 0.75rem/1.6 var(--mono); color: var(--mute); }
+.seqlist .who { font: 400 0.8125rem/1.5 var(--mono); color: var(--metal-1); }
+.seqlist .what { color: var(--ink); }
+.seqlist .what span { display: block; color: var(--mute); font-size: 0.875rem; }
+.prose .seqlist > li { padding-left: 0; }
+.prose .seqlist > li::before { content: none; }
 
-    .watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}
-    .watermark svg{width:100%;height:100%;display:block}
+.rec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 8px 0 20px; border-top: 1px solid var(--line); }
+.rec > div { padding: 14px 20px 16px 0; }
+.rec > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rec h3 { margin: 0 0 10px; font-size: 1rem; }
+.words th:nth-child(1) { width: 22%; } .words th:nth-child(2) { width: 19%; } .words th:nth-child(4) { width: 21%; }
+.words tr[data-f~="sees"] td:first-child code { border-color: var(--metal-0); }
+.calm { margin: 16px 0 0; padding: 14px 18px; border: 1px solid var(--metal-0); color: var(--ink); font-size: 1.0625rem; }
+.calm .by { display: block; margin-top: 6px; font-size: 0.875rem; color: var(--mute); }
 
-    .container-narrow {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-
-    .about-hero {
-      margin-bottom: 40px;
-    }
-
-    h1 {
-      margin: 0 0 18px;
-      font-size: clamp(34px, 5vw, 52px);
-      line-height: 1.05;
-      font-weight: 650;
-      letter-spacing: -0.035em;
-    }
-
-    .lead {
-      margin: 0;
-      font-size: 20px;
-      line-height: 1.55;
-      color: var(--about-muted);
-    }
-
-    .section {
-      margin-bottom: 48px;
-    }
-
-    h2 {
-      margin: 0 0 16px;
-      font-size: 22px;
-      line-height: 1.25;
-      font-weight: 600;
-      letter-spacing: -0.015em;
-    }
-
-    p {
-      margin: 0 0 16px;
-    }
-
-    ul {
-      padding-left: 20px;
-      margin: 0 0 20px;
-    }
-
-    li {
-      margin-bottom: 10px;
-    }
-
-    strong {
-      color: #ffffff;
-      font-weight: 600;
-    }
-
-    code {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
-      font-size: 0.92em;
-      background: var(--about-code-bg);
-      color: #f0f2f5;
-      padding: 2px 6px;
-      border: 1px solid var(--about-border);
-      border-radius: 4px;
-      white-space: normal;
-      word-break: break-word;
-    }
-
-    .about-glance {
-      margin: -8px 0 56px;
-    }
-
-    .about-glance h2 {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--about-muted);
-      margin-bottom: 16px;
-    }
-
-    .glance-grid,
-    .property-grid,
-    .boundary-grid {
-      display: grid;
-      gap: 14px;
-    }
-
-    .glance-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .property-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin: 22px 0 20px;
-    }
-
-    .boundary-grid {
-      grid-template-columns: 1fr;
-      margin-top: 20px;
-    }
-
-    @media (min-width: 641px) {
-      .boundary-grid {
-        grid-template-columns: 1fr 1fr;
-      }
-    }
-
-    .glance-card,
-    .property-card,
-    .boundary-card,
-    .organism-anchor,
-    .uncertainty-card {
-      background: rgba(255, 255, 255, 0.025);
-      border: 1px solid var(--about-border);
-      border-radius: 12px;
-    }
-
-    .glance-card,
-    .property-card {
-      padding: 18px;
-    }
-
-    .glance-label,
-    .endpoint-label {
-      display: inline-block;
-      margin-bottom: 8px;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--about-muted);
-    }
-
-    .glance-card p,
-    .property-card p {
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.6;
-      color: var(--about-muted);
-    }
-
-    .property-card h3 {
-      margin: 0 0 8px;
-      font-size: 16px;
-      line-height: 1.3;
-    }
-
-    .organism-anchor,
-    .uncertainty-card {
-      padding: 28px;
-      margin-bottom: 32px;
-    }
-
-    .field-groups {
-      display: grid;
-      gap: 10px;
-      margin: 22px 0;
-    }
-
-    .field-groups div {
-      display: flex;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 12px 0;
-      border-top: 1px solid var(--about-border);
-    }
-
-    .field-groups div:last-child {
-      border-bottom: 1px solid var(--about-border);
-    }
-
-    .field-groups strong {
-      flex: 0 0 160px;
-      font-size: 14px;
-    }
-
-    .field-groups span {
-      font-size: 14px;
-      line-height: 1.5;
-      color: var(--about-muted);
-    }
-
-    .state-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin: 20px 0;
-    }
-
-    .state-row code {
-      padding: 7px 10px;
-      border-radius: 999px;
-    }
-
-    .boundary-card {
-      padding: 24px;
-    }
-
-    .boundary-card-muted {
-      background: rgba(255, 255, 255, 0.018);
-    }
-
-    .boundary-summary {
-      margin-top: 20px;
-      padding: 18px 20px;
-      border-left: 2px solid var(--about-border-strong);
-      color: var(--about-muted);
-    }
-
-    .callout {
-      background: var(--about-panel);
-      border: 1px solid var(--about-border-strong);
-      border-radius: 10px;
-      padding: 24px;
-      margin: 32px 0 48px;
-    }
-
-    .callout h3 {
-      margin: 0 0 12px;
-      font-size: 16px;
-      font-weight: 600;
-    }
-
-    .callout p {
-      color: var(--about-muted);
-    }
-
-    .callout p:first-of-type {
-      color: var(--about-text);
-    }
-
-    .closing {
-      margin-top: 64px;
-      padding-top: 32px;
-      border-top: 1px solid var(--about-border);
-    }
-
-    .closing p {
-      font-size: 15px;
-      color: var(--about-muted);
-      line-height: 1.65;
-    }
-
-    @media (max-width: 640px) {
-      .watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}
-      .about-demos-page {
-        padding-top: 28px;
-        padding-bottom: 64px;
-      }
-      .container-narrow {
-        padding: 0 20px;
-      }
-      .about-hero {
-        margin-bottom: 32px;
-      }
-      .lead {
-        font-size: 18px;
-      }
-      .section {
-        margin-bottom: 40px;
-      }
-      .glance-grid,
-      .property-grid,
-      .boundary-grid {
-        grid-template-columns: 1fr;
-      }
-      .organism-anchor,
-      .uncertainty-card {
-        padding: 22px;
-      }
-      .field-groups div {
-        display: block;
-      }
-      .field-groups strong {
-        display: block;
-        margin-bottom: 4px;
-      }
-      .callout {
-        padding: 20px;
-        margin: 28px 0 40px;
-      }
-      .closing {
-        margin-top: 52px;
-      }
-    }
-  </style>
+.prose .flow > li { padding: 12px 22px 12px 12px; }
+.prose .flow > li::before { content: none; }
+@media (max-width: 859px) {
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .prose .flow > li { padding: 10px 12px; }
+  .flow > li + li { border-left: 1px solid var(--line); border-top: 0; }
+  .lane--inside .flow > li + li { border-left: 1px dashed #3A3A3A; }
+  .flow > li:not(:last-child)::after { right: auto; left: 18px; top: auto; bottom: -6px; transform: rotate(135deg); }
+  .sm { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .sm-arrow { height: 44px; width: 1px; margin: 0 0 0 24px; }
+  .sm-arrow::after { right: auto; left: -4px; top: auto; bottom: 0; transform: rotate(135deg); }
+  .sm-arrow span { left: 16px; right: auto; bottom: 50%; transform: translateY(50%); text-align: left; white-space: nowrap; }
+}
+@media (max-width: 719px) {
+  .sd-steps > li { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .seqlist > li { grid-template-columns: 1.5rem minmax(0, 1fr); }
+  .seqlist .what { grid-column: 2; }
+  .rec { grid-template-columns: minmax(0, 1fr); }
+  .rec > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+  .wall span { white-space: normal; text-align: center; width: max-content; max-width: 80%; }
+}
+@media (prefers-reduced-motion: reduce) { .sm-moves tr { transition: none; } }
+</style>
 </head>
-<body class="doc-page doc-page--about-demos">
-
-<!-- BEGIN canonical-header v1 -->
-<nav class="doc-nav">
-  <div class="doc-nav-inner">
-    <div class="doc-nav-left">
-      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
-    </div>
-    <div class="doc-nav-right">
-      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
-      <a href="/about-demos" class="doc-nav-link" data-nav="about-demos" aria-current="page">About Demos</a>
-      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
-      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
-      <a href="/sources" class="doc-nav-link" data-nav="sources">Sources</a>
-      <a href="/reference" class="doc-nav-link" data-nav="reference">Reference</a>
-      <a href="/dashboard" class="doc-nav-link" data-nav="dashboard">Dashboard</a>
-      <a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
-    </div>
-    <div class="doc-nav-far">
-      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-        <span class="dbtn-prefix">powered by</span>
-        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-        <span class="dbtn-wordmark">DEMOS</span>
-      </a>
-    </div>
-  </div>
-</nav>
-<!-- END canonical-header v1 -->
-
-<main class="about-demos-page">
-  <div class="container-narrow">
-
-    <!-- Hero -->
-    <div class="about-hero">
-      <h1>About Demos</h1>
-      <p class="lead">
-        Demos is blockchain infrastructure built for <strong>agent commerce</strong> — enabling both autonomous agents and humans to coordinate, exchange value, and verify outcomes across networks with cryptographic proof.
-      </p>
-    </div>
-
-    <!-- At a glance -->
-    <section class="about-glance" aria-labelledby="about-glance-title">
-      <h2 id="about-glance-title">At a glance</h2>
-      <div class="glance-grid">
-        <div class="glance-card">
-          <span class="glance-label">Demos</span>
-          <p>Blockchain infrastructure for agent commerce — usable by both agents and humans.</p>
-        </div>
-        <div class="glance-card">
-          <span class="glance-label">Agents</span>
-          <p>Autonomous systems that can identify, coordinate, settle, and verify.</p>
-        </div>
-        <div class="glance-card">
-          <span class="glance-label">DNO</span>
-          <p>An independent, watch-only observer of the Demos testnet.</p>
-        </div>
-        <div class="glance-card">
-          <span class="glance-label">Primary feed</span>
-          <p><code>/organism</code> publishes DNO’s public network assessment.</p>
-        </div>
+<body>
+<!--dno:header:about-demos-->
+<main id="main">
+  <header class="doc-head">
+    <div class="wrap">
+      <div>
+        <p class="doc-kicker">Context for the reading</p>
+        <h1>About Demos</h1>
+        <p class="doc-lede">Demos is the network DNO watches. This page sets out what the Demos documentation says about validators, shards, node health and DAHR, and which of those DNO can see from outside. Every protocol statement links to the page it comes from.</p>
       </div>
-    </section>
-
-    <!-- What is Demos -->
-    <section class="section">
-      <h2>What is Demos?</h2>
-      <p>
-        Demos is blockchain infrastructure designed for <strong>agent commerce</strong> — systems in which autonomous agents (and humans) can identify one another, negotiate, exchange value, and produce verifiable records across networks.
-      </p>
-      <p>
-        As agents become more capable, they need reliable ways to prove identity, check claims, settle transactions cleanly, and leave auditable records. Demos provides the protocol primitives to support these interactions.
-      </p>
-    </section>
-
-    <!-- What Demos is all about -->
-    <section class="section">
-      <h2>What Demos is all about</h2>
-      <p>
-        Demos focuses on making agent-to-agent (and human-to-agent) commerce practical and verifiable. It emphasizes four key properties:
-      </p>
-
-      <div class="property-grid">
-        <div class="property-card">
-          <h3>Identity</h3>
-          <p>Agents can carry a consistent identity across chains, platforms, and traditional systems.</p>
-        </div>
-        <div class="property-card">
-          <h3>Verification</h3>
-          <p>Agents can check claims, credentials, and supporting evidence.</p>
-        </div>
-        <div class="property-card">
-          <h3>Atomicity</h3>
-          <p>Transactions can settle cleanly without unnecessary intermediate exposure.</p>
-        </div>
-        <div class="property-card">
-          <h3>Audit</h3>
-          <p>Important steps can leave a clear, verifiable record.</p>
-        </div>
+      <div class="doc-facts">
+        <span>Source <b>docs.kynesys.xyz</b></span>
+        <span>Read <b>28 Sep 2026</b></span>
+        <span>DNO is not an official Demos product</span>
       </div>
-    </section>
-
-    <!-- Cross-Context Identity -->
-    <section class="section">
-      <h2>Cross-Context Identity</h2>
-      <p>
-        One important concept in Demos is <strong>Cross-Context Identity</strong>, or <strong>CCI</strong>. CCI allows agents and users to carry identity across different Web2 and Web3 contexts.
-      </p>
-    </section>
-
-    <!-- Where DNO fits -->
-    <section class="section">
-      <h2>Where DNO fits in</h2>
-      <p>
-        <strong>DNO</strong> (Demos Network Oracle) is an <strong>independent, watch-only observer</strong> of public Demos testnet infrastructure. It does not operate the protocol, control validators, or certify identities or transactions.
-      </p>
-      <p>
-        DNO observes public validators and selected public infrastructure on the Demos testnet, applies a published methodology, and publishes structured assessments.
-      </p>
-    </section>
-
-    <!-- DNO as an observability layer -->
-    <section class="section">
-      <h2>DNO as an observability layer</h2>
-      <p>
-        DNO functions as an independent observability layer on the Demos public testnet. It monitors public validators and selected public infrastructure, then reduces those observations into machine-readable assessments published through the <code>/organism</code> feed.
-      </p>
-    </section>
-
-    <!-- /organism technical anchor -->
-    <section class="organism-anchor">
-      <div class="endpoint-label">Primary public assessment feed</div>
-      <h2>The <code>/organism</code> feed</h2>
-      <p>
-        DNO publishes its core public network assessment through a machine-readable feed called <code>/organism</code>.
-      </p>
-      <p>
-        <code>/organism</code> returns a structured snapshot of what DNO currently observes about the Demos testnet, including status, data quality, agreement, risk, incidents, and uncertainty.
-      </p>
-
-      <div class="field-groups">
-        <div><strong>Status</strong> <span>Observed condition, trend, and risk</span></div>
-        <div><strong>Confidence &amp; freshness</strong> <span>Data quality, confidence, and freshness</span></div>
-        <div><strong>Consensus view</strong> <span>Whether visible public nodes appear aligned</span></div>
-        <div><strong>Incident context</strong> <span>Active public incidents, if any</span></div>
-        <div><strong>Explanation</strong> <span>Reasons, uncertainty, and observed limits</span></div>
-      </div>
-
-      <p>
-        <code>/organism</code> is computed from public network observations. Reference data may be shown for transparency but does not determine the core public assessment.
-      </p>
-    </section>
-
-    <!-- Developer Callout -->
-    <div class="callout">
-      <h3>For agents and developers</h3>
-      <p>
-        Use <code>GET /organism</code> as DNO’s primary public state feed. Read <code>status</code>, <code>risk</code>, and <code>confidence</code> for the minimal operating picture. Add <code>data_quality</code>, <code>staleness_seconds</code>, and <code>agreement_reason</code> before making automated interpretations.
-      </p>
-      <p>
-        Validate integrations against <code>/organism/schema</code>. Treat <code>unknown</code>, <code>insufficient</code>, and <code>uncertain</code> as valid states.
-      </p>
-      <p>
-        DNO informs context. It does not advise, predict, score, certify, verify identities, or decide action.
-      </p>
     </div>
+  </header>
 
-    <!-- Honest uncertainty card -->
-    <section class="uncertainty-card">
-      <div class="endpoint-label">Honest uncertainty</div>
-      <h2>Uncertainty is part of the output</h2>
-      <p>
-        DNO does not force incomplete observations into confident answers.
-      </p>
-      <div class="state-row">
-        <code>unknown</code>
-        <code>insufficient</code>
-        <code>uncertain</code>
-      </div>
+  <div class="wrap doc-grid">
+    <details class="toc" open>
+      <summary>On this page</summary>
+      <ol>
+        <li><a href="#what">What Demos is</a></li>
+        <li><a href="#two-mechanisms">Two mechanisms</a></li>
+        <li><a href="#validators">Validators</a></li>
+        <li><a href="#shards">A shard for each block</a></li>
+        <li><a href="#inside">Inside a shard</a></li>
+        <li><a href="#node-health">A node's own health</a></li>
+        <li><a href="#dahr">DAHR</a></li>
+        <li><a href="#dno-dahr">What DNO does with DAHR</a></li>
+        <li><a href="#words">Words that must not share a label</a></li>
+        <li><a href="#cannot-see">What DNO cannot see</a></li>
+        <li><a href="#sources">Sources</a></li>
+      </ol>
+    </details>
 
-      <p>
-        These are valid outputs. They mean the visible public data is incomplete, stale, or conflicting — not that the API has failed.
-      </p>
-    </section>
+    <article class="prose">
+      <section id="what" aria-labelledby="h-what">
+        <h2 id="h-what">What Demos is</h2>
+        <p>The Demos docs describe the Demos Network as an interconnectivity layer across chains and web contexts. The network has two parts, the node and the SDKs, and its nodes “can act either as validators or as synced read-only nodes” (<a href="https://docs.kynesys.xyz/introduction/demos-network-architecture">architecture</a>). Consensus is PoR-BFT, “Proof of Reputation (PoR) Byzantine Fault Tolerance” (<a href="https://docs.kynesys.xyz/backend/consensus-mechanism/overview">consensus</a>).</p>
+        <h3>Parts the docs name</h3>
+        <dl class="kv">
+          <div><dt>Consensus</dt><dd>PoR-BFT. Validators are shuffled into shards for each block; see <a href="#shards">below</a>.</dd></div>
+          <div><dt>State</dt><dd>The Global Change Registry (GCR) holds account and subnet properties once blocks are synced (<a href="https://docs.kynesys.xyz/backend/global-change-registry/overview">GCR</a>).</dd></div>
+          <div><dt>Identity</dt><dd>Cross Context Identities (CCI): each address carries an <code>identities</code> object in the GCR (<a href="https://docs.kynesys.xyz/backend/internal-mechanisms/cross-context-identities">CCI</a>).</dd></div>
+          <div><dt>Cross-chain</dt><dd>The XM SDKs “help you create payloads to interact with other blockchains from DEMOS” (<a href="https://docs.kynesys.xyz/sdk/cross-chain/overview">XM</a>).</dd></div>
+          <div><dt>Web2</dt><dd>DAHR relays an HTTP request and anchors hashes of the response on chain; TLSNotary produces proofs from TLS sessions (<a href="https://docs.kynesys.xyz/sdk/web2/overview">Web2</a>). See <a href="#dahr">DAHR</a>.</dd></div>
+          <div><dt>Privacy</dt><dd>L2PS, the Layer 2 Privacy Subnet, “a privacy-preserving transaction layer that enables encrypted transactions” (<a href="https://docs.kynesys.xyz/backend/l2ps-subnet-framework/overview">L2PS</a>).</dd></div>
+        </dl>
+        <div class="aside">
+          <span class="aside-k">Where DNO stands</span>
+          <p>DNO is an independent observer built by XM33, not part of Demos. Its public reading comes from three public Demos endpoints read from outside. It does not operate the protocol, admit validators, or decide anything on the network.</p>
+        </div>
+      </section>
 
-    <!-- What DNO does / does not do -->
-    <section class="boundary-grid">
-      <div class="boundary-card">
-        <h2>What DNO does</h2>
-        <ul>
-          <li>Observes public validators on the Demos testnet</li>
-          <li>Reports whether visible public nodes appear reachable and aligned</li>
-          <li>Publishes structured assessments that humans and agents can read</li>
-          <li>Records notable observed network conditions over time</li>
-          <li>Shows when available data is insufficient or uncertain</li>
+      <section id="two-mechanisms" aria-labelledby="h-two">
+        <h2 id="h-two">Two mechanisms, two questions</h2>
+        <p>DNO's cross-check compares public answers. Demos shard composition is a consensus step inside the network. They answer different questions, and DNO never sees the second one.</p>
+        <figure class="fig lanes" aria-labelledby="lanes-cap">
+          <div class="fig-body">
+            <div class="lane">
+              <p class="lane-k">Outside: DNO's cross-check <span class="tag">every 20 s</span></p>
+              <ol class="flow">
+                <li><b>3 public seeds</b><span>their /info answers</span></li>
+                <li><b>Own heights</b><span>each seed's own peerlist entry</span></li>
+                <li><b>Median, ±25</b><span>a height in the band is aligned</span></li>
+                <li><b>Agreement</b><span>strong · moderate · weak · unknown</span></li>
+                <li class="to-status"><b>Status</b><span>on /organism, with its reason</span></li>
+              </ol>
+            </div>
+            <div class="wall" role="presentation"><span>DNO does not see below this line</span></div>
+            <div class="lane lane--inside" style="--steps: 4">
+              <p class="lane-k">Inside: Demos shard composition <span class="tag">every block</span></p>
+              <ol class="flow">
+                <li><b>validators table</b><span>ACTIVE rows are eligible</span></li>
+                <li><b>CVSA seed</b><span>SHA-256 over recent block hashes</span></li>
+                <li><b>Composition</b><span>the seed shuffles the eligible set; validators failing health or sync checks are skipped (Phase 1)</span></li>
+                <li><b>Shard</b><span>runs consensus for the block, one round at a time</span></li>
+              </ol>
+            </div>
+          </div>
+          <figcaption id="lanes-cap"><span>Upper lane: what DNO computes. Lower lane: the Demos docs' description.</span><span class="whose">no live data in this figure</span></figcaption>
+        </figure>
+        <div class="compare">
+          <div>
+            <h3>DNO's cross-check</h3>
+            <p class="who">DNO, from outside</p>
+            <dl>
+              <dt>Question</dt><dd>Did the public seeds answer, and do the heights they report agree?</dd>
+              <dt>Inputs</dt><dd>The <code>/info</code> answers of three public Kynesys seeds. A seed's height is its own peerlist entry; a seed that does not list itself has no height here.</dd>
+              <dt>Output</dt><dd><code>status</code> on <code>/organism</code>, always with <code>status_reason</code>.</dd>
+              <dt>Also dialed, not in status</dt><dd>The cross-check RPCs (DAHR is attempted there), fixnet peers for the reference table.</dd>
+            </dl>
+          </div>
+          <div>
+            <h3>Demos shard composition</h3>
+            <p class="who">The network, for every block</p>
+            <dl>
+              <dt>Question</dt><dd>Which validators form the shard for this block?</dd>
+              <dt>Inputs</dt><dd>Validators that are <code>ACTIVE</code> on chain, and the CVSA seed.</dd>
+              <dt>Output</dt><dd>The shard that runs consensus for that block.</dd>
+              <dt>What DNO sees of it</dt><dd>Nothing.</dd>
+            </dl>
+          </div>
+        </div>
+        <p>So a <span class="val">stable</span> reading means the public seeds answered and their reported heights agree. It does not mean a shard formed, that a given identity sat in one, or that the network is healthy in the sense the Demos docs use.</p>
+      </section>
+
+      <section id="validators" aria-labelledby="h-val">
+        <h2 id="h-val">Validators</h2>
+        <p>In the Demos docs, a validator is “an on-chain row in the <code>validators</code> table”. Its status moves through three states, driven by three transactions (<a href="https://docs.kynesys.xyz/backend/validator-lifecycle/overview">validator lifecycle</a>).</p>
+        <figure class="fig" id="lifecycle" aria-labelledby="sm-cap">
+          <div class="fig-tools"><span class="dim">Select a state to see its moves.</span></div>
+          <div class="fig-body">
+            <div class="sm" role="group" aria-label="Validator states">
+              <button type="button" class="sm-state" data-s="ACTIVE" aria-pressed="true"><b>ACTIVE</b><span>status "2"</span></button>
+              <div class="sm-arrow" aria-hidden="true"><span>validatorUnstake</span></div>
+              <button type="button" class="sm-state" data-s="UNSTAKING" aria-pressed="false"><b>UNSTAKING</b><span>status "3"</span></button>
+              <div class="sm-arrow" aria-hidden="true"><span>validatorExit</span></div>
+              <button type="button" class="sm-state" data-s="EXITED" aria-pressed="false"><b>EXITED</b><span>status "0"</span></button>
+            </div>
+            <p class="sm-meaning" id="sm-meaning" aria-live="polite">“Participating in consensus, eligible for shard selection.”<span class="by">ACTIVE, in the validator lifecycle page</span></p>
+            <div class="tbl-wrap sm-moves">
+              <table class="tbl stack" id="sm-moves">
+                <thead><tr><th>Move</th><th>Transaction</th><th>What the docs say</th></tr></thead>
+                <tbody>
+                  <tr data-from="" data-to="ACTIVE"><td data-label="Move">new → ACTIVE</td><td data-label="Transaction"><code>validatorStake</code></td><td data-label="Docs">Needs the minimum stake and a connection URL.</td></tr>
+                  <tr data-from="ACTIVE" data-to="ACTIVE"><td data-label="Move">ACTIVE → ACTIVE</td><td data-label="Transaction"><code>validatorStake</code></td><td data-label="Docs">A top-up adds to the stake.</td></tr>
+                  <tr data-from="ACTIVE" data-to="UNSTAKING"><td data-label="Move">ACTIVE → UNSTAKING</td><td data-label="Transaction"><code>validatorUnstake</code></td><td data-label="Docs">Arms the lock: <code>unstake_available_at</code> = current block + 1,000.</td></tr>
+                  <tr data-from="UNSTAKING" data-to="EXITED"><td data-label="Move">UNSTAKING → EXITED</td><td data-label="Transaction"><code>validatorExit</code></td><td data-label="Docs">Only after the lock has elapsed.</td></tr>
+                  <tr data-from="UNSTAKING" data-to="ACTIVE"><td data-label="Move">UNSTAKING → ACTIVE</td><td data-label="Transaction"><code>validatorStake</code></td><td data-label="Docs">A top-up clears the unstake, so every stake unit sits under a fresh 1,000-block lock before exit.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <figcaption id="sm-cap"><span>Validator states and moves.</span><span class="whose">as the Demos docs describe · no live data</span></figcaption>
+        </figure>
+        <blockquote class="src-quote">
+          <p>“Stake doesn't currently weight the random pick (Phase 2), but it gates eligibility (you must be <code>ACTIVE</code>).”</p>
+          <footer>Demos docs · <a href="https://docs.kynesys.xyz/backend/validator-lifecycle/overview">Validator lifecycle</a></footer>
+        </blockquote>
+        <div class="aside">
+          <span class="aside-k">What DNO sees of this</span>
+          <p>Nothing. DNO does not read the <code>validators</code> table, so it cannot say whether any identity is ACTIVE, UNSTAKING or EXITED, or what it has staked. The identities in DNO's catalog are names listed on public peerlists, not validator rows.</p>
+        </div>
+      </section>
+
+      <section id="shards" aria-labelledby="h-shards">
+        <h2 id="h-shards">A shard for each block</h2>
+        <blockquote class="src-quote">
+          <p>“PoR-BFT shuffles the eligible validator set into per-block shards using the CVSA seed — a deterministic SHA-256 over recent block hashes”</p>
+          <footer>Demos docs · <a href="https://docs.kynesys.xyz/backend/consensus-mechanism/decentralization-in-por-bft">Decentralization in PoR-BFT</a></footer>
+        </blockquote>
+        <p>Because the seed comes from recent block hashes, the same page says “no operator can predict or influence which validators land in their shard”.</p>
+        <h3 id="phase-1">Phase 1: out-of-sync validators are skipped</h3>
+        <blockquote class="src-quote">
+          <p>“validators that fail health/sync checks are skipped during shard composition for the affected blocks”</p>
+          <footer>Demos docs · <a href="https://docs.kynesys.xyz/backend/consensus-mechanism/enhanced-security">Enhanced security</a></footer>
+        </blockquote>
+        <p>The docs name the causes as “bad latency, divergent state, or active malice”, and say plainly that this is not a penalty: “Phase 1 does not slash, burn, or otherwise penalise stake.” Slashing, “active stake removal as a punitive response to provable misbehaviour”, “is a Phase 2 feature.”</p>
+
+        <figure class="fig" id="shard-demo" aria-labelledby="sd-cap">
+          <div class="fig-tools">
+            <button type="button" class="btn" id="sd-next">Next block</button>
+            <span class="dim">Select a validator to mark it out of sync for this block.</span>
+          </div>
+          <div class="fig-body">
+            <ol class="sd-steps">
+              <li><span class="k">Recent block hashes (made up)</span><div class="sd-hashes" id="sd-hashes"></div></li>
+              <li><span class="k">Seed: SHA-256 of those</span><code class="sd-seed" id="sd-seed">computing</code></li>
+              <li><span class="k">Validators this block</span>
+                <div>
+                  <div class="sd-set" id="sd-set" role="group" aria-label="Illustrative validators"></div>
+                  <p class="sd-legend" style="margin-top:10px"><span><i></i>ACTIVE, eligible</span><span><i class="s"></i>out of sync: skipped this block</span><span><i class="x"></i>EXITED: never eligible</span></p>
+                </div>
+              </li>
+              <li><span class="k">Order drawn from the seed</span><div class="sd-order" id="sd-order"></div></li>
+              <li><span class="k">A shard for block <span id="sd-block">1</span></span><div class="sd-shard" id="sd-shard" aria-live="polite"></div></li>
+            </ol>
+          </div>
+          <figcaption id="sd-cap"><span>Illustration of the docs' description, computed in your browser: made-up hashes, twelve generic validators, a shard of four. The shuffle and the shard size are placeholders; the pages linked here do not give them.</span><span class="whose">no network data · DNO does not see this step</span></figcaption>
+        </figure>
+      </section>
+
+      <section id="inside" aria-labelledby="h-inside">
+        <h2 id="h-inside">Inside a shard</h2>
+        <blockquote class="src-quote">
+          <p>“Per-shard consensus itself runs sequentially — one consensus round per shard at a time — not multiple rounds in parallel within the same shard.”</p>
+          <footer>Demos docs · <a href="https://docs.kynesys.xyz/backend/consensus-mechanism/unparalleled-scalability">Unparalleled scalability</a></footer>
+        </blockquote>
+        <p>The parallel part is applying transactions. Within one block, independent transactions are split into groups and up to 8 groups are applied at once; the gain “lives in transaction-application within a block”, “not in concurrent consensus rounds”.</p>
+        <div class="aside">
+          <span class="aside-k">What DNO sees of this</span>
+          <p>A height that moves, or does not. A designed pause and a fault look the same from outside, so DNO never says why a height stopped.</p>
+        </div>
+      </section>
+
+      <section id="node-health" aria-labelledby="h-health">
+        <h2 id="h-health">A node's own health</h2>
+        <p>Every Demos node answers an unauthenticated <code>GET /health</code> on its RPC port. The status is the node's own word (<a href="https://docs.kynesys.xyz/backend/operations/health-and-readiness">health and readiness</a>):</p>
+        <div class="tbl-wrap">
+          <table class="tbl stack">
+            <thead><tr><th>Status</th><th>What the docs say</th><th class="num">HTTP</th></tr></thead>
+            <tbody>
+              <tr><td data-label="Status"><code>ok</code></td><td data-label="Docs">“All subsystems healthy, main loop alive.”</td><td data-label="HTTP" class="num">200</td></tr>
+              <tr><td data-label="Status"><code>degraded</code></td><td data-label="Docs">“At least one non-critical subsystem is failed, but the chain and main loop are alive.”</td><td data-label="HTTP" class="num">200</td></tr>
+              <tr><td data-label="Status"><code>dormant</code></td><td data-label="Docs">“The node booted with an empty peer list and intentionally skipped signaling/MCP/TLSNotary/main loop.” Sent with an <code>X-Demos-Dormant: true</code> header.</td><td data-label="HTTP" class="num">200</td></tr>
+              <tr><td data-label="Status"><code>failing</code></td><td data-label="Docs">“The mempool/DB is unreachable, the chain subsystem failed, or the main loop died.”</td><td data-label="HTTP" class="num">503</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Readiness is not a separate flag in those docs: a readiness probe should “inspect dormant / the X-Demos-Dormant header or require boot.complete === true”.</p>
+        <div class="aside">
+          <span class="aside-k">What DNO sees of this</span>
+          <p>None of these words. DNO reads each seed's <code>/info</code>, not its <code>/health</code>, and none of these statuses appears in DNO's reading. The peerlists DNO reads carry an online flag and one more status flag for each listed peer. DNO shows the online flag as peer-reported and leaves the other flag out, because the pages linked here do not say what it means.</p>
+        </div>
+      </section>
+
+      <section id="dahr" aria-labelledby="h-dahr">
+        <h2 id="h-dahr">DAHR</h2>
+        <p>DAHR is the Data Agnostic HTTPS Relay (<a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/overview">DAHR API reference</a>). A client using the SDK calls <code>createDahr()</code>, then <code>startProxy({ url, method })</code>. A Demos node forwards the request to the target, returns the response, and hashes it.</p>
+        <ol class="seqlist" aria-label="One DAHR call">
+          <li><span class="n">1</span><span class="who">client → Demos node</span><span class="what"><code>startProxy({ url, method })</code></span></li>
+          <li><span class="n">2</span><span class="who">Demos node → target URL</span><span class="what">forwards the request<span>http or https only</span></span></li>
+          <li><span class="n">3</span><span class="who">target URL → Demos node</span><span class="what">the response</span></li>
+          <li><span class="n">4</span><span class="who">Demos node</span><span class="what">SHA-256 of the body, SHA-256 of the headers<span>headers are canonicalized first: keys lower-cased, volatile and hop-by-hop headers dropped, sorted by key</span></span></li>
+          <li><span class="n">5</span><span class="who">on chain</span><span class="what">one <code>web2Request</code> transaction per call<span>it stores the hashes, not the data; the pages linked here do not say which party signs and broadcasts it</span></span></li>
+          <li><span class="n">6</span><span class="who">SDK → client</span><span class="what">the response, its hashes and the <code>txHash</code><span>returned once the transaction is confirmed and broadcast; <code>txHash</code> is optional in the result type</span></span></li>
+        </ol>
+        <blockquote class="src-quote">
+          <p>“Each <code>startProxy</code> call creates one on-chain web2Request transaction that stores only hashes of the response (body and headers), not the full data.”</p>
+          <footer>Demos docs · <a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/overview">DAHR API reference</a> · <a href="https://docs.kynesys.xyz/backend/communications-stack/web2-proxy-dahr">Web2 proxy</a> · <a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/types">types</a></footer>
+        </blockquote>
+        <div class="rec">
+          <div>
+            <h3>What one call records</h3>
+            <ul>
+              <li>That a Demos node fetched this URL and received a response.</li>
+              <li>SHA-256 hashes of that response's body and headers, anchored in one on-chain transaction.</li>
+              <li>Anyone holding the same response bytes can hash them and compare.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>What it does not</h3>
+            <ul>
+              <li>Store the response itself: only hashes go on chain.</li>
+              <li>Say whether the content is correct, current or complete.</li>
+              <li>Prove the TLS session. That is TLSNotary, a separate mechanism the docs list as slower (about 2–5 s against about 500 ms) and costlier (1+ DEM plus gas, against gas only).</li>
+            </ul>
+          </div>
+        </div>
+        <p>Same letters, different object: the Key Server OAuth flow returns a <code>DAHRAttestation</code>, an Ed25519-signed record that the Key Server performed a verification (<a href="https://docs.kynesys.xyz/sdk/web2/keyserver-oauth">Key Server OAuth</a>). DNO does not use it.</p>
+      </section>
+
+      <section id="dno-dahr" aria-labelledby="h-dno-dahr">
+        <h2 id="h-dno-dahr">What DNO does with DAHR</h2>
+        <ol>
+          <li>Each cycle DNO dials its cross-check RPCs. For each one that answers, it asks a Demos node, through the SDK, to relay a <code>GET</code> of that RPC through DAHR.</li>
+          <li>It counts an attestation only when a transaction hash comes back, and keeps the URL, the transaction hash, the response hash, the HTTP status and the time.</li>
+          <li>Those records would travel with an on-chain post of the reading. On-chain publication is disabled, so nothing is posted.</li>
+          <li><code>/health</code> reports the state in <code>attestation</code>: <code>available</code>, <code>last_count</code> (how many of those RPCs returned an attestation object this cycle) and <code>last_ok_at</code>.</li>
+        </ol>
+        <div class="aside">
+          <span class="aside-k">Not the seeds</span>
+          <p>The three seeds whose answers enter status are not relayed through DAHR, and <code>/organism</code> carries no attestation. That is why the homepage says <em>Observe. Explain.</em> and mentions DAHR once, under the API, and only while <code>attestation.available</code> is true.</p>
+        </div>
+      </section>
+
+      <section id="words" aria-labelledby="h-words">
+        <h2 id="h-words">Words that must not share a label</h2>
+        <p>Demos uses its own words for a node's health, a validator's status and a validator skipped from a shard. DNO's words are different, and they describe what DNO saw from outside.</p>
+        <div class="chips" data-filter-for="words-table" role="group" aria-label="Filter the words">
+          <span class="k">Show</span>
+          <span class="seg">
+            <button type="button" class="btn" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" class="btn" data-filter="sees" aria-pressed="false">DNO sees it</button>
+            <button type="button" class="btn" data-filter="not" aria-pressed="false">DNO does not</button>
+          </span>
+          <span class="dim" data-filter-count></span>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl stack words" id="words-table">
+            <thead><tr><th>Word</th><th>Whose word</th><th>Meaning</th><th>DNO sees it?</th></tr></thead>
+            <tbody>
+              <tr data-f="not"><td data-label="Word"><code>ok</code> <code>degraded</code> <code>dormant</code> <code>failing</code></td><td data-label="Whose">the node's own <code>GET /health</code></td><td data-label="Meaning">ok: subsystems and main loop up. degraded: something non-critical failed, chain still up. dormant: booted with no peers and skipped work on purpose. failing: chain, mempool or main loop down.</td><td data-label="DNO sees it?">No. DNO reads <code>/info</code>, not <code>/health</code>.</td></tr>
+              <tr data-f="not"><td data-label="Word"><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></td><td data-label="Whose">the on-chain <code>validators</code> table</td><td data-label="Meaning">a validator row's status. ACTIVE is eligible for shard selection.</td><td data-label="DNO sees it?">No.</td></tr>
+              <tr data-f="not"><td data-label="Word">out of sync</td><td data-label="Whose">consensus, Phase 1</td><td data-label="Meaning">that validator is skipped for shard composition on those blocks. It is not slashing.</td><td data-label="DNO sees it?">No.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>stable</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">this cycle's reading of the public seeds: they answered and their heights agree, with no warning or critical public incident.</td><td data-label="DNO sees it?">Yes. It is not <code>ok</code>, and it is not <code>ACTIVE</code>.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>strong</code> agreement</td><td data-label="Whose">DNO</td><td data-label="Meaning">the seeds' own heights sit within DNO's band, ±25 blocks of the median.</td><td data-label="DNO sees it?">Yes, for seeds that reported their own height.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>sufficient</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">DNO got at least two heights and the reading is not stale.</td><td data-label="DNO sees it?">Yes. It describes DNO's vantage, not the network.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>reachable</code> <code>unreachable</code></td><td data-label="Whose">DNO, probed seeds only</td><td data-label="Meaning">a seed answered DNO's <code>/info</code> request, or did not.</td><td data-label="DNO sees it?">Yes, for the three seeds only.</td></tr>
+              <tr data-f="sees"><td data-label="Word">peer-reported</td><td data-label="Whose">a seed's peerlist</td><td data-label="Meaning">what a public peerlist said about another identity. DNO did not dial it.</td><td data-label="DNO sees it?">As reported, never confirmed.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="calm">Public seeds answered and their reported heights agree.<span class="by">The plain sentence DNO uses for a calm reading. It never says the Demos network is healthy.</span></p>
+      </section>
+
+      <section id="cannot-see" aria-labelledby="h-cannot">
+        <h2 id="h-cannot">What DNO cannot see</h2>
+        <ul class="limits">
+          <li>Who is in a shard, or who the secretary is.</li>
+          <li>The <code>validators</code> table: which identities are ACTIVE, UNSTAKING or EXITED, and any stake.</li>
+          <li>Votes, admission, and the health and sync checks consensus applies.</li>
+          <li>A node's own <code>/health</code> status.</li>
+          <li>Whether a peer-listed identity is a validator, or whether it answers: DNO does not dial the catalog.</li>
+          <li>Why height stopped. A designed pause and a fault look the same from here.</li>
         </ul>
-      </div>
+      </section>
 
-      <div class="boundary-card boundary-card-muted">
-        <h2>What DNO does not do</h2>
-        <ul>
-          <li>Operate the Demos protocol</li>
-          <li>Control, rank, or recommend validators</li>
-          <li>Issue, verify, or certify CCI or agent identities</li>
-          <li>Verify individual commerce claims</li>
-          <li>Approve or reject transactions</li>
-          <li>Provide financial, trading, or transaction advice</li>
-          <li>Predict future network behavior</li>
+      <section id="sources" aria-labelledby="h-sources">
+        <h2 id="h-sources">Sources</h2>
+        <p>Demos documentation at docs.kynesys.xyz, read on 28 September 2026. If the docs change, this page may lag; the linked pages take precedence.</p>
+        <ul class="sources">
+          <li><a href="https://docs.kynesys.xyz/introduction/overview">Introduction</a><span>what the Demos Network is</span></li>
+          <li><a href="https://docs.kynesys.xyz/introduction/demos-network-architecture">Demos Network architecture</a><span>node and SDKs; validators or synced read-only nodes</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/consensus-mechanism/overview">Consensus mechanism</a><span>PoR-BFT</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/validator-lifecycle/overview">Validator lifecycle</a><span>states, transactions, the unstake lock, stake gates eligibility</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/consensus-mechanism/decentralization-in-por-bft">Decentralization in PoR-BFT</a><span>the CVSA seed and per-block shards</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/consensus-mechanism/enhanced-security">Enhanced security</a><span>Phase 1 exclusion of out-of-sync validators; slashing in Phase 2</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/consensus-mechanism/unparalleled-scalability">Unparalleled scalability</a><span>sequential consensus per shard; parallel transaction application</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/operations/health-and-readiness">Health and readiness</a><span>a node's own GET /health</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/api-reference/http-endpoints">HTTP endpoints</a><span>/info and /health</span></li>
+          <li><a href="https://docs.kynesys.xyz/sdk/web2/overview">Web2</a><span>DAHR and TLSNotary compared</span></li>
+          <li><a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/overview">DAHR API reference</a> · <a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/types">types</a><span>createDahr, startProxy, the hashes and txHash</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/communications-stack/web2-proxy-dahr">Web2 proxy (DAHR)</a><span>how a node hashes and canonicalizes a response</span></li>
+          <li><a href="https://docs.kynesys.xyz/sdk/web2/keyserver-oauth">Key Server OAuth</a><span>DAHRAttestation, a different object</span></li>
+          <li><a href="https://docs.kynesys.xyz/backend/global-change-registry/overview">Global Change Registry</a> · <a href="https://docs.kynesys.xyz/backend/internal-mechanisms/cross-context-identities">Cross Context Identities</a> · <a href="https://docs.kynesys.xyz/sdk/cross-chain/overview">Cross-chain</a> · <a href="https://docs.kynesys.xyz/backend/l2ps-subnet-framework/overview">L2PS</a><span>the other parts named above</span></li>
         </ul>
-      </div>
-    </section>
-
-    <p class="boundary-summary">
-      DNO observes and reports. It informs context; it does not advise, predict, score, certify, verify identities, or decide action.
-    </p>
-
-    <!-- Closing -->
-    <div class="closing">
-      <p>
-        Demos provides infrastructure for agents and humans to identify, coordinate, settle, and verify across networks.
-      </p>
-      <p>
-        DNO’s role is narrower: make the observable public state around the Demos testnet easier to inspect.
-      </p>
-    </div>
-
+        <p class="dim" style="margin-top:16px">How DNO forms its own reading: <a href="/methodology">Methodology</a> · <a href="/sources">Sources</a> · <a href="/agent">Agent guide</a>.</p>
+      </section>
+    </article>
   </div>
 </main>
+<!--dno:footer-->
+<script>
+(function () {
+  'use strict';
+  // ---- Validator states: select a state, see its meaning and the moves that touch it ----
+  var MEANING = {
+    ACTIVE: ['“Participating in consensus, eligible for shard selection.”', 'ACTIVE, in the validator lifecycle page'],
+    UNSTAKING: ['“Unstake requested, lock running. Still active until exit.”', 'UNSTAKING, in the validator lifecycle page'],
+    EXITED: ['“Stake withdrawn, removed from active set.”', 'EXITED, in the validator lifecycle page']
+  };
+  var states = Array.prototype.slice.call(document.querySelectorAll('.sm-state'));
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#sm-moves tbody tr'));
+  var meaning = document.getElementById('sm-meaning');
+  function pick(s) {
+    states.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-s') === s ? 'true' : 'false'); });
+    rows.forEach(function (r) { r.setAttribute('data-dim', r.getAttribute('data-from') === s || r.getAttribute('data-to') === s ? 'false' : 'true'); });
+    meaning.textContent = MEANING[s][0];
+    var by = document.createElement('span'); by.className = 'by'; by.textContent = MEANING[s][1];
+    meaning.appendChild(by);
+  }
+  states.forEach(function (b) { b.addEventListener('click', function () { pick(b.getAttribute('data-s')); }); });
+  if (states.length) pick('ACTIVE');
 
-<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>
-<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>600){p.style.borderColor='rgba(217,119,6,0.35)';p.style.color='rgba(217,119,6,0.9)';var d=p.querySelector('.nav-live-dot');if(d)d.style.background='#d97706'}}).catch(function(){})})();</script>
+  // ---- Shard illustration: made-up hashes → SHA-256 seed → an order over the eligible set → a shard of four ----
+  // SHA-256 (FIPS 180-4), small and synchronous, so the figure works without crypto.subtle.
+  function sha256(bytes) {
+    var K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    var H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var l = bytes.length, withPad = ((l + 9 + 63) >> 6) << 6, m = new Uint8Array(withPad);
+    m.set(bytes); m[l] = 0x80;
+    var bits = l * 8; m[withPad - 4] = (bits >>> 24) & 255; m[withPad - 3] = (bits >>> 16) & 255; m[withPad - 2] = (bits >>> 8) & 255; m[withPad - 1] = bits & 255;
+    var w = new Array(64), r = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+    for (var off = 0; off < withPad; off += 64) {
+      for (var i = 0; i < 16; i++) w[i] = (m[off + 4 * i] << 24) | (m[off + 4 * i + 1] << 16) | (m[off + 4 * i + 2] << 8) | m[off + 4 * i + 3];
+      for (i = 16; i < 64; i++) { var s0 = r(w[i - 15], 7) ^ r(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = r(w[i - 2], 17) ^ r(w[i - 2], 19) ^ (w[i - 2] >>> 10); w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0; }
+      var a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (i = 0; i < 64; i++) {
+        var t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+        var t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0; H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+    var out = new Uint8Array(32);
+    for (i = 0; i < 8; i++) { out[4 * i] = (H[i] >>> 24) & 255; out[4 * i + 1] = (H[i] >>> 16) & 255; out[4 * i + 2] = (H[i] >>> 8) & 255; out[4 * i + 3] = H[i] & 255; }
+    return out;
+  }
+  var enc = function (s) { var u = unescape(encodeURIComponent(s)), a = new Uint8Array(u.length); for (var i = 0; i < u.length; i++) a[i] = u.charCodeAt(i); return a; };
+  var hex = function (b) { var s = ''; for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16); return s; };
+  var short = function (h) { return '0x' + h.slice(0, 6) + '…' + h.slice(-4); };
 
+  var set = document.getElementById('sd-set');
+  if (!set) return;
+  var NAMES = 'abcdefghijkl'.split(''), EXITED = { f: true, k: true }, SHARD = 4;
+  var block = 1, hashes = [], skipped = {};
+  // The first three made-up hashes; each new block adds SHA-256("made-up block " + n).
+  for (var n = -2; n <= 0; n++) hashes.push(hex(sha256(enc('made-up block ' + n))));
+  NAMES.forEach(function (v) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'sd-v'; b.textContent = v;
+    b.setAttribute('data-name', v);
+    if (EXITED[v]) { b.setAttribute('data-v', 'exited'); b.setAttribute('aria-disabled', 'true'); b.title = v + ': EXITED, never eligible'; }
+    b.addEventListener('click', function () { if (EXITED[v]) return; skipped[v] = !skipped[v]; draw(); });
+    set.appendChild(b);
+  });
+  function draw() {
+    var recent = hashes.slice(-3);
+    var hEl = document.getElementById('sd-hashes');
+    hEl.replaceChildren.apply(hEl, recent.map(function (h) { var s = document.createElement('span'); s.textContent = short(h); return s; }));
+    var seed = sha256(enc(recent.join('')));
+    var seedHex = hex(seed);
+    document.getElementById('sd-seed').textContent = '0x' + seedHex.slice(0, 16) + '…' + seedHex.slice(-8);   // shortened: 64 hex characters would read like a key
+    document.getElementById('sd-block').textContent = String(block);
+    Array.prototype.forEach.call(set.children, function (b) {
+      var v = b.getAttribute('data-name');
+      if (EXITED[v]) return;
+      b.setAttribute('data-v', skipped[v] ? 'skipped' : 'active');
+      b.setAttribute('aria-pressed', skipped[v] ? 'true' : 'false');
+      b.title = v + (skipped[v] ? ': out of sync, skipped this block' : ': ACTIVE, eligible');
+    });
+    // Placeholder shuffle: Fisher–Yates driven by a SHA-256 stream from the seed.
+    var eligible = NAMES.filter(function (v) { return !EXITED[v] && !skipped[v]; });
+    var stream = seed, pos = 0;
+    var next = function () { if (pos + 4 > stream.length) { stream = sha256(stream); pos = 0; } var x = ((stream[pos] << 24) >>> 0) + (stream[pos + 1] << 16) + (stream[pos + 2] << 8) + stream[pos + 3]; pos += 4; return x; };
+    for (var i = eligible.length - 1; i > 0; i--) { var j = next() % (i + 1), t = eligible[i]; eligible[i] = eligible[j]; eligible[j] = t; }
+    var order = document.getElementById('sd-order');
+    order.replaceChildren.apply(order, eligible.map(function (v, k) { var el = document.createElement(k < SHARD ? 'b' : 'span'); el.textContent = v; return el; }));
+    var shard = document.getElementById('sd-shard');
+    shard.replaceChildren.apply(shard, eligible.slice(0, SHARD).map(function (v) { var s = document.createElement('span'); s.className = 'sd-v'; s.textContent = v; s.style.cursor = 'default'; return s; }));
+    if (eligible.length < SHARD) { var note = document.createElement('span'); note.className = 'dim'; note.textContent = 'Fewer than four eligible: this placeholder shard is short.'; shard.appendChild(note); }
+  }
+  document.getElementById('sd-next').addEventListener('click', function () {
+    hashes.push(hex(sha256(enc('made-up block ' + block)))); block++; skipped = {}; draw();
+  });
+  draw();
+})();
+</script>
 </body>
 </html>

@@ -204,40 +204,44 @@ const CONSENSUS_ENABLED = process.env.CONSENSUS_ENABLED === "1";     // Path 2 (
 var ORGANISM_SCHEMA = '{"error":"schema file not loaded"}'; // Phase 1 contract
 try { ORGANISM_SCHEMA = readFileSync("organism.schema.json", "utf8"); } catch (e) { console.error("[schema] organism.schema.json not loaded: " + e.message); }
 
-var DOCS_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — API</title>' +
-'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#cbd5e1;padding:2rem;max-width:860px;margin:0 auto;line-height:1.5}' +
-'h1{color:#22d3ee;margin-bottom:4px;font-size:1.6rem}.sub{color:#64748b;margin-bottom:1.5rem;font-size:.9rem}' +
-'h2{color:#38bdf8;margin:1.2rem 0 .4rem;font-size:1rem;border-bottom:1px solid #1e293b;padding-bottom:4px}' +
-'.e{background:#1e293b;border-left:3px solid #22d3ee;padding:8px 12px;margin:5px 0;border-radius:0 4px 4px 0;font-size:.9rem}' +
-'.e b{color:#f59e0b}.e span{color:#94a3b8;display:block;font-size:.82rem;margin-top:2px}' +
-'code{background:#0f172a;padding:1px 5px;border-radius:3px;font-size:.85rem}' +
-'footer{margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #1e293b;color:#475569;font-size:.8rem}</style></head><body>' +
-'<h1>Demos Network Oracle</h1>' +
-'<p class="sub">Public network observability for the Demos ecosystem. Monitors public validators and tracks network agreement. On-chain publication of Oracle observations is currently disabled.<br>' +
-'Oracle wallet: <code>__AGENT_WALLET__</code> &middot; v' + AGENT_VERSION + '</p>' +
-'<p class="sub">On-chain publication is currently disabled from this Oracle. Live observations may continue independently. This reflects the Oracle\'s publication status and does not by itself indicate a Demos network failure.</p>' +
-'<h2>Network</h2>' +
-'<div class="e"><b>GET /health</b><span>Full network snapshot — core assessment model, agreement, signals, public nodes, reference layer. on_chain_publication is currently "disabled" (observation posts are not sent). attestation is a separate field: DAHR attempted on the cross-check RPCs (available, last_count, last_ok_at), not on the seeds whose answers enter status.</span></div>' +
-'<div class="e"><b>GET /organism</b><span>Default context. Compact public core assessment feed — 17 required fields plus additive 1.1 fields (observed_at, data_quality_reason, height_static_seconds, active_public_conditions, agreement_detail), zero fleet data. ETag / 304 between observations.</span></div>' +
-'<div class="e"><b>GET /organism/schema</b><span>Machine-readable JSON Schema contract — stability policy, enums, changelog</span></div>' +
-'<div class="e"><b>GET /signals</b><span>Current network signals grouped by severity (critical / warning / info)</span></div>' +
-'<div class="e"><b>GET /incidents</b><span>Public incident log. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; active counts every active public record, condition records included (/organism active_incidents does not).</span></div>' +
-'<h2>Validators</h2>' +
-'<div class="e"><b>GET /peers</b><span>Identities listed on the public seed peerlists in the latest crawl — peer-reported height, online flag, sync status and how many public peerlists listed them. Truncated identities; connections are never exposed; never dialed.</span></div>' +
-'<div class="e"><b>GET /catalog</b><span>Retained catalog (identities listed by a public seed peerlist): first recorded (first_seen), last listed, and what peerlists reported in the latest crawl. Rows recorded before 1.1 appear once a public peerlist lists them again. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations.</span></div>' +
-'<div class="e"><b>GET /catalog/lookup?key=0x…</b><span>Exact check of a full key against the retained catalog and the configured seeds. Returns the sanitized row only.</span></div>' +
-'<div class="e"><b>GET /sentinel</b><span>Anomaly detector status — alert count for the last 24 h, or unknown when unavailable</span></div>' +
-'<div class="e"><b>GET /sources</b><span>Where the Oracle derives its view — source layers, resolution model, attestation</span></div>' +
-'<div class="e"><b>GET /agent</b><span>Agent integration guide \u2014 consumption patterns, examples, polling guidance</span></div>' +
-'<div class="e"><b>GET /methodology</b><span>How the Oracle works \u2014 assessment model, data sources, limitations</span></div>' +
-'<h2>History</h2>' +
-'<div class="e"><b>GET /history</b><span>Fleet reference history (last 72 cycles). Internal listener only (INTERNAL_PORT); not served publicly.</span></div>' +
-'<div class="e"><b>GET /history/export?format=csv&amp;from=TS&amp;to=TS</b><span>Export history as CSV. Internal listener only.</span></div>' +
-'<h2>Integration</h2>' +
-'<div class="e"><b>GET /federate</b><span>Prometheus text metrics: oracle implementation version plus public-RPC reachability and probe latency observed from this DNO vantage</span></div>' +
-'<div class="e"><b>GET /badge</b><span>SVG status badge showing observed network status (STABLE/DEGRADED/UNSTABLE)</span></div>' +
-'<div class="e"><b>GET /version</b><span>Running agent version vs latest GitHub commit</span></div>' +
-'<footer>All endpoints return JSON unless noted. Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s. Publishing interval: ' + Math.round(INTERVAL_MS / 60000) + ' min. API version: ' + API_VERSION + '. Oracle is strictly watch-only. DNO informs context; it does not advise, predict, score, certify, or decide action.</footer></body></html>';
+// The API index page. Site-kit markers are filled per request (the kit is defined further down).
+function docsEntry(path, text) { return '<div><dt><code>' + path + '</code></dt><dd>' + text + '</dd></div>'; }
+var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>API · Demos Network Oracle</title><!--dno:head-->' +
+'<style>.docs-kv dt code{white-space:nowrap}.docs-kv{grid-template-columns:minmax(0,19rem) minmax(0,1fr)}@media(max-width:719px){.docs-kv{grid-template-columns:minmax(0,1fr)}}</style></head><body>' +
+'<!--dno:header:docs--><main id="main"><header class="doc-head"><div class="wrap"><div><h1>API</h1>' +
+'<p class="doc-lede">Every public endpoint, read-only, JSON unless noted, served with CORS for any origin. DNO reads three public Demos seeds and publishes whether their reported heights agree.</p>' +
+'<div class="doc-intro"><p>Oracle wallet: <code>__AGENT_WALLET__</code> · v' + AGENT_VERSION + ' · API ' + API_VERSION + '. On-chain publication of the reading is currently disabled; observation continues independently, and that says nothing by itself about the Demos network.</p></div>' +
+'</div></div></header><div class="wrap doc-grid"><details class="toc" open><summary>On this page</summary><ol>' +
+'<li><a href="#reading">The reading</a></li><li><a href="#identities">Peer-listed identities</a></li><li><a href="#pages">Pages</a></li><li><a href="#integration">Integration</a></li><li><a href="#internal">Internal only</a></li></ol></details>' +
+'<article class="prose">' +
+'<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
+docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_static_seconds, active_public_conditions, agreement_detail, last_24h.chain_movement.blocks_advanced). No fleet data. ETag / 304 between observations.') +
+docsEntry('GET /organism/schema', 'The JSON Schema contract: stability policy, enums, changelog.') +
+docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at) and on_chain_publication (currently "disabled").') +
+docsEntry('GET /signals', 'Current signals grouped by severity (critical, warning, info).') +
+docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them.') +
+'</dl></section>' +
+'<section id="identities"><h2>Peer-listed identities</h2><dl class="kv docs-kv">' +
+docsEntry('GET /catalog', 'Identities listed on the public seeds\' peerlists, kept after two public peerlists have listed them: first recorded (first_seen), last listed, and what the peerlists reported in the latest crawl. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations. Never dialed.') +
+docsEntry('GET /catalog/lookup?key=0x…', 'Exact check of one full key against the catalog and the configured seeds. Returns the sanitized row only, never a key.') +
+docsEntry('GET /peers', 'The latest crawl only: truncated identities with the peer-reported height, online flag, sync status and how many public peerlists listed them. Connections are never exposed.') +
+'</dl></section>' +
+'<section id="pages"><h2>Pages</h2><dl class="kv docs-kv">' +
+docsEntry('GET /methodology', 'How each value is derived, and where the observation stops.') +
+docsEntry('GET /about-demos', 'Validators, shards, node health and DAHR, as the Demos docs describe them, and what DNO sees of each.') +
+docsEntry('GET /sources', 'What DNO reads, and which of it enters status.') +
+docsEntry('GET /agent', 'How software agents consume the API: fields, polling, examples.') +
+docsEntry('GET /reference', 'The fixnet probe and the peer-listed identities, in two tables.') +
+docsEntry('GET /timeline', 'Public incidents, condition records and release events.') +
+'</dl></section>' +
+'<section id="integration"><h2>Integration</h2><dl class="kv docs-kv">' +
+docsEntry('GET /federate', 'Prometheus text: the oracle version, plus cross-check RPC reachability and probe latency observed from this vantage, under neutral names.') +
+docsEntry('GET /badge', 'An SVG of the current status word.') +
+docsEntry('GET /version', 'Running agent version and the version most seeds report.') +
+docsEntry('GET /sentinel', 'Anomaly detector: alert count for the last 24 h, or unknown when unavailable.') +
+'</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s. Publishing interval: ' + Math.round(INTERVAL_MS / 60000) + ' min.</p></section>' +
+'<section id="internal"><h2>Internal only</h2><p>Fleet views, <code>/dashboard</code>, <code>/history</code> and <code>/history/export</code>, are served on DNO\'s internal listener only (INTERNAL_PORT). The public site answers 404 for them.</p></section>' +
+'</article></div></main><!--dno:footer--></body></html>';
 
 // FIX BUG 6: Write budget constants (SuperColony rate limits)
 const DAILY_PUBLISH_LIMIT = 15;
@@ -319,59 +323,92 @@ try {
   if (createHash("sha256").update(markBytes).digest("hex") === MARK_ASSET_SHA256) MARK_ASSET = markBytes;
   else console.error("[homepage] assets/dno-mark.jpg is not the locked mark; it will not be served");
 } catch (e) { MARK_ASSET = null; }
+
+// --- Site kit: one stylesheet, one script, one header and one footer for every public page ---------------------
+// Static pages carry three markers that are filled once at load: <!--dno:head-->, <!--dno:header:NAME--> and
+// <!--dno:footer-->. Server-rendered pages call the same functions. The header places the locked raster
+// (MARK_ASSET_PATH) and nothing else: no page draws a mark of its own. Kit files are served under a content hash.
+function loadKitAsset(file, base, ext, type) {
+  try {
+    var bytes = readFileSync(file);
+    return { path: "/assets/" + base + "-" + createHash("sha256").update(bytes).digest("hex").slice(0, 8) + ext, bytes: bytes, type: type };
+  } catch (e) { return null; }
+}
+var SITE_CSS = loadKitAsset("assets/site.css", "site", ".css", "text/css; charset=utf-8");
+var SITE_JS = loadKitAsset("assets/site.js", "site", ".js", "text/javascript; charset=utf-8");
+var SITE_FAVICON = loadKitAsset("assets/dno-favicon.png", "dno-favicon", ".png", "image/png");
+var KIT_ASSETS = {};
+[SITE_CSS, SITE_JS, SITE_FAVICON].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
+// The same links, in the same order, as the homepage header (src/public-api-v11.test.mjs compares them).
+var SITE_NAV = [
+  ["/methodology", "methodology", "Methodology"],
+  ["/about-demos", "about-demos", "About Demos"],
+  ["/sources", "sources", "Sources"],
+  ["/agent", "agent", "Agent"],
+  ["/reference", "reference", "Reference"],
+  ["/timeline", "timeline", "Timeline"],
+  ["/commerce", "commerce", "Commerce"]
+];
+function siteNavLinks(active) {
+  return SITE_NAV.map(function(n) { return '<a href="' + n[0] + '"' + (n[1] === active ? ' aria-current="page"' : '') + '>' + n[2] + '</a>'; });
+}
+function siteHead() {
+  return '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#000000">'
+    + (SITE_FAVICON ? '<link rel="icon" type="image/png" sizes="64x64" href="' + SITE_FAVICON.path + '">' : '')
+    + '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">'
+    + (SITE_CSS ? '<link rel="stylesheet" href="' + SITE_CSS.path + '">' : '');
+}
+function siteHeader(active) {
+  var links = siteNavLinks(active);
+  return '<a class="skip" href="#main">Skip to content</a>'
+    + '<header class="site-head"><div class="wrap">'
+    + '<a class="brand" href="/" aria-label="Demos Network Oracle, home">'
+    + (MARK_ASSET ? '<img class="mark mark--nav" src="' + MARK_ASSET_PATH + '" width="92" height="92" alt="" decoding="async">' : '')
+    + '<span class="brand-name"><span class="full">Demos Network Oracle</span><span class="short">DNO</span></span></a>'
+    + '<nav class="nav" aria-label="Primary">' + links.join("") + '</nav>'
+    + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot"></span><span id="live-text">connecting</span></a>'
+    + '<details class="menu"><summary>Menu</summary><ul><li><a href="/">Live reading</a></li>' + links.map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
+    + '</div></header>';
+}
+function siteFooter(active) {
+  return '<footer class="site-foot"><div class="wrap">'
+    + '<nav class="foot-nav" aria-label="Site"><a href="/">Live reading</a>' + siteNavLinks(active).join("") + '<a href="/docs"' + (active === "docs" ? ' aria-current="page"' : '') + '>API</a></nav>'
+    + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>'
+    + '<p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'
+    + '<p class="fine">Built by XM33 · not an official Demos product.</p>'
+    + '</div></footer>'
+    + (SITE_JS ? '<script src="' + SITE_JS.path + '" defer></script>' : '');
+}
+function applySiteKit(html) {
+  var name = (String(html).match(/<!--dno:header:([a-z-]+)-->/) || [])[1] || "";
+  return String(html).replace("<!--dno:head-->", siteHead()).replace(/<!--dno:header:[a-z-]+-->/, siteHeader(name)).replace("<!--dno:footer-->", siteFooter(name));
+}
 var SOURCES_HTML = "";
-try { SOURCES_HTML = readFileSync("sources.html", "utf8"); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
+try { SOURCES_HTML = applySiteKit(readFileSync("sources.html", "utf8")); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
 
 var AGENT_GUIDE_HTML = "";
-try { AGENT_GUIDE_HTML = readFileSync("agent-guide.html", "utf8"); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
+try { AGENT_GUIDE_HTML = applySiteKit(readFileSync("agent-guide.html", "utf8")); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
 var METHODOLOGY_HTML = "";
-try { METHODOLOGY_HTML = readFileSync("methodology.html", "utf8"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
+try { METHODOLOGY_HTML = applySiteKit(readFileSync("methodology.html", "utf8")); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
 var CRITERIA_HTML = "";
-try { CRITERIA_HTML = readFileSync("criteria.html", "utf8"); } catch(e) { CRITERIA_HTML = "<html><body><h1>Criteria page not found</h1></body></html>"; }
+try { CRITERIA_HTML = applySiteKit(readFileSync("criteria.html", "utf8")); } catch(e) { CRITERIA_HTML = "<html><body><h1>Criteria page not found</h1></body></html>"; }
 
 var CRITERIA_JSON = "";
 try { CRITERIA_JSON = readFileSync("criteria.json", "utf8"); } catch(e) { CRITERIA_JSON = "{\"error\":\"criteria.json not found\"}"; }
 
 var ABOUT_DEMOS_HTML = "";
-try { ABOUT_DEMOS_HTML = readFileSync("about-demos.html", "utf8"); } catch(e) { ABOUT_DEMOS_HTML = "<html><body><h1>About Demos page not found</h1></body></html>"; }
+try { ABOUT_DEMOS_HTML = applySiteKit(readFileSync("about-demos.html", "utf8")); } catch(e) { ABOUT_DEMOS_HTML = "<html><body><h1>About Demos page not found</h1></body></html>"; }
 
 var COMMERCE_HTML = "";
-try { COMMERCE_HTML = readFileSync("commerce.html", "utf8"); } catch(e) { COMMERCE_HTML = "<html><body><h1>Commerce page not found</h1></body></html>"; }
+try { COMMERCE_HTML = applySiteKit(readFileSync("commerce.html", "utf8")); } catch(e) { COMMERCE_HTML = "<html><body><h1>Commerce page not found</h1></body></html>"; }
 
 var COMMERCE_METHODOLOGY_HTML = "";
-try { COMMERCE_METHODOLOGY_HTML = readFileSync("commerce-methodology.html", "utf8"); } catch(e) { COMMERCE_METHODOLOGY_HTML = "<html><body><h1>Commerce methodology not found</h1></body></html>"; }
+try { COMMERCE_METHODOLOGY_HTML = applySiteKit(readFileSync("commerce-methodology.html", "utf8")); } catch(e) { COMMERCE_METHODOLOGY_HTML = "<html><body><h1>Commerce methodology not found</h1></body></html>"; }
 
-/* __CANON_HEADER_START__  Canonical header — SINGLE SOURCE: commerce.html marked regions.
-   Captured from COMMERCE_HTML at load so the two agent.mjs-generated headers (community,
-   timeline) cannot drift from the static canonical. Logo SVG + CSS are copied, never hand-written. */
-var CANONICAL_HEADER_CSS = (function(){ var m = COMMERCE_HTML.match(/\/\* BEGIN canonical-header-css v1 \*\/[\s\S]*?\/\* END canonical-header-css v1 \*\//); return m ? m[0] : ""; })();
-var CANONICAL_LOGO_SVG = (function(){ var m = COMMERCE_HTML.match(/<svg class="doc-logo"[\s\S]*?<\/svg>/); return m ? m[0] : ""; })();
-var DEMOS_BADGE = '<a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn"><span class="dbtn-prefix">powered by</span><svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg><span class="dbtn-wordmark">DEMOS</span></a>';
-function renderHeaderNavLink(href, dataNav, label, activeItem) {
-  var cur = (dataNav === activeItem) ? ' aria-current="page"' : '';
-  return '<a href="' + href + '" class="doc-nav-link" data-nav="' + dataNav + '"' + cur + '>' + label + '</a>';
-}
-function renderHeader(activeItem, farSlot) {
-  return '<!-- BEGIN canonical-header v1 -->'
-    + '<nav class="doc-nav"><div class="doc-nav-inner"><div class="doc-nav-left">'
-    + '<a href="/" class="doc-nav-brand">' + CANONICAL_LOGO_SVG + 'ORACLE</a>'
-    + '<span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>'
-    + '</div><div class="doc-nav-right">'
-    + renderHeaderNavLink('/methodology', 'methodology', 'Methodology', activeItem)
-    + renderHeaderNavLink('/about-demos', 'about-demos', 'About Demos', activeItem)
-    + renderHeaderNavLink('/commerce', 'commerce', 'Commerce', activeItem)
-    + renderHeaderNavLink('/agent', 'agent', 'Agent', activeItem)
-    + renderHeaderNavLink('/sources', 'sources', 'Sources', activeItem)
-    + renderHeaderNavLink('/reference', 'reference', 'Reference', activeItem)
-    + renderHeaderNavLink('/dashboard', 'dashboard', 'Dashboard', activeItem)
-    + renderHeaderNavLink('/timeline', 'timeline', 'Timeline', activeItem)
-    + '</div>'
-    + (farSlot ? '<div class="doc-nav-far">' + farSlot + '</div>' : '')
-    + '</div></nav>'
-    + '<!-- END canonical-header v1 -->';
-}
-/* __CANON_HEADER_END__ */
+// The old canonical header (a 3-dot SVG copied from commerce.html) is gone: every page uses siteHeader().
 
 // ─── Commerce Sanitization (Layer 2 → public projection) ────
 function buildPublicCommerceObservation() {
@@ -1106,13 +1143,27 @@ function renderTimelinePage() {
       if (secs >= 86400) dur = Math.floor(secs/86400) + "d " + Math.floor((secs%86400)/3600) + "h";
       else if (secs >= 3600) dur = Math.floor(secs/3600) + "h " + Math.floor((secs%3600)/60) + "m";
       else dur = Math.floor(secs/60) + "m";
-      items += '<div class="tl-item sev-' + sev + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + sev + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div></div></div>';
+      var affectedTL = null; try { affectedTL = JSON.parse(r.affected_nodes); } catch (eTL) { affectedTL = null; }
+      var isCond = isPublicConditionMarker({ affectedNodes: affectedTL });
+      items += '<div class="tl-item sev-' + sev + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + (isCond ? "condition record" : sev) + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div></div></div>';
     } else {
       items += '<div class="tl-item sev-release"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + escapeHtmlTL(ev.kind) + '</span><div class="tl-text">' + escapeHtmlTL(ev.text) + '</div></div></div>';
     }
   }
   if (!items) items = '<div class="tl-item"><div class="tl-body"><div class="tl-text">No public-scope events recorded yet. Public incident generation began 2026-06-11.</div></div></div>';
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demos Network Oracle — Network Observation Timeline</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet"><style>:root{--bg:#0a0a0a;--panel:#161b22;--border:#21262d;--text:#e6edf3;--text2:#8b949e;--warn:#d29922;--crit:#f85149;--rel:#58a6ff;--surface:#101010;--brand:#2B36D9;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;margin:0;padding:0 16px 60px}.wrap{max-width:1100px;margin:0 auto}' + CANONICAL_HEADER_CSS + 'h1{font-size:22px;margin:0 0 4px}.sub{color:var(--text2);font-size:13px;margin-bottom:6px;font-style:italic}.note{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.55;margin:18px 0 26px}.tl-item{display:flex;gap:16px;border-left:2px solid var(--border);padding:0 0 22px 18px;margin-left:6px;position:relative}.tl-item:before{content:"";position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--text2)}.sev-warning:before{background:var(--warn)}.sev-critical:before{background:var(--crit)}.sev-release:before{background:var(--rel)}.tl-date{color:var(--text2);font-size:12px;min-width:78px;padding-top:2px}.tl-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 6px 6px 0}.tl-text{font-size:13.5px;line-height:1.55;margin:2px 0}.tl-meta{font-size:11.5px;color:var(--text2);margin-top:4px}.foot{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--text2)}.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body>' + renderHeader("timeline", DEMOS_BADGE) + '<div class="wrap"><h1>Network Observation Timeline</h1><div class="sub">Many signals. One observed view.</div><div class="note">Generated from the Oracle’s public observation record — public-scope incidents (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written. Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Raw incident data: <a href="/incidents" style="color:var(--rel)">/incidents</a>.</div>' + items + '<div class="foot"><b>DNO informs context; it does not advise, predict, score, certify, or decide action.</b><br>Observability incidents record limits of the Oracle’s own visibility — they are not network-failure claims.</div></div>' + "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>" + '<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div></body></html>';
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timeline · Demos Network Oracle</title>' + siteHead()
+    + '<style>.tl{max-width:52rem}.tl-item{position:relative;display:grid;grid-template-columns:6.5rem minmax(0,1fr);gap:16px;padding:0 0 24px 22px;border-left:1px solid var(--line);margin-left:5px}'
+    + '.tl-item::before{content:"";position:absolute;left:-5px;top:6px;width:9px;height:9px;background:var(--metal-0);border:1px solid var(--metal-0)}'
+    + '.sev-warning::before{background:var(--elevated-risk);border-color:var(--elevated-risk)}.sev-critical::before{background:var(--degraded);border-color:var(--degraded)}.sev-release::before{background:var(--bg);border-color:var(--metal-1)}'
+    + '.tl-date{font:400 .8125rem/1.6 var(--mono);color:var(--mute)}.tl-body{min-width:0}.tl-tag{display:inline-block;font:400 .75rem/1.4 var(--mono);color:var(--mute);border:1px solid var(--line);border-radius:var(--radius);padding:1px 6px;margin:0 6px 6px 0}'
+    + '.tl-text{color:var(--ink);line-height:1.5}.tl-meta{font-size:.8125rem;color:var(--mute);margin-top:4px}'
+    + '@media(max-width:719px){.tl-item{grid-template-columns:minmax(0,1fr);gap:2px}}</style></head><body>'
+    + siteHeader("timeline")
+    + '<main id="main"><header class="doc-head"><div class="wrap"><div><h1>Observation timeline</h1>'
+    + '<p class="doc-lede">Generated from the Oracle’s public observation record: public-scope incidents and condition records (since the 2026-04-23 incident reconciliation boundary) and Oracle release events. Nothing on this page is hand-written.</p>'
+    + '<div class="doc-intro"><p>Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Observability incidents record limits of the Oracle’s own visibility; they are not network-failure claims. Raw data: <a href="/incidents">/incidents</a>.</p></div>'
+    + '</div></div></header><div class="wrap" style="padding-block:40px 72px"><div class="tl">' + items + '</div></div></main>'
+    + siteFooter("timeline") + '</body></html>';
 }
 function isFleetIncident_24h(inc) {
   var affected;
@@ -3164,7 +3215,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(JSON.stringify(latestVersionData, null, 2));
     } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(DOCS_HTML.replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected"));
+      res.end(applySiteKit(DOCS_HTML).replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected"));
+    } else if (KIT_ASSETS[reqPath]) {
+      var kitAsset = KIT_ASSETS[reqPath];
+      res.writeHead(200, { "Content-Type": kitAsset.type, "Content-Length": kitAsset.bytes.length, "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" });
+      res.end(kitAsset.bytes);
     } else if (reqPath === MARK_ASSET_PATH) {
       if (!MARK_ASSET) { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": MARK_ASSET.length, "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" });
@@ -3181,44 +3236,16 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     } else if (reqPath === "/reference") {
       if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
-      var h = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>DNO — Reference</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Ccircle cx=\'50\' cy=\'18\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'18\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'82\' cy=\'72\' r=\'4\' fill=\'%232B36D9\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'5.5\' fill=\'%232B36D9\'/%3E%3C/svg%3E"><meta name="viewport" content="width=device-width,initial-scale=1">';
-      h += '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">';
-      h += '<style>';
-      h += ':root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--improving:#00DAFF;--brand:#2B36D9;--mono:"Source Code Pro",monospace;--sans:"Inter",system-ui,sans-serif}';
-      h += '*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}';
-      h += 'main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}';
-      h += '.noncanonical-banner{margin:0 0 28px;padding:14px 18px;background:#0f0f0f;border:1px solid #1f1f1f;border-left:3px solid #4a4a4a;color:#c9d1d9;font-size:13px;line-height:1.6;border-radius:4px}';
-      h += '.noncanonical-banner strong{color:#e8ece8;font-weight:600;margin-right:6px}';
-      h += 'h1{font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-0.03em;margin:0 0 4px}';
-      h += '.sub{color:var(--text-secondary);margin-bottom:28px;font-size:13px}';
-      h += '.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}';
-      h += '.sum-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:center;min-width:96px}';
-      h += '.sum-val{font-size:22px;font-weight:600;font-family:var(--mono)}';
-      h += '.sum-label{font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.3px;margin-top:2px;white-space:nowrap}';
-      h += 'table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}';
-      h += 'th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text-secondary);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}';
-      h += 'td{padding:8px 10px;border-bottom:1px solid #151515;font-family:var(--mono);font-size:12px}';
-      h += 'tr:hover{background:#0d0d0d}';
-      h += '.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:500;border:1px solid var(--border)}';
-      h += '.detail{display:none;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin:6px 0 10px;font-size:12px;color:var(--text-secondary);line-height:1.6}';
-      h += '.detail b{color:var(--text-primary);font-weight:500}';
-      h += '.toggle{cursor:pointer;color:var(--text-secondary);font-size:11px;text-decoration:underline}';
-      h += '.toggle:hover{color:var(--text-primary)}';
-      h += 'a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}a:hover{border-bottom-color:var(--improving)}';
-      h += CANONICAL_HEADER_CSS;
-      h += '@media(max-width:640px){.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}';
-      h += '.oracle-hero-submit{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(255,255,255,0.15);border-radius:999px;color:rgba(255,255,255,0.7);text-decoration:none;letter-spacing:0.04em;transition:all 0.2s}';
-      h += '.oracle-hero-submit:hover{color:var(--improving);border-color:rgba(0,218,255,0.3)}';
-      h += 'footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:11px;opacity:0.5;text-align:center}.xm33-dot{display:none}';
-      h += '.table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}';
-      h += '@media(max-width:720px){main{padding:20px 16px 64px}.summary{gap:8px}.sum-card{flex:1;min-width:88px;padding:10px 10px}.sum-label{font-size:9px;letter-spacing:0.2px}table{font-size:11px}td,th{padding:6px 8px}}';
-      h += '.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}';
-      h += '</style></head><body>';
-      // Nav
-      h += renderHeader("reference", DEMOS_BADGE);
-      h += '<main>';
-      h += '<div class="noncanonical-banner"><strong>Reference surface.</strong> Two tables. Neither enters status, risk, or agreement. Neither is a validator list, a stake list, or an official-node list.</div>';
-      h += '<h1>Reference — Discovered Validators</h1>';
+      var h = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead();
+      h += '<style>.ref-body{padding-block:32px 72px}.ref-sec + .ref-sec{margin-top:48px;padding-top:32px;border-top:1px solid var(--line)}'
+        + '.ref-sec h2{font-size:1.375rem;font-weight:500;color:var(--metal-2);margin-bottom:8px}.ref-note{color:var(--metal-1);max-width:46rem;margin-bottom:6px}'
+        + '.ref-meta{font:400 .8125rem/1.5 var(--mono);color:var(--mute);margin:8px 0 14px}.ref-tbl td{font-family:var(--mono);font-size:.875rem}'
+        + '.ref-tbl .nm{font-family:var(--sans);color:var(--ink)}.ref-tbl .id{display:block;color:var(--mute);font-size:.75rem;margin-top:2px}'
+        + '.lampt{display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap}.ref-empty{color:var(--mute);padding:12px 0}</style></head><body>';
+      h += siteHeader("reference");
+      h += '<main id="main"><header class="doc-head"><div class="wrap"><div><h1>Reference</h1>'
+        + '<p class="doc-lede">Two tables. Neither enters status, risk or agreement. Neither is a validator list, a stake list or an official-node list.</p></div></div></header>'
+        + '<div class="wrap ref-body">';
 
       // --- Fleet Fixnet section (v7.2) ---
       var fx = latestFixnetNodes || [];
@@ -3250,19 +3277,16 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           fxAgoStr = agoSec < 60 ? (agoSec + "s ago") : (Math.round(agoSec/60) + "m ago");
         }
 
-        h += '<section style="margin:28px 0 36px">';
-        h += '<h2 style="font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Fixnet probe — discovered hosts</h2>';
-        h += '<p class="sub" style="margin:0 0 8px">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights are the latest reported by the anchor peerlist or by the DNO probe, whichever came last. This is not the public testnet catalog.</p>';
-        h += '<div style="font-size:11px;color:var(--text-secondary);font-family:var(--mono);margin:0 0 14px">';
-        if (fxAgoStr) h += 'Updated ' + fxAgoStr;
-        h += '</div>';
+        h += '<section class="ref-sec" id="fixnet">';
+        h += '<h2>Fixnet probe</h2>';
+        h += '<p class="ref-note">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights are the latest reported by the anchor peerlist or by the DNO probe, whichever came last. This is not the public testnet catalog.</p>';
+        h += '<p class="ref-meta">' + (fxAgoStr ? 'Updated ' + fxAgoStr : '') + '</p>';
         var fxNotProbedN = fxDiscovered.filter(function(n){return n.probed === false}).length;
-        h += '<p class="sub" style="margin:0 0 6px">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe' + (fxNotProbedN ? ' · ' + fxNotProbedN + ' not probed' : '') + '</p>';
-        h += '<p class="sub" style="margin:0 0 16px">Not a count of the public testnet. Not network size.</p>';
+        h += '<p class="ref-meta">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe' + (fxNotProbedN ? ' · ' + fxNotProbedN + ' not probed' : '') + ' · not a count of the public testnet, not network size</p>';
 
 
-        h += '<div class="table-scroll"><table><thead><tr>';
-        h += '<th>Validator</th><th>Source</th><th>Status</th><th>Block</th><th>Sync</th><th>Latency</th>';
+        h += '<div class="tbl-wrap"><table class="tbl stack ref-tbl"><thead><tr>';
+        h += '<th>Name</th><th>Source</th><th>Probe</th><th class="num">Block</th><th class="num">Height vs anchor</th><th class="num">Latency</th>';
         h += '</tr></thead><tbody>';
 
         // Build ordered rows: Anchor, then Fleet (status then block desc), then Discovered (status then block desc)
@@ -3290,21 +3314,19 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
           // Trust tier: Kynesys anchor = trust origin, everything else = observed/discovered.
           // Operator names (if any) move to the Validator column, not the Source column.
-          var srcColor = isAnchor ? "#2B36D9" : "#a78bfa";
           var srcLabel = isAnchor ? "Kynesys" : "Discovered";
 
           // Status resolution: monitored uses .ok, discovered uses .online
           var isOnline = isDisc ? !!fn.online : !!fn.ok;
-          var statusColor = isOnline ? "#3fb950" : "#8b949e";   // S2: reachable=green, unreachable=neutral grey (not alarm-red)
-          var statusText = isOnline ? "reachable" : "unreachable";   // S2: fixnet probe measures reachability-from-vantage, not liveness
-          if (isDisc && fn.probed === false) { statusColor = "#6b6b6b"; statusText = "not probed"; }
+          var statusTone = isOnline ? "ok" : "neutral";   // reachable, or unreachable (neutral: reachability from this vantage, not liveness)
+          var statusText = isOnline ? "reachable" : "unreachable";
+          if (isDisc && fn.probed === false) { statusTone = "unknown"; statusText = "not probed"; }
 
 
 
           // Block
           var block = fn.block || fn.last_block || null;
-          var syncPct = (block && fxNetHead > 0) ? Math.round((block / fxNetHead) * 1000) / 10 : null;
-          var syncColor = syncPct === null ? "#98a2b3" : (syncPct >= 95 ? "#22C55E" : (syncPct >= 80 ? "#d97706" : "#EF4444")); var syncOpacity = (syncPct !== null && syncPct >= 95 && syncPct < 100) ? ";opacity:0.55" : "";
+          var vsAnchor = (block && fxNetHead > 0) ? block - fxNetHead : null;   // blocks against the anchor's height, as reported
 
           // Latency (only meaningful for monitored; discovered has no current-cycle latency)
           // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
@@ -3323,25 +3345,19 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
           h += '<tr>';
           // Validator (with identity sub-line)
-          h += '<td><div>' + esc(nameLabel) + '</div>';
-          h += '<div style="font-family:var(--mono);color:var(--text-secondary);font-size:10px;margin-top:2px;opacity:0.7">' + esc(truncId(identity)) + '</div></td>';
-          // Source
-          h += '<td><span class="pill" style="color:'+srcColor+';border-color:'+srcColor+'44">' + srcLabel + '</span></td>';
-          // Status
-          h += '<td><span style="color:'+statusColor+'">\u25cf</span> ' + statusText + '</td>';
-          // Block
-          h += '<td>' + heightCell(block) + '</td>';
-          // Sync
-          h += '<td' + (syncPct !== null ? ' style="color:'+syncColor+syncOpacity+'"' : '') + '>' + (syncPct !== null ? syncPct + "%" : "\u2014") + '</td>';
-          // Latency
-          h += '<td>' + latencyStr + '</td>';
+          h += '<td data-label="Name"><span class="nm">' + esc(nameLabel) + '</span><span class="id">' + esc(truncId(identity)) + '</span></td>';
+          h += '<td data-label="Source"><span class="tag" style="margin:0">' + srcLabel + '</span></td>';
+          h += '<td data-label="Probe"><span class="lampt"><span class="ind" data-tone="' + statusTone + '"></span>' + statusText + '</span></td>';
+          h += '<td data-label="Block" class="num">' + heightCell(block) + '</td>';
+          h += '<td data-label="Height vs anchor" class="num">' + (vsAnchor === null ? "not reported" : (vsAnchor === 0 ? "same" : (vsAnchor > 0 ? "+" : "") + vsAnchor)) + '</td>';
+          h += '<td data-label="Latency" class="num">' + latencyStr + '</td>';
           h += '</tr>';
         }
         h += '</tbody></table></div>';
 
         // v7.3: "Nodes syncing" — across ALL rows (anchor + fleet + discovered)
-        h += '<p class="sub" style="margin-top:10px;font-size:11px">Advertised heights on this fixnet probe, relative to the fixnet anchor this cycle. Not a public-testnet census.</p>';
-        h += '</section><hr style="border:none;border-top:1px solid var(--border);margin:24px 0">';
+        h += '<p class="ref-meta">Advertised heights on this fixnet probe, relative to the fixnet anchor this cycle. Not a public-testnet census.</p>';
+        h += '</section>';
       }
       // --- end Fleet Fixnet section ---
 
@@ -3366,36 +3382,28 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           discoveredList = vgrow.validators.filter(function(v){ return !v.monitored; });
         }
       } catch(e) { discoveredList = []; }
-      h += '<div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">';
-      h += '<h2 style="font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px">Crawl-observed identities</h2>';
-      h += '<p class="sub" style="margin-bottom:18px">Public testnet catalog — identities seen on a seed peerlist. Seen on a public peerlist. Not a validator list. Not a stake list. Not an official-node list. DNO did not dial these identities. Status here is peer-reported, not a probe.</p>';
+      h += '<section class="ref-sec" id="peer-listed">';
+      h += '<h2>Peer-listed identities</h2>';
+      h += '<p class="ref-note">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta. Kept after two public peerlists have listed them; what is shown is what those peerlists reported, not a probe.</p>';
       if (discoveredList.length === 0) {
-        h += '<p style="color:var(--text-secondary);font-size:12px;font-family:var(--mono);opacity:0.6;padding:12px 0">None in this set.</p>';
+        h += '<p class="ref-empty">None in this set.</p>';
       } else {
-        h += '<div class="table-scroll"><table style="opacity:0.8"><thead><tr><th>Identity</th><th>peer-reported</th><th>Block</th><th>Sync</th></tr></thead><tbody>';
+        h += '<div class="tbl-wrap"><table class="tbl stack ref-tbl"><thead><tr><th>Identity</th><th>peer-reported</th><th class="num">Height</th><th class="num">vs highest seed</th></tr></thead><tbody>';
         for (var dvi = 0; dvi < discoveredList.length; dvi++) {
           var dv = discoveredList[dvi];
-          var dvOnline = dv.online === true;
-          var dvStatusColor = dvOnline ? "#d97706" : "#98a2b3";
-          var dvStatusBg = dvOnline ? "rgba(217,119,6,0.08)" : "rgba(152,162,179,0.08)";
-          var dvStatusText = dvOnline ? "reported online" : "not reported";
-          var dvSyncPct = typeof dv.sync_pct === "number" ? dv.sync_pct : null;
-          var dvSyncColor = dvSyncPct === null ? "#98a2b3" : dvSyncPct >= 99.9 ? "#22C55E" : dvSyncPct >= 50 ? "#d97706" : "#EF4444";
+          var dvListed = dv.listed_this_cycle !== false;
+          var dvStatusText = !dvListed ? "not listed in the latest crawl" : dv.online === true ? "online flag set" : "online flag not set";
           h += '<tr>';
-          h += '<td style="font-family:var(--mono);font-size:11px">' + esc(truncId(dv.identity)) + '</td>';
-          h += '<td><span class="pill" style="color:' + dvStatusColor + ';background:' + dvStatusBg + ';border-color:' + dvStatusColor + '44">' + dvStatusText + '</span></td>';
-          h += '<td>' + heightCell(dv.block) + '</td>';
-          h += '<td style="color:' + dvSyncColor + '">' + (dvSyncPct === null ? "not reported" : dvSyncPct + "%") + '</td>';
+          h += '<td data-label="Identity">' + esc(truncId(dv.identity)) + '</td>';
+          h += '<td data-label="peer-reported">' + dvStatusText + '</td>';
+          h += '<td data-label="Height" class="num">' + heightCell(dv.block) + '</td>';
+          h += '<td data-label="vs highest seed" class="num">' + (typeof dv.lag === "number" ? (dv.lag === 0 ? "same" : (dv.lag > 0 ? "−" + dv.lag : "+" + (-dv.lag))) : "not reported") + '</td>';
           h += '</tr>';
         }
         h += '</tbody></table></div>';
       }
-      h += '</div>';
 
-      h += '<footer>Demos Network Oracle &middot; API v1.1 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> &middot; <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>';
-      h += "<script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#d29922\"></span>STALE';}}).catch(function(){p.innerHTML='<span class=\"nav-live-dot\" style=\"background:#6b7280\"></span>OFFLINE';});})();</script>";
-      h += '<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div>';
-      h += '</main></body></html>';
+      h += '</section></div></main>' + siteFooter("reference") + '</body></html>';
       res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
       res.end(h);
     } else if (reqPath === "/agent") {

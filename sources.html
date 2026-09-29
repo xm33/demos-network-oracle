@@ -1,153 +1,96 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Network Oracle — Sources</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='18' r='4' fill='%232B36D9'/%3E%3Ccircle cx='18' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='82' cy='72' r='4' fill='%232B36D9'/%3E%3Ccircle cx='50' cy='50' r='5.5' fill='%232B36D9'/%3E%3C/svg%3E">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root{--bg:#0a0a0a;--surface:#101010;--border:#1a1a1a;--text-primary:#f5f5f5;--text-secondary:#98a2b3;--brand:#2B36D9;--accent:#00DAFF;--warning:#d97706;--critical:#EF4444;--improving:var(--accent);--degraded:var(--warning);--unstable:var(--critical);--mono:'Source Code Pro',monospace;--sans:'Inter',system-ui,sans-serif}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--sans);background:var(--bg);color:var(--text-primary);-webkit-font-smoothing:antialiased;line-height:1.7}
-main{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
-h1{font-family:var(--mono);font-size:28px;font-weight:600;letter-spacing:-0.03em;margin:0 0 4px}
-.sub{color:var(--text-secondary);margin-bottom:32px;font-size:14px;line-height:1.7;max-width:680px}
-h2{font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:-0.02em;color:var(--text-primary);margin:36px 0 12px;padding-top:16px;border-top:1px solid var(--border)}
-h3{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text-primary);margin:18px 0 6px}
-p{color:var(--text-secondary);font-size:14px;line-height:1.72;margin:0 0 12px}
-code{font-family:var(--mono);color:var(--text-primary);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px}
-a{color:#c9d1d9;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.15)}
-a:hover{border-bottom-color:var(--improving)}
-a:hover{text-decoration:underline}
-.layer-card{margin:16px 0;padding:18px 20px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
-.layer-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.layer-badge{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;line-height:1}
-.layer-badge.core{color:var(--improving);border:1px solid rgba(0,218,255,0.25);background:rgba(0,218,255,0.06)}
-.layer-badge.reference{color:var(--text-secondary);border:1px solid var(--border);background:rgba(255,255,255,0.03)}
-.layer-badge.community{color:var(--degraded);border:1px solid rgba(217,119,6,0.25);background:rgba(217,119,6,0.06)}
-.layer-title{font-family:var(--mono);font-size:15px;font-weight:600}
-.layer-desc{color:var(--text-secondary);font-size:13px;line-height:1.6;margin:0}
-.layer-detail{color:var(--text-secondary);font-size:12px;margin-top:8px;opacity:0.75;font-family:var(--mono)}
-.flow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:24px 0;padding:16px 20px;border:1px solid var(--border);border-radius:12px;background:var(--surface);font-family:var(--mono);font-size:13px;color:var(--text-secondary)}
-.flow-step{color:var(--text-primary);font-weight:500}
-.flow-arrow{color:var(--text-secondary);opacity:0.4}
-.endpoints{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.ep{font-family:var(--mono);font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;color:var(--text-primary);text-decoration:none}
-.ep:hover{border-color:var(--improving);color:var(--improving);text-decoration:none}
-.note{margin:16px 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text-secondary);font-size:12px;line-height:1.6}
-footer,.doc-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;opacity:0.6;text-align:center}.xm33-dot{display:none}
-/* BEGIN canonical-header-css v1 */
-/* Navbar (doc-nav component) */
-.doc-nav{position:sticky;top:0;z-index:20;background:var(--surface);height:52px;display:flex;align-items:center}
-.doc-nav-inner{max-width:1100px;width:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:12px}
-.doc-nav-left{order:1}
-.doc-nav-right{order:2;margin-left:auto}
-.doc-nav-left,.doc-nav-right{display:flex;align-items:center;gap:18px}
-.doc-nav-brand{color:var(--brand);text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:2.6px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-bottom:none}
-.doc-nav-brand:hover{text-decoration:none;opacity:0.9}
-.doc-logo{width:30px;height:30px;color:var(--text-primary)}
-.doc-nav-link{color:var(--text-secondary);text-decoration:none;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.7px;transition:color 0.2s;border-bottom:none;text-transform:uppercase}
-.doc-nav-link:hover{color:var(--text-primary);text-decoration:none}
-.doc-nav-link[aria-current="page"]{opacity:0.5}
-.doc-nav-link[aria-current="page"]:hover{opacity:0.8;text-decoration:none}
-.nav-live{font-size:10px;font-family:var(--mono);padding:3px 9px;border:1px solid rgba(0,218,255,0.16);border-radius:999px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;letter-spacing:0.45px}
-.nav-live-dot{width:5px;height:5px;border-radius:50%;background:#00DAFF;opacity:0.8}
-.doc-nav-far { order:3; display:flex; align-items:center; gap:12px; }
-.demos-brand-btn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 14px; background:rgba(43,54,217,0.04); border:1px solid rgba(43,54,217,0.28); border-radius:12px; text-decoration:none; color:var(--text-primary); line-height:1; white-space:nowrap; transition:all 0.2s; }
-.demos-brand-btn:hover { background:rgba(43,54,217,0.08); border-color:rgba(43,54,217,0.42); }
-.dbtn-prefix { font-size:10px; font-weight:400; color:var(--text-secondary); opacity:0.74; letter-spacing:0.01em; }
-.dbtn-logo { height:16px; width:auto; opacity:1; }
-.dbtn-wordmark { font-size:11px; font-weight:600; letter-spacing:0.12em; }
-@media(max-width:640px){.doc-nav{height:auto;min-height:56px;padding:10px 0}.doc-nav-inner{padding:0 16px;flex-wrap:wrap;gap:8px;row-gap:10px}.doc-nav-left{flex:0 0 auto;order:1}.doc-nav-left .nav-live{font-size:9px;padding:3px 7px;letter-spacing:0.3px}.doc-nav-right{flex:1 1 100%;order:3;gap:10px;flex-wrap:wrap;justify-content:flex-start}.doc-nav-link{font-size:10px;flex:0 0 auto;white-space:nowrap}.demos-brand-btn{display:none}.dbtn-prefix{display:none}}
-/* END canonical-header-css v1 */
-@media(max-width:720px){main{padding:20px 16px 64px}h1{font-size:24px}h2{font-size:15px}.flow{flex-direction:column;align-items:flex-start;gap:6px}}
-@media(max-width:640px){.xm33-sep{display:none}.xm33-block{display:block}.xm33-dot{display:inline}}
-.watermark{position:fixed;bottom:48px;right:40px;width:110px;height:110px;opacity:0.07;pointer-events:none;z-index:0}.watermark svg{width:100%;height:100%;display:block}@media(max-width:640px){.watermark{width:76px;height:76px;right:18px;bottom:40px;opacity:0.06}}</style></head><body class="doc-page doc-page--sources">
-<!-- BEGIN canonical-header v1 -->
-<nav class="doc-nav">
-  <div class="doc-nav-inner">
-    <div class="doc-nav-left">
-      <a href="/" class="doc-nav-brand"><svg class="doc-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg>ORACLE</a>
-      <span class="nav-live"><span class="nav-live-dot"></span>LIVE</span>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sources · Demos Network Oracle</title>
+<meta name="description" content="What DNO reads, which of it enters status, and which endpoints publish it.">
+<!--dno:head-->
+</head>
+<body>
+<!--dno:header:sources-->
+<main id="main">
+  <header class="doc-head">
+    <div class="wrap">
+      <div>
+        <h1>Sources</h1>
+        <p class="doc-lede">Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism. That is the independence that matters.</p>
+      </div>
     </div>
-    <div class="doc-nav-right">
-      <a href="/methodology" class="doc-nav-link" data-nav="methodology">Methodology</a>
-<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a>      <a href="/commerce" class="doc-nav-link" data-nav="commerce">Commerce</a>
-      <a href="/agent" class="doc-nav-link" data-nav="agent">Agent</a>
-      <a href="/sources" class="doc-nav-link" data-nav="sources" aria-current="page">Sources</a>
-      <a href="/reference" class="doc-nav-link" data-nav="reference">Reference</a><a href="/dashboard" class="doc-nav-link" data-nav="dashboard">Dashboard</a><a href="/timeline" class="doc-nav-link" data-nav="timeline">Timeline</a>
-    </div>
-    <div class="doc-nav-far">
-      <a href="https://demos.sh" target="_blank" rel="noopener noreferrer" class="demos-brand-btn">
-        <span class="dbtn-prefix">powered by</span>
-        <svg class="dbtn-logo" viewBox="0 0 227 267" xmlns="http://www.w3.org/2000/svg"><path d="M80 1.9C107-3.3 131.7 3.5 137.9 5.4L146 8.1 78.4 206.7l-8-2.7c-2.2-.9-26-9.2-45.4-29.8C5.7 153.5-9.2 120.6 6.7 70.2 23.3 24.3 53 7.1 80 1.9zm32.8 15.7C93.5 14 49.6 17.8 28.2 69.8c-5.3 12.9-4.8 24.4-.7 33.6 4 9.2 11.6 16.1 20.4 19.9 8.8 3.8 18.8 4.4 27.7 1 8.9-3.4 16.7-10.9 21-23.2l24.1-71.2c1.9-5.6-2-10.8-7.4-12.1l-.5-.1zM156.7 64.1c2 .7 25.9 9 45.2 29.7 19.3 20.6 34.3 53.7 18.5 104 -16.6 46-47.8 62.7-75.6 65.7-27.9 5-52.4-1.8-55.7-2.9l-8.1-2.7L148.7 61.4zm22.5 80.6c-8.8-3.8-18.8-4.4-27.7-1-8.9 3.4-16.7 10.9-21 23.2l-24.1 71.2c-1.9 5.6 2 10.8 7.4 12.1l.5.1c19.2 3.6 63.1-.2 84.6-52.2 5.3-12.9 4.8-24.4.7-33.6-4-9.2-11.6-16.1-20.4-19.9z" fill="#fff" stroke="none"/></svg>
-        <span class="dbtn-wordmark">DEMOS</span>
-      </a>
-    </div>
+  </header>
+  <div class="wrap doc-grid">
+    <details class="toc" open>
+      <summary>On this page</summary>
+      <ol>
+        <li><a href="#resolution">Resolution model</a></li>
+        <li><a href="#layers">Source layers</a></li>
+        <li><a href="#separation">Separation rules</a></li>
+        <li><a href="#endpoints">Public endpoints</a></li>
+        <li><a href="#dahr">DAHR</a></li>
+        <li><a href="#limits">Limits</a></li>
+      </ol>
+    </details>
+    <article class="prose">
+      <section id="resolution">
+        <h2>Resolution model</h2>
+        <ol>
+          <li><strong>Sources.</strong> Each configured seed's <code>/info</code> is fetched every 20 seconds, in parallel.</li>
+          <li><strong>Observation.</strong> Whether each seed answered, its own block height (its own peerlist entry), its version and its peerlist. A seed that does not list itself has no height here.</li>
+          <li><strong>Aggregation.</strong> The seeds' own heights are compared with deterministic rules: the median, a ±25-block band, agreement.</li>
+          <li><strong>Public state.</strong> Status and the other six values on <code>/organism</code>. The same inputs always produce the same public state.</li>
+        </ol>
+        <p>Status uses only those seeds. The resulting state reflects agreement, disagreement and uncertainty across them.</p>
+      </section>
+
+      <section id="layers">
+        <h2>Source layers</h2>
+        <div class="tbl-wrap">
+          <table class="tbl stack">
+            <thead><tr><th>Layer</th><th>What DNO reads</th><th>Enters status</th></tr></thead>
+            <tbody>
+              <tr><td data-label="Layer">Public seeds</td><td data-label="Reads">Kynesys-operated public endpoints: kyne-node2, kyne-node3, kyne-node3b. One operator: node3b is a second port on the same host as node3, not a fourth org, and a second hostname that points at node3 is an alias, not a fourth seed.</td><td data-label="Enters status">yes, and nothing else does</td></tr>
+              <tr><td data-label="Layer">Peer-listed identities</td><td data-label="Reads">Identities copied from the seeds' own peerlists, with what those peerlists reported (online flag, sync status, advertised height). A new identity is kept after two public peerlists have listed it. DNO does not dial them.</td><td data-label="Enters status">no</td></tr>
+              <tr><td data-label="Layer">Cross-check RPCs</td><td data-label="Reads">Public Demos RPC endpoints, dialed once per fleet cycle: answered or not, and latency. DAHR is attempted there (see below).</td><td data-label="Enters status">no</td></tr>
+              <tr><td data-label="Layer">Fixnet (reference)</td><td data-label="Reads">The fixnet anchor's peerlist. Its rows are probed for reachability, height and latency only when the address they advertise is a public http origin; other rows are shown as not probed. Trust origin on fixnet: the Kynesys anchor only.</td><td data-label="Enters status">no</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Peer-listed identities and fixnet rows are shown as discovered- plus the last 4 characters of the identity. No operator names are shown.</p>
+      </section>
+
+      <section id="separation">
+        <h2>Separation rules</h2>
+        <p>Public status, risk, trend, agreement, confidence and data quality are computed from the public seeds only. Fleet data is used internally as a reference layer and does not influence public assessments; fleet views are served on DNO's internal listener only.</p>
+      </section>
+
+      <section id="endpoints">
+        <h2>Public endpoints</h2>
+        <dl class="kv">
+          <div><dt><a href="/organism">/organism</a></dt><dd>The public reading. The contract is <a href="/organism/schema">/organism/schema</a>.</dd></div>
+          <div><dt><a href="/health">/health</a></dt><dd>The same reading with its parts: each seed, <code>validator_growth</code>, attestation state.</dd></div>
+          <div><dt><a href="/incidents">/incidents</a></dt><dd>Public records; each row is an incident or a condition record.</dd></div>
+          <div><dt><a href="/catalog">/catalog</a></dt><dd>Peer-listed identities, sanitized. <code>/catalog/lookup?key=0x…</code> checks one full key and never returns a key.</dd></div>
+          <div><dt><a href="/peers">/peers</a></dt><dd>The latest crawl only, truncated identities.</dd></div>
+          <div><dt><a href="/federate">/federate</a></dt><dd>Prometheus metrics: version, and cross-check RPC reachability and latency under neutral names.</dd></div>
+          <div><dt><a href="/badge">/badge</a></dt><dd>An SVG of the current status word.</dd></div>
+        </dl>
+        <p>Every endpoint is listed on <a href="/docs">/docs</a>.</p>
+      </section>
+
+      <section id="dahr">
+        <h2>DAHR</h2>
+        <p>DAHR, the Demos Data Agnostic HTTPS Relay, is attempted on the cross-check RPCs, not on the seeds whose answers enter status. <code>/health</code> reports it in <code>attestation</code>: <code>available</code>, <code>last_count</code> (how many of those RPCs returned an attestation object this cycle) and <code>last_ok_at</code>. <code>/organism</code> carries no attestation.</p>
+        <p>While <code>on_chain_publication</code> is <span class="val">disabled</span>, no observation post is sent on chain. DAHR does not remove observational limits or guarantee future conditions. What one DAHR call records, and what it does not, is on <a href="/about-demos#dahr">About Demos</a>.</p>
+      </section>
+
+      <section id="limits">
+        <h2>Limits</h2>
+        <p>Oracle outputs are based on externally observable signals available during each measurement cycle. Public endpoint availability, temporary network conditions or incomplete visibility may affect results. Outputs should be read as structured observed assessments, not guarantees of present or future network behavior.</p>
+        <p>Inclusion of an identity in Oracle outputs does not imply endorsement, approval, or certification.</p>
+        <div class="aside"><p>The Oracle is a watch-only observability system with respect to the Demos network it observes: it does not command validators, advise operators, or predict outcomes. While on-chain publication is disabled, its on-chain activity is limited to DAHR requests on the cross-check RPCs. It does not provide financial, operational, legal, or governance advice.</p></div>
+      </section>
+    </article>
   </div>
-</nav>
-<!-- END canonical-header v1 -->
-<main>
-<h1>Sources</h1>
-<p style="color:var(--text-secondary);font-size:13px;margin-top:4px;margin-bottom:20px;font-style:italic;opacity:0.8">Observing many signals. Resolving one view.</p>
-<p class="sub">Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism. That is the independence that matters.</p>
-
-<h2>Resolution Model</h2>
-<div class="flow">
-  <span class="flow-step">Sources</span>
-  <span class="flow-arrow">&rarr;</span>
-  <span class="flow-step">Observation</span>
-  <span class="flow-arrow">&rarr;</span>
-  <span class="flow-step">Aggregation</span>
-  <span class="flow-arrow">&rarr;</span>
-  <span class="flow-step">Public State</span>
-</div>
-<p>Each configured seed is fetched every 20 seconds. Status uses only those seeds. Their states are compared and aligned using deterministic rules. The resulting state reflects agreement, disagreement, and uncertainty across those seeds. The same inputs always produce the same public state.</p>
-
-<h2>Source Layers</h2>
-
-<div class="layer-card">
-  <div class="layer-header">
-    <span class="layer-badge core">Core</span>
-    <span class="layer-title">Public Network</span>
-  </div>
-  <p class="layer-desc">Public validator nodes used to determine network status, agreement, and risk. These are the primary observation sources. All core assessments are derived exclusively from this layer.</p>
-  <div class="layer-detail">Includes: Kynesys-operated public endpoints (kyne-node2, kyne-node3, kyne-node3b)</div>
-  <div class="layer-detail">One operator. node3b is a second port on the same host as node3, not a fourth org. A second hostname that points at node3 is an alias, not a fourth seed.</div>
-</div>
-
-<div class="layer-card">
-  <div class="layer-header">
-    <span class="layer-badge reference">Reference</span>
-    <span class="layer-title">Discovered (Fixnet)</span>
-  </div>
-  <p class="layer-desc">All fixnet validators except the Kynesys anchor are treated as discovered observations. This includes anonymous peers surfaced via the anchor&apos;s peerlist. On the fixnet reference path, discovered rows are probed for reachability, height, and latency when the address they advertise is a public http origin; other rows are shown as not probed. That sentence does not apply to the public testnet catalog. Public testnet catalog rows are copied from seed peerlists (online bit, advertised height). DNO does not dial those identities. Not probed. Neither layer enters status, risk, or agreement.</p>
-  <div class="layer-detail">Trust origin on fixnet: the Kynesys anchor only &middot; All other fixnet sources are observed</div>
-  <div class="layer-detail">Discovered rows are shown as discovered- plus the last 4 characters of the identity. No operator names are shown.</div>
-</div>
-
-<h2>Separation Rules</h2>
-<p>Public status, risk, trend, agreement, confidence, and data quality are computed from public node data only. Fleet data is used internally as a reference layer and does not influence public assessments.</p>
-
-<h2>Public Endpoints</h2>
-<p>All Oracle data is available through public JSON endpoints:</p>
-<div class="endpoints">
-  <a href="/organism" class="ep">/organism</a>
-  <a href="/health" class="ep">/health</a>
-  <a href="/incidents" class="ep">/incidents</a>
-  <a href="/peers" class="ep">/peers</a>
-  <a href="/badge" class="ep">/badge</a>
-  <a href="/catalog" class="ep">/catalog</a>
-</div>
-
-<h2>Attestation</h2>
-<p>Observed public sources are attested on-chain via DAHR when attestation is available. Current attestation state is published at <a href="/health">/health</a>. Publication of observation posts is not currently performed. DAHR does not eliminate observational limits or guarantee future conditions.</p>
-
-<h2>Limits</h2>
-<p>Oracle outputs are based on externally observable signals available during each measurement cycle. Public endpoint availability, temporary network conditions, or incomplete visibility may affect results. Outputs should be interpreted as structured observed assessments, not guarantees of present or future network behavior.</p>
-<p>Inclusion of a validator in Oracle outputs does not imply endorsement, approval, or certification.</p>
-
-<div class="note">The Oracle is a watch-only observability system with respect to the Demos network it observes: it does not command validators, advise operators, or predict outcomes. Its on-chain activity is limited to DAHR attestation of observed public sources. It does not provide financial, operational, legal, or governance advice.</div>
-
-<footer class="doc-footer">Demos Network Oracle &middot; API v1.1 &middot; <a href="/methodology">Methodology</a> &middot; <a href="https://github.com/xm33/demos-network-oracle">GitHub</a> &middot; <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span> <span class="xm33-sep"> &middot; </span><span class="xm33-block"><span class="xm33-dot">&middot; </span>Built by XM33<span class="xm33-dot"> &middot;</span></span></footer>
-<a href="/about-demos" class="doc-nav-link" data-nav="about-demos">About Demos</a></main>
-<div class="watermark"><svg width="110" height="110" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="38" stroke="currentColor" stroke-width="1.8" opacity="0.9"/><circle cx="50" cy="19" r="3.4" fill="currentColor"/><circle cx="19" cy="73" r="3.4" fill="currentColor"/><circle cx="81" cy="73" r="3.4" fill="currentColor"/><line x1="50" y1="22.5" x2="50" y2="46.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="22.5" y1="70" x2="46.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><line x1="77.5" y1="70" x2="53.5" y2="53.5" stroke="currentColor" stroke-width="0.9" opacity="0.6"/><circle cx="50" cy="50" r="4.8" fill="currentColor"/></svg></div><script>(function(){var p=document.querySelector('.nav-live');if(!p)return;fetch('/organism').then(function(r){return r.json()}).then(function(o){if(o&&typeof o.staleness_seconds==='number'&&o.staleness_seconds>120){p.innerHTML='<span class="nav-live-dot" style="background:#d29922"></span>STALE';}}).catch(function(){p.innerHTML='<span class="nav-live-dot" style="background:#6b7280"></span>OFFLINE';});})();</script></body></html>
+</main>
+<!--dno:footer-->
+</body>
+</html>
