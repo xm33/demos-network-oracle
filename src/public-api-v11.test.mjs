@@ -77,7 +77,8 @@ check("H22 homepage nav = site nav", navAgent.length === 7 && JSON.stringify(nav
 const kitCss = readFileSync(join(ROOT, "assets", "site.css"), "utf8");
 const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf("/* chrome:end */"));
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
-check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those RPCs returned an attestation object.") && HOME.includes("' On-chain publication of the reading is disabled.'") && HOME.includes("'DAHR attestation unavailable'"));
+// Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
+check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
 console.log("\n[" + TAG + "] served (base: " + BASE + ")");
 async function get(path, headers) { const r = await fetch(BASE + path, { headers: headers || {} }); let body = null; try { body = await r.clone().json(); } catch (e) { body = await r.text(); } return { status: r.status, headers: r.headers, body }; }
 try {

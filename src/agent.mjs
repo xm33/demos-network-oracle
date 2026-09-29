@@ -222,7 +222,7 @@ docsEntry('GET /signals', 'Current signals grouped by severity (critical, warnin
 docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them.') +
 '</dl></section>' +
 '<section id="identities"><h2>Peer-listed identities</h2><dl class="kv docs-kv">' +
-docsEntry('GET /catalog', 'Identities listed on the public seeds\' peerlists, kept after two public peerlists have listed them: first recorded (first_seen), last listed, and what the peerlists reported in the latest crawl. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations. Never dialed.') +
+docsEntry('GET /catalog', 'Identities listed on the public seeds\' peerlists, kept after two public peerlists have listed them (one peerlist brings at most 50 new identities into that count per crawl): first recorded (first_seen), last listed, and what the peerlists reported in the latest crawl. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations. Never dialed.') +
 docsEntry('GET /catalog/lookup?key=0x…', 'Exact check of one full key against the catalog and the configured seeds. Returns the sanitized row only, never a key.') +
 docsEntry('GET /peers', 'The latest crawl only: truncated identities with the peer-reported height, online flag, sync status and how many public peerlists listed them. Connections are never exposed.') +
 '</dl></section>' +
@@ -901,7 +901,7 @@ function getValidatorGrowth() {
 function getPublicCatalog() {
   var out = { scope: "retained_catalog", crawl: { completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null, public_peerlists_read: catalogLatest.peerlistsRead, listed_this_cycle: catalogLatest.listedCount }, notes: [
     "Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta.",
-    "An identity is kept after two public peerlists have listed it; first_seen is the first of those listings DNO counted. The count is kept in memory, so a restart starts it again.",
+    "An identity is kept after two public peerlists have listed it; first_seen is the first of those listings DNO counted. The count is kept in memory, so a restart starts it again. One peerlist brings at most " + CATALOG_MAX_NEW_PER_PEERLIST + " new identities into the count per crawl.",
     "Reported fields are what the listing peerlists reported in the latest crawl. DNO does not dial these identities."
   ], rows: [] };
   if (!sharedDb) return out;
@@ -2621,6 +2621,12 @@ const CATALOG_MAX_NEW_PER_CRAWL = 200;    // a flood of fabricated identities ca
 // published, never dialed. The set is bounded; the least recently listed entry is dropped first.
 const CATALOG_MIN_PEERLISTS = 2;
 const CATALOG_PENDING_MAX = 4000;
+// Per-peerlist budget: in one crawl, one public peerlist brings at most this many identities DNO has never seen into
+// the count. The rest are not counted that crawl (a later crawl counts them), so one peerlist listing thousands of
+// new keys can neither churn the waiting set nor, with a second peerlist, add more than this many rows per crawl.
+// Identities already waiting or kept, and rows recorded before 1.1, use no budget. A rate, not a total: the row cap
+// and the 30-day eviction bound the total.
+const CATALOG_MAX_NEW_PER_PEERLIST = 50;
 var catalogPending = new Map();           // identity -> { sources: [seed names], firstAt }
 var catalogCrawl = null;                  // crawl in progress
 var catalogLatest = { completedAt: null, peerlistsRead: 0, listedCount: 0 };
@@ -2669,6 +2675,7 @@ function catalogFinishCrawl(results, observedAt) {
     try { sharedDb.query("SELECT identity, first_seen, public_listed_since FROM validator_discoveries").all().forEach(function(r) { known[r.identity] = { firstSeen: r.first_seen, isPublic: r.public_listed_since !== null && r.public_listed_since !== undefined }; }); } catch (e) {}
   }
   var retained = Object.keys(known).length, added = 0, promotedLegacy = 0, skipped = 0, evicted = 0, newlyPending = 0, pendingDropped = 0;
+  var budgetUsed = {}, budgetHit = {}, budgetSkipped = 0;   // per-peerlist introductions of never-seen identities
   var next = {};
   // Two-peerlist rule: merge this crawl's sources with what earlier crawls recorded. An identity two distinct public
   // peerlists have listed leaves the waiting set for good (it goes back only if its write fails).
@@ -2677,8 +2684,14 @@ function catalogFinishCrawl(results, observedAt) {
     ids.forEach(function(x) {
       if (known[x] && known[x].isPublic) { catalogPending.delete(x); return; }
       var pend = catalogPending.get(x), isNew = !pend;
+      var srcs = crawl.listed[x].sources;
+      if (!pend && !known[x]) {                                // never seen: counts only for peerlists with budget left
+        srcs = srcs.filter(function(src) { if ((budgetUsed[src] || 0) < CATALOG_MAX_NEW_PER_PEERLIST) return true; budgetHit[src] = true; return false; });
+        if (!srcs.length) { budgetSkipped++; return; }
+        srcs.forEach(function(src) { budgetUsed[src] = (budgetUsed[src] || 0) + 1; });
+      }
       if (pend) catalogPending.delete(x); else pend = { sources: [], firstAt: observedAt };
-      crawl.listed[x].sources.forEach(function(src) { if (pend.sources.indexOf(src) === -1) pend.sources.push(src); });
+      srcs.forEach(function(src) { if (pend.sources.indexOf(src) === -1) pend.sources.push(src); });
       if (pend.sources.length >= CATALOG_MIN_PEERLISTS) { promote[x] = pend; return; }
       if (isNew) newlyPending++;
       catalogPending.set(x, pend);           // re-inserted: most recently listed last
@@ -2746,6 +2759,8 @@ function catalogFinishCrawl(results, observedAt) {
   if (pendingDropped > 0) logError("  [catalog] " + pendingDropped + " waiting identit" + (pendingDropped === 1 ? "y" : "ies") + " dropped: the pending set is full (" + CATALOG_PENDING_MAX + ")");
   if (evicted > 0) log("  [catalog] " + evicted + " identit" + (evicted === 1 ? "y" : "ies") + " not listed for 30 days removed at the cap");
   if (skipped > 0) logError("  [catalog] " + skipped + " new identities not retained this crawl (per-crawl or total cap reached); they wait for the next");
+  var hitCount = Object.keys(budgetHit).length;
+  if (hitCount > 0) logError("  [catalog] " + hitCount + " public peerlist" + (hitCount === 1 ? "" : "s") + " listed more than " + CATALOG_MAX_NEW_PER_PEERLIST + " new identities this crawl; " + budgetSkipped + " identit" + (budgetSkipped === 1 ? "y was" : "ies were") + " not counted (a later crawl counts them)");
 }
 
 // Public catalog row (no connection string, no full identity). Reported fields only when listed this round.

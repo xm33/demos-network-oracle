@@ -324,6 +324,7 @@ svg text { font-family: var(--sans); }
 .seen-n .n { font-size: 1.75rem; line-height: 1.1; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
 .seen-n .n.none { font-size: 0.9375rem; font-weight: 400; color: var(--mute); }
 .seen-n .k { font-size: 0.9375rem; color: var(--mute); }
+.seen-cap { flex-basis: 100%; margin: 0; }
 .scards { --cols: 3; margin-bottom: 4px; }
 .overlap { display: grid; gap: 8px; margin: 18px 0 4px; max-width: 46rem; }
 .overlap[hidden] { display: none; }
@@ -750,6 +751,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <p class="seen-n"><span class="n none" id="gc-seen">reading</span><span class="k" data-v10="recorded">kept</span></p>
           <p class="meta" id="growth-line"></p>
           <p class="meta" id="crawl-line" hidden></p>
+          <p class="fine seen-cap">Retained catalog. Not a census.</p>
         </div>
         <div class="overlap" id="overlap" hidden>
           <p class="overlap-k">Listed by how many of the public peerlists read, latest crawl</p>
@@ -1170,8 +1172,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       const n = nodes.length, k = nodes.filter((x) => x && x.ok === true).length;
       setText($('seeds-line'), `${k} of ${n} seeds answered. Those ${n} are the only endpoints whose answers enter status. Status does not use the catalog.`);
     } else setText($('seeds-line'), h ? 'Seeds: not reported in this reading of /health.' : reads.health.error ? `Seeds: not read. ${reads.health.error}.` : 'Awaiting first reading of /health.');
-    const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
-    setText($('door'), vg && isNum(vg.discovered) ? `${fmtInt(vg.discovered)} peer-listed · find a node` : 'find a node');
 
     if (!o) {
       const failed = !!reads.organism.error;
@@ -2041,10 +2041,11 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     const ocp = typeof h.on_chain_publication === 'string' && h.on_chain_publication ? h.on_chain_publication : null;
     box.hidden = false;
     if (att.available === true) {
-      setText($('dahr'), 'This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those RPCs returned an attestation object.' + (ocp === 'disabled' ? ' On-chain publication of the reading is disabled.' : ''));
+      // Owner ruling, 2026-09-29. The reading itself is never posted, whatever on_chain_publication says.
+      setText($('dahr'), 'This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.' + (ocp === 'disabled' ? ' DNO\'s own on-chain posts are disabled; the reading is never posted.' : ' The reading is never posted.'));
       setText($('dahr-meta'), `attestation.available true · last_count ${isNum(att.last_count) ? att.last_count : 'not reported'}${ocp ? ` · on_chain_publication ${ocp}` : ''} · /health`);
     } else {
-      setText($('dahr'), 'DAHR attestation unavailable');
+      setText($('dahr'), 'DAHR attestation unavailable.');
       setText($('dahr-meta'), `attestation.available false${ocp ? ` · on_chain_publication ${ocp}` : ''} · /health`);
     }
   }

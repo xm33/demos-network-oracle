@@ -244,9 +244,12 @@
           <p>“Stake doesn't currently weight the random pick (Phase 2), but it gates eligibility (you must be <code>ACTIVE</code>).”</p>
           <footer>Demos docs · <a href="https://docs.kynesys.xyz/backend/validator-lifecycle/overview">Validator lifecycle</a></footer>
         </blockquote>
+        <h3 id="validator-reads">The minimum stake, and reading the table</h3>
+        <p>The minimum stake is a network parameter, <code>minValidatorStake</code>, not a fixed figure. The public Demos SDK reads the value in force with <code>getNetworkParameters()</code>, which it describes as the genesis defaults with every active network upgrade applied, and returns it as a whole-number string (<a href="https://www.npmjs.com/package/@kynesyslabs/demosdk">Demos SDK</a>). DNO assumes no figure.</p>
+        <p>The same SDK lists validator rows with <code>getValidators()</code>: the rows whose status is still active at a block. The lifecycle page describes <code>UNSTAKING</code> as still active until exit and <code>EXITED</code> as removed from the active set, so a count of exited validators does not come from that list.</p>
         <div class="aside">
           <span class="aside-k">What DNO sees of this</span>
-          <p>Nothing. DNO does not read the <code>validators</code> table, so it cannot say whether any identity is ACTIVE, UNSTAKING or EXITED, or what it has staked. The identities in DNO's catalog are names listed on public peerlists, not validator rows.</p>
+          <p>Nothing yet. DNO does not read the <code>validators</code> table, so it cannot say whether any identity is ACTIVE, UNSTAKING or EXITED, or what it has staked. Until one read of that table on the same public seeds has been checked, DNO publishes no validator count. The identities in DNO's catalog are names listed on public peerlists, not validator rows: a larger catalog is not a larger validator set.</p>
         </div>
       </section>
 
@@ -366,7 +369,7 @@
         </ol>
         <div class="aside">
           <span class="aside-k">Not the seeds</span>
-          <p>The three seeds whose answers enter status are not relayed through DAHR, and <code>/organism</code> carries no attestation. That is why the homepage says <em>Observe. Explain.</em> and mentions DAHR once, under the API: the sentence about the cross-check RPCs while <code>attestation.available</code> is true, and “DAHR attestation unavailable” while it is false.</p>
+          <p>The three seeds whose answers enter status are not relayed through DAHR, and <code>/organism</code> carries no attestation. That is why the homepage says <em>Observe. Explain.</em> and mentions DAHR once, under the API: the sentence about the cross-check RPCs while <code>attestation.available</code> is true, and “DAHR attestation unavailable.” while it is false. The sentence also says that the reading itself is never posted.</p>
         </div>
       </section>
 
@@ -429,6 +432,7 @@
           <li><a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/overview">DAHR API reference</a> · <a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/types">types</a><span>createDahr, startProxy, the hashes and txHash</span></li>
           <li><a href="https://docs.kynesys.xyz/backend/communications-stack/web2-proxy-dahr">Web2 proxy (DAHR)</a><span>how a node hashes and canonicalizes a response</span></li>
           <li><a href="https://docs.kynesys.xyz/sdk/web2/keyserver-oauth">Key Server OAuth</a><span>DAHRAttestation, a different object</span></li>
+          <li><a href="https://www.npmjs.com/package/@kynesyslabs/demosdk">Demos SDK</a><span>@kynesyslabs/demosdk 4.0.14 type definitions: getNetworkParameters, getValidators, the validator status codes</span></li>
           <li><a href="https://docs.kynesys.xyz/backend/global-change-registry/overview">Global Change Registry</a> · <a href="https://docs.kynesys.xyz/backend/internal-mechanisms/cross-context-identities">Cross Context Identities</a> · <a href="https://docs.kynesys.xyz/sdk/cross-chain/overview">Cross-chain</a> · <a href="https://docs.kynesys.xyz/backend/l2ps-subnet-framework/overview">L2PS</a><span>the other parts named above</span></li>
         </ul>
         <p class="dim" style="margin-top:16px">How DNO forms its own reading: <a href="/methodology">Methodology</a> · <a href="/sources">Sources</a> · <a href="/agent">Agent guide</a>.</p>
