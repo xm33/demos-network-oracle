@@ -33,6 +33,7 @@ import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./con
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine } from "./validator-watch.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -217,7 +218,7 @@ var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><tit
 '<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
 docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail, last_24h.critical_public_incidents_in_window, last_24h.chain_movement.blocks_advanced). No fleet data. ETag / 304 between observations.') +
 docsEntry('GET /organism/schema', 'The JSON Schema contract: stability policy, enums, changelog.') +
-docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at) and on_chain_publication (currently "disabled").') +
+docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). Neither of the last two enters status or /organism.') +
 docsEntry('GET /signals', 'Current signals grouped by severity (critical, warning, info).') +
 docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them.') +
 '</dl></section>' +
@@ -279,6 +280,7 @@ var HOME_MARKERS = {
   insufficient: '<p class="insufficient" id="insufficient" hidden>',
   agreement: '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   live: '<span id="live-text">connecting</span>',
+  validators: '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>',
   cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality") }
 };
 function renderHomepageNoJs(html) {
@@ -308,6 +310,8 @@ function renderHomepageNoJs(html) {
     var ag = (c.agreement && c.agreement.state) || "unknown";
     html = html.replace(HOME_MARKERS.agreement, '<span class="ind" id="ag-ind" data-tone="' + homeTone("agreement", ag) + '"></span><span id="ag-state">' + e(ag) + '</span>');
     html = html.replace(HOME_MARKERS.live, '<span id="live-text">as of ' + e(c.observed_at.slice(11, 19)) + ' UTC</span>');
+    var vline = validatorsNoJsLine();
+    if (vline) html = html.replace(HOME_MARKERS.validators, '<p class="note" id="vw-line">' + e(vline) + '</p>');
     return html;
   } catch (err) {
     return html;
@@ -2237,6 +2241,68 @@ function startPublicObservationLoop() {
   tick();
 }
 
+// --- On-chain validators: the read (Path A seeds) and the watch (Path B). Neither enters status or /organism. ---------
+// Each round sends getValidators and getNetworkParameters to the configured seeds, then dials GET /info once at the
+// address each ACTIVE validator published on chain, when that address is a public http origin (src/validator-watch.mjs).
+// /health publishes counts only. VALIDATOR_WATCH_DIALS=0 keeps the read and stops the dials.
+function envMs(name, def, min) { var n = parseInt(process.env[name] || "", 10); return Number.isFinite(n) ? Math.max(min, n) : def; }
+const VALIDATOR_WATCH_INTERVAL_MS = envMs("VALIDATOR_WATCH_INTERVAL_MS", 60000, 5000);
+const VALIDATOR_WATCH_WINDOW_MS = envMs("VALIDATOR_WATCH_WINDOW_MS", 3600000, 60000);
+const VALIDATOR_WATCH_DIALS = process.env.VALIDATOR_WATCH_DIALS !== "0";
+var VALIDATOR_ORIGIN_RESOLVER = resolvePublicProbeOrigin;
+var validatorHistory = createWatchHistory(VALIDATOR_WATCH_WINDOW_MS, VALIDATOR_WATCH_INTERVAL_MS);
+var latestValidatorRound = null;
+function validatorPublishConfig() {
+  return { seedsConfigured: Object.keys(PUBLIC_NODES).length, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS, dials: VALIDATOR_WATCH_DIALS };
+}
+// The seeds' median from the latest public observation, by the rule status uses: the own heights of answering seeds,
+// at least two of them, from an observation at most 300 s old (the data-quality bound). null otherwise (heights are then
+// not compared).
+function seedMedianReference() {
+  if (!lastPublicObservedAt || Date.now() - lastPublicObservedAt > 300000) return null;
+  var hs = (latestPublicNodes || []).map(ownHeight).filter(function(h) { return h !== null; }).sort(function(a, b) { return a - b; });
+  return hs.length >= 2 ? { height: hs[Math.floor(hs.length / 2)], observedAt: lastPublicObservedAt } : null;
+}
+async function validatorWatchRound() {
+  // A seed whose latest /info named another key is not asked: its answers would be another node's (the alias case).
+  var seeds = Object.keys(PUBLIC_NODES).map(function(name) {
+    var live = (latestPublicNodes || []).find(function(n) { return n.name === name; });
+    return { name: name, url: PUBLIC_NODES[name].url, exclude: live && live.ok && live.identityMatch === false ? "its last /info answered with another key" : null };
+  });
+  latestValidatorRound = await runValidatorRound({ seeds: seeds, resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, reference: seedMedianReference,
+    history: validatorHistory, dials: VALIDATOR_WATCH_DIALS, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS });
+  log("  " + roundLogLine(latestValidatorRound));
+}
+function startValidatorWatchLoop() {
+  async function tick() {
+    var started = Date.now();
+    try { await validatorWatchRound(); }
+    catch (err) { logError("[validators] round failed: " + (err && err.message ? err.message : String(err))); }
+    setTimeout(tick, Math.max(1000, VALIDATOR_WATCH_INTERVAL_MS - (Date.now() - started)));
+  }
+  // The first round waits for the first public observation, which gives the seeds' median.
+  setTimeout(tick, Math.min(10000, VALIDATOR_WATCH_INTERVAL_MS));
+}
+// One sentence for readers without JavaScript. null keeps the page's own text.
+function validatorsNoJsLine() {
+  var cfg = validatorPublishConfig(), now = Date.now();
+  var oc = publicOnChainValidators(latestValidatorRound, now, cfg), w = publicValidatorWatch(latestValidatorRound, now, cfg);
+  if (oc.state !== "agreed") return null;
+  var s = oc.active + " ACTIVE on chain, as " + oc.seeds_agreed + " of " + oc.seeds_configured + " public seeds listed them at " + oc.observed_at.slice(11, 19) + " UTC.";
+  if (w.state === "observed") {
+    var span = w.window.minutes === 60 ? "the last hour" : w.window.minutes === 1 ? "the last minute" : "the last " + w.window.minutes + " minutes";
+    s += " Of these, " + w.answered_as_listed + " answered DNO as the listed key at the address each published";
+    if (w.at_seed_height === null) s += "; heights were not compared this round.";
+    else {
+      s += ", " + w.at_seed_height + " at the seeds' height";
+      if (w.every_round_last_hour !== null) s += ", and " + w.every_round_last_hour + " in every round of " + span + ".";
+      else if (w.window.observed_minutes < w.window.minutes) s += "; every round in " + span + ": insufficient observation (" + w.window.observed_minutes + " of " + w.window.minutes + " min).";
+      else s += "; every round in " + span + ": insufficient observation (fewer than half the rounds counted).";
+    }
+  }
+  return s + " Not in status.";
+}
+
 // Rejects when an SDK call does not settle in time; the underlying call is left to finish on its own.
 function withTimeout(promise, ms, label) {
   var timer;
@@ -3015,7 +3081,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
   // previous ETag gets 304 until DNO has observed something new (staleness can then be computed locally from
   // observed_at). Last-Modified is the observation time.
   function observationValidators(route) {
-    var tag = 'W/"' + route + "-" + (lastPublicObservedAt || 0) + "-" + cycleCount + '"';
+    var tag = 'W/"' + route + "-" + (lastPublicObservedAt || 0) + "-" + cycleCount + (route === "health" && latestValidatorRound ? "-v" + latestValidatorRound.roundAt : "") + '"';
     return { etag: tag, lastModified: lastPublicObservedAt ? new Date(lastPublicObservedAt).toUTCString() : null };
   }
   function notModified(req, res, v, headers) {
@@ -3105,6 +3171,8 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         discoveredPeers: Object.keys(discoveredPeers).length,
         attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
         on_chain_publication: SUPERCOLONY_ENABLED ? "unavailable" : "disabled",
+        on_chain_validators: publicOnChainValidators(latestValidatorRound, Date.now(), validatorPublishConfig()),
+        validator_watch: publicValidatorWatch(latestValidatorRound, Date.now(), validatorPublishConfig()),
       };
       var healthHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" };
       var healthV = observationValidators("health");
@@ -4326,6 +4394,7 @@ async function main() {
 
   // Public observation starts now, before and independent of the wallet.
   startPublicObservationLoop();
+  startValidatorWatchLoop();
   if (!MNEMONIC) { log("  Wallet: not configured. Running as a public observer only."); return; }
 
   var demos = new Demos();

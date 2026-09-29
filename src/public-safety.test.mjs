@@ -50,6 +50,9 @@ check("N2 private, loopback, link-local, CGNAT, metadata, doc, multicast blocked
 check("N3 v6 blocked ranges", ["::1", "::", "fe80::1", "fc00::1", "fd12:3456::1", "ff02::1", "2001:db8::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1"].every((ip) => !isPublicIp(ip)));
 check("N4 public v6 and mapped public v4 allowed", isPublicIp("2606:4700:4700::1111") && isPublicIp("::ffff:8.8.8.8"));
 check("N5 not an IP", !isPublicIp("example.com") && !isPublicIp(""));
+check("N6 v6 forms that carry or imply a private IPv4 address are blocked", ["::7f00:1", "::a00:1", "::127.0.0.1", "::ffff:0:7f00:1", "::ffff:0:127.0.0.1", "fec0::1", "2002:7f00:1::1", "2002:0a00:0001::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2"].every((ip) => !isPublicIp(ip)),
+  ["::7f00:1", "::a00:1", "::127.0.0.1", "::ffff:0:7f00:1", "::ffff:0:127.0.0.1", "fec0::1", "2002:7f00:1::1", "2002:0a00:0001::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2"].filter((ip) => isPublicIp(ip)).join(" "));
+check("N7 ordinary public v6 still allowed", isPublicIp("2001:4860:4860::8888") && isPublicIp("2a00:1450:4001:80b::200e"));
 check("O1 bare origin parsed", parseProbeOrigin("http://8.8.8.8:53550") !== null && parseProbeOrigin("8.8.8.8:53550").origin === "http://8.8.8.8:53550");
 check("O2 paths, queries, credentials, other schemes rejected",
   ["http://8.8.8.8:53550/latest/meta-data", "http://8.8.8.8:53550/?x=1", "http://u:p@8.8.8.8:53550", "file:///etc/passwd", "gopher://8.8.8.8:70", "http://8.8.8.8#frag"].every((s) => parseProbeOrigin(s) === null));

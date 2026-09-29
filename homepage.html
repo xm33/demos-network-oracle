@@ -233,7 +233,7 @@ h2 { font-size: 1.375rem; line-height: 1.2; font-weight: 500; color: var(--metal
 .odo .odo-none { font: 400 0.9375rem/1.4 var(--sans); color: var(--mute); }
 .strip .v.odo { gap: 0; align-items: flex-end; }
 
-/* ---------- How the reading is formed: four paths ---------- */
+/* ---------- How the reading is formed: five paths ---------- */
 .paths { display: grid; margin-top: 18px; border-top: 1px solid var(--line); }
 .path { display: grid; grid-template-columns: 15rem minmax(0, 1fr) 11rem 11rem; align-items: center; gap: 8px 0; width: 100%; padding: 16px 12px 16px 14px; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-left: 2px solid transparent; color: var(--metal-1); font: inherit; text-align: left; cursor: pointer; }
 .path:hover { background: var(--bg-2); }
@@ -314,6 +314,31 @@ svg text { font-family: var(--sans); }
 .meter { height: 4px; border-radius: 0 2px 2px 0; background: color-mix(in oklab, var(--tone) 20%, var(--bg)); overflow: hidden; margin-top: 4px; }
 .meter > span { display: block; height: 100%; background: var(--tone); border-radius: 0 2px 2px 0; }
 .h24-note { margin-top: 12px; }
+
+/* ---------- Validators on chain: four nested counts ---------- */
+.ladder { list-style: none; margin: 20px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.rung { display: grid; grid-template-columns: 13rem 6rem minmax(0, 1fr); column-gap: 24px; row-gap: 6px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.rung-k { grid-column: 1; grid-row: 1 / span 3; align-self: center; font-size: 0.9375rem; color: var(--metal-1); }
+.rung-k .tag { margin-left: 8px; }
+.rung-k .tag[hidden] { display: none; }
+.rung-n { grid-column: 2; grid-row: 1 / span 3; align-self: center; justify-self: end; font: 500 1.75rem/1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.rung-n.none { font: 400 0.875rem/1.35 var(--sans); color: var(--mute); text-align: right; }
+.rung-bar { grid-column: 3; grid-row: 1; height: 8px; background: var(--surface); border: 1px solid var(--line); }
+.rung-bar > span { display: block; height: 100%; width: 0; background: var(--metal-1); }
+.rung[data-rung="active"] .rung-bar > span { background: var(--metal-2); }
+.rung-d { grid-column: 3; grid-row: 2; font-size: 0.875rem; line-height: 1.45; color: var(--mute); }
+.rung-s { grid-column: 3; grid-row: 3; font: 400 0.8125rem/1.45 var(--mono); color: var(--metal-1); }
+.rung-s[hidden] { display: none; }
+.ladder[data-mode="oneread"] .rung[data-rung="active"] .rung-n { color: var(--metal-1); }
+.ladder[data-mode="oneread"] .rung[data-rung="active"] .rung-bar > span { background: var(--metal-0); }
+.vw-rest { margin-top: 14px; color: var(--metal-1); max-width: 52rem; }
+.vw-rest[hidden] { display: none; }
+.vw-facts { --cols: 3; margin-top: 18px; }
+.vw-facts[data-n="4"] { --cols: 4; }
+.vw-facts[hidden] { display: none; }
+.vw-facts .v { font-size: 0.9375rem; font-weight: 400; flex-wrap: wrap; column-gap: 6px; }
+.vw-facts .mono { font-family: var(--mono); font-size: 0.9375rem; color: var(--ink); }
+.vw-cap { margin-top: 12px; font-family: var(--mono); font-size: 0.8125rem; }
 
 /* ---------- Two populations ---------- */
 .pop { padding-top: 36px; }
@@ -505,6 +530,9 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 }
 
 /* ---------- Narrow screens ---------- */
+@media (min-width: 720px) and (max-width: 959px) {
+  .rung { grid-template-columns: 11rem 5rem minmax(0, 1fr); column-gap: 18px; }
+}
 @media (max-width: 859px) {
   .cards, .agree-strip { --cols: 2; }
   .cards > div:nth-child(3), .agree-strip > div:nth-child(3) { border-left: 0; }
@@ -543,6 +571,14 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   .words-grid { grid-template-columns: minmax(0, 1fr); }
   .words-list > div { grid-template-columns: minmax(0, 1fr); }
   .ob { grid-template-columns: 6rem minmax(0, 1fr) 2.5rem; }
+  .rung { grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; padding: 14px 0; }
+  .rung-k { grid-column: 1; grid-row: 1; }
+  .rung-n { grid-column: 2; grid-row: 1; font-size: 1.5rem; }
+  .rung-bar { grid-column: 1 / -1; grid-row: 2; }
+  .rung-d { grid-column: 1 / -1; grid-row: 3; }
+  .rung-s { grid-column: 1 / -1; grid-row: 4; }
+  .vw-facts, .vw-facts[data-n] { --cols: 1; }
+  .vw-facts > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
   .rb-live { display: none; }
   .readbar[data-live="down"] .rb-live, .readbar[data-live="stale"] .rb-live { display: inline; }
   .h24:not([data-n="1"]) { --cols: 2; }
@@ -661,13 +697,57 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     </div>
   </section>
 
+  <section class="section" id="validators" aria-labelledby="val-title" tabindex="-1">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="val-title">Validators on chain</h2>
+        <p class="meta">GET /health</p>
+      </div>
+      <p class="note">The on-chain validators table as the public seeds list it, and what DNO saw when it dialed the address each ACTIVE validator published on chain. Four counts, each inside the one above. Not in status, and never added to the seed or peer-listed counts.</p>
+      <ol class="ladder" id="ladder" data-mode="pending" aria-label="Validators on chain, each count inside the one above">
+        <li class="rung" data-rung="active">
+          <p class="rung-k">ACTIVE on chain<span class="tag" id="vt-active" hidden>one read</span></p>
+          <p class="rung-n none" id="vn-active">reading</p>
+          <span class="rung-bar" aria-hidden="true"><span id="vb-active"></span></span>
+          <p class="rung-d" id="vd-active">Rows with status ACTIVE, when at least two public seeds return the same list.</p>
+          <p class="rung-s" id="vs-active" hidden></p>
+        </li>
+        <li class="rung" data-rung="answered">
+          <p class="rung-k">answered as that key</p>
+          <p class="rung-n none" id="vn-answered">reading</p>
+          <span class="rung-bar" aria-hidden="true"><span id="vb-answered"></span></span>
+          <p class="rung-d" id="vd-answered">DNO dials the address each published on chain; the answer names the same key.</p>
+          <p class="rung-s" id="vs-answered" hidden></p>
+        </li>
+        <li class="rung" data-rung="height">
+          <p class="rung-k">at the seeds' height</p>
+          <p class="rung-n none" id="vn-height">reading</p>
+          <span class="rung-bar" aria-hidden="true"><span id="vb-height"></span></span>
+          <p class="rung-d" id="vd-height">That answer's own height within ±25 blocks of the seeds' median, the band the seeds' agreement uses.</p>
+          <p class="rung-s" id="vs-height" hidden></p>
+        </li>
+        <li class="rung" data-rung="hour">
+          <p class="rung-k">every round, last hour</p>
+          <p class="rung-n none" id="vn-hour">reading</p>
+          <span class="rung-bar" aria-hidden="true"><span id="vb-hour"></span></span>
+          <p class="rung-d" id="vd-hour">Answered as that key at the seeds' height in every counted round of the last 60 minutes.</p>
+          <p class="rung-s" id="vs-hour" hidden></p>
+        </li>
+      </ol>
+      <p class="vw-rest" id="vw-rest" hidden></p>
+      <div class="strip vw-facts" id="vw-facts" hidden></div>
+      <p class="fine vw-cap" id="vw-cap"></p>
+      <noscript><p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p></noscript>
+    </div>
+  </section>
+
   <section class="section" id="formed" aria-labelledby="formed-title">
     <div class="wrap">
       <div class="section-head">
         <h2 id="formed-title">How the reading is formed</h2>
         <p class="meta">GET /health, GET /organism</p>
       </div>
-      <p class="note">DNO reads four kinds of input. Only the public seeds enter status.<span class="js-only"> Select a path.</span></p>
+      <p class="note">DNO reads five kinds of input. Only the public seeds enter status.<span class="js-only"> Select a path.</span></p>
       <div class="paths" id="paths" role="tablist" aria-label="What DNO reads">
         <button type="button" class="path path--status" role="tab" id="tab-seeds" data-path="seeds" aria-selected="true" aria-controls="path-panel">
           <span class="path-k"><span class="path-name">Public seeds</span><span class="tag">enters status</span></span>
@@ -693,9 +773,15 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <span class="path-end path-end--off"><span>/catalog</span></span>
           <span class="path-live" id="pl-catalog">reading</span>
         </button>
+        <button type="button" class="path" role="tab" id="tab-validators" data-path="validators" aria-selected="false" aria-controls="path-panel">
+          <span class="path-k"><span class="path-name">On-chain validators</span><span class="tag">not in status</span></span>
+          <span class="path-flow" aria-hidden="true"><span>getValidators</span><span>2 seeds agree</span><span>dial /info</span></span>
+          <span class="path-end path-end--off"><span>/health</span></span>
+          <span class="path-live" id="pl-validators">reading</span>
+        </button>
       </div>
       <div class="path-panel" id="path-panel" role="tabpanel" aria-labelledby="tab-seeds" tabindex="0"></div>
-      <noscript><p class="note" style="margin-top:16px">The four: the public seeds, which enter status; cross-check RPCs; the fixnet probe; and peer-listed identities, never dialed. Each is described on <a href="/methodology">/methodology</a>.</p></noscript>
+      <noscript><p class="note" style="margin-top:16px">The five: the public seeds, which enter status; cross-check RPCs; the fixnet probe; peer-listed identities, never dialed; and on-chain validators, listed by the seeds and dialed at the address each published. Each is described on <a href="/methodology">/methodology</a>.</p></noscript>
     </div>
   </section>
 
@@ -875,8 +961,9 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         <h2>What this reading cannot see</h2>
         <ul class="limits">
           <li>Who is in the shard, or who the secretary is.</li>
-          <li>Vote counts, stake, official admission, or any private vantage.</li>
+          <li>Vote counts, any validator's stake, official admission, or any private vantage.</li>
           <li>Whether peer-listed identities answer. They were not dialed.</li>
+          <li>Why a validator did not answer DNO. No answer from here does not change its row on chain.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
         </ul>
       </div>
@@ -893,7 +980,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     </div>
     <div class="wrap words" id="words">
       <h2>Whose word is it</h2>
-      <p class="note">DNO's words describe what it saw from outside. Demos uses its own words for a node's health and a validator's status; DNO does not see those.</p>
+      <p class="note">DNO's words describe what it saw from outside. Demos uses its own words for a node's health and a validator's status. DNO counts validator statuses as the public seeds list them; it does not see a node's own health.</p>
       <div class="words-grid">
         <div>
           <p class="words-k">DNO's words · seen from outside</p>
@@ -902,14 +989,15 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
             <div><dt><code>strong</code></dt><dd>every height counted sits within ±25 blocks of the median, and the spread is at most 20 blocks.</dd></div>
             <div><dt><code>sufficient</code></dt><dd><span data-v10="at least two seeds answered, and the observation is at most 300 s old.">at least two seeds reported their own height, and the observation is at most 300 s old.</span> It describes DNO's vantage, not the network.</dd></div>
             <div><dt>peer-reported</dt><dd>what a public peerlist said. Never confirmed by DNO.</dd></div>
+            <div><dt>at the seeds' height</dt><dd>a validator's own height, in its answer to DNO, within ±25 blocks of the seeds' median. Not Demos' sync check.</dd></div>
           </dl>
         </div>
         <div>
-          <p class="words-k">Demos' words · DNO does not see them</p>
+          <p class="words-k">Demos' words · not DNO's</p>
           <dl class="words-list words-list--off">
-            <div><dt><code>ok</code> <code>degraded</code> <code>dormant</code> <code>failing</code></dt><dd>a node's own GET /health.</dd></div>
-            <div><dt><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></dt><dd>a row in the on-chain validators table.</dd></div>
-            <div><dt>out of sync</dt><dd>consensus Phase 1: a validator skipped from shard composition for those blocks. Not slashing.</dd></div>
+            <div><dt><code>ok</code> <code>degraded</code> <code>dormant</code> <code>failing</code></dt><dd>a node's own GET /health. DNO does not read it.</dd></div>
+            <div><dt><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></dt><dd>a row in the on-chain validators table. DNO counts ACTIVE and UNSTAKING rows as two public seeds list them; EXITED rows are not in that list. It decides none of them.</dd></div>
+            <div><dt>out of sync</dt><dd>consensus Phase 1: a validator skipped from shard composition for those blocks. Not slashing. DNO does not see it.</dd></div>
           </dl>
           <p class="fine" style="margin-top:12px">Sources and the full table: <a href="/about-demos#words">About Demos</a>.</p>
         </div>
@@ -1259,7 +1347,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     setText($('rb-live'), text);
   }
 
-  // ---------- How the reading is formed: four paths ----------
+  // ---------- How the reading is formed: five paths ----------
   let pathSel = 'seeds';
   // Seeds that reported their own height. api 1.1 says where a height came from; under 1.0 every answering seed with a
   // block counted, as the 1.0 server did.
@@ -1280,6 +1368,10 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       const detail = rows.some((v) => typeof v.listed_this_cycle === 'boolean');
       setText($('pl-catalog'), `${fmtInt(vg.discovered)} ${API10 ? 'recorded' : 'kept'}${detail ? ` · ${fmtInt(rows.filter((v) => v.listed_this_cycle === true).length)} listed now` : ''}`);
     } else setText($('pl-catalog'), h ? 'not reported' : reads.health.error ? 'not read' : 'reading');
+    const vm = validatorModel();
+    setText($('pl-validators'), vm.mode === 'oneread' ? `${ONE_READ.active} ACTIVE in one read` : vm.mode === 'live'
+      ? (vm.R.active.n != null ? `${fmtInt(vm.R.active.n)} ACTIVE${vm.R.answered.n != null ? ` · ${fmtInt(vm.R.answered.n)} answered` : ''}` : vm.R.active.text)
+      : vm.mode === 'unread' ? 'not read' : 'reading');
     renderPathPanel();
   }
   function renderPathPanel() {
@@ -1318,7 +1410,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           : 'The result is a separate table on /reference, where each row says whether DNO\'s probe answered, or that the row was not probed. It is a different network from the public testnet and never enters status.' }),
         links(['/reference', '/reference'])];
       facts = API10 ? [['enters status', 'no'], ['shown on', '/reference']] : [['enters status', 'no'], ['shown on', '/reference'], ['rows not dialed', 'say "not probed"']];
-    } else {
+    } else if (pathSel === 'catalog') {
       const rows = vg && Array.isArray(vg.validators) ? vg.validators.filter((v) => v && v.monitored !== true) : [];
       const detail = rows.some((v) => typeof v.listed_this_cycle === 'boolean');
       const crawlAt = vg ? parseTime(vg.catalog_crawl_completed_at) : null;
@@ -1332,6 +1424,24 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         ['public peerlists read', vg && isNum(vg.public_peerlists_read) ? String(vg.public_peerlists_read) : wait()],
         ['latest crawl', crawlAt != null ? clock(crawlAt) : wait()],
         ['enters status', 'no'],
+      ];
+    } else {
+      const vm = validatorModel(), live = vm.mode === 'live';
+      const every = live && vm.w && isNum(vm.w.interval_seconds) ? (vm.w.interval_seconds === 60 ? 'Each minute' : `Every ${vm.w.interval_seconds} s`) : 'Each minute';
+      const shown = (r) => (r.n != null ? fmtInt(r.n) : dim(r.text));
+      text = [el('h3', { text: 'On-chain validators: not in status' }),
+        el('p', { text: vm.mode === 'oneread'
+          ? `This server does not read the validators table yet. One read with DNO's probe tool on ${stamp(Date.parse(ONE_READ.at))}: two of three public seeds returned the same ${ONE_READ.listed} rows, all ACTIVE.`
+          : `${every} DNO sends two read-only calls to the three public seeds: getValidators, the on-chain validators table, and getNetworkParameters. A count is published only when at least two seeds return the same answer.` }),
+        el('p', { text: `${vm.mode === 'oneread' ? 'A server that publishes on_chain_validators also dials' : 'DNO dials'} GET /info once at the address each ACTIVE validator published on chain, only when it is a public http origin: the probe connects to the address it checked, does not follow redirects and reads at most 2 MB. /health publishes counts, never an address, and none of it enters status.` }),
+        links(['#validators', 'validators on chain'], ['/methodology#validators', 'methodology'])];
+      facts = [
+        ['ACTIVE', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : vm.mode === 'oneread' ? dim(`${ONE_READ.active} in one read`) : shown(vm.R.active)],
+        ['answered as that key', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : shown(vm.R.answered)],
+        ['seeds agreeing', live && vm.oc.state === 'agreed' ? `${vm.oc.seeds_agreed} of ${vm.oc.seeds_configured}` : live ? dim({ pending: 'reading', stale: 'not reported: the last read is older than 300 s' }[vm.oc.state] || 'fewer than two')
+          : vm.mode === 'oneread' ? dim('2 of 3 in one read') : wait()],
+        ['enters status', 'no'],
+        ['addresses published', 'no'],
       ];
     }
     const sig = JSON.stringify([pathSel, API10, facts.map(([k, v]) => [k, typeof v === 'string' ? v : v.textContent])]);
@@ -1532,6 +1642,120 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     } else items.push(item('coverage', el('span', { text: 'not reported' })));
     box.dataset.n = String(items.length);
     box.replaceChildren(...items);
+  }
+
+  // ---------- Validators on chain ----------
+  // One read made with DNO's probe tool (tools/validator-set-probe.mjs) before any server published the field. Shown, dated
+  // and marked, only while /health has no on_chain_validators; never as this cycle.
+  const ONE_READ = { at: '2026-09-29T09:05:39Z', listed: 35, active: 35, stake: '1000000000000' };
+  const RUNGS = ['active', 'answered', 'height', 'hour'];
+  // What the ladder shows. mode: pending | unread | oneread (the server has no such field) | live.
+  // R[rung] = { n: count or null, text: the word shown when there is no count, note: why }.
+  function validatorModel() {
+    const h = reads.health.data;
+    const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : null);
+    const oc = h ? obj(h.on_chain_validators) : null, w = h ? obj(h.validator_watch) : null;
+    const mode = !h ? (reads.health.error ? 'unread' : 'pending') : oc ? 'live' : 'oneread';
+    const R = {};
+    const put = (k, n, text, note) => { R[k] = isNum(n) ? { n, text: null, note: note || null } : { n: null, text, note: note || null }; };
+    let base = null;
+    if (mode === 'pending' || mode === 'unread') RUNGS.forEach((k) => put(k, null, mode === 'pending' ? 'reading' : 'not read'));
+    else if (mode === 'oneread') {
+      put('active', ONE_READ.active, null, `One read with DNO's probe tool, ${stamp(Date.parse(ONE_READ.at))}: two of three public seeds returned the same ${ONE_READ.listed} rows, all ACTIVE. Not this cycle.`);
+      put('answered', null, 'not observed', 'This server does not dial validators yet.');
+      put('height', null, 'not observed'); put('hour', null, 'not observed');
+      base = ONE_READ.active;
+    } else {
+      if (oc.state === 'agreed' && isNum(oc.active)) { put('active', oc.active); base = oc.active; }
+      else put('active', null, oc.state === 'pending' ? 'reading' : 'unknown', oc.state === 'pending' ? null : oc.reason);
+      const ws = w ? w.state : null;
+      if (!w) ['answered', 'height', 'hour'].forEach((k) => put(k, null, 'not reported'));
+      else if (ws === 'observed') {
+        put('answered', w.answered_as_listed, 'not reported');
+        put('height', w.at_seed_height, 'unknown', isNum(w.at_seed_height) ? null : "The seeds' median is not known this round, so heights were not compared.");
+        const win = obj(w.window) || {};
+        if (isNum(w.every_round_last_hour)) put('hour', w.every_round_last_hour);
+        else if (win.counted_this_round === false) put('hour', null, 'unknown', "This round did not count: the seeds' median is not known.");
+        else put('hour', null, 'insufficient observation', isNum(win.observed_minutes) && isNum(win.minutes) && win.observed_minutes < win.minutes
+          ? `${win.observed_minutes} of ${win.minutes} min observed since the first counted round.` : 'Fewer than half the rounds in the window counted.');
+        if (isNum(w.watched)) base = w.watched;
+      } else {
+        const t = ws === 'pending' ? 'reading' : ws === 'disabled' ? 'not observed' : 'unknown';
+        put('answered', null, t, ws === 'pending' ? null : typeof w.reason === 'string' ? w.reason : null);
+        put('height', null, t); put('hour', null, t);
+      }
+    }
+    return { mode, oc, w, R, base };
+  }
+  function validatorRest(w) {
+    const out = [], r = w.not_dialed_reasons || {};
+    if (w.not_dialed > 0) {
+      const why = [[r.not_public_http, 'no public http origin published'], [r.name_unresolved, 'published name did not resolve to a public address'], [r.seeds_differ, 'the seeds list different addresses'], [r.over_cap, 'over the round cap']]
+        .filter(([n]) => isNum(n) && n > 0).map(([n, t]) => `${t}: ${fmtInt(n)}`).join('; ');
+      out.push(`${fmtInt(w.not_dialed)} not dialed${why ? ` (${why})` : ''}`);
+    }
+    if (w.no_answer > 0) out.push(`${fmtInt(w.no_answer)} no answer`);
+    if (w.answered_other_key > 0) out.push(`${fmtInt(w.answered_other_key)} answered with another key`);
+    if (w.answered_no_key > 0) out.push(`${fmtInt(w.answered_no_key)} answered without a key`);
+    if (w.off_seed_height > 0) out.push(`${fmtInt(w.off_seed_height)} away from the seeds' height`);
+    if (w.height_not_reported > 0) out.push(`${fmtInt(w.height_not_reported)} answered without their own height`);
+    return out;
+  }
+  function renderValidators() {
+    const vm = validatorModel(), { mode, oc, w, R, base } = vm;
+    $('ladder').dataset.mode = mode;
+    $('vt-active').hidden = mode !== 'oneread';
+    RUNGS.forEach((k) => {
+      const r = R[k], nEl = $(`vn-${k}`), sEl = $(`vs-${k}`);
+      setText(nEl, r.n != null ? fmtInt(r.n) : r.text);
+      nEl.classList.toggle('none', r.n == null);
+      $(`vb-${k}`).style.width = r.n != null && isNum(base) && base > 0 ? `${Math.min(100, (r.n / base) * 100)}%` : '0%';
+      setText(sEl, r.note || ''); sEl.hidden = !r.note;
+    });
+    const band = w && isNum(w.height_band_blocks) ? w.height_band_blocks : 25;
+    const mins = w && w.window && isNum(w.window.minutes) ? w.window.minutes : 60;
+    setText($('vd-height'), `That answer's own height within ±${band} blocks of the seeds' median, the band the seeds' agreement uses.`);
+    setText($('vd-hour'), `Answered as that key at the seeds' height in every counted round of the last ${mins === 1 ? 'minute' : `${mins} minutes`}.`);
+
+    // What the ladder does not show: rows not dialed, not answered, answered otherwise.
+    const restEl = $('vw-rest');
+    const observed = mode === 'live' && w && w.state === 'observed';
+    const parts = observed ? validatorRest(w) : [];
+    const restText = !observed ? '' : !(w.watched > 0) ? 'No ACTIVE row is listed.' : parts.length ? `Of ${fmtInt(w.watched)} ACTIVE: ${parts.join(' · ')}.` : 'Every ACTIVE row was dialed and answered as its key.';
+    setText(restEl, restText); restEl.hidden = !restText;
+
+    // The parameter, UNSTAKING and versions.
+    const box = $('vw-facts');
+    const mono = (t) => el('span', { class: 'mono', text: t }), plain = (t) => el('span', { text: t });
+    let facts = null;
+    if (mode === 'oneread') facts = [['minValidatorStake', [mono(ONE_READ.stake), dim('raw, as reported, same read')]], ['UNSTAKING', [plain('none listed'), dim('same read')]], ['versions answered', [dim('not observed')]]];
+    else if (mode === 'live') {
+      const vers = observed && Array.isArray(w.versions) && w.versions.length
+        ? w.versions.map((g) => `${typeof g.version === 'string' && g.version ? g.version : 'no release version'} (${fmtInt(g.count)})`).join(' · ') + (w.versions_other > 0 ? ` · other (${fmtInt(w.versions_other)})` : '') : null;
+      const pend = oc.state === 'pending', ws = w ? w.state : null;
+      facts = [
+        ['minValidatorStake', typeof oc.min_validator_stake === 'string' ? [mono(oc.min_validator_stake), dim('raw, as reported')]
+          : [dim(pend ? 'reading' : oc.state === 'stale' ? 'not reported' : 'not reported: two seeds did not give the same value')]],
+        ['UNSTAKING', [oc.state !== 'agreed' ? dim(pend ? 'reading' : 'not reported') : plain(isNum(oc.unstaking) ? `${fmtInt(oc.unstaking)} listed, not dialed` : 'none listed')]],
+        ['versions answered', [vers ? plain(vers) : dim(ws === 'pending' ? 'reading' : ws === 'stale' ? 'not reported' : 'not observed')]],
+      ];
+      if (oc.state === 'agreed' && isNum(oc.other_status) && oc.other_status > 0) facts.push(['other status', [plain(`${fmtInt(oc.other_status)} listed, not dialed`)]]);
+    }
+    const sig = JSON.stringify([mode, facts && facts.map(([k, nodes]) => [k, nodes.map((n) => n.className + ':' + n.textContent)])]);
+    if (box.dataset.sig !== sig) {
+      box.dataset.sig = sig;
+      box.dataset.n = facts ? String(facts.length) : '3';
+      box.replaceChildren(...(facts || []).map(([k, nodes]) => el('div', null, el('p', { class: 'k', text: k }), el('p', { class: 'v' }, ...nodes))));
+    }
+    box.hidden = !facts;
+
+    const cap = mode === 'oneread' ? 'One read · not this cycle · this server does not publish on_chain_validators yet'
+      : mode === 'unread' ? `Validators not read: ${reads.health.error}. Their state is unknown from here.`
+      : mode === 'live' ? [parseTime(oc.observed_at) != null ? `List read ${clock(parseTime(oc.observed_at))}` : null,
+          oc.state === 'agreed' && isNum(oc.seeds_agreed) ? `${oc.seeds_agreed} of ${oc.seeds_configured} public seeds returned the same list` : null,
+          w && isNum(w.interval_seconds) ? `a round every ${w.interval_seconds} s` : null, 'not in status', 'counts only, never an address'].filter(Boolean).join(' · ')
+      : '';
+    setText($('vw-cap'), cap);
   }
 
   // ---------- Two populations ----------
@@ -1961,7 +2185,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   const EPS = {
     organism: { path: '/organism', what: 'The public reading: the 17 required fields plus the 1.1 additions, with ETag and 304 between observations. The contract is /organism/schema.',
       what10: 'The public reading: the 17 required fields. The contract is /organism/schema.' },
-    health: { path: '/health', what: 'The same reading with its parts: publicNodes (each seed, with height_source), validator_growth (seed counts and peer-listed identities), attestation and on_chain_publication.',
+    health: { path: '/health', what: 'The same reading with its parts: publicNodes (each seed, with height_source), validator_growth (seed counts and peer-listed identities), attestation, on_chain_publication, and on_chain_validators and validator_watch (counts only; neither enters status).',
       what10: 'The same reading with its parts: publicNodes (each seed), validator_growth (seed counts and recorded identities), attestation and on_chain_publication.' },
     catalog: { path: '/catalog?listed=not', what: 'Peer-listed identities the latest crawl did not list, sanitized: display name, truncated key, first and last listing. ?q= filters. /catalog/lookup?key=0x… checks one full key and never returns a key.' },
     incidents: { path: '/incidents?scope=public&status=active', what: 'Active public records. Each row has kind: incident, or condition for the records DNO opens about its own reading. /organism\'s active_incidents leaves the condition records out; this endpoint\'s own active count includes them.',
@@ -2107,7 +2331,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       if (o && ((isNum(o.active_incidents) && o.active_incidents > 0) || (isNum(o.active_public_conditions) && o.active_public_conditions > 0))) await refresh('incidents');
       else { reads.incidents.data = null; reads.incidents.error = null; }
       applyVersion();
-      renderLive(); renderCycle(); renderPaths(); renderAgreement(); render24h(); renderPopulations(); renderIncidents(); renderConsole(); renderDahr();
+      renderLive(); renderCycle(); renderValidators(); renderPaths(); renderAgreement(); render24h(); renderPopulations(); renderIncidents(); renderConsole(); renderDahr();
       if (okO) blip();
       if (okO || okH) pulse();
     } finally { inFlight = false; schedule(); renderCountdown(); }

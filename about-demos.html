@@ -173,7 +173,7 @@
                 <li class="to-status"><b>Status</b><span>on /organism, with its reason</span></li>
               </ol>
             </div>
-            <div class="wall" role="presentation"><span>DNO does not see below this line</span></div>
+            <div class="wall" role="presentation"><span>Below this line DNO sees only the validator list the seeds return</span></div>
             <div class="lane lane--inside" style="--steps: 4">
               <p class="lane-k">Inside: Demos shard composition <span class="tag">every block</span></p>
               <ol class="flow">
@@ -194,7 +194,7 @@
               <dt>Question</dt><dd>Did the public seeds answer, and do the heights they report agree?</dd>
               <dt>Inputs</dt><dd>The <code>/info</code> answers of three public Kynesys seeds. A seed's height is its own peerlist entry; a seed that does not list itself has no height here.</dd>
               <dt>Output</dt><dd><code>status</code> on <code>/organism</code>, always with <code>status_reason</code>.</dd>
-              <dt>Also dialed, not in status</dt><dd>The cross-check RPCs (DAHR is attempted there), fixnet peers for the reference table.</dd>
+              <dt>Also dialed, not in status</dt><dd>The cross-check RPCs (DAHR is attempted there), fixnet peers for the reference table, and the address each ACTIVE validator published on chain (counts only, on <code>/health</code>).</dd>
             </dl>
           </div>
           <div>
@@ -249,7 +249,9 @@
         <p>The same SDK lists validator rows with <code>getValidators()</code>: the rows whose status is still active at a block. The lifecycle page describes <code>UNSTAKING</code> as still active until exit and <code>EXITED</code> as removed from the active set, so a count of exited validators does not come from that list.</p>
         <div class="aside">
           <span class="aside-k">What DNO sees of this</span>
-          <p>Nothing yet. DNO does not read the <code>validators</code> table, so it cannot say whether any identity is ACTIVE, UNSTAKING or EXITED, or what it has staked. Until one read of that table on the same public seeds has been checked, DNO publishes no validator count. The identities in DNO's catalog are names listed on public peerlists, not validator rows: a larger catalog is not a larger validator set.</p>
+          <p>Counts, as the public seeds list them. Once a minute DNO sends both calls to the three public seeds. It publishes how many rows are ACTIVE and <code>minValidatorStake</code>, each only when at least two seeds return the same answer; it publishes no address and keeps no stake. It then dials the address each ACTIVE validator published on chain and counts the answers: see <a href="/methodology#validators">how the counts are made</a>. It publishes no identity, so it cannot tell you whether a given key is ACTIVE.</p>
+          <p>The first read, with DNO's probe tool on 29 September 2026 at 09:05 UTC: two of the three public seeds returned the same 35 rows, all ACTIVE, and the same <code>minValidatorStake</code>, 1000000000000 as reported. The third seed did not answer.</p>
+          <p>The identities in DNO's catalog are names listed on public peerlists, not validator rows: a larger catalog is not a larger validator set.</p>
         </div>
       </section>
 
@@ -390,9 +392,10 @@
             <thead><tr><th>Word</th><th>Whose word</th><th>Meaning</th><th>DNO sees it?</th></tr></thead>
             <tbody>
               <tr data-f="not"><td data-label="Word"><code>ok</code> <code>degraded</code> <code>dormant</code> <code>failing</code></td><td data-label="Whose">the node's own <code>GET /health</code></td><td data-label="Meaning">ok: subsystems and main loop up. degraded: something non-critical failed, chain still up. dormant: booted with no peers and skipped work on purpose. failing: chain, mempool or main loop down.</td><td data-label="DNO sees it?">No. DNO reads <code>/info</code>, not <code>/health</code>.</td></tr>
-              <tr data-f="not"><td data-label="Word"><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></td><td data-label="Whose">the on-chain <code>validators</code> table</td><td data-label="Meaning">a validator row's status. ACTIVE is eligible for shard selection.</td><td data-label="DNO sees it?">No.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></td><td data-label="Whose">the on-chain <code>validators</code> table</td><td data-label="Meaning">a validator row's status. ACTIVE is eligible for shard selection.</td><td data-label="DNO sees it?">Counts of ACTIVE and UNSTAKING rows, as two public seeds list them. EXITED rows are not in that list, and no row is named.</td></tr>
               <tr data-f="not"><td data-label="Word">out of sync</td><td data-label="Whose">consensus, Phase 1</td><td data-label="Meaning">that validator is skipped for shard composition on those blocks. It is not slashing.</td><td data-label="DNO sees it?">No.</td></tr>
               <tr data-f="sees"><td data-label="Word"><code>stable</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">this cycle's reading of the public seeds: at least two reported their own height, those heights agree (strong), and no warning or critical public incident is active.</td><td data-label="DNO sees it?">Yes. It is not <code>ok</code>, and it is not <code>ACTIVE</code>.</td></tr>
+              <tr data-f="sees"><td data-label="Word">at the seeds' height</td><td data-label="Whose">DNO</td><td data-label="Meaning">a validator's own height, in its answer when DNO dialed the address it published, within ±25 blocks of the seeds' median.</td><td data-label="DNO sees it?">Yes, for validators that answered. It is not Demos' sync check, and it is not <code>out of sync</code>.</td></tr>
               <tr data-f="sees"><td data-label="Word"><code>strong</code> agreement</td><td data-label="Whose">DNO</td><td data-label="Meaning">every own height sits within DNO's band, ±25 blocks of the median, and the spread is at most 20 blocks.</td><td data-label="DNO sees it?">Yes, for seeds that reported their own height.</td></tr>
               <tr data-f="sees"><td data-label="Word"><code>sufficient</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">at least two seeds reported their own height, and the observation is at most 300 s old.</td><td data-label="DNO sees it?">Yes. It describes DNO's vantage, not the network.</td></tr>
               <tr data-f="sees"><td data-label="Word"><code>reachable</code> <code>unreachable</code></td><td data-label="Whose">DNO, for endpoints it dials</td><td data-label="Meaning">an endpoint DNO dialed answered, or did not: the probed seeds on the homepage, the cross-check RPCs on <code>/federate</code>, the probed fixnet rows on <code>/reference</code>.</td><td data-label="DNO sees it?">Yes, for those endpoints. Never for peer-listed identities, which DNO does not dial.</td></tr>
@@ -407,10 +410,11 @@
         <h2 id="h-cannot">What DNO cannot see</h2>
         <ul class="limits">
           <li>Who is in a shard.</li>
-          <li>The <code>validators</code> table: which identities are ACTIVE, UNSTAKING or EXITED, and any stake.</li>
+          <li>EXITED validators: the list DNO reads holds only rows still active at the block.</li>
           <li>Votes, admission, and the health and sync checks consensus applies.</li>
           <li>A node's own <code>/health</code> status.</li>
-          <li>Whether a peer-listed identity is a validator, or whether it answers: DNO does not dial the catalog.</li>
+          <li>Whether a peer-listed identity is a validator, or whether it answers: DNO does not dial the catalog or match it against the validator list.</li>
+          <li>Why a validator does not answer DNO. The address may refuse outside callers or be out of reach from here only; the row on chain does not change.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
         </ul>
       </section>

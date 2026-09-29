@@ -111,10 +111,13 @@ export function isPublicIp(ip) {
     var v4 = x.v4tail || [g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join(".");
     return isPublicIp(v4);
   }
-  if (g.every(function(v) { return v === 0; })) return false;  // ::
-  if (allZeroHead && g[5] === 0 && g[6] === 0 && g[7] === 1) return false; // ::1
+  if (allZeroHead && g[5] === 0) return false;                // ::/96: ::, ::1 and IPv4-compatible ::a.b.c.d (deprecated)
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0xffff && g[5] === 0) return false; // ::ffff:0:a.b.c.d (IPv4-translated)
   if ((g[0] & 0xfe00) === 0xfc00) return false;               // fc00::/7 unique local
   if ((g[0] & 0xffc0) === 0xfe80) return false;               // fe80::/10 link local
+  if ((g[0] & 0xffc0) === 0xfec0) return false;               // fec0::/10 site local (deprecated)
+  if (g[0] === 0x2002) return false;                          // 2002::/16 6to4: carries an IPv4 address of any kind
+  if (g[0] === 0x2001 && g[1] === 0) return false;            // 2001::/32 Teredo: carries an IPv4 address of any kind
   if ((g[0] & 0xff00) === 0xff00) return false;               // ff00::/8 multicast
   if (g[0] === 0x2001 && g[1] === 0x0db8) return false;       // 2001:db8::/32 documentation
   if (g[0] === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return false; // 100::/64 discard

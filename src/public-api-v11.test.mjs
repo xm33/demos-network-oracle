@@ -52,7 +52,9 @@ const MARKERS = [
   '<span id="live-text">connecting</span>',
   card("trend", "trend"), card("risk", "risk"), card("confidence", "confidence"), card("data_quality", "data quality")
 ];
+const VW_MARKER = '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>';
 MARKERS.forEach((m, i) => check("H" + (i + 1) + " fill marker present once: " + m.slice(0, 48), count(HOME, m) === 1, "count " + count(HOME, m)));
+check("H25 validators line: marker present once, and the agent fills it from the same text", count(HOME, VW_MARKER) === 1 && SRC.includes("validators: '" + VW_MARKER + "'"), "count " + count(HOME, VW_MARKER));
 check("H12 agent builds the same markers", MARKERS.slice(0, 7).every((m) => SRC.includes(JSON.stringify(m).slice(1, -1).replace(/\\"/g, '"')) || SRC.includes("'" + m + "'")));
 const markSha = createHash("sha256").update(readFileSync(join(ROOT, "assets", "dno-mark.jpg"))).digest("hex");
 const shaInSrc = (SRC.match(/MARK_ASSET_SHA256 = "([0-9a-f]{64})"/) || [])[1];
@@ -157,6 +159,19 @@ try {
   const firstPeer = pn.filter((n) => n.height_source === "first_peer").map((n) => n.name);
   const vgSeeds = (vg.validators || []).filter((v) => v.monitored && firstPeer.includes(v.display));
   check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));
+  // SPEC-v7: the on-chain validators read and watch, on /health only, counts only.
+  const ocv = health.on_chain_validators, vwt = health.validator_watch;
+  const OC_KEYS = "active,listed,min_validator_stake,observed_at,other_status,reason,seeds_agreed,seeds_answered,seeds_configured,state,unstaking";
+  const VW_KEYS = "answered_as_listed,answered_no_key,answered_other_key,at_seed_height,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,no_answer,not_dialed,not_dialed_reasons,off_seed_height,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
+  check("V1 /health on_chain_validators: exactly the published keys", ocv && Object.keys(ocv).sort().join(",") === OC_KEYS, ocv && Object.keys(ocv).sort().join(","));
+  check("V2 /health validator_watch: exactly the published keys", vwt && Object.keys(vwt).sort().join(",") === VW_KEYS, vwt && Object.keys(vwt).sort().join(","));
+  check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
+  const ocCounts = ["listed", "active", "unstaking", "other_status"], vwCounts = ["watched", "not_dialed", "no_answer", "answered_other_key", "answered_no_key", "answered_as_listed", "every_round_last_hour"];
+  check("V4 a count only in the agreed or observed state", ocv && vwt && (ocv.state === "agreed" || ocCounts.every((k) => ocv[k] === null)) && (vwt.state === "observed" || vwCounts.every((k) => vwt[k] === null))
+    && (ocv.state !== "agreed" || (Number.isInteger(ocv.active) && ocv.seeds_agreed >= 2)) && (ocv.min_validator_stake === null || /^\d+$/.test(ocv.min_validator_stake)));
+  const vLeaks = stringsDeep([ocv, vwt]).filter((x) => FULL_ID.test(x) || IPV4.test(x) || HOSTPORT.test(x) || /https?:|0x[0-9a-f]{8,}/i.test(x));
+  check("V5 neither object carries an address, key, URL or host", vLeaks.length === 0, vLeaks.slice(0, 3).join(", "));
+  check("V6 /organism carries neither", !("on_chain_validators" in o) && !("validator_watch" in o) && !JSON.stringify(o).includes("min_validator_stake"));
   // Site kit: assets under a content hash, cached; every page carries the one header with the locked mark.
   const aboutPage = await get("/about-demos");
   const aboutHtml = typeof aboutPage.body === "string" ? aboutPage.body : "";

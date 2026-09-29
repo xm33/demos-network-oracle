@@ -9,13 +9,20 @@
 // It prints counts, the parameter, whether the seeds agree, and the /info key names. It never prints hosts,
 // addresses, connectionUrl, per-row stake or full keys. Paste its output back; nothing here is published by DNO.
 //
+// --dial adds one round of the validator watch, run with the agent's own module (src/validator-watch.mjs): the list the
+// seeds agree on, then GET /info once at the address each ACTIVE validator published on chain, only when it is a public
+// http origin (pinned address, no redirects, 2 MB). It prints the counts the agent would publish on /health, nothing else.
+//
 // Run:  bun tools/validator-set-probe.mjs                 (seeds from src/agent.mjs)
 //       bun tools/validator-set-probe.mjs name=url ...    (explicit seeds)
+//       bun tools/validator-set-probe.mjs --dial [name=url ...]
 // Exit: 0 when every answer had the expected shape (or no answer came), 2 when an answer had an unexpected shape.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, WATCH_DEFAULTS } from "../src/validator-watch.mjs";
+import { resolvePublicProbeOrigin, sanitizeHeight } from "../src/public-safety.mjs";
 
 const TIMEOUT_MS = 8000;
 const BODY_MAX_BYTES = 2 * 1024 * 1024;
@@ -71,8 +78,10 @@ export async function probeSeed(seed) {
     else {
       const entry = Array.isArray(r.body.peerlist) && r.body.peerlist.length ? r.body.peerlist[0] : null;
       const all = [...nested(r.body), ...(entry ? nested(entry) : [])].join(" ");
+      const id = typeof r.body.identity === "string" ? r.body.identity.toLowerCase() : null;
+      const self = id && Array.isArray(r.body.peerlist) ? r.body.peerlist.find((p) => p && typeof p.identity === "string" && p.identity.toLowerCase() === id) : null;
       out.info = { answered: true, keys: nested(r.body), entryKeys: entry ? nested(entry) : [],
-        hashField: /hash/i.test(all), shardField: /shard/i.test(all) };
+        hashField: /hash/i.test(all), shardField: /shard/i.test(all), ownHeight: self && self.sync ? sanitizeHeight(self.sync.block) : null };
     }
   } catch (e) { out.info = { answered: false, why: e.name === "TimeoutError" ? "no answer within 8 s" : "not reached" }; }
   // 2. getNetworkParameters
@@ -142,14 +151,48 @@ export function formatReport(results, when = new Date()) {
   return { text: lines.join("\n"), summary: s };
 }
 
+// --dial: one watch round with the agent's module. The seeds' median comes from the seeds' own heights in this run's
+// /info answers (at least two). opts.resolveOrigin exists for tests; the default is the agent's resolver.
+export async function dialReport(seeds, results, opts = {}) {
+  const hs = results.map((r) => (r.info && r.info.answered ? r.info.ownHeight : null)).filter((h) => h !== null && h !== undefined).sort((a, b) => a - b);
+  const reference = hs.length >= 2 ? { height: hs[Math.floor(hs.length / 2)], observedAt: Date.now() } : null;
+  const round = await runValidatorRound({ seeds, resolveOrigin: opts.resolveOrigin || resolvePublicProbeOrigin, reference: () => reference,
+    history: createWatchHistory(WATCH_DEFAULTS.windowMs, WATCH_DEFAULTS.intervalMs) });
+  const oc = publicOnChainValidators(round, round.listAt, { seedsConfigured: seeds.length });
+  const w = publicValidatorWatch(round, round.roundAt, {});
+  const lines = ["", "Watch (one round, --dial)"];
+  lines.push(`  list: ${oc.state === "agreed" ? `${oc.seeds_agreed} of ${oc.seeds_configured} public seeds returned the same list · ${oc.listed} rows · ACTIVE ${oc.active} · UNSTAKING ${oc.unstaking === null ? "none listed" : oc.unstaking} · other ${oc.other_status}` : `no figure: ${oc.reason}`}`);
+  lines.push(`  seeds' median: ${reference ? `${reference.height} (from ${hs.length} own heights)` : "not known (fewer than two own heights): heights not compared"}`);
+  if (w.state !== "observed") { lines.push(`  dials: none (${w.reason})`); return { text: lines.join("\n"), onChain: oc, watch: w }; }
+  const r = w.not_dialed_reasons;
+  lines.push(`  ACTIVE rows dialed at the address each published on chain: ${w.watched - w.not_dialed} of ${w.watched}`);
+  lines.push(`    not dialed ${w.not_dialed} (no public http origin published ${r.not_public_http} · name did not resolve to a public address ${r.name_unresolved} · seeds list different addresses ${r.seeds_differ} · over the round cap ${r.over_cap})`);
+  lines.push(`    no answer ${w.no_answer}`);
+  lines.push(`    answered with another key ${w.answered_other_key}`);
+  lines.push(`    answered without a key ${w.answered_no_key}`);
+  lines.push(`    answered as the listed key ${w.answered_as_listed}: ${w.at_seed_height === null ? `heights not compared (${w.height_not_compared} with a height)` : `at the seeds' height (±${w.height_band_blocks}) ${w.at_seed_height} · off ${w.off_seed_height}`} · own height not reported ${w.height_not_reported}`);
+  lines.push(`  versions among answers as the listed key: ${w.versions.length ? w.versions.map((g) => `${g.version === null ? "no release version" : g.version} ${g.count}`).join(" · ") + (w.versions_other ? ` · other ${w.versions_other}` : "") : "none"}`);
+  lines.push(`  every round, last hour: not from one run (the agent keeps an hour of rounds)`);
+  return { text: lines.join("\n"), onChain: oc, watch: w };
+}
+
 if (import.meta.main) {
-  const args = process.argv.slice(2);
+  const all = process.argv.slice(2);
+  const dial = all.includes("--dial");
+  const args = all.filter((a) => a !== "--dial");
   const here = dirname(fileURLToPath(import.meta.url));
-  const seeds = args.length ? args.map((a) => { const i = a.indexOf("="); return { name: a.slice(0, i), url: a.slice(i + 1) }; })
-    : seedsFromAgent(readFileSync(join(here, "..", "src", "agent.mjs"), "utf8"));
+  let seeds;
+  if (args.length) seeds = args.map((a) => { const i = a.indexOf("="); return { name: a.slice(0, i), url: a.slice(i + 1) }; });
+  else {
+    let src = null;
+    try { src = readFileSync(join(here, "..", "src", "agent.mjs"), "utf8"); } catch (e) {}
+    if (!src) { console.error("No src/agent.mjs next to this tool. Give the seeds: bun validator-set-probe.mjs [--dial] name=http://host:port ..."); process.exit(64); }
+    seeds = seedsFromAgent(src);
+  }
   const results = [];
   for (const seed of seeds) results.push(await probeSeed(seed));
   const { text, summary } = formatReport(results);
   console.log(text);
+  if (dial) console.log((await dialReport(seeds, results)).text);
   process.exit(summary.shapeErrors.length ? 2 : 0);
 }

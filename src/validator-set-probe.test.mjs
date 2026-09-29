@@ -5,7 +5,7 @@
 // are reported and make the tool exit non-zero.
 // Run: bun src/validator-set-probe.test.mjs   (executable harness, not `bun test`)
 
-import { probeSeed, formatReport, summarize, seedsFromAgent } from "../tools/validator-set-probe.mjs";
+import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport } from "../tools/validator-set-probe.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -78,6 +78,34 @@ console.log("\n[" + TAG + "] seeds come from the agent's configuration");
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "agent.mjs"), "utf8");
   const seeds = seedsFromAgent(src);
   check("S1 the three configured seeds, by name", seeds.map((s) => s.name).join(",") === "kyne-node2,kyne-node3,kyne-node3b" && seeds.every((s) => /^https?:\/\//.test(s.url)), seeds.map((s) => s.name).join(","));
+}
+
+console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
+{
+  const VKEY = "0x" + "c1".repeat(32);
+  const val = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: VKEY, version: "0.9.9 RC", peerlist: [{ identity: VKEY, sync: { block: 12346 } }] }); } });
+  const vrows = [
+    { address: VKEY, status: "2", connectionUrl: "http://127.0.0.1:" + val.port, stakedAmount: "5555555555", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null },
+    { address: ADDR("d2"), status: "2", connectionUrl: "http://203.0.113.7:53550", stakedAmount: "5555555555", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }];
+  const dialSeed = (id) => Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    const u = new URL(req.url);
+    if (req.method === "GET" && u.pathname === "/info") return Response.json({ identity: id, version: "0.9.9 RC", peerlist: [{ identity: id, sync: { block: 12345 } }] });
+    const p = (await req.json()).params[0];
+    if (p.message === "getValidators") return Response.json({ result: 200, response: vrows });
+    if (p.message === "getNetworkParameters") return Response.json({ result: 200, response: { minValidatorStake: "1000000000000" } });
+    return Response.json({ result: 404, response: null });
+  } });
+  const D1 = dialSeed(ADDR("e1")), D2 = dialSeed(ADDR("e2"));
+  const seeds = [{ name: "seed-a", url: url(D1) }, { name: "seed-b", url: url(D2) }];
+  const results = [await probeSeed(seeds[0]), await probeSeed(seeds[1])];
+  const loop = async (u) => { const x = new URL(u); return x.protocol === "http:" && x.hostname === "127.0.0.1" && x.pathname === "/" ? x.origin : null; };
+  const rep = await dialReport(seeds, results, { resolveOrigin: loop });
+  check("X1 --dial: the agreed list, the seeds' median and the watch counts the agent would publish", rep.onChain.active === 2 && rep.watch.answered_as_listed === 1 && rep.watch.at_seed_height === 1
+    && rep.watch.not_dialed === 1 && /seeds' median: 12345 \(from 2 own heights\)/.test(rep.text) && /answered as the listed key 1: at the seeds' height \(±25\) 1/.test(rep.text) && /not from one run/.test(rep.text), rep.text);
+  check("X2 --dial prints no host, address, connectionUrl, port or stake", leaks(rep.text).length === 0 && !rep.text.includes(String(val.port)) && !/5555555555/.test(rep.text), leaks(rep.text).join(" "));
+  const prod = await dialReport(seeds, results);
+  check("X3 --dial with the agent's resolver dials no loopback address, seeds included", prod.watch.state === "no_agreed_list" && /no figure/.test(prod.text), prod.text);
+  [D1, D2, val].forEach((s) => s.stop(true));
 }
 
 [A, B, C, E].forEach((s) => s.stop(true));
