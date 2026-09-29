@@ -1,8 +1,12 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
 const HEALTH_URL = process.env.SENTINEL_HEALTH_URL || "http://127.0.0.1:55225";
-// Fleet history is served on the agent's loopback internal listener when INTERNAL_PORT is set (404 on the public port).
-const HISTORY_URL = process.env.SENTINEL_HISTORY_URL || (process.env.INTERNAL_PORT ? "http://127.0.0.1:" + process.env.INTERNAL_PORT : HEALTH_URL);
+// Fleet history is served only on the agent's loopback internal listener (INTERNAL_PORT); the public port answers 404.
+const HISTORY_URL = process.env.SENTINEL_HISTORY_URL || (process.env.INTERNAL_PORT ? "http://127.0.0.1:" + process.env.INTERNAL_PORT : null);
+if (!HISTORY_URL) {
+  console.error("[SENTINEL] No fleet history source: set INTERNAL_PORT (the agent's internal listener) or SENTINEL_HISTORY_URL. Not starting.");
+  process.exit(1);
+}
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const POLL_INTERVAL_MS = 5 * 60 * 1000;

@@ -24,13 +24,13 @@ const code = decl + "\n" + line("function ownHeight(") + extract("function updat
 const MONITOR_INTERVAL_MS = Number(SRC.match(/const MONITOR_INTERVAL_MS = parseInt\(process\.env\.MONITOR_INTERVAL_MS \|\| "(\d+)"\)/)[1]);
 const CHAIN_STATIC_RUN_MIN_24H = Number(SRC.match(/var CHAIN_STATIC_RUN_MIN_24H = parseInt\(process\.env\.PHASE_B_CHAIN_STATIC_RUN_MIN \|\| '(\d+)'/)[1]);
 // history: { ts, median_block } rows; the stub applies the query's bound, order and limit.
-function fresh(history) {
-  const db = history ? { query: (sql) => ({ all: (bound) => {
-    if (!/ts < \? ORDER BY ts DESC LIMIT 2000/.test(sql)) throw new Error("unexpected history query: " + sql);
-    return history.filter((r) => r.ts < bound).sort((a, b) => b.ts - a.ts).slice(0, 2000);
+function fresh(history, ownSince = 0) {
+  const db = history ? { query: (sql) => ({ all: (bound, since) => {
+    if (!/ts < \? AND ts >= \? ORDER BY ts DESC LIMIT 2000/.test(sql)) throw new Error("unexpected history query: " + sql);
+    return history.filter((r) => r.ts < bound && r.ts >= since).sort((a, b) => b.ts - a.ts).slice(0, 2000);
   } }) } : null;
-  return new Function("sanitizeHeight", "sharedDb", "MONITOR_INTERVAL_MS", "CHAIN_STATIC_RUN_MIN_24H",
-    code + "\nreturn { t: heightTracker, update: updateHeightTracker, movement: heightMovement };")(sanitizeHeight, db, MONITOR_INTERVAL_MS, CHAIN_STATIC_RUN_MIN_24H);
+  return new Function("sanitizeHeight", "sharedDb", "MONITOR_INTERVAL_MS", "CHAIN_STATIC_RUN_MIN_24H", "OWN_HEIGHT_SINCE",
+    code + "\nreturn { t: heightTracker, update: updateHeightTracker, movement: heightMovement };")(sanitizeHeight, db, MONITOR_INTERVAL_MS, CHAIN_STATIC_RUN_MIN_24H, ownSince);
 }
 // A seed's own height comes from its own peerlist entry (height_source "self").
 const round = (heights) => Object.entries(heights).map(([name, block]) => ({ name, ok: block !== undefined, block, height_source: block === undefined ? null : "self" }));
@@ -40,7 +40,7 @@ function published(t, observedAt, anyHeight = true) {
   const m = current.movement(observedAt, anyHeight);
   return { staticS: m.staticSeconds, advancedAt: m.advancedAtIso ? Date.parse(m.advancedAtIso) : null, reason: m.advancing ? "advancing" : m.stalled ? "unchanged" : "aligned" };
 }
-function fresh2(history) { current = fresh(history); return current; }
+function fresh2(history, ownSince) { current = fresh(history, ownSince); return current; }
 const T0 = 1_800_000_000_000, S = 1000;
 
 console.log("\n[" + TAG + "] start, advance, static");
@@ -177,6 +177,15 @@ console.log("\n[" + TAG + "] restart with retained history");
   update(round({ a: 500, b: 500 }), T0);
   const p = published(t, T0);
   check("D3 a restart after the height moved on: nothing claimed until the next round", p.staticS === null, JSON.stringify(p));
+}
+
+{
+  const hist = [];
+  for (let k = 1; k <= 30; k++) hist.push({ ts: T0 - k * 20 * S, median_block: 500 });   // 10 minutes at 500, all before the rule change
+  const { t, update } = fresh2(hist, T0 - 5 * 20 * S);                                   // own heights since 100 s ago
+  update(round({ a: 500, b: 500 }), T0);
+  const p = published(t, T0);
+  check("D4 history from before seeds counted only their own heights is not read (a lower bound from the change)", p.staticS === 100 && p.advancedAt === null && p.reason === "aligned", JSON.stringify(p));
 }
 
 console.log("\n[" + TAG + "] blocks advanced in the last 24 hours (as observed)");

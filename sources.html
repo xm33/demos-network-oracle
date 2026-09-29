@@ -13,7 +13,7 @@
     <div class="wrap">
       <div>
         <h1>Sources</h1>
-        <p class="doc-lede">Path A is three public Kynesys /info URLs, one org. A stranger with those URLs gets the same /organism. That is the independence that matters.</p>
+        <p class="doc-lede">Path A is three public Kynesys /info URLs, one org. Anyone can read the same URLs, and the rules that turn their answers into status are published. That is the independence that matters.</p>
       </div>
     </div>
   </header>
@@ -36,7 +36,7 @@
           <li><strong>Sources.</strong> Each configured seed's <code>/info</code> is fetched every 20 seconds, in parallel.</li>
           <li><strong>Observation.</strong> Whether each seed answered, its own block height (its own peerlist entry), its version and its peerlist. A seed that does not list itself has no height here.</li>
           <li><strong>Aggregation.</strong> The seeds' own heights are compared with deterministic rules: the median, a ±25-block band, agreement.</li>
-          <li><strong>Public state.</strong> Status and the other six values on <code>/organism</code>. The same inputs always produce the same public state.</li>
+          <li><strong>Public state.</strong> Status and the other six values on <code>/organism</code>. The same inputs, history and observation age always produce the same public state.</li>
         </ol>
         <p>Status uses only those seeds. The resulting state reflects agreement, disagreement and uncertainty across them.</p>
       </section>
@@ -50,11 +50,11 @@
               <tr><td data-label="Layer">Public seeds</td><td data-label="Reads">Kynesys-operated public endpoints: kyne-node2, kyne-node3, kyne-node3b. One operator: node3b is a second port on the same host as node3, not a fourth org, and a second hostname that points at node3 is an alias, not a fourth seed.</td><td data-label="Enters status">yes, and nothing else does</td></tr>
               <tr><td data-label="Layer">Peer-listed identities</td><td data-label="Reads">Identities copied from the seeds' own peerlists, with what those peerlists reported (online flag, sync status, advertised height). A new identity is kept after two public peerlists have listed it. DNO does not dial them.</td><td data-label="Enters status">no</td></tr>
               <tr><td data-label="Layer">Cross-check RPCs</td><td data-label="Reads">Public Demos RPC endpoints, dialed once per fleet cycle: answered or not, and latency. DAHR is attempted there (see below).</td><td data-label="Enters status">no</td></tr>
-              <tr><td data-label="Layer">Fixnet (reference)</td><td data-label="Reads">The fixnet anchor's peerlist. Its rows are probed for reachability, height and latency only when the address they advertise is a public http origin; other rows are shown as not probed. Trust origin on fixnet: the Kynesys anchor only.</td><td data-label="Enters status">no</td></tr>
+              <tr><td data-label="Layer">Fixnet (reference)</td><td data-label="Reads">The peerlists of DNO's operator's own fixnet nodes, and of an anchor node when one is configured. The identities they list are probed for reachability, height and latency only when the address they advertise is a public http origin; other rows are shown as not probed. The operator's own nodes are not rows of the table; a configured anchor is, and heights are shown against it.</td><td data-label="Enters status">no</td></tr>
             </tbody>
           </table>
         </div>
-        <p>Peer-listed identities and fixnet rows are shown as discovered- plus the last 4 characters of the identity. No operator names are shown.</p>
+        <p>No row for a discovered identity carries an operator name: peer-listed identities appear as a truncated key on <code>/reference</code> and as discovered- plus the last 4 characters elsewhere, and discovered fixnet rows as discovered- plus the last 4 characters.</p>
       </section>
 
       <section id="separation">
@@ -78,14 +78,14 @@
 
       <section id="dahr">
         <h2>DAHR</h2>
-        <p>DAHR, the Demos Data Agnostic HTTPS Relay, is attempted on the cross-check RPCs, not on the seeds whose answers enter status. <code>/health</code> reports it in <code>attestation</code>: <code>available</code>, <code>last_count</code> (how many of those RPCs returned an attestation object this cycle) and <code>last_ok_at</code>. <code>/organism</code> carries no attestation.</p>
-        <p>While <code>on_chain_publication</code> is <span class="val">disabled</span>, no observation post is sent on chain. DAHR does not remove observational limits or guarantee future conditions. What one DAHR call records, and what it does not, is on <a href="/about-demos#dahr">About Demos</a>.</p>
+        <p>DAHR, the Demos Data Agnostic HTTPS Relay, is attempted on the cross-check RPCs, not on the seeds whose answers enter status. <code>/health</code> reports it in <code>attestation</code>: <code>available</code>, <code>last_count</code> (how many of those relays returned a transaction hash this cycle) and <code>last_ok_at</code>. <code>/organism</code> carries no attestation.</p>
+        <p>While <code>on_chain_publication</code> is <span class="val">disabled</span>, DNO sends none of its own posts on chain (fleet alerts, recoveries, daily summaries; the public reading is never posted). The relays still happen: per the Demos docs each relay call creates a transaction, and DNO does not check that it was included. DAHR does not remove observational limits or guarantee future conditions. What one DAHR call records, and what it does not, is on <a href="/about-demos#dahr">About Demos</a>.</p>
       </section>
 
       <section id="limits">
         <h2>Limits</h2>
         <p>Oracle outputs are based on externally observable signals available during each measurement cycle. Public endpoint availability, temporary network conditions or incomplete visibility may affect results. Outputs should be read as structured observed assessments, not guarantees of present or future network behavior.</p>
-        <p>Inclusion of an identity in Oracle outputs does not imply endorsement, approval, or certification.</p>
+        <p>A row in DNO's outputs is an observation of an identity or an endpoint, not a statement about whoever runs it.</p>
         <div class="aside"><p>The Oracle is a watch-only observability system with respect to the Demos network it observes: it does not command validators, advise operators, or predict outcomes. While on-chain publication is disabled, its on-chain activity is limited to DAHR requests on the cross-check RPCs. It does not provide financial, operational, legal, or governance advice.</p></div>
       </section>
     </article>

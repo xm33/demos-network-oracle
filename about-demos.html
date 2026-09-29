@@ -213,7 +213,7 @@
 
       <section id="validators" aria-labelledby="h-val">
         <h2 id="h-val">Validators</h2>
-        <p>In the Demos docs, a validator is “an on-chain row in the <code>validators</code> table”. Its status moves through three states, driven by three transactions (<a href="https://docs.kynesys.xyz/backend/validator-lifecycle/overview">validator lifecycle</a>).</p>
+        <p>In the Demos docs, a validator is “an on-chain row in the <code>validators</code> table”. Its status moves through three states, driven by three transactions: <code>validatorStake</code>, <code>validatorUnstake</code> and <code>validatorExit</code> (<a href="https://docs.kynesys.xyz/backend/validator-lifecycle/overview">validator lifecycle</a>).</p>
         <figure class="fig" id="lifecycle" aria-labelledby="sm-cap">
           <div class="fig-tools"><span class="dim">Select a state to see its moves.</span></div>
           <div class="fig-body">
@@ -283,7 +283,7 @@
               <li><span class="k">A shard for block <span id="sd-block">1</span></span><div class="sd-shard" id="sd-shard" aria-live="polite"></div></li>
             </ol>
           </div>
-          <figcaption id="sd-cap"><span>Illustration of the docs' description, computed in your browser: made-up hashes, twelve generic validators, a shard of four. The shuffle and the shard size are placeholders; the pages linked here do not give them.</span><span class="whose">no network data · DNO does not see this step</span></figcaption>
+          <figcaption id="sd-cap"><span>Illustration of the docs' description, computed in your browser: made-up hashes, twelve generic validators, a shard of four. The pages linked here do not give the following, so they are placeholders: how many recent hashes feed the seed (three here) and how they are combined (their hex joined, then SHA-256), the shuffle (Fisher–Yates on a SHA-256 stream), the shard size, and when out-of-sync validators are skipped (before the shuffle, here).</span><span class="whose">no network data · DNO does not see this step</span></figcaption>
         </figure>
       </section>
 
@@ -310,11 +310,11 @@
               <tr><td data-label="Status"><code>ok</code></td><td data-label="Docs">“All subsystems healthy, main loop alive.”</td><td data-label="HTTP" class="num">200</td></tr>
               <tr><td data-label="Status"><code>degraded</code></td><td data-label="Docs">“At least one non-critical subsystem is failed, but the chain and main loop are alive.”</td><td data-label="HTTP" class="num">200</td></tr>
               <tr><td data-label="Status"><code>dormant</code></td><td data-label="Docs">“The node booted with an empty peer list and intentionally skipped signaling/MCP/TLSNotary/main loop.” Sent with an <code>X-Demos-Dormant: true</code> header.</td><td data-label="HTTP" class="num">200</td></tr>
-              <tr><td data-label="Status"><code>failing</code></td><td data-label="Docs">“The mempool/DB is unreachable, the chain subsystem failed, or the main loop died.”</td><td data-label="HTTP" class="num">503</td></tr>
+              <tr><td data-label="Status"><code>failing</code></td><td data-label="Docs">“The mempool/DB is unreachable, the chain subsystem failed, or the main loop died (and the node is not dormant).”</td><td data-label="HTTP" class="num">503</td></tr>
             </tbody>
           </table>
         </div>
-        <p>Readiness is not a separate flag in those docs: a readiness probe should “inspect dormant / the X-Demos-Dormant header or require boot.complete === true”.</p>
+        <p>On readiness, the same page adds that “a probe wanting to gate traffic until consensus participation can additionally inspect dormant / the X-Demos-Dormant header or require boot.complete === true”.</p>
         <div class="aside">
           <span class="aside-k">What DNO sees of this</span>
           <p>None of these words. DNO reads each seed's <code>/info</code>, not its <code>/health</code>, and none of these statuses appears in DNO's reading. The peerlists DNO reads carry an online flag and one more status flag for each listed peer. DNO shows the online flag as peer-reported and leaves the other flag out, because the pages linked here do not say what it means.</p>
@@ -340,8 +340,7 @@
           <div>
             <h3>What one call records</h3>
             <ul>
-              <li>That a Demos node fetched this URL and received a response.</li>
-              <li>SHA-256 hashes of that response's body and headers, anchored in one on-chain transaction.</li>
+              <li>SHA-256 hashes of the response's body and headers, in one on-chain <code>web2Request</code> transaction.</li>
               <li>Anyone holding the same response bytes can hash them and compare.</li>
             </ul>
           </div>
@@ -362,12 +361,12 @@
         <ol>
           <li>Each cycle DNO dials its cross-check RPCs. For each one that answers, it asks a Demos node, through the SDK, to relay a <code>GET</code> of that RPC through DAHR.</li>
           <li>It counts an attestation only when a transaction hash comes back, and keeps the URL, the transaction hash, the response hash, the HTTP status and the time.</li>
-          <li>Those records would travel with an on-chain post of the reading. On-chain publication is disabled, so nothing is posted.</li>
-          <li><code>/health</code> reports the state in <code>attestation</code>: <code>available</code>, <code>last_count</code> (how many of those RPCs returned an attestation object this cycle) and <code>last_ok_at</code>.</li>
+          <li>When on-chain publication is enabled, DNO attaches those records to its fleet alerts and daily summaries, never to the public reading. On-chain publication is disabled, so DNO posts none of them. The relays themselves still happen: per the Demos docs each relay call creates a <code>web2Request</code> transaction, and DNO counts a relay when a transaction hash comes back, without checking that the transaction was included.</li>
+          <li><code>/health</code> reports the state in <code>attestation</code>: <code>available</code>, <code>last_count</code> (how many of those relays returned a transaction hash this cycle) and <code>last_ok_at</code>.</li>
         </ol>
         <div class="aside">
           <span class="aside-k">Not the seeds</span>
-          <p>The three seeds whose answers enter status are not relayed through DAHR, and <code>/organism</code> carries no attestation. That is why the homepage says <em>Observe. Explain.</em> and mentions DAHR once, under the API, and only while <code>attestation.available</code> is true.</p>
+          <p>The three seeds whose answers enter status are not relayed through DAHR, and <code>/organism</code> carries no attestation. That is why the homepage says <em>Observe. Explain.</em> and mentions DAHR once, under the API: the sentence about the cross-check RPCs while <code>attestation.available</code> is true, and “DAHR attestation unavailable” while it is false.</p>
         </div>
       </section>
 
@@ -390,10 +389,10 @@
               <tr data-f="not"><td data-label="Word"><code>ok</code> <code>degraded</code> <code>dormant</code> <code>failing</code></td><td data-label="Whose">the node's own <code>GET /health</code></td><td data-label="Meaning">ok: subsystems and main loop up. degraded: something non-critical failed, chain still up. dormant: booted with no peers and skipped work on purpose. failing: chain, mempool or main loop down.</td><td data-label="DNO sees it?">No. DNO reads <code>/info</code>, not <code>/health</code>.</td></tr>
               <tr data-f="not"><td data-label="Word"><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></td><td data-label="Whose">the on-chain <code>validators</code> table</td><td data-label="Meaning">a validator row's status. ACTIVE is eligible for shard selection.</td><td data-label="DNO sees it?">No.</td></tr>
               <tr data-f="not"><td data-label="Word">out of sync</td><td data-label="Whose">consensus, Phase 1</td><td data-label="Meaning">that validator is skipped for shard composition on those blocks. It is not slashing.</td><td data-label="DNO sees it?">No.</td></tr>
-              <tr data-f="sees"><td data-label="Word"><code>stable</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">this cycle's reading of the public seeds: they answered and their heights agree, with no warning or critical public incident.</td><td data-label="DNO sees it?">Yes. It is not <code>ok</code>, and it is not <code>ACTIVE</code>.</td></tr>
-              <tr data-f="sees"><td data-label="Word"><code>strong</code> agreement</td><td data-label="Whose">DNO</td><td data-label="Meaning">the seeds' own heights sit within DNO's band, ±25 blocks of the median.</td><td data-label="DNO sees it?">Yes, for seeds that reported their own height.</td></tr>
-              <tr data-f="sees"><td data-label="Word"><code>sufficient</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">DNO got at least two heights and the reading is not stale.</td><td data-label="DNO sees it?">Yes. It describes DNO's vantage, not the network.</td></tr>
-              <tr data-f="sees"><td data-label="Word"><code>reachable</code> <code>unreachable</code></td><td data-label="Whose">DNO, probed seeds only</td><td data-label="Meaning">a seed answered DNO's <code>/info</code> request, or did not.</td><td data-label="DNO sees it?">Yes, for the three seeds only.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>stable</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">this cycle's reading of the public seeds: at least two reported their own height, those heights agree (strong), and no warning or critical public incident is active.</td><td data-label="DNO sees it?">Yes. It is not <code>ok</code>, and it is not <code>ACTIVE</code>.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>strong</code> agreement</td><td data-label="Whose">DNO</td><td data-label="Meaning">every own height sits within DNO's band, ±25 blocks of the median, and the spread is at most 20 blocks.</td><td data-label="DNO sees it?">Yes, for seeds that reported their own height.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>sufficient</code></td><td data-label="Whose">DNO</td><td data-label="Meaning">at least two seeds reported their own height, and the observation is at most 300 s old.</td><td data-label="DNO sees it?">Yes. It describes DNO's vantage, not the network.</td></tr>
+              <tr data-f="sees"><td data-label="Word"><code>reachable</code> <code>unreachable</code></td><td data-label="Whose">DNO, for endpoints it dials</td><td data-label="Meaning">an endpoint DNO dialed answered, or did not: the probed seeds on the homepage, the cross-check RPCs on <code>/federate</code>, the probed fixnet rows on <code>/reference</code>.</td><td data-label="DNO sees it?">Yes, for those endpoints. Never for peer-listed identities, which DNO does not dial.</td></tr>
               <tr data-f="sees"><td data-label="Word">peer-reported</td><td data-label="Whose">a seed's peerlist</td><td data-label="Meaning">what a public peerlist said about another identity. DNO did not dial it.</td><td data-label="DNO sees it?">As reported, never confirmed.</td></tr>
             </tbody>
           </table>
@@ -404,7 +403,7 @@
       <section id="cannot-see" aria-labelledby="h-cannot">
         <h2 id="h-cannot">What DNO cannot see</h2>
         <ul class="limits">
-          <li>Who is in a shard, or who the secretary is.</li>
+          <li>Who is in a shard.</li>
           <li>The <code>validators</code> table: which identities are ACTIVE, UNSTAKING or EXITED, and any stake.</li>
           <li>Votes, admission, and the health and sync checks consensus applies.</li>
           <li>A node's own <code>/health</code> status.</li>
