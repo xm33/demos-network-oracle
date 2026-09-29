@@ -69,6 +69,15 @@ check("H19 lookup is requested in one place, inside the explicit button's handle
 check("H20 no readiness flag in public output (toPublicPeer, catalog rows, validator_growth rows)", !/readiness_flag\s*:|reported_readiness_flag|reported_ready\b/.test(SRC)
   && !/^\s+ready: /m.test(SRC.slice(SRC.indexOf("function toPublicPeer"), SRC.indexOf("function toPublicPeer") + 900)));
 
+check("H21 homepage has no Attest tagline and no /dashboard link", !/Observe\. Attest\. Explain\./.test(HOME) && !/href="\/dashboard"/.test(HOME));
+// The homepage header and the site kit's header list the same links in the same order.
+const navAgent = [...SRC.slice(SRC.indexOf("var SITE_NAV = ["), SRC.indexOf("];", SRC.indexOf("var SITE_NAV = ["))).matchAll(/\["(\/[a-z\/-]+)", "[a-z-]+", "([^"]+)"\]/g)].map((m) => m[1] + " " + m[2]);
+const navHome = [...(HOME.match(/<nav class="nav" aria-label="Primary">([\s\S]*?)<\/nav>/) || ["", ""])[1].matchAll(/<a href="(\/[a-z\/-]+)">([^<]+)<\/a>/g)].map((m) => m[1] + " " + m[2]);
+check("H22 homepage nav = site nav", navAgent.length === 7 && JSON.stringify(navAgent) === JSON.stringify(navHome), navHome.join(", "));
+const kitCss = readFileSync(join(ROOT, "assets", "site.css"), "utf8");
+const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf("/* chrome:end */"));
+check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
+check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those RPCs returned an attestation object.") && HOME.includes("' On-chain publication of the reading is disabled.'") && HOME.includes("'DAHR attestation unavailable'"));
 console.log("\n[" + TAG + "] served (base: " + BASE + ")");
 async function get(path, headers) { const r = await fetch(BASE + path, { headers: headers || {} }); let body = null; try { body = await r.clone().json(); } catch (e) { body = await r.text(); } return { status: r.status, headers: r.headers, body }; }
 try {
@@ -147,6 +156,20 @@ try {
   const firstPeer = pn.filter((n) => n.height_source === "first_peer").map((n) => n.name);
   const vgSeeds = (vg.validators || []).filter((v) => v.monitored && firstPeer.includes(v.display));
   check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));
+  // Site kit: assets under a content hash, cached; every page carries the one header with the locked mark.
+  const aboutPage = await get("/about-demos");
+  const aboutHtml = typeof aboutPage.body === "string" ? aboutPage.body : "";
+  const kitRefs = [...new Set(aboutHtml.match(/\/assets\/(?:site|dno-favicon)-[0-9a-f]{8}\.(?:css|js|png)/g) || [])];
+  let kitOk = kitRefs.length === 3;
+  for (const a of kitRefs) { const r = await fetch(BASE + a); kitOk = kitOk && r.status === 200 && /immutable/.test(r.headers.get("cache-control") || ""); }
+  check("S37 site kit assets are served under a content hash, immutable", kitOk, kitRefs.join(", "));
+  const pages = ["/about-demos", "/methodology", "/sources", "/agent", "/criteria", "/commerce", "/commerce/methodology", "/reference", "/timeline", "/docs"];
+  const badPages = [];
+  for (const pth of pages) {
+    const r = await get(pth); const t = typeof r.body === "string" ? r.body : "";
+    if (r.status !== 200 || !t.includes('<header class="site-head">') || !t.includes('src="/assets/dno-mark-' + markSha.slice(0, 8) + '.jpg"') || t.includes("<!--dno:") || /cx="50" cy="19"|class="doc-logo"|href="\/dashboard"/.test(t)) badPages.push(pth);
+  }
+  check("S38 every page: the site header with the locked mark, markers filled, no old mark, no /dashboard link", badPages.length === 0, badPages.join(", "));
   const docs = await get("/docs");
   const docsHtml = typeof docs.body === "string" ? docs.body : "";
   check("S36 /docs prints no full wallet or identity and no /dashboard link", docs.status === 200 && !FULL_ID.test(docsHtml) && !/0x[0-9a-fA-F]{40}\b/.test(docsHtml) && !/href="\/dashboard"/.test(docsHtml));
