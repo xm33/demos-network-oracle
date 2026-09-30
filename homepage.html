@@ -409,6 +409,7 @@ svg text { font-family: var(--sans); }
 .find-actions[hidden] { display: none; }
 .find-actions .fine { margin: 0; }
 #lookup-result:empty { display: none; }
+.lk-chain { display: block; margin-top: 6px; }
 .cat-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px; margin: 6px 0 10px; }
 .cat-cap { margin: 0; max-width: 40rem; }
 .cat-filter[hidden] { display: none; }
@@ -2218,6 +2219,19 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     $('cat-filter').querySelectorAll('.btn').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     applySearch(true);
   });
+  // Where the key stands on the agreed validators list, when the server says (on_chain on /catalog/lookup). That key only;
+  // a separate sentence from the catalog's, with its own source, never added to it.
+  function onChainLine(v) {
+    if (!v || typeof v !== 'object') return '';
+    if (v.state === 'agreed' && typeof v.status === 'string') {
+      const at = parseTime(v.observed_at);
+      const src = `${isNum(v.seeds_agreed) && isNum(v.seeds_configured) ? `${v.seeds_agreed} of ${v.seeds_configured} public seeds` : 'two or more public seeds'}${at != null ? `, read ${clock(at)}` : ''}`;
+      const what = { ACTIVE: 'ACTIVE', UNSTAKING: 'UNSTAKING', other: 'listed with another status',
+        not_listed: 'not listed. The SDK describes this list as the validators in force at the block read, so a key that has exited, or whose stake takes effect at a later block, is not on it either' }[v.status];
+      return what ? `On the agreed validators list (${src}): ${what}.` : '';
+    }
+    return `On the validators list: not reported${typeof v.reason === 'string' && v.reason ? `: ${v.reason}` : ''}.`;
+  }
   // Exact-key check: sent only when the button is pressed, and only for a full key.
   let lookupSeq = 0;
   $('lookup-btn').addEventListener('click', async () => {
@@ -2234,17 +2248,19 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     const same = catalog.rows.filter((r) => rowMatches(c, r));
     if (err) { out.replaceChildren(`The exact check did not complete: ${err}.`); return; }
     if (!body || typeof body !== 'object' || body.valid_key === false) { out.replaceChildren('DNO did not accept this as a key: a key is 0x followed by 64 hex characters.'); return; }
-    if (typeof body.configured_seed === 'string' && body.configured_seed) { out.replaceChildren(`Exact match: this is the key of configured seed ${body.configured_seed}. Its probe result is under `, toSeeds(), '.'); return; }
+    // The list's answer on a line of its own: two populations, two sentences, each with its source.
+    const vl = onChainLine(body.on_chain), then = vl ? [el('span', { class: 'lk-chain', text: vl })] : [];
+    if (typeof body.configured_seed === 'string' && body.configured_seed) { out.replaceChildren(`Exact match: this is the key of configured seed ${body.configured_seed}. Its probe result is under `, toSeeds(), '.', ...then); return; }
     if (body.in_catalog === true) {
       const row = body.row && typeof body.row === 'object' ? body.row : null;
       const fs = row ? parseTime(row.first_seen) : null;
-      out.replaceChildren(`Exact match: DNO's retained catalog holds this key${row && typeof row.display === 'string' ? ` as ${row.display}` : ''}${fs != null ? `, first recorded ${stamp(fs)}` : ''}.`);
+      out.replaceChildren(`Exact match: DNO's retained catalog holds this key${row && typeof row.display === 'string' ? ` as ${row.display}` : ''}${fs != null ? `, first recorded ${stamp(fs)}` : ''}.`, ...then);
       return;
     }
-    if (body.error) { out.replaceChildren('The exact check is unavailable on this DNO instance right now.'); return; }
+    if (body.error) { out.replaceChildren('The exact check of the catalog is unavailable on this DNO instance right now.', ...then); return; }
     openRow.noAutoFor = $('find').value;
     if (openRow.via === 'search') { openRow.key = null; openRow.via = null; applySearch(true); }
-    out.replaceChildren(`No exact match: this key is not in DNO's retained catalog.${same.length === 1 ? ` ${same[0].name} shares its published characters but is a different key.` : same.length > 1 ? ` The ${same.length} rows that share its published characters are different keys.` : ''}`);
+    out.replaceChildren(`No exact match: this key is not in DNO's retained catalog.${same.length === 1 ? ` ${same[0].name} shares its published characters but is a different key.` : same.length > 1 ? ` The ${same.length} rows that share its published characters are different keys.` : ''}`, ...then);
   });
   $('find').addEventListener('input', () => applySearch(false));
   // Ctrl+K (Cmd+K on a Mac) jumps to Find a node. A modified key, so typing never triggers it (WCAG 2.1.4).
@@ -2316,7 +2332,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       what10: 'The public reading: the 17 required fields. The contract is /organism/schema.' },
     health: { path: '/health', what: 'The same reading with its parts: publicNodes (each seed, with height_source), validator_growth (seed counts and peer-listed identities), attestation, on_chain_publication, and on_chain_validators and validator_watch (counts only; neither enters status).',
       what10: 'The same reading with its parts: publicNodes (each seed), validator_growth (seed counts and recorded identities), attestation and on_chain_publication.' },
-    catalog: { path: '/catalog?listed=not', what: 'Peer-listed identities the latest crawl did not list, sanitized: display name, truncated key, first and last listing. ?q= filters. /catalog/lookup?key=0x… checks one full key and never returns a key.' },
+    catalog: { path: '/catalog?listed=not', what: 'Peer-listed identities the latest crawl did not list, sanitized: display name, truncated key, first and last listing. ?q= filters. /catalog/lookup?key=0x… checks one full key against the catalog and, while two seeds agree on a list read in the last 300 s, the validators list; it never returns a key.' },
     incidents: { path: '/incidents?scope=public&status=active', what: 'Active public records. Each row has kind: incident, or condition for the records DNO opens about its own reading. /organism\'s active_incidents leaves the condition records out; this endpoint\'s own active count includes them.',
       what10: 'Active public incident rows. Takes status, scope and limit.' },
     peers: { path: '/peers', what: 'The latest crawl only: truncated identities with what the public peerlists reported about them. Never dialed.',

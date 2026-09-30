@@ -33,7 +33,7 @@ import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./con
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
-import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence } from "./validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus } from "./validator-watch.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -224,7 +224,7 @@ docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1�
 '</dl></section>' +
 '<section id="identities"><h2>Peer-listed identities</h2><dl class="kv docs-kv">' +
 docsEntry('GET /catalog', 'Identities listed on the public seeds\' peerlists, kept after two public peerlists have listed them (one peerlist brings at most 50 new identities into that count per crawl): first recorded (first_seen), last listed, and what the peerlists reported in the latest crawl. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations. Never dialed.') +
-docsEntry('GET /catalog/lookup?key=0x…', 'Exact check of one full key against the catalog and the configured seeds. Returns the sanitized row only, never a key.') +
+docsEntry('GET /catalog/lookup?key=0x…', 'Exact check of one full key against the catalog and the configured seeds. Returns the sanitized row only, never a key. on_chain says where that key stands on the agreed validators list (ACTIVE, UNSTAKING, other or not_listed), only while two seeds return the same list, read in the last 300 s.') +
 docsEntry('GET /peers', 'The latest crawl only: truncated identities with the peer-reported height, online flag, sync status and how many public peerlists listed them. Connections are never exposed.') +
 '</dl></section>' +
 '<section id="pages"><h2>Pages</h2><dl class="kv docs-kv">' +
@@ -3206,10 +3206,13 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, catHdrs);
       res.end(JSON.stringify(cat, null, 2));
     } else if (reqPath === "/catalog/lookup") {
-      // Exact check of a full key against retained identities; answers yes/no and the sanitized row only.
+      // Exact check of a full key against retained identities; answers yes/no and the sanitized row only. For a valid key
+      // it also says where that key stands on the agreed validators list (on_chain): that key only, never another.
       var lkKey = (reqQuery.get("key") || "").trim();
+      var lk = lookupCatalogKey(lkKey);
+      lk.on_chain = lk.valid_key ? listedStatus(latestValidatorRound, lkKey, Date.now(), validatorPublishConfig()) : null;
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify(lookupCatalogKey(lkKey), null, 2));
+      res.end(JSON.stringify(lk, null, 2));
     } else if (reqPath === "/history") {
       // Return last 24h of data points
       var last24h = history.slice(-72);

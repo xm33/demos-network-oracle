@@ -7,7 +7,7 @@
 // every-round window; versions sanitised; stale and disabled states; counts only in what is published.
 // Run: bun src/validator-watch.test.mjs   (executable harness, not `bun test`)
 
-import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence } from "./validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence, listedStatus } from "./validator-watch.mjs";
 import { Database } from "bun:sqlite";
 import { parseProbeOrigin, resolvePublicProbeOrigin } from "./public-safety.mjs";
 
@@ -252,6 +252,25 @@ console.log("\n[" + TAG + "] the sentence for readers without JavaScript");
     && s3.includes(" 5 listed keys share 2 published origins, each with a key that answered. That is not 5 nodes down. Not in status.") && !/no address/.test(s3), s2 + " | " + s3);
   check("N3 no agreed list: no sentence; dials off: the list only", validatorsSentence(Object.assign({}, oc, { state: "not_agreed" }), w) === null
     && validatorsSentence(oc, { state: "disabled" }) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Not in status.");
+}
+
+console.log("\n[" + TAG + "] find a node: one key against the agreed list");
+{
+  const r = await round();
+  const at = r.listAt;
+  const k11 = listedStatus(r, KEY(0x11), at, {}), k1e = listedStatus(r, KEY(0x1e).toUpperCase().replace("0X", "0x"), at, {}), k25 = listedStatus(r, KEY(0x25), at, {}), k99 = listedStatus(r, KEY(0x99), at, {});
+  check("F1 a key on the agreed list: ACTIVE, UNSTAKING, another status; a key not on it: not_listed (case-insensitive)",
+    k11.status === "ACTIVE" && k1e.status === "UNSTAKING" && k25.status === "other" && k99.status === "not_listed" && k11.state === "agreed" && k11.seeds_agreed === 2, JSON.stringify([k11, k1e, k25, k99]));
+  const stale = listedStatus(r, KEY(0x11), at + 10 * 60000, {});
+  SEED.b = { list: BASE_ROWS.slice(0, 5), stake: "1" }; SEED.c = { list: BASE_ROWS.slice(0, 4), stake: "2" };
+  const rd = await round();
+  SEED.b = { list: BASE_ROWS, stake: "1000000000000" }; SEED.c = { list: BASE_ROWS.slice(0, 5), stake: "2000000000000" };
+  const differ = listedStatus(rd, KEY(0x11), rd.listAt, {}), none = listedStatus(null, KEY(0x11), at, {}), bad = listedStatus(r, "0xzz", at, {});
+  check("F2 no agreed or fresh list: no status, the list's own reason; a malformed key is not_listed",
+    stale.status === null && stale.reason === "the last read is older than 300 s" && differ.status === null && /different validator lists/.test(differ.reason)
+    && none.status === null && none.reason === "no read has completed yet" && bad.status === "not_listed", JSON.stringify([stale, differ, none, bad]));
+  const txt = JSON.stringify([k11, k1e, k25, k99, stale, differ]);
+  check("F3 the answer carries no key, URL, stake or time other than when the list was read", FORBIDDEN(txt).length === 0 && Object.keys(k11).sort().join(",") === "observed_at,reason,seeds_agreed,seeds_configured,state,status", FORBIDDEN(txt).join(" "));
 }
 
 console.log("\n[" + TAG + "] every round, last hour");

@@ -69,7 +69,7 @@
           <div><dt><a href="/organism">/organism</a></dt><dd>The public reading. The contract is <a href="/organism/schema">/organism/schema</a>.</dd></div>
           <div><dt><a href="/health">/health</a></dt><dd>The same reading with its parts: each seed, <code>validator_growth</code>, attestation state, and the on-chain validator counts (<code>on_chain_validators</code>, <code>validator_watch</code>).</dd></div>
           <div><dt><a href="/incidents">/incidents</a></dt><dd>Public records; each row is an incident or a condition record.</dd></div>
-          <div><dt><a href="/catalog">/catalog</a></dt><dd>Peer-listed identities, sanitized. <code>/catalog/lookup?key=0x…</code> checks one full key and never returns a key.</dd></div>
+          <div><dt><a href="/catalog">/catalog</a></dt><dd>Peer-listed identities, sanitized. <code>/catalog/lookup?key=0x…</code> checks one full key against the catalog and the agreed validators list, and never returns a key.</dd></div>
           <div><dt><a href="/peers">/peers</a></dt><dd>The latest crawl only, truncated identities.</dd></div>
           <div><dt><a href="/federate">/federate</a></dt><dd>Prometheus metrics: version, and cross-check RPC reachability and latency under neutral names.</dd></div>
           <div><dt><a href="/badge">/badge</a></dt><dd>An SVG of the current status word.</dd></div>

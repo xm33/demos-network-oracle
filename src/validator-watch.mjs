@@ -485,6 +485,20 @@ export function publicValidatorWatch(round, nowMs, cfg) {
   return out;
 }
 
+// Find a node: where one full key the reader supplied stands on the agreed validators list. The status of that key only,
+// never another key, a URL, stake, a first-agreed time or a dial outcome, and only while the list is agreed and fresh;
+// otherwise status is null and reason is the list's own. getValidators holds rows still active at a block, so an EXITED
+// key is not_listed like a key that never staked.
+export function listedStatus(round, key, nowMs, cfg) {
+  var oc = publicOnChainValidators(round, nowMs, cfg);
+  var out = { state: oc.state, status: null, seeds_agreed: oc.seeds_agreed, seeds_configured: oc.seeds_configured, observed_at: oc.observed_at, reason: oc.reason };
+  if (oc.state !== "agreed") return out;
+  var k = keyOf(key), hit = null;
+  if (k !== null) for (var i = 0; i < round.list.rows.length; i++) if (round.list.rows[i].key === k) { hit = round.list.rows[i]; break; }
+  out.status = !hit ? "not_listed" : hit.status === STATUS_ACTIVE ? "ACTIVE" : hit.status === STATUS_UNSTAKING ? "UNSTAKING" : "other";
+  return out;
+}
+
 // The sentence the agent writes into the homepage for readers without JavaScript, from the two published objects:
 // counts only, and the rows the ladder does not show accounted for as the page does. null outside the agreed state.
 export function validatorsSentence(oc, w) {

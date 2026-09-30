@@ -279,7 +279,7 @@ Agent feed: <a href="/organism">/organism</a> — 17 required fields, public-onl
 Contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema, stability policy, changelog. The schema is the binding contract; this page is the explanation. If they ever disagree, the schema governs and the discrepancy is a bug.<br>
 Full diagnostic: <a href="/health">/health</a> — canonical + derived.<br>
 Incident log: <a href="/incidents">/incidents</a> — public scope; condition records marked <code>kind: "condition"</code>.<br>
-Peer-listed identities: <a href="/catalog">/catalog</a> — identities listed on the public seeds' peerlists; <code>/catalog/lookup?key=</code> checks a full key exactly.<br>
+Peer-listed identities: <a href="/catalog">/catalog</a> — identities listed on the public seeds' peerlists; <code>/catalog/lookup?key=</code> checks a full key exactly, against the catalog and, while two seeds return the same list (read in the last 300 s), the validators list.<br>
 API documentation: <a href="/docs">/docs</a><br>
 Agent guide: <a href="/agent">/agent</a><br>
 

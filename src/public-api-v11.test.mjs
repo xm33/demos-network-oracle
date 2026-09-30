@@ -187,6 +187,19 @@ try {
     && [[0, 1], [1, 2], [0, 2]].every(([a, b]) => win[a] === null || win[b] === null || win[a] <= win[b])
     && (ocv.first_agreed_since === null || ocv.first_agreed_as_of === null || Date.parse(ocv.first_agreed_since) <= Date.parse(ocv.first_agreed_as_of));
   check("V8 on_chain_validators first-agreed windows: counts or null with a reason, today <= week <= month", ocv && nest, ocv && JSON.stringify(win) + " " + ocv.first_agreed_reason);
+  // SPEC-v7.1 F: the full-key check says where that key stands on the agreed list, for that key only.
+  // The lookup reads the same round, under the same freshness rule, as /health (a round may land between the reads).
+  const h9a = (await get("/health")).body.on_chain_validators;
+  const lkOk = await get("/catalog/lookup?key=" + "0x" + createHash("sha256").update("dno-v9-" + Date.now()).digest("hex")), lkBad = await get("/catalog/lookup?key=0x12");
+  const h9b = (await get("/health")).body.on_chain_validators;
+  const oc9 = lkOk.body && lkOk.body.on_chain;
+  const sameRound = (h) => h && oc9 && oc9.state === h.state && oc9.observed_at === h.observed_at && oc9.seeds_agreed === h.seeds_agreed && oc9.reason === h.reason;
+  check("V10 /catalog/lookup on_chain comes from the same round as /health's on_chain_validators", sameRound(h9a) || sameRound(h9b), JSON.stringify([oc9, h9a && h9a.observed_at, h9b && h9b.observed_at]));
+  check("V9 /catalog/lookup on_chain: a status for a valid key only while the list agrees (a key nobody listed is not_listed), null for an invalid key, never a key in the answer",
+    oc9 && Object.keys(oc9).sort().join(",") === "observed_at,reason,seeds_agreed,seeds_configured,state,status"
+    && (oc9.state === "agreed" ? oc9.status === "not_listed" : oc9.status === null && typeof oc9.reason === "string")
+    && lkBad.body && lkBad.body.valid_key === false && lkBad.body.on_chain === null
+    && !/0x[0-9a-f]{64}/i.test(JSON.stringify(lkOk.body)), JSON.stringify([oc9, lkBad.body && lkBad.body.on_chain]));
   check("V6 /organism carries neither", !("on_chain_validators" in o) && !("validator_watch" in o) && !JSON.stringify(o).includes("min_validator_stake"));
   // Site kit: assets under a content hash, cached; every page carries the one header with the locked mark.
   const aboutPage = await get("/about-demos");
