@@ -331,8 +331,37 @@ svg text { font-family: var(--sans); }
 .rung-s[hidden] { display: none; }
 .ladder[data-mode="oneread"] .rung[data-rung="active"] .rung-n { color: var(--metal-1); }
 .ladder[data-mode="oneread"] .rung[data-rung="active"] .rung-bar > span { background: var(--metal-0); }
-.vw-rest { margin-top: 14px; color: var(--metal-1); max-width: 52rem; }
-.vw-rest[hidden] { display: none; }
+/* Each ACTIVE row, this round: one bar, every row in exactly one part, most observed first (an ordinal metal ramp) */
+.acct { display: grid; grid-template-columns: 13rem 6rem minmax(0, 1fr); column-gap: 24px; row-gap: 10px; align-items: start; padding: 18px 0; }
+.acct[hidden] { display: none; }
+.acct:not([hidden]) + .vw-facts { margin-top: 0; }
+.acct-h { grid-column: 1 / span 2; grid-row: 1 / span 3; }
+.acct-k { font-size: 0.9375rem; color: var(--metal-1); }
+.acct-sub { margin-top: 4px; font: 400 0.8125rem/1.45 var(--mono); color: var(--mute); }
+.acct-sub[hidden] { display: none; }
+.acct-bar { grid-column: 3; grid-row: 1; display: flex; gap: 2px; height: 10px; }
+.acct-bar[hidden] { display: none; }
+.acct-bar > span { flex: var(--n, 1) 1 0; min-width: 3px; }
+.acct-fill[data-k="at"] { background: var(--metal-2); }
+.acct-fill[data-k="as"] { background: var(--metal-1); }
+.acct-fill[data-k="shared"] { background: var(--metal-0); }
+.acct-fill[data-k="other"] { background: var(--unknown); }
+.acct-fill[data-k="noanswer"] { background: repeating-linear-gradient(-45deg, var(--unknown) 0 1px, transparent 1px 4px); box-shadow: inset 0 0 0 1px var(--unknown); }
+.acct-fill[data-k="notdialed"] { background: transparent; border: 1px dashed var(--metal-0); }
+.acct-legend { grid-column: 3; grid-row: 2; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 24px; }
+.acct-legend li { display: inline-flex; align-items: baseline; gap: 8px; font-size: 0.875rem; color: var(--metal-1); }
+.acct-legend b { font: 500 0.9375rem/1 var(--mono); color: var(--ink); }
+.acct-sw { display: inline-block; width: 12px; height: 12px; flex: none; transform: translateY(1px); }
+.acct-notes { grid-column: 3; grid-row: 3; list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 4px; }
+.acct-notes[hidden] { display: none; }
+.acct-notes li { font-size: 0.875rem; color: var(--metal-1); padding-left: 12px; border-left: 1px solid var(--metal-0); }
+.acct.hl-on .acct-bar > span:not(.hl) { opacity: 0.35; }
+.acct-legend li.hl { color: var(--ink); }
+.vw-growth { margin-top: 26px; }
+.vw-growth[hidden] { display: none; }
+.vw-growth[data-mode="oneread"] .n { color: var(--metal-1); }
+.vg-note { flex-basis: 100%; margin: 0; }
+.vg-note[hidden] { display: none; }
 .vw-facts { --cols: 3; margin-top: 18px; }
 .vw-facts[data-n="4"] { --cols: 4; }
 .vw-facts[hidden] { display: none; }
@@ -531,7 +560,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 
 /* ---------- Narrow screens ---------- */
 @media (min-width: 720px) and (max-width: 959px) {
-  .rung { grid-template-columns: 11rem 5rem minmax(0, 1fr); column-gap: 18px; }
+  .rung, .acct { grid-template-columns: 11rem 5rem minmax(0, 1fr); column-gap: 18px; }
 }
 @media (max-width: 859px) {
   .cards, .agree-strip { --cols: 2; }
@@ -577,6 +606,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   .rung-bar { grid-column: 1 / -1; grid-row: 2; }
   .rung-d { grid-column: 1 / -1; grid-row: 3; }
   .rung-s { grid-column: 1 / -1; grid-row: 4; }
+  .acct { grid-template-columns: minmax(0, 1fr); padding: 14px 0; }
+  .acct-h, .acct-bar, .acct-legend, .acct-notes { grid-column: 1; grid-row: auto; }
   .vw-facts, .vw-facts[data-n] { --cols: 1; }
   .vw-facts > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
   .rb-live { display: none; }
@@ -734,9 +765,20 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <p class="rung-s" id="vs-hour" hidden></p>
         </li>
       </ol>
-      <p class="vw-rest" id="vw-rest" hidden></p>
+      <div class="acct" id="vw-acct" hidden>
+        <div class="acct-h"><p class="acct-k">Each ACTIVE row, this round</p><p class="acct-sub" id="acct-sub" hidden></p></div>
+        <div class="acct-bar" id="acct-bar" aria-hidden="true"></div>
+        <ul class="acct-legend" id="acct-legend" aria-label="Each ACTIVE row, this round"></ul>
+        <ul class="acct-notes" id="acct-notes" hidden></ul>
+      </div>
       <div class="strip vw-facts" id="vw-facts" hidden></div>
       <p class="fine vw-cap" id="vw-cap"></p>
+      <div class="seen vw-growth" id="vw-growth" data-mode="pending" hidden>
+        <p class="seen-n"><span class="n none" id="vg-n">reading</span><span class="k">ACTIVE</span></p>
+        <p class="meta" id="vg-line"></p>
+        <p class="fine seen-cap">First counted on an agreed getValidators list. Not the catalog. Not a census.</p>
+        <p class="fine vg-note" id="vg-note" hidden></p>
+      </div>
       <noscript><p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p></noscript>
     </div>
   </section>
@@ -964,6 +1006,9 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <li>Vote counts, any validator's stake, official admission, or any private vantage.</li>
           <li>Whether peer-listed identities answer. They were not dialed.</li>
           <li>Why a validator did not answer DNO. No answer from here does not change its row on chain.</li>
+          <li>What stands behind a published address that several keys share. Its answer names one key.</li>
+          <li>Whether the chain stopped, or only these three seeds did. All three are public URLs of one organization.</li>
+          <li>Blocks and transactions are on the chain explorer. This page is the public reading from named seeds.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
         </ul>
       </div>
@@ -990,6 +1035,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
             <div><dt><code>sufficient</code></dt><dd><span data-v10="at least two seeds answered, and the observation is at most 300 s old.">at least two seeds reported their own height, and the observation is at most 300 s old.</span> It describes DNO's vantage, not the network.</dd></div>
             <div><dt>peer-reported</dt><dd>what a public peerlist said. Never confirmed by DNO.</dd></div>
             <div><dt>at the seeds' height</dt><dd>a validator's own height, in its answer to DNO, within ±25 blocks of the seeds' median. Not Demos' sync check.</dd></div>
+            <div><dt>first counted</dt><dd>on DNO's own clock. A peer-listed identity: when a public peerlist first listed it, once a second has. An ACTIVE key: the first agreed validators list that showed it. Not the chain's <code>firstSeen</code>.</dd></div>
           </dl>
         </div>
         <div>
@@ -1370,7 +1416,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     } else setText($('pl-catalog'), h ? 'not reported' : reads.health.error ? 'not read' : 'reading');
     const vm = validatorModel();
     setText($('pl-validators'), vm.mode === 'oneread' ? `${ONE_READ.active} ACTIVE in one read` : vm.mode === 'live'
-      ? (vm.R.active.n != null ? `${fmtInt(vm.R.active.n)} ACTIVE${vm.R.answered.n != null ? ` · ${fmtInt(vm.R.answered.n)} answered` : ''}` : vm.R.active.text)
+      ? (vm.R.active.n != null ? `${fmtInt(vm.R.active.n)} ACTIVE${vm.R.answered.n != null ? ` · ${fmtInt(vm.R.answered.n)} answered as that key` : ''}` : vm.R.active.text)
       : vm.mode === 'unread' ? 'not read' : 'reading');
     renderPathPanel();
   }
@@ -1433,7 +1479,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         el('p', { text: vm.mode === 'oneread'
           ? `This server does not read the validators table yet. One read with DNO's probe tool on ${stamp(Date.parse(ONE_READ.at))}: two of three public seeds returned the same ${ONE_READ.listed} rows, all ACTIVE.`
           : `${every} DNO sends two read-only calls to the three public seeds: getValidators, the on-chain validators table, and getNetworkParameters. A count is published only when at least two seeds return the same answer.` }),
-        el('p', { text: `${vm.mode === 'oneread' ? 'A server that publishes on_chain_validators also dials' : 'DNO dials'} GET /info once at the address each ACTIVE validator published on chain, only when it is a public http origin: the probe connects to the address it checked, does not follow redirects and reads at most 2 MB. /health publishes counts, never an address, and none of it enters status.` }),
+        el('p', { text: `${vm.mode === 'oneread' ? 'A server that publishes on_chain_validators also dials' : 'DNO dials'} GET /info once at the address each ACTIVE validator published on chain, only when it is a public http origin: the probe connects to the address it checked, does not follow redirects and reads at most 2 MB. An address that several keys publish is dialed once, and its answer names one key. /health publishes counts, never an address, and none of it enters status.` }),
         links(['#validators', 'validators on chain'], ['/methodology#validators', 'methodology'])];
       facts = [
         ['ACTIVE', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : vm.mode === 'oneread' ? dim(`${ONE_READ.active} in one read`) : shown(vm.R.active)],
@@ -1647,7 +1693,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   // ---------- Validators on chain ----------
   // One read made with DNO's probe tool (tools/validator-set-probe.mjs) before any server published the field. Shown, dated
   // and marked, only while /health has no on_chain_validators; never as this cycle.
-  const ONE_READ = { at: '2026-09-29T09:05:39Z', listed: 35, active: 35, stake: '1000000000000' };
+  const ONE_READ = { at: '2026-09-29T11:31:45Z', listed: 35, active: 35, stake: '1000000000000' };
   const RUNGS = ['active', 'answered', 'height', 'hour'];
   // What the ladder shows. mode: pending | unread | oneread (the server has no such field) | live.
   // R[rung] = { n: count or null, text: the word shown when there is no count, note: why }.
@@ -1671,7 +1717,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       const ws = w ? w.state : null;
       if (!w) ['answered', 'height', 'hour'].forEach((k) => put(k, null, 'not reported'));
       else if (ws === 'observed') {
-        put('answered', w.answered_as_listed, 'not reported');
+        const seeds = isNum(w.answered_as_listed_seeds) ? w.answered_as_listed_seeds : 0;
+        put('answered', w.answered_as_listed, 'not reported', seeds > 0 ? `${fmtInt(seeds)} of them ${seeds === 1 ? 'is a public seed' : 'are public seeds'} that status also reads.` : null);
         put('height', w.at_seed_height, 'unknown', isNum(w.at_seed_height) ? null : "The seeds' median is not known this round, so heights were not compared.");
         const win = obj(w.window) || {};
         if (isNum(w.every_round_last_hour)) put('hour', w.every_round_last_hour);
@@ -1687,19 +1734,103 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     }
     return { mode, oc, w, R, base };
   }
-  function validatorRest(w) {
-    const out = [], r = w.not_dialed_reasons || {};
-    if (w.not_dialed > 0) {
-      const why = [[r.not_public_http, 'no public http origin published'], [r.name_unresolved, 'published name did not resolve to a public address'], [r.seeds_differ, 'the seeds list different addresses'], [r.over_cap, 'over the round cap']]
-        .filter(([n]) => isNum(n) && n > 0).map(([n, t]) => `${t}: ${fmtInt(n)}`).join('; ');
-      out.push(`${fmtInt(w.not_dialed)} not dialed${why ? ` (${why})` : ''}`);
-    }
-    if (w.no_answer > 0) out.push(`${fmtInt(w.no_answer)} no answer`);
-    if (w.answered_other_key > 0) out.push(`${fmtInt(w.answered_other_key)} answered with another key`);
-    if (w.answered_no_key > 0) out.push(`${fmtInt(w.answered_no_key)} answered without a key`);
-    if (w.off_seed_height > 0) out.push(`${fmtInt(w.off_seed_height)} away from the seeds' height`);
-    if (w.height_not_reported > 0) out.push(`${fmtInt(w.height_not_reported)} answered without their own height`);
+  // Every ACTIVE row of this round in exactly one part, from the most observed to the least. Parts with no row are left out.
+  function accountingParts(w) {
+    const n = (v) => (isNum(v) ? v : 0), r = w.not_dialed_reasons || {};
+    const kinds = [[n(w.off_seed_height), "away from the seeds' height"], [n(w.height_not_reported), 'no own height in the answer'], [n(w.height_not_compared), 'height not compared this round']].filter(([c]) => c > 0);
+    const why = [[n(r.no_address), 'published no address'], [n(r.not_public_http), 'no public http origin'], [n(r.name_unresolved), 'name did not resolve to a public address'],
+      [n(r.seeds_differ), 'the seeds list different addresses'], [n(r.over_cap), 'over the round cap']].filter(([c]) => c > 0);
+    const shared = n(w.other_key_shared);
+    return [
+      ['at', n(w.at_seed_height), "answered as that key, at the seeds' height"],
+      ['as', kinds.reduce((t, [c]) => t + c, 0), `answered as that key, ${kinds.map(([, t]) => t).join(' or ')}`],
+      ['shared', shared, `${shared === 1 ? 'shares' : 'share'} a published origin with a key that answered`],
+      ['other', n(w.answered_other_key) - shared + n(w.answered_no_key), 'answered with another key, or none'],
+      ['noanswer', n(w.no_answer), 'no answer'],
+      ['notdialed', n(w.not_dialed), `not dialed: ${why.length === 1 ? why[0][1] : why.map(([c, t]) => `${fmtInt(c)} ${t}`).join(', ')}`],
+    ].filter(([, c]) => c > 0);
+  }
+  function accountingNotes(w) {
+    const n = (v) => (isNum(v) ? v : 0), r = w.not_dialed_reasons || {}, out = [];
+    const shared = n(w.other_key_shared), origins = n(w.other_key_shared_origins);
+    // The advisor's sentence (29 Sep), with this round's counts.
+    if (shared > 0) out.push(`${fmtInt(shared)} listed ${shared === 1 ? 'key shares' : 'keys share'} ${origins > 1 ? `${fmtInt(origins)} published origins, each with a key that answered` : 'one published origin with a key that answered'}. That is not ${shared === 1 ? 'a node' : `${fmtInt(shared)} nodes`} down.`);
+    if (n(r.no_address) > 0) out.push(`${fmtInt(r.no_address)} ${r.no_address === 1 ? 'row publishes' : 'rows publish'} no address on chain: there is nothing to dial.`);
+    if (n(w.no_answer) > 0) out.push('No answer is not an exit: the row on chain does not change, and why it did not answer is not known from here.');
     return out;
+  }
+  function renderAccounting(vm) {
+    const box = $('vw-acct'), w = vm.w;
+    if (!(vm.mode === 'live' && w && w.state === 'observed' && isNum(w.watched) && w.watched > 0)) { box.hidden = true; delete box.dataset.sig; return; }
+    const parts = accountingParts(w), notes = accountingNotes(w);
+    // The bar claims every ACTIVE row sits in exactly one part. If the parts a server reports do not add up, no bar is drawn.
+    const whole = parts.reduce((t, [, c]) => t + c, 0) === w.watched;
+    if (!whole) notes.unshift(`These parts do not add up to the ${fmtInt(w.watched)} ACTIVE rows of this round, so no bar is drawn. The counts are as reported.`);
+    const dialedN = w.watched - (isNum(w.not_dialed) ? w.not_dialed : 0);
+    const sub = isNum(w.origins_dialed) ? `${fmtInt(dialedN)} dialed at ${fmtInt(w.origins_dialed)} published ${w.origins_dialed === 1 ? 'origin' : 'origins'}` : `${fmtInt(dialedN)} dialed`;
+    const sig = JSON.stringify([sub, parts, notes, whole]);
+    box.hidden = false;
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    setText($('acct-sub'), sub); $('acct-sub').hidden = false;
+    $('acct-bar').hidden = !whole;
+    $('acct-bar').replaceChildren(...(whole ? parts : []).map(([k, c]) => { const seg = el('span', { class: 'acct-fill', 'data-k': k }); seg.style.setProperty('--n', String(c)); return seg; }));
+    $('acct-legend').replaceChildren(...parts.map(([k, c, t]) => el('li', { 'data-k': k }, el('span', { class: 'acct-fill acct-sw', 'data-k': k, 'aria-hidden': 'true' }), el('b', { text: fmtInt(c) }), el('span', { text: t }))));
+    $('acct-notes').replaceChildren(...notes.map((t) => el('li', { text: t })));
+    $('acct-notes').hidden = !notes.length;
+    markAccounting(acctMark);
+  }
+  // Pointing at a part of the bar or a legend row marks both. The mark is applied again after a re-render, and cleared when
+  // the part it named is gone, so the bar never dims with nothing marked. No information waits behind it: the legend
+  // carries every count.
+  var acctMark = null;             // var: a render before this line runs must not meet a temporal dead zone
+  function markAccounting(k) {
+    const box = $('vw-acct'), parts = box.querySelectorAll('[data-k]');
+    if (k && ![...parts].some((x) => x.dataset.k === k)) k = null;
+    acctMark = k;
+    box.classList.toggle('hl-on', !!k);
+    parts.forEach((x) => x.classList.toggle('hl', !!k && x.dataset.k === k));
+  }
+  $('vw-acct').addEventListener('pointerover', (e) => { const t = e.target.closest('[data-k]'); markAccounting(t ? t.dataset.k : null); });
+  $('vw-acct').addEventListener('pointerleave', () => markAccounting(null));
+  // First counted by DNO: ACTIVE keys first seen on an agreed list in the last 24 h, 7 days and 30 days (the DNO clock).
+  // A window with no figure says "not reported", and why, never +0.
+  function renderGrowth(vm) {
+    const box = $('vw-growth'), { mode, oc } = vm;
+    if (mode === 'pending' || mode === 'unread') { box.hidden = true; return; }
+    const W = [['first_agreed_today', 'today'], ['first_agreed_week', 'this week'], ['first_agreed_month', 'this month']];
+    // In window order: "+n today", and each run of windows without a figure in one clause: "this week, this month: not reported".
+    const line = (src) => {
+      const out = [];
+      let gap = [];
+      const flush = () => { if (gap.length) out.push(`${gap.join(', ')}: not reported`); gap = []; };
+      W.forEach(([f, l]) => { if (src && isNum(src[f])) { flush(); out.push(`+${fmtInt(src[f])} ${l}`); } else gap.push(l); });
+      flush();
+      return out.join(' · ');
+    };
+    let n = null, text, why = null;
+    if (mode === 'oneread') {
+      n = ONE_READ.active; text = line(null);
+      why = `This server does not record first agreed times yet. ${fmtInt(ONE_READ.active)} is the one read of ${stamp(Date.parse(ONE_READ.at))}.`;
+    } else {
+      const has = 'first_agreed_today' in oc;
+      if (oc.state === 'agreed' && isNum(oc.active)) n = oc.active;
+      text = oc.state === 'pending' ? '' : line(has && oc.state === 'agreed' ? oc : null);
+      if (!has) why = 'This server does not record first agreed times yet.';
+      else if (oc.state !== 'agreed') why = oc.state === 'pending' ? null : `Not reported: ${typeof oc.reason === 'string' && oc.reason ? oc.reason : 'no agreed list this round'}.`;
+      else if (W.some(([f]) => !isNum(oc[f]))) {
+        const since = parseTime(oc.first_agreed_since);
+        why = `Not reported: ${oc.first_agreed_reason || 'the record does not cover the window'}${since != null ? ` (DNO has recorded agreed lists since ${stamp(since)})` : ''}.`;
+      }
+    }
+    box.hidden = false;
+    box.dataset.mode = mode;
+    const nEl = $('vg-n');
+    setText(nEl, n != null ? fmtInt(n) : (mode === 'live' && oc.state === 'pending' ? 'reading' : 'unknown'));
+    nEl.classList.toggle('none', n == null);
+    setText($('vg-line'), text);
+    const note = $('vg-note');
+    setText(note, why || ''); note.hidden = !why;
   }
   function renderValidators() {
     const vm = validatorModel(), { mode, oc, w, R, base } = vm;
@@ -1717,12 +1848,10 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     setText($('vd-height'), `That answer's own height within ±${band} blocks of the seeds' median, the band the seeds' agreement uses.`);
     setText($('vd-hour'), `Answered as that key at the seeds' height in every counted round of the last ${mins === 1 ? 'minute' : `${mins} minutes`}.`);
 
-    // What the ladder does not show: rows not dialed, not answered, answered otherwise.
-    const restEl = $('vw-rest');
+    // Where every ACTIVE row stands this round, and the history of the set.
     const observed = mode === 'live' && w && w.state === 'observed';
-    const parts = observed ? validatorRest(w) : [];
-    const restText = !observed ? '' : !(w.watched > 0) ? 'No ACTIVE row is listed.' : parts.length ? `Of ${fmtInt(w.watched)} ACTIVE: ${parts.join(' · ')}.` : 'Every ACTIVE row was dialed and answered as its key.';
-    setText(restEl, restText); restEl.hidden = !restText;
+    renderAccounting(vm);
+    renderGrowth(vm);
 
     // The parameter, UNSTAKING and versions.
     const box = $('vw-facts');

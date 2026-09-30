@@ -5,7 +5,7 @@
 // are reported and make the tool exit non-zero.
 // Run: bun src/validator-set-probe.test.mjs   (executable harness, not `bun test`)
 
-import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport } from "../tools/validator-set-probe.mjs";
+import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue } from "../tools/validator-set-probe.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -85,8 +85,8 @@ console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
   const VKEY = "0x" + "c1".repeat(32);
   const val = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: VKEY, version: "0.9.9 RC", peerlist: [{ identity: VKEY, sync: { block: 12346 } }] }); } });
   const vrows = [
-    { address: VKEY, status: "2", connectionUrl: "http://127.0.0.1:" + val.port, stakedAmount: "5555555555", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null },
-    { address: ADDR("d2"), status: "2", connectionUrl: "http://203.0.113.7:53550", stakedAmount: "5555555555", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }];
+    { address: VKEY, status: "2", connectionUrl: "http://127.0.0.1:" + val.port, stakedAmount: "5555555555", firstSeen: 12000, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null },
+    { address: ADDR("d2"), status: "2", connectionUrl: "http://203.0.113.7:53550", stakedAmount: "5555555555", firstSeen: 12001, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }];
   const dialSeed = (id) => Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
     const u = new URL(req.url);
     if (req.method === "GET" && u.pathname === "/info") return Response.json({ identity: id, version: "0.9.9 RC", peerlist: [{ identity: id, sync: { block: 12345 } }] });
@@ -101,8 +101,54 @@ console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
   const loop = async (u) => { const x = new URL(u); return x.protocol === "http:" && x.hostname === "127.0.0.1" && x.pathname === "/" ? x.origin : null; };
   const rep = await dialReport(seeds, results, { resolveOrigin: loop });
   check("X1 --dial: the agreed list, the seeds' median and the watch counts the agent would publish", rep.onChain.active === 2 && rep.watch.answered_as_listed === 1 && rep.watch.at_seed_height === 1
-    && rep.watch.not_dialed === 1 && /seeds' median: 12345 \(from 2 own heights\)/.test(rep.text) && /answered as the listed key 1: at the seeds' height \(±25\) 1/.test(rep.text) && /not from one run/.test(rep.text), rep.text);
+    && rep.watch.not_dialed === 1 && /seeds' median: 12345 \(from 2 own heights\)/.test(rep.text) && /answered as the listed key 1 \(Path A seed keys among them: 0\): at the seeds' height \(±25\) 1/.test(rep.text) && /on 1 origin \(most rows on one origin: 1\)/.test(rep.text) && /not from one run/.test(rep.text), rep.text);
   check("X2 --dial prints no host, address, connectionUrl, port or stake", leaks(rep.text).length === 0 && !rep.text.includes(String(val.port)) && !/5555555555/.test(rep.text), leaks(rep.text).join(" "));
+  const plain = formatReport(results, new Date(0)).text;
+  check("X4 firstSeen: whether two seeds agree and what the values look like, counts only", /firstSeen on ACTIVE rows: two or more seeds agree on 2 of 2 \(missing 0 · differ 0\); agreed values look like block heights 2 · millisecond times 0 · second times 0 · date strings 0 · other 0 \(values not printed\)/.test(plain)
+    && !/12000|12001/.test(plain), plain.split("\n").filter((l) => /firstSeen/.test(l)).join(" | "));
+  // The list's rule for firstSeen too: two of three seeds holding the same value agree; digits in a string are a number.
+  const fsRows = (vals) => ({ validators: { firstSeen: new Map(Object.entries(vals).map(([k, v]) => [k, firstSeenValue(v)])) } });
+  const agree3 = firstSeenAgreement([fsRows({ a: 12000, b: "1759140000000", c: null, d: "2026-09-01T10:00:00Z" }), fsRows({ a: 12000, b: 1759140000000, c: null, d: "2026-09-01T10:00:00Z" }),
+    fsRows({ a: 12999, b: 1759140000000, c: 5, d: "2026-09-02T10:00:00Z" })], [{ info: { answered: true, ownHeight: 13000 } }]);
+  check("X6 firstSeen: two of three seeds agreeing is agreement; a digit string is a number; a date string is a date; one value is missing, not a disagreement",
+    JSON.stringify(agree3) === JSON.stringify({ active: 4, agreed: 3, missing: 1, differ: 0, heights: 1, ms: 1, seconds: 0, dates: 1, other: 0 }), JSON.stringify(agree3));
+  // T-R2 and T-R3: a candidate seed with another list, and a seed that answers with another seed's identity.
+  const other = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    const u = new URL(req.url);
+    if (req.method === "GET" && u.pathname === "/info") return Response.json({ identity: ADDR("e1"), version: "0.9.9 RC", peerlist: [{ identity: ADDR("e1"), sync: { block: 12345 } }] });
+    const p = (await req.json()).params[0];
+    if (p.message === "getValidators") return Response.json({ result: 200, response: vrows.slice(0, 1) });
+    return Response.json({ result: 200, response: { minValidatorStake: "1000000000000" } });
+  } });
+  const withCandidate = results.concat([await probeSeed({ name: "candidate", url: url(other) }), await probeSeed({ name: "silent", url: "http://127.0.0.1:1" })]);
+  const t2 = formatReport(withCandidate, new Date(0)).text;
+  check("X7 the Path A candidate tests: the same list from two seeds, another list from the candidate, none from a silent seed (T-R2); a shared identity named by seed names, never printed (T-R3)",
+    t2.includes("getValidators lists, address and status of every row: the same list from seed-a, seed-b · another list from candidate · no list from silent")
+    && t2.includes("/info identities: seed-a and candidate answered with the same identity (one vantage, not 2) (not printed)")
+    && formatReport(results, new Date(0)).text.includes("/info identities: each of the 2 seeds that answered with an identity has its own (not printed)")
+    && !/e1e1|e2e2/i.test(t2), t2.split("\n").filter((l) => /lists, address|identities/.test(l)).join(" | "));
+  // A tie between the two largest groups is no agreement, and the line says so; a list the agent would not accept is not
+  // "no list", and it is an unexpected shape; an /info answer without an identity is named, not counted as a vantage.
+  const seedOf = (id, list) => Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    const u = new URL(req.url);
+    if (req.method === "GET" && u.pathname === "/info") return Response.json(id ? { identity: id, peerlist: [] } : { peerlist: [] });
+    const p = (await req.json()).params[0];
+    return Response.json(p.message === "getValidators" ? { result: 200, response: list } : { result: 200, response: { minValidatorStake: "1" } });
+  } });
+  const L1 = vrows, L2 = vrows.slice(0, 1), BAD = [{ status: "2", connectionUrl: null }];
+  const T = [seedOf(ADDR("f1"), L1), seedOf(ADDR("f2"), L1), seedOf(ADDR("f3"), L2), seedOf(ADDR("f4"), L2), seedOf(null, BAD)];
+  const tres = [];
+  for (const [i, x] of T.entries()) tres.push(await probeSeed({ name: ["a", "b", "c", "cand", "odd"][i], url: url(x) }));
+  const t3 = formatReport(tres, new Date(0));
+  check("X8 a two-two tie is no agreement and says so; a list the agent would not accept is named and is an unexpected shape; an answer without an identity is named",
+    t3.text.includes("getValidators lists, address and status of every row: a tie, no single largest group (a, b / c, cand): the agent publishes no figure · a list the agent would not accept from odd")
+    && t3.text.includes("/info identities: each of the 4 seeds that answered with an identity has its own · an answer without an identity from odd (not printed)")
+    && /odd: getValidators: a row without a usable address or status/.test(t3.text), t3.text.split("\n").filter((l) => /lists, address|identities|odd:/.test(l)).join(" | "));
+  T.forEach((x) => x.stop(true));
+  other.stop(true);
+  const { spawnSync } = await import("node:child_process");
+  const bad = spawnSync("bun", [join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "validator-set-probe.mjs"), "--dail"], { encoding: "utf8" });
+  check("X5 an argument that is not name=url (a mistyped flag) stops the tool with usage, exit 64", bad.status === 64 && /Not a name=url pair: --dail/.test(bad.stderr) && !/--dia\n/.test(bad.stdout), JSON.stringify([bad.status, bad.stderr.slice(0, 80)]));
   const prod = await dialReport(seeds, results);
   check("X3 --dial with the agent's resolver dials no loopback address, seeds included", prod.watch.state === "no_agreed_list" && /no figure/.test(prod.text), prod.text);
   [D1, D2, val].forEach((s) => s.stop(true));

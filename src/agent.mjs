@@ -33,7 +33,7 @@ import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./con
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
-import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine } from "./validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence } from "./validator-watch.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -218,7 +218,7 @@ var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><tit
 '<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
 docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail, last_24h.critical_public_incidents_in_window, last_24h.chain_movement.blocks_advanced). No fleet data. ETag / 304 between observations.') +
 docsEntry('GET /organism/schema', 'The JSON Schema contract: stability policy, enums, changelog.') +
-docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). Neither of the last two enters status or /organism.') +
+docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). Neither of the last two enters status or /organism.') +
 docsEntry('GET /signals', 'Current signals grouped by severity (critical, warning, info).') +
 docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them.') +
 '</dl></section>' +
@@ -2251,6 +2251,10 @@ const VALIDATOR_WATCH_WINDOW_MS = envMs("VALIDATOR_WATCH_WINDOW_MS", 3600000, 60
 const VALIDATOR_WATCH_DIALS = process.env.VALIDATOR_WATCH_DIALS !== "0";
 var VALIDATOR_ORIGIN_RESOLVER = resolvePublicProbeOrigin;
 var validatorHistory = createWatchHistory(VALIDATOR_WATCH_WINDOW_MS, VALIDATOR_WATCH_INTERVAL_MS);
+// First agreed ACTIVE keys, on the host's UTC clock, in the shared observation database (opened in main()).
+var validatorFirstAgreed = null;
+// The configured seed keys, to count how many validators that answered as themselves are Path A seeds (an overlap count).
+const SEED_KEYS = new Set(Object.keys(PUBLIC_NODES).map(function(n) { return keyOf(PUBLIC_NODES[n].identity); }).filter(Boolean));
 var latestValidatorRound = null;
 function validatorPublishConfig() {
   return { seedsConfigured: Object.keys(PUBLIC_NODES).length, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS, dials: VALIDATOR_WATCH_DIALS };
@@ -2270,10 +2274,11 @@ async function validatorWatchRound() {
     return { name: name, url: PUBLIC_NODES[name].url, exclude: live && live.ok && live.identityMatch === false ? "its last /info answered with another key" : null };
   });
   latestValidatorRound = await runValidatorRound({ seeds: seeds, resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, reference: seedMedianReference,
-    history: validatorHistory, dials: VALIDATOR_WATCH_DIALS, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS });
+    history: validatorHistory, growth: validatorFirstAgreed, seedKeys: SEED_KEYS, dials: VALIDATOR_WATCH_DIALS, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS });
   log("  " + roundLogLine(latestValidatorRound));
 }
 function startValidatorWatchLoop() {
+  if (!validatorFirstAgreed) validatorFirstAgreed = createFirstAgreedStore(sharedDb || null);
   async function tick() {
     var started = Date.now();
     try { await validatorWatchRound(); }
@@ -2286,21 +2291,7 @@ function startValidatorWatchLoop() {
 // One sentence for readers without JavaScript. null keeps the page's own text.
 function validatorsNoJsLine() {
   var cfg = validatorPublishConfig(), now = Date.now();
-  var oc = publicOnChainValidators(latestValidatorRound, now, cfg), w = publicValidatorWatch(latestValidatorRound, now, cfg);
-  if (oc.state !== "agreed") return null;
-  var s = oc.active + " ACTIVE on chain, as " + oc.seeds_agreed + " of " + oc.seeds_configured + " public seeds listed them at " + oc.observed_at.slice(11, 19) + " UTC.";
-  if (w.state === "observed") {
-    var span = w.window.minutes === 60 ? "the last hour" : w.window.minutes === 1 ? "the last minute" : "the last " + w.window.minutes + " minutes";
-    s += " Of these, " + w.answered_as_listed + " answered DNO as the listed key at the address each published";
-    if (w.at_seed_height === null) s += "; heights were not compared this round.";
-    else {
-      s += ", " + w.at_seed_height + " at the seeds' height";
-      if (w.every_round_last_hour !== null) s += ", and " + w.every_round_last_hour + " in every round of " + span + ".";
-      else if (w.window.observed_minutes < w.window.minutes) s += "; every round in " + span + ": insufficient observation (" + w.window.observed_minutes + " of " + w.window.minutes + " min).";
-      else s += "; every round in " + span + ": insufficient observation (fewer than half the rounds counted).";
-    }
-  }
-  return s + " Not in status.";
+  return validatorsSentence(publicOnChainValidators(latestValidatorRound, now, cfg), publicValidatorWatch(latestValidatorRound, now, cfg));
 }
 
 // Rejects when an SDK call does not settle in time; the underlying call is left to finish on its own.

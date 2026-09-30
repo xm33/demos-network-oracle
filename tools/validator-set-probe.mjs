@@ -9,6 +9,11 @@
 // It prints counts, the parameter, whether the seeds agree, and the /info key names. It never prints hosts,
 // addresses, connectionUrl, per-row stake or full keys. Paste its output back; nothing here is published by DNO.
 //
+// The same run is the named test for a Path A seed that would replace or join the three (T-R1 to T-R3): add the
+// candidate as one more name=url pair and read its /info line (T-R1), whether it returned the same address–status list
+// as the other seeds (T-R2), and whether any two seeds answered /info with the same identity (T-R3: one vantage, not two).
+// Seed names are the ones given on the command line; identities are compared, never printed.
+//
 // --dial adds one round of the validator watch, run with the agent's own module (src/validator-watch.mjs): the list the
 // seeds agree on, then GET /info once at the address each ACTIVE validator published on chain, only when it is a public
 // http origin (pinned address, no redirects, 2 MB). It prints the counts the agent would publish on /health, nothing else.
@@ -21,7 +26,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, WATCH_DEFAULTS } from "../src/validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, keyOf, WATCH_DEFAULTS, reduceValidatorRows, listSignature, largestGroup } from "../src/validator-watch.mjs";
 import { resolvePublicProbeOrigin, sanitizeHeight } from "../src/public-safety.mjs";
 
 const TIMEOUT_MS = 8000;
@@ -81,7 +86,7 @@ export async function probeSeed(seed) {
       const id = typeof r.body.identity === "string" ? r.body.identity.toLowerCase() : null;
       const self = id && Array.isArray(r.body.peerlist) ? r.body.peerlist.find((p) => p && typeof p.identity === "string" && p.identity.toLowerCase() === id) : null;
       out.info = { answered: true, keys: nested(r.body), entryKeys: entry ? nested(entry) : [],
-        hashField: /hash/i.test(all), shardField: /shard/i.test(all), ownHeight: self && self.sync ? sanitizeHeight(self.sync.block) : null };
+        hashField: /hash/i.test(all), shardField: /shard/i.test(all), ownHeight: self && self.sync ? sanitizeHeight(self.sync.block) : null, key: keyOf(r.body.identity) };
     }
   } catch (e) { out.info = { answered: false, why: e.name === "TimeoutError" ? "no answer within 8 s" : "not reached" }; }
   // 2. getNetworkParameters
@@ -103,12 +108,31 @@ export async function probeSeed(seed) {
     else if (!Array.isArray(b.response) || !b.response.every((v) => v && typeof v === "object" && typeof v.status === "string")) {
       out.validators = { answered: true, shapeOk: false }; out.shapeErrors.push("getValidators: not a list of rows with a status");
     } else {
-      const byStatus = {};
-      b.response.forEach((v) => { byStatus[v.status] = (byStatus[v.status] || 0) + 1; });
-      out.validators = { answered: true, shapeOk: true, rows: b.response.length, byStatus, rowKeys: keysOf(b.response[0] || {}) };
+      const byStatus = {}, firstSeen = new Map();
+      b.response.forEach((v) => {
+        byStatus[v.status] = (byStatus[v.status] || 0) + 1;
+        // ACTIVE rows' firstSeen, kept in memory only to count agreement; never printed.
+        const k = keyOf(v.address);
+        if (k && v.status === "2") firstSeen.set(k, firstSeenValue(v.firstSeen));
+      });
+      // The address–status pairs, in memory only, to compare whole lists across seeds (T-R2); never printed. A list the
+      // agent would not accept (a row without a usable address or status, or an address twice) is an unexpected shape.
+      const pairs = reduceValidatorRows(b.response);
+      if (!pairs) out.shapeErrors.push("getValidators: a row without a usable address or status, or an address listed twice: the agent would not accept this list");
+      out.validators = { answered: true, shapeOk: true, rows: b.response.length, byStatus, rowKeys: keysOf(b.response[0] || {}), firstSeen, pairs };
     }
   } catch (e) { out.validators = { answered: false, why: e.name === "TimeoutError" ? "no answer within 8 s" : "not reached" }; }
   return out;
+}
+
+// A firstSeen value, normalised for comparison: a whole number (or a string of digits), or a date string. null when
+// absent; kind "other" for any other shape.
+export function firstSeenValue(v) {
+  if (Number.isSafeInteger(v) && v >= 0) return { key: "n" + v, n: v, kind: "number" };
+  if (typeof v === "string" && /^\d{1,15}$/.test(v)) return { key: "n" + Number(v), n: Number(v), kind: "number" };
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v) && Number.isFinite(Date.parse(v))) return { key: "t" + Date.parse(v), n: Date.parse(v), kind: "date" };
+  if (v === null || v === undefined || v === "") return null;
+  return { key: "x" + String(v).slice(0, 64), n: null, kind: "other" };
 }
 
 // What the homepage may say, from these answers. A value is printed only when at least two seeds report it and all
@@ -122,8 +146,63 @@ export function summarize(results) {
   const stake = withParams.length >= 2 && stakes.length === 1 ? stakes[0] : null;
   const rows = withRows.length >= 2 && rowSigs.length === 1 ? withRows[0].validators.byStatus : null;
   return { seeds: results.length, paramsAnswered: withParams.length, stakeAgrees: stakes.length <= 1, stake,
-    validatorsAnswered: withRows.length, rowsAgree: rowSigs.length <= 1, rows,
+    validatorsAnswered: withRows.length, rowsAgree: rowSigs.length <= 1, rows, firstSeen: firstSeenAgreement(withRows, results),
+    lists: listAgreement(results), identities: identityOverlap(results),
     shapeErrors: results.flatMap((r) => r.shapeErrors.map((e) => `${r.name}: ${e}`)) };
+}
+
+// Whether the seeds agree on protocol firstSeen for ACTIVE rows, and what the agreed values look like (block heights or
+// times), before any page may use it. A row agrees under the list's own rule: the single largest group of at least two
+// seeds holding the same value. Counts only: no value, no key.
+export function firstSeenAgreement(withRows, results) {
+  if (withRows.length < 2) return null;
+  const heights = results.map((r) => (r.info && r.info.answered ? r.info.ownHeight : null)).filter((h) => Number.isSafeInteger(h));
+  const top = heights.length ? Math.max(...heights) : null;
+  const keys = new Set(withRows.flatMap((r) => [...r.validators.firstSeen.keys()]));
+  const out = { active: keys.size, agreed: 0, missing: 0, differ: 0, heights: 0, ms: 0, seconds: 0, dates: 0, other: 0 };
+  keys.forEach((k) => {
+    const vals = withRows.map((r) => r.validators.firstSeen.get(k)).filter((v) => v !== undefined);
+    const present = vals.filter((v) => v !== null);
+    const group = largestGroup(present.map((v) => ({ v, sig: v.key })));
+    if (!group) { if (present.length < 2) out.missing++; else out.differ++; return; }
+    out.agreed++;
+    const v = group[0].v;
+    if (v.kind === "date") out.dates++;
+    else if (v.kind !== "number") out.other++;
+    else if (v.n >= 1e12 && v.n < 1e14) out.ms++;
+    else if (v.n >= 1e9 && v.n < 1e10) out.seconds++;
+    else if (top !== null && v.n <= top + 1000) out.heights++;
+    else out.other++;
+  });
+  return out;
+}
+
+// T-R2: which seeds returned the same address–status list (the agent's rule: the single largest group of at least two;
+// largest groups that tie are no agreement), which returned another list, which returned a list the agent would not
+// accept, and which returned none. Names only.
+export function listAgreement(results) {
+  const withPairs = results.filter((r) => r.validators && r.validators.shapeOk && Array.isArray(r.validators.pairs));
+  const groups = new Map();
+  withPairs.forEach((r) => { const sig = listSignature(r.validators.pairs); if (!groups.has(sig)) groups.set(sig, []); groups.get(sig).push(r.name); });
+  const multi = [...groups.values()].filter((g) => g.length >= 2).sort((a, b) => b.length - a.length);
+  const same = multi.length && (multi.length === 1 || multi[0].length > multi[1].length) ? multi[0] : [];
+  const tied = !same.length && multi.length >= 2 ? multi.filter((g) => g.length === multi[0].length) : [];
+  const grouped = same.concat(...tied);
+  return { same, tied, other: withPairs.map((r) => r.name).filter((n) => !grouped.includes(n)),
+    unaccepted: results.filter((r) => r.validators && r.validators.shapeOk && !Array.isArray(r.validators.pairs)).map((r) => r.name),
+    none: results.filter((r) => !(r.validators && r.validators.shapeOk)).map((r) => r.name) };
+}
+
+// T-R3: seeds that answered /info with the same identity are one vantage, not two. Names only.
+export function identityOverlap(results) {
+  const byKey = new Map(), noKey = [];
+  results.forEach((r) => {
+    if (!(r.info && r.info.answered)) return;
+    if (!r.info.key) { noKey.push(r.name); return; }
+    if (!byKey.has(r.info.key)) byKey.set(r.info.key, []);
+    byKey.get(r.info.key).push(r.name);
+  });
+  return { withKey: [...byKey.values()].reduce((t, g) => t + g.length, 0), noKey, shared: [...byKey.values()].filter((g) => g.length > 1) };
 }
 
 export function formatReport(results, when = new Date()) {
@@ -146,6 +225,15 @@ export function formatReport(results, when = new Date()) {
   lines.push(`  getNetworkParameters answered by ${s.paramsAnswered} of ${s.seeds}; minValidatorStake ${s.stake !== null ? `agrees: ${s.stake} (raw, as reported)` : s.paramsAnswered >= 2 && !s.stakeAgrees ? "differs between seeds: not reported" : "not reported (fewer than two answers)"}`);
   lines.push(`  getValidators answered by ${s.validatorsAnswered} of ${s.seeds}; counts by status ${s.rows ? `agree: ${Object.entries(s.rows).sort().map(([k, n]) => `${STATUS_WORD[k] || `"${k}"`} ${n}`).join(", ")}` : s.validatorsAnswered >= 2 && !s.rowsAgree ? "differ between seeds: not reported" : "not reported (fewer than two answers)"}`);
   lines.push(`  EXITED rows: getValidators lists rows still active at a block, so an EXITED count does not come from it.`);
+  const L = s.lists;
+  lines.push(`  getValidators lists, address and status of every row: ${L.same.length ? `the same list from ${L.same.join(", ")}`
+    : L.tied.length ? `a tie, no single largest group (${L.tied.map((g) => g.join(", ")).join(" / ")}): the agent publishes no figure` : "no two seeds returned the same list"}`
+    + `${L.other.length ? ` · another list from ${L.other.join(", ")}` : ""}${L.unaccepted.length ? ` · a list the agent would not accept from ${L.unaccepted.join(", ")}` : ""}${L.none.length ? ` · no list from ${L.none.join(", ")}` : ""}`);
+  const I = s.identities;
+  lines.push(`  /info identities: ${I.withKey < 2 ? "fewer than two seeds answered with an identity" : I.shared.length ? I.shared.map((g) => `${g.join(" and ")} answered with the same identity (one vantage, not ${g.length})`).join("; ") : `each of the ${I.withKey} seeds that answered with an identity has its own`}`
+    + `${I.noKey.length ? ` · an answer without an identity from ${I.noKey.join(", ")}` : ""} (not printed)`);
+  const fs = s.firstSeen;
+  if (fs) lines.push(`  firstSeen on ACTIVE rows: two or more seeds agree on ${fs.agreed} of ${fs.active} (missing ${fs.missing} · differ ${fs.differ}); agreed values look like block heights ${fs.heights} · millisecond times ${fs.ms} · second times ${fs.seconds} · date strings ${fs.dates} · other ${fs.other} (values not printed)`);
   lines.push(`  Block text this read supports: ${s.rows || s.stake !== null ? "counts and the parameter above, as the public seeds report them" : "\"on-chain validator rows: not reported.\""}`);
   if (s.shapeErrors.length) lines.push("", "Unexpected shapes:", ...s.shapeErrors.map((e) => "  " + e));
   return { text: lines.join("\n"), summary: s };
@@ -156,7 +244,8 @@ export function formatReport(results, when = new Date()) {
 export async function dialReport(seeds, results, opts = {}) {
   const hs = results.map((r) => (r.info && r.info.answered ? r.info.ownHeight : null)).filter((h) => h !== null && h !== undefined).sort((a, b) => a - b);
   const reference = hs.length >= 2 ? { height: hs[Math.floor(hs.length / 2)], observedAt: Date.now() } : null;
-  const round = await runValidatorRound({ seeds, resolveOrigin: opts.resolveOrigin || resolvePublicProbeOrigin, reference: () => reference,
+  const seedKeys = new Set(results.map((r) => (r.info && r.info.answered ? r.info.key : null)).filter(Boolean));
+  const round = await runValidatorRound({ seeds, resolveOrigin: opts.resolveOrigin || resolvePublicProbeOrigin, reference: () => reference, seedKeys,
     history: createWatchHistory(WATCH_DEFAULTS.windowMs, WATCH_DEFAULTS.intervalMs) });
   const oc = publicOnChainValidators(round, round.listAt, { seedsConfigured: seeds.length });
   const w = publicValidatorWatch(round, round.roundAt, {});
@@ -165,13 +254,13 @@ export async function dialReport(seeds, results, opts = {}) {
   lines.push(`  seeds' median: ${reference ? `${reference.height} (from ${hs.length} own heights)` : "not known (fewer than two own heights): heights not compared"}`);
   if (w.state !== "observed") { lines.push(`  dials: none (${w.reason})`); return { text: lines.join("\n"), onChain: oc, watch: w }; }
   const r = w.not_dialed_reasons;
-  lines.push(`  ACTIVE rows dialed at the address each published on chain: ${w.watched - w.not_dialed} of ${w.watched}`);
-  lines.push(`    not dialed ${w.not_dialed} (no public http origin published ${r.not_public_http} · name did not resolve to a public address ${r.name_unresolved} · seeds list different addresses ${r.seeds_differ} · over the round cap ${r.over_cap})`);
+  lines.push(`  ACTIVE rows dialed at the address each published on chain: ${w.watched - w.not_dialed} of ${w.watched}, on ${w.origins_dialed} origin${w.origins_dialed === 1 ? "" : "s"} (most rows on one origin: ${w.max_rows_per_origin})`);
+  lines.push(`    not dialed ${w.not_dialed} (no address published ${r.no_address} · not a public http origin ${r.not_public_http} · name did not resolve to a public address ${r.name_unresolved} · seeds list different addresses ${r.seeds_differ} · over the round cap ${r.over_cap})`);
   lines.push(`    no answer ${w.no_answer}`);
-  lines.push(`    answered with another key ${w.answered_other_key}`);
+  lines.push(`    answered with another key ${w.answered_other_key} (sharing an origin with a key that answered there: ${w.other_key_shared}, on ${w.other_key_shared_origins} origin${w.other_key_shared_origins === 1 ? "" : "s"})`);
   lines.push(`    answered without a key ${w.answered_no_key}`);
-  lines.push(`    answered as the listed key ${w.answered_as_listed}: ${w.at_seed_height === null ? `heights not compared (${w.height_not_compared} with a height)` : `at the seeds' height (±${w.height_band_blocks}) ${w.at_seed_height} · off ${w.off_seed_height}`} · own height not reported ${w.height_not_reported}`);
-  lines.push(`  versions among answers as the listed key: ${w.versions.length ? w.versions.map((g) => `${g.version === null ? "no release version" : g.version} ${g.count}`).join(" · ") + (w.versions_other ? ` · other ${w.versions_other}` : "") : "none"}`);
+  lines.push(`    answered as the listed key ${w.answered_as_listed} (Path A seed keys among them: ${w.answered_as_listed_seeds}): ${w.at_seed_height === null ? `heights not compared (${w.height_not_compared} with a height)` : `at the seeds' height (±${w.height_band_blocks}) ${w.at_seed_height} · off ${w.off_seed_height}`} · own height not reported ${w.height_not_reported}`);
+  lines.push(`  versions among answers as the listed key: ${w.versions.length ? w.versions.map((g) => `${g.version === null ? "no release version" : g.version} ${g.count}`).join(" · ") + (w.versions_other ? ` · other ${w.versions_other}` : "") : w.versions_other ? `other ${w.versions_other}` : "none"}`);
   lines.push(`  every round, last hour: not from one run (the agent keeps an hour of rounds)`);
   return { text: lines.join("\n"), onChain: oc, watch: w };
 }
@@ -180,6 +269,8 @@ if (import.meta.main) {
   const all = process.argv.slice(2);
   const dial = all.includes("--dial");
   const args = all.filter((a) => a !== "--dial");
+  const bad = args.filter((a) => !/^[A-Za-z0-9._-]+=https?:\/\/\S+$/.test(a));
+  if (bad.length) { console.error("Not a name=url pair: " + bad.map((a) => a.slice(0, 40)).join(", ") + "\nUsage: bun validator-set-probe.mjs [--dial] name=http://host:port ..."); process.exit(64); }
   const here = dirname(fileURLToPath(import.meta.url));
   let seeds;
   if (args.length) seeds = args.map((a) => { const i = a.indexOf("="); return { name: a.slice(0, i), url: a.slice(i + 1) }; });

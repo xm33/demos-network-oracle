@@ -14,6 +14,10 @@
 //
 // Published objects carry counts only: never an address, connection URL, host, per-row height, per-row outcome or stake.
 // Version groups are published only in a strict version shape and only when at least two validators share one.
+//
+// The first-agreed clock (DNO's clock): the host's UTC time at which an ACTIVE key first appeared on an agreed list,
+// kept in SQLite. It gives how many keys were first agreed in the last 24 h, 7 d and 30 d, and never the store's first
+// list, which says nothing about when those keys joined.
 // Runtime tests: bun src/validator-watch.test.mjs
 
 import { isIP } from "node:net";
@@ -87,8 +91,9 @@ export function reduceValidatorRows(list) {
     var key = keyOf(v.address), status = v.status.trim();
     if (key === null || !STATUS_RE.test(status) || seen.has(key)) return null;
     seen.add(key);
-    var url = typeof v.connectionUrl === "string" && v.connectionUrl.trim() && v.connectionUrl.length <= 200 ? v.connectionUrl.trim() : null;
-    out.push({ key: key, status: status, url: url });
+    // noUrl: the row publishes no address at all. url: the address as published, when short enough to be an origin.
+    var raw = typeof v.connectionUrl === "string" ? v.connectionUrl.trim() : "";
+    out.push({ key: key, status: status, url: raw && raw.length <= 512 ? raw : null, noUrl: !raw });
   }
   return out;
 }
@@ -109,8 +114,8 @@ export async function readSeed(seed, o) {
   return out;
 }
 
-// The single largest group of at least two equal values; null when there is none or two groups tie.
-function largestGroup(entries) {
+// The single largest group of at least two entries with the same sig; null when there is none or the largest groups tie.
+export function largestGroup(entries) {
   var groups = new Map();
   entries.forEach(function(e) { if (!groups.has(e.sig)) groups.set(e.sig, []); groups.get(e.sig).push(e); });
   var best = null, tie = false;
@@ -120,13 +125,15 @@ function largestGroup(entries) {
   });
   return best && !tie ? best : null;
 }
+// A list's identity for agreement: its address–status pairs, in address order.
+export function listSignature(rows) {
+  return JSON.stringify(rows.map(function(x) { return [x.key, x.status]; }).sort(function(a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }));
+}
 // Agreement: the largest group of at least two seeds whose lists hold the same address–status pairs. A connection URL
 // is kept for a row only when every seed in that group lists the same URL for it.
 export function agreeLists(reads) {
   var answered = reads.filter(function(r) { return r.rows; });
-  var best = largestGroup(answered.map(function(r) {
-    return { r: r, sig: JSON.stringify(r.rows.map(function(x) { return [x.key, x.status]; }).sort(function(a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; })) };
-  }));
+  var best = largestGroup(answered.map(function(r) { return { r: r, sig: listSignature(r.rows) }; }));
   var stakeGroup = largestGroup(reads.filter(function(r) { return r.stake !== null; }).map(function(r) { return { sig: r.stake }; }));
   var base = { seedsAnswered: answered.length, stake: stakeGroup ? stakeGroup[0].sig : null };
   if (!best) {
@@ -135,10 +142,10 @@ export function agreeLists(reads) {
   }
   var group = best.map(function(e) { return e.r; });
   var urls = new Map();
-  group.forEach(function(r) { r.rows.forEach(function(x) { if (!urls.has(x.key)) urls.set(x.key, new Set()); urls.get(x.key).add(x.url); }); });
+  group.forEach(function(r) { r.rows.forEach(function(x) { if (!urls.has(x.key)) urls.set(x.key, new Set()); urls.get(x.key).add(x.noUrl ? "\u0000none" : x.url); }); });
   var rows = group[0].rows.map(function(x) {
     var u = urls.get(x.key);
-    return { key: x.key, status: x.status, url: u.size === 1 ? x.url : null, urlsDiffer: u.size > 1 };
+    return { key: x.key, status: x.status, url: u.size === 1 ? x.url : null, noUrl: u.size === 1 && x.noUrl, urlsDiffer: u.size > 1 };
   });
   return Object.assign(base, { agreed: true, seedsAgreed: group.length, rows: rows,
     reason: group.length + " of " + reads.length + " public seeds returned the same validator list" });
@@ -185,18 +192,33 @@ async function lookupNames(names, o) {
   return out;
 }
 
-// Dial the ACTIVE rows, in address order. A URL that is not a bare http origin is not_public_http; so is an address
-// literal the resolver refuses (decided without a lookup, before the cap, so it takes no slot). Names and public literals
-// take one slot each per distinct origin, at most maxOrigins; rows past that, or names not looked up within the lookup
-// budget, are over_cap. A name that did not resolve to a public address in time is name_unresolved. Each origin is dialed
-// once. Returns one result per ACTIVE row: { key, outcome, notDialed?, height?, version? }.
+// Dial the ACTIVE rows, in address order. A row that publishes no address is no_address. A URL that is not a bare http
+// origin is not_public_http; so is an address literal the resolver refuses (decided without a lookup, before the cap, so
+// it takes no slot). Names and public literals take one slot each per distinct origin, at most maxOrigins; rows past
+// that, or names not looked up within the lookup budget, are over_cap. A name that did not resolve to a public address
+// in time is name_unresolved. Rows are grouped by the origin they published; each address DNO connects to is dialed
+// once, so published origins that resolve to the same address share its one answer. Within a published origin the
+// answer names at most one of the keys listed there; the others are answered_other_key, with shared set only when the
+// answer named one of the keys listed on that same published origin. Returns { results: one per ACTIVE row
+// { key, outcome, notDialed?, shared?, origin?, seed?, height?, version? }, origins: { dialed: published origins dialed,
+// maxRows: the most ACTIVE rows on one of them } }.
 export async function dialActive(rows, o) {
   var active = rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).sort(function(a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+  // Every key the list shows on a published origin, whatever its status: an answer naming any of them is a key listed there.
+  var listedOn = new Map();
+  rows.forEach(function(r) {
+    var q = !r.noUrl && !r.urlsDiffer && r.url ? parseProbeOrigin(r.url) : null;
+    if (!q || q.protocol !== "http:") return;
+    var b = q.protocol + "//" + q.host;
+    if (!listedOn.has(b)) listedOn.set(b, new Set());
+    listedOn.get(b).add(r.key);
+  });
   var results = [], pending = [], names = [], originOf = new Map(), refused = new Set(), slots = new Set();
   var notDialed = function(r, why) { results.push({ key: r.key, outcome: "not_dialed", notDialed: why }); };
   for (var i = 0; i < active.length; i++) {
     var r = active[i];
     if (r.urlsDiffer) { notDialed(r, "seeds_differ"); continue; }
+    if (r.noUrl) { notDialed(r, "no_address"); continue; }
     var p = r.url ? parseProbeOrigin(r.url) : null;
     if (!p || p.protocol !== "http:") { notDialed(r, "not_public_http"); continue; }
     var bare = p.protocol + "//" + p.host;           // one lookup and one dial per origin, however the URL was written
@@ -217,25 +239,30 @@ export async function dialActive(rows, o) {
   }
   var looked = await lookupNames(names, o);
   names.forEach(function(n, k) { originOf.set(n, looked[k]); });
-  var byOrigin = new Map(), order = [];
+  // Grouped by the published origin (what the rows said); dialed once per address (what DNO connects to).
+  var byPublished = new Map(), order = [], dials = [], dialOf = new Map();
   pending.forEach(function(r) {
     var origin = originOf.get(r.url);
     if (origin === undefined) { notDialed(r, "over_cap"); return; }
     if (!origin) { notDialed(r, "name_unresolved"); return; }
-    if (!byOrigin.has(origin)) { byOrigin.set(origin, []); order.push(origin); }
-    byOrigin.get(origin).push(r);
+    if (!byPublished.has(r.url)) { byPublished.set(r.url, []); order.push(r.url); }
+    byPublished.get(r.url).push(r);
+    if (!dialOf.has(origin)) { dialOf.set(origin, dials.length); dials.push(origin); }
   });
-  var answers = await mapWithConcurrency(order, o.concurrency, function(origin) { return dialInfo(origin, o); });
-  order.forEach(function(origin, idx) {
-    var a = answers[idx];
-    byOrigin.get(origin).forEach(function(r) {
+  var answers = await mapWithConcurrency(dials, o.concurrency, function(origin) { return dialInfo(origin, o); });
+  var seedKeys = o.seedKeys instanceof Set ? o.seedKeys : new Set(), maxRows = 0;
+  order.forEach(function(published, idx) {
+    var a = answers[dialOf.get(originOf.get(published))], listed = byPublished.get(published);
+    maxRows = Math.max(maxRows, listed.length);
+    var matched = a.answered && a.key !== null && listedOn.get(published).has(a.key);
+    listed.forEach(function(r) {
       if (!a.answered) results.push({ key: r.key, outcome: "no_answer" });
       else if (a.key === null) results.push({ key: r.key, outcome: "answered_no_key" });
-      else if (a.key !== r.key) results.push({ key: r.key, outcome: "answered_other_key" });
-      else results.push({ key: r.key, outcome: "answered_as_listed", height: a.height, version: a.version });
+      else if (a.key !== r.key) results.push({ key: r.key, outcome: "answered_other_key", shared: matched, origin: idx });
+      else results.push({ key: r.key, outcome: "answered_as_listed", seed: seedKeys.has(r.key), height: a.height, version: a.version });
     });
   });
-  return results;
+  return { results: results, origins: { dialed: order.length, maxRows: maxRows } };
 }
 
 // Where an answer's own height sits against the seeds' median: "at", "off", "not_reported" (no own height in the
@@ -277,6 +304,77 @@ export function createWatchHistory(windowMs, intervalMs) {
   };
 }
 
+// ---- the first-agreed clock (DNO's clock) ------------------------------------------------------------------------------
+// Rows: key -> first_agreed_at (the list time of the first agreed list that listed it ACTIVE) and prior_agreed_at (the
+// list time of the agreed list before that one; null for keys on the store's first list). Meta: earliest (the store's
+// first agreed list) and last_agreed_at. A window [now - w, now] has a figure only when the record started before it;
+// a key counts in it when it is known to have first appeared inside it:
+//   - first seen within gapMs of the previous agreed list: when first_agreed_at is inside the window;
+//   - first seen after a longer gap: only when the list before the gap is itself inside the window. When the gap
+//     crosses the window's start, the window has no figure (that key's join time is not known);
+//   - a key on the store's first list: never.
+// Not net of exits: a key that later leaves ACTIVE still counts where it first appeared.
+// A failed write leaves memory as it was and every figure empty until a later write succeeds; the lists it missed are a
+// gap in the record like any other, so the rules above still hold.
+export const FIRST_AGREED_WINDOWS = Object.freeze([["today", 86400000, "24 h"], ["week", 7 * 86400000, "7 days"], ["month", 30 * 86400000, "30 days"]]);
+export function createFirstAgreedStore(db, opts) {
+  var gapMs = (opts && opts.gapMs) || 3600000;
+  var keys = new Map(), meta = { earliest: null, last: null }, down = null, failed = false;
+  if (!db) down = "no store is configured on this server";
+  else {
+    try {
+      db.run("CREATE TABLE IF NOT EXISTS validator_first_agreed (key TEXT PRIMARY KEY, first_agreed_at INTEGER NOT NULL, prior_agreed_at INTEGER)");
+      db.run("CREATE TABLE IF NOT EXISTS validator_first_agreed_meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL)");
+      db.query("SELECT key, first_agreed_at, prior_agreed_at FROM validator_first_agreed").all().forEach(function(r) { keys.set(r.key, { first: r.first_agreed_at, prior: r.prior_agreed_at }); });
+      db.query("SELECT k, v FROM validator_first_agreed_meta").all().forEach(function(r) { if (r.k === "earliest") meta.earliest = r.v; else if (r.k === "last_agreed_at") meta.last = r.v; });
+    } catch (e) { down = "the store is not available on this server"; keys.clear(); meta = { earliest: null, last: null }; }
+  }
+  return {
+    // One agreed list, read at t, with its ACTIVE keys. Memory changes only after the write succeeded. A list with no
+    // ACTIVE key is not recorded at all: as the first list it would make every later key "new", and later it would count
+    // as coverage although it shows no key; a stretch of such lists is a gap in the record like any other.
+    record: function(t, activeKeys) {
+      if (down) return false;
+      if (activeKeys.length === 0) return true;
+      var fresh = activeKeys.filter(function(k) { return !keys.has(k); }), prior = meta.last;
+      try {
+        db.transaction(function() {
+          var ins = db.prepare("INSERT OR IGNORE INTO validator_first_agreed (key, first_agreed_at, prior_agreed_at) VALUES (?, ?, ?)");
+          fresh.forEach(function(k) { ins.run(k, t, prior); });
+          var up = db.prepare("INSERT INTO validator_first_agreed_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v");
+          if (meta.earliest === null) up.run("earliest", t);
+          up.run("last_agreed_at", t);
+        })();
+      } catch (e) { failed = true; return false; }
+      failed = false;
+      fresh.forEach(function(k) { keys.set(k, { first: t, prior: prior }); });
+      if (meta.earliest === null) meta.earliest = t;
+      meta.last = t;
+      return true;
+    },
+    summary: function(now) {
+      var out = { today: null, week: null, month: null, since: meta.earliest, reason: null };
+      if (down || failed) { out.reason = down || "the store could not record this round's list"; return out; }
+      if (meta.earliest === null) { out.reason = "no agreed list with an ACTIVE key has been recorded yet"; return out; }
+      FIRST_AGREED_WINDOWS.forEach(function(w) {
+        var start = now - w[1];
+        if (meta.earliest > start) { out.reason = out.reason || "the record started less than " + w[2] + " ago"; return; }
+        var n = 0, unsure = false;
+        keys.forEach(function(v) {
+          if (v.prior === null || v.prior === undefined) return;
+          if (v.first - v.prior <= gapMs) { if (v.first > start) n++; }
+          else if (v.prior >= start) n++;
+          else if (v.first > start) unsure = true;
+        });
+        if (unsure) { out.reason = out.reason || "a gap in the record crosses the start of the last " + w[2]; return; }
+        out[w[0]] = n;
+      });
+      return out;
+    },
+    size: function() { return keys.size; }
+  };
+}
+
 // ---- one round ----------------------------------------------------------------------------------------------------
 // o: { seeds: [{name, url, exclude?}], resolveOrigin(url) -> Promise<origin|null>, reference() -> {height, observedAt}|null,
 //      history, now() -> ms, fetch, dials (boolean), and any WATCH_DEFAULTS override }.
@@ -285,22 +383,29 @@ export async function runValidatorRound(opts) {
   var reads = await Promise.all(o.seeds.map(function(s) { return readSeed(s, o); }));
   var list = agreeLists(reads);
   var listAt = o.now();
-  var results = list.agreed && o.dials ? await dialActive(list.rows, o) : null;
+  if (list.agreed && o.growth) o.growth.record(listAt, list.rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).map(function(r) { return r.key; }));
+  var growth = o.growth ? o.growth.summary(listAt) : null;
+  var dialed = list.agreed && o.dials ? await dialActive(list.rows, o) : null;
+  var results = dialed ? dialed.results : null;
   var reference = results ? o.reference() : null;
   var roundAt = o.now();
   var outcomes = null, versions = null;
   if (results) {
-    outcomes = { not_dialed: 0, not_dialed_reasons: { not_public_http: 0, name_unresolved: 0, seeds_differ: 0, over_cap: 0 }, no_answer: 0, answered_other_key: 0, answered_no_key: 0, answered_as_listed: 0,
-      at_seed_height: 0, off_seed_height: 0, height_not_reported: 0, height_not_compared: 0 };
-    var vg = new Map();
+    outcomes = { not_dialed: 0, not_dialed_reasons: { no_address: 0, not_public_http: 0, name_unresolved: 0, seeds_differ: 0, over_cap: 0 }, no_answer: 0, answered_other_key: 0, answered_no_key: 0, answered_as_listed: 0,
+      at_seed_height: 0, off_seed_height: 0, height_not_reported: 0, height_not_compared: 0,
+      origins_dialed: dialed.origins.dialed, max_rows_per_origin: dialed.origins.maxRows, other_key_shared: 0, other_key_shared_origins: 0, answered_as_listed_seeds: 0 };
+    var vg = new Map(), sharedOrigins = new Set();
     results.forEach(function(r) {
       outcomes[r.outcome]++;
       if (r.outcome === "not_dialed") outcomes.not_dialed_reasons[r.notDialed]++;
+      if (r.outcome === "answered_other_key" && r.shared) { outcomes.other_key_shared++; sharedOrigins.add(r.origin); }
       if (r.outcome !== "answered_as_listed") return;
+      if (r.seed) outcomes.answered_as_listed_seeds++;
       r.place = heightPlace(r.height, reference, o.bandBlocks);
       outcomes[{ at: "at_seed_height", off: "off_seed_height", not_reported: "height_not_reported", not_compared: "height_not_compared" }[r.place]]++;
       vg.set(r.version, (vg.get(r.version) || 0) + 1);
     });
+    outcomes.other_key_shared_origins = sharedOrigins.size;
     if (!reference) { outcomes.at_seed_height = null; outcomes.off_seed_height = null; }
     // Named groups: a version shared by at least versionMinCount validators, largest first, at most versionGroups of them.
     var named = [...vg.entries()].filter(function(e) { return e[0] !== null && e[1] >= o.versionMinCount; })
@@ -318,7 +423,7 @@ export async function runValidatorRound(opts) {
   return {
     listAt: listAt, roundAt: roundAt, seedsConfigured: o.seeds.length, list: list,
     counts: list.agreed ? countStatuses(list.rows) : null,
-    outcomes: outcomes, versions: versions, counted: isCounted,
+    outcomes: outcomes, versions: versions, counted: isCounted, growth: growth,
     reference: reference ? { height: reference.height, observedAt: reference.observedAt } : null,
     everyRound: every,
     seedErrors: reads.map(function(r) { return { name: r.name, list: r.listError }; })
@@ -331,17 +436,24 @@ const iso = function(ms) { return Number.isFinite(ms) ? new Date(ms).toISOString
 export function publicOnChainValidators(round, nowMs, cfg) {
   var c = Object.assign({}, WATCH_DEFAULTS, cfg);
   var out = { state: "pending", listed: null, active: null, unstaking: null, other_status: null, min_validator_stake: null,
-    seeds_configured: c.seedsConfigured, seeds_answered: null, seeds_agreed: null, observed_at: null, reason: "no read has completed yet" };
-  if (!round) return out;
+    seeds_configured: c.seedsConfigured, seeds_answered: null, seeds_agreed: null, observed_at: null, reason: "no read has completed yet",
+    first_agreed_today: null, first_agreed_week: null, first_agreed_month: null, first_agreed_as_of: null, first_agreed_since: null, first_agreed_reason: null };
+  // Outside the agreed state the first-agreed figures are null for the list's own reason.
+  var unagreed = function() { out.first_agreed_reason = out.reason; return out; };
+  if (!round) return unagreed();
   out.observed_at = iso(round.listAt);
-  if (nowMs - round.listAt > c.staleMs) { out.state = "stale"; out.reason = "the last read is older than " + Math.round(c.staleMs / 1000) + " s"; return out; }
+  if (nowMs - round.listAt > c.staleMs) { out.state = "stale"; out.reason = "the last read is older than " + Math.round(c.staleMs / 1000) + " s"; return unagreed(); }
   out.seeds_answered = round.list.seedsAnswered;
   out.seeds_agreed = round.list.seedsAgreed;
   out.min_validator_stake = round.list.stake;
   out.reason = round.list.reason;
-  if (!round.list.agreed) { out.state = "not_agreed"; return out; }
+  if (!round.list.agreed) { out.state = "not_agreed"; return unagreed(); }
   out.state = "agreed";
   Object.assign(out, round.counts);
+  var g = round.growth;
+  if (!g) out.first_agreed_reason = "no store is configured on this server";
+  else Object.assign(out, { first_agreed_today: g.today, first_agreed_week: g.week, first_agreed_month: g.month, first_agreed_as_of: iso(round.listAt),
+    first_agreed_since: g.since === null ? null : iso(g.since), first_agreed_reason: g.reason });
   return out;
 }
 
@@ -351,6 +463,7 @@ export function publicValidatorWatch(round, nowMs, cfg) {
     reference_height: null, reference_observed_at: null, watched: null,
     not_dialed: null, not_dialed_reasons: null, no_answer: null, answered_other_key: null, answered_no_key: null, answered_as_listed: null,
     at_seed_height: null, off_seed_height: null, height_not_reported: null, height_not_compared: null,
+    origins_dialed: null, max_rows_per_origin: null, other_key_shared: null, other_key_shared_origins: null, answered_as_listed_seeds: null,
     every_round_last_hour: null, window: null, versions: null, versions_other: null, reason: "no round has completed yet" };
   if (c.dials === false) { out.state = "disabled"; out.reason = "dialing validators is turned off on this server"; return out; }
   if (!round) return out;
@@ -370,6 +483,30 @@ export function publicValidatorWatch(round, nowMs, cfg) {
   out.versions_other = round.versions.other;
   out.reason = round.reference ? "ACTIVE rows dialed at the address each published on chain" : "ACTIVE rows dialed; the seeds' median is not known this round, so heights were not compared";
   return out;
+}
+
+// The sentence the agent writes into the homepage for readers without JavaScript, from the two published objects:
+// counts only, and the rows the ladder does not show accounted for as the page does. null outside the agreed state.
+export function validatorsSentence(oc, w) {
+  if (!oc || oc.state !== "agreed") return null;
+  var s = oc.active + " ACTIVE on chain, as " + oc.seeds_agreed + " of " + oc.seeds_configured + " public seeds listed them at " + oc.observed_at.slice(11, 19) + " UTC.";
+  if (w && w.state === "observed") {
+    var span = w.window.minutes === 60 ? "the last hour" : w.window.minutes === 1 ? "the last minute" : "the last " + w.window.minutes + " minutes";
+    s += " Of these, " + w.answered_as_listed + " answered DNO as the listed key at the address each published";
+    if (w.at_seed_height === null) s += "; heights were not compared this round.";
+    else {
+      s += ", " + w.at_seed_height + " at the seeds' height";
+      if (w.every_round_last_hour !== null) s += ", and " + w.every_round_last_hour + " in every round of " + span + ".";
+      else if (w.window.observed_minutes < w.window.minutes) s += "; every round in " + span + ": insufficient observation (" + w.window.observed_minutes + " of " + w.window.minutes + " min).";
+      else s += "; every round in " + span + ": insufficient observation (fewer than half the rounds counted).";
+    }
+    var shared = w.other_key_shared, origins = w.other_key_shared_origins, none = w.not_dialed_reasons ? w.not_dialed_reasons.no_address : 0;
+    if (shared > 0) s += " " + shared + (shared === 1 ? " listed key shares " : " listed keys share ")
+      + (origins > 1 ? origins + " published origins, each with a key that answered" : "one published origin with a key that answered")
+      + ". That is not " + (shared === 1 ? "a node" : shared + " nodes") + " down.";
+    if (none > 0) s += " " + none + (none === 1 ? " ACTIVE row publishes" : " ACTIVE rows publish") + " no address on chain.";
+  }
+  return s + " Not in status.";
 }
 
 // One log line per round. Counts only.

@@ -251,6 +251,7 @@
           <span class="aside-k">What DNO sees of this</span>
           <p>Counts, as the public seeds list them. Once a minute DNO sends both calls to the three public seeds. It publishes how many rows are ACTIVE and <code>minValidatorStake</code>, each only when at least two seeds return the same answer; it publishes no address and keeps no stake. It then dials the address each ACTIVE validator published on chain and counts the answers: see <a href="/methodology#validators">how the counts are made</a>. It publishes no identity, so it cannot tell you whether a given key is ACTIVE.</p>
           <p>The first read, with DNO's probe tool on 29 September 2026 at 09:05 UTC: two of the three public seeds returned the same 35 rows, all ACTIVE, and the same <code>minValidatorStake</code>, 1000000000000 as reported. The third seed did not answer.</p>
+          <p>The first dial, with the same tool at 11:31 UTC that day: 26 of the 35 rows were dialed at the address they published and 9 were not. 7 answered as their own key, all at the seeds' height; 18 answered with another key; 1 did not answer. A count of the published addresses at 11:41 UTC: the 9 publish none, and the 26 sit on 8 origins, one of them published by 19 keys. 2 of the 7 keys that answered as themselves are public seeds. 18 listed keys share one published origin with a key that answered. That is not 18 nodes down. Two runs from one place, not this cycle.</p>
           <p>The identities in DNO's catalog are names listed on public peerlists, not validator rows: a larger catalog is not a larger validator set.</p>
         </div>
       </section>
@@ -415,6 +416,7 @@
           <li>A node's own <code>/health</code> status.</li>
           <li>Whether a peer-listed identity is a validator, or whether it answers: DNO does not dial the catalog or match it against the validator list.</li>
           <li>Why a validator does not answer DNO. The address may refuse outside callers or be out of reach from here only; the row on chain does not change.</li>
+          <li>What stands behind an address that several validators publish. Its answer names one key.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
         </ul>
       </section>

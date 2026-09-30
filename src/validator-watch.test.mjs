@@ -7,7 +7,8 @@
 // every-round window; versions sanitised; stale and disabled states; counts only in what is published.
 // Run: bun src/validator-watch.test.mjs   (executable harness, not `bun test`)
 
-import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf } from "./validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence } from "./validator-watch.mjs";
+import { Database } from "bun:sqlite";
 import { parseProbeOrigin, resolvePublicProbeOrigin } from "./public-safety.mjs";
 
 const TAG = "VALIDATOR_WATCH";
@@ -119,7 +120,7 @@ console.log("\n[" + TAG + "] the read");
     && reduceValidatorRows([{ address: "", status: "2" }]) === null && reduceValidatorRows([{ address: KEY(1), status: "2" }, { address: KEY(1).toUpperCase().replace("0X", "0x"), status: "2" }]) === null
     && reduceValidatorRows("x") === null && reduceValidatorRows([]).length === 0);
   const reduced = reduceValidatorRows([row(0x31, "2", "http://example.invalid:1")]);
-  check("R8 stake and timestamps are dropped on arrival", reduced.length === 1 && JSON.stringify(Object.keys(reduced[0]).sort()) === JSON.stringify(["key", "status", "url"]), JSON.stringify(reduced));
+  check("R8 stake and timestamps are dropped on arrival", reduced.length === 1 && JSON.stringify(Object.keys(reduced[0]).sort()) === JSON.stringify(["key", "noUrl", "status", "url"]), JSON.stringify(reduced));
   const st = agreeLists([{ rows: [], stake: "5" }, { rows: [], stake: "6" }, { rows: [], stake: null }]);
   check("R9 stake split: not reported; an empty list agreed by two is a list of zero", st.stake === null && st.agreed === true && st.rows.length === 0);
   SEED.a = { list: BASE_ROWS, stake: "1000000000000" }; SEED.b = { list: BASE_ROWS, stake: "1000000000000" }; SEED.c = { list: BASE_ROWS.slice(0, 5), stake: "2000000000000" };
@@ -137,7 +138,10 @@ console.log("\n[" + TAG + "] the watch");
   const w = publicValidatorWatch(r, r.roundAt, {});
   check("W1 ACTIVE rows watched; the UNSTAKING row's origin is never dialed", w.state === "observed" && w.watched === 19 && hits.u === 0, "watched " + w.watched + " u " + hits.u);
   check("W2 one dial per origin: two rows on one origin, one answered as itself, one with another key", hits.a === 1, "hits.a " + hits.a);
-  check("W3 not dialed: not a public http origin (private, https, path, none)", w.not_dialed === 4 && w.not_dialed_reasons.not_public_http === 4 && w.not_dialed_reasons.seeds_differ === 0 && w.not_dialed_reasons.over_cap === 0, JSON.stringify(w.not_dialed_reasons));
+  check("W3 not dialed: no address published (none), not a public http origin (private, https, path)", w.not_dialed === 4 && w.not_dialed_reasons.no_address === 1 && w.not_dialed_reasons.not_public_http === 3 && w.not_dialed_reasons.seeds_differ === 0 && w.not_dialed_reasons.over_cap === 0, JSON.stringify(w.not_dialed_reasons));
+  check("W18 origins: 14 dialed, at most 2 rows on one; the row sharing a's origin is other_key_shared, the answer naming an unlisted key is not",
+    w.origins_dialed === 14 && w.max_rows_per_origin === 2 && w.other_key_shared === 1 && w.other_key_shared_origins === 1 && w.answered_other_key === 2 && w.answered_as_listed_seeds === 0,
+    JSON.stringify([w.origins_dialed, w.max_rows_per_origin, w.other_key_shared, w.other_key_shared_origins]));
   check("W4 redirect refused: no answer, and the redirect target is never dialed", hits.j === 1 && hits.trap === 0);
   check("W5 no answer: HTTP 500, invalid JSON, a JSON array, a redirect, a body over 2 MB, a closed port", w.no_answer === 6, "no_answer " + w.no_answer);
   check("W6 answered with another key (two: e, and the row sharing a's origin); answered without a key (f)", w.answered_other_key === 2 && w.answered_no_key === 1, w.answered_other_key + " / " + w.answered_no_key);
@@ -152,7 +156,7 @@ console.log("\n[" + TAG + "] the watch");
   const capped = await round({ maxOrigins: 3 });
   const wc = publicValidatorWatch(capped, capped.roundAt, {});
   const dialed = Object.entries(hits).filter(([k, n]) => n > 0).map(([k]) => k).sort().join(",");
-  check("W12 per-round cap: the first origins in address order are dialed, the rest are over the cap", wc.not_dialed_reasons.over_cap === 11 && wc.not_dialed_reasons.not_public_http === 4 && dialed === "a,b,c", dialed + " " + JSON.stringify(wc.not_dialed_reasons));
+  check("W12 per-round cap: the first origins in address order are dialed, the rest are over the cap", wc.not_dialed_reasons.over_cap === 11 && wc.not_dialed_reasons.not_public_http === 3 && wc.not_dialed_reasons.no_address === 1 && dialed === "a,b,c", dialed + " " + JSON.stringify(wc.not_dialed_reasons));
 
   const diff = BASE_ROWS.map((x) => (x.address === KEY(0x12) ? Object.assign({}, x, { connectionUrl: V.m.url }) : x));
   SEED.b = { list: diff, stake: "1000000000000" };
@@ -176,6 +180,78 @@ console.log("\n[" + TAG + "] the watch");
   const rx = await round({ dials: false });
   const wx = publicValidatorWatch(rx, rx.roundAt, { dials: false });
   check("W17 dials turned off: the read continues, nothing is dialed, the watch says so", wx.state === "disabled" && /turned off/.test(wx.reason) && Object.entries(hits).every(([k, n]) => n === 0) && publicOnChainValidators(rx, rx.listAt, {}).state === "agreed");
+  const rs = await round({ seedKeys: new Set([keyOf(KEY(0x11)), keyOf(KEY(0x12)), keyOf(KEY(0x15)), keyOf(KEY(0x55))]) });
+  check("W19 seeds among the answers: only keys answered as listed count (0x15 is a seed key whose row answered with another key; 0x55 is not listed)", publicValidatorWatch(rs, rs.roundAt, {}).answered_as_listed_seeds === 2);
+}
+
+console.log("\n[" + TAG + "] one origin, many rows (the 29 Sep shape: 19 rows on one origin, 9 with no address)");
+{
+  const X = KEY(0xd0);
+  const one = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: X, version: "0.9.9 RC", peerlist: [{ identity: X, sync: { block: HEIGHT } }] }); } });
+  const u19 = "http://127.0.0.1:" + one.port;
+  const rows19 = [row(0xd0, "2", u19)].concat(Array.from({ length: 18 }, (_, i) => row(0xe0 + i, "2", u19))).concat(Array.from({ length: 9 }, (_, i) => row(0xa0 + i, "2", null)));
+  const s19 = [Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { const p = (await req.json()).params[0]; return Response.json(p.message === "getValidators" ? { result: 200, response: rows19 } : { result: 200, response: { minValidatorStake: "1" } }); } })];
+  s19.push(Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { const p = (await req.json()).params[0]; return Response.json(p.message === "getValidators" ? { result: 200, response: rows19 } : { result: 200, response: { minValidatorStake: "1" } }); } }));
+  const r19 = await runValidatorRound({ seeds: s19.map((x, i) => ({ name: "s" + i, url: "http://127.0.0.1:" + x.port })), resolveOrigin: loopResolver, reference: ref(HEIGHT), history: createWatchHistory(3600000, 60000) });
+  const w19 = publicValidatorWatch(r19, r19.roundAt, {});
+  check("O1 one answer on a 19-row origin: 1 as listed, 18 other_key_shared on 1 origin; 9 no_address; one origin dialed carrying 19 rows",
+    w19.watched === 28 && w19.answered_as_listed === 1 && w19.answered_other_key === 18 && w19.other_key_shared === 18 && w19.other_key_shared_origins === 1
+    && w19.not_dialed_reasons.no_address === 9 && w19.origins_dialed === 1 && w19.max_rows_per_origin === 19, JSON.stringify(w19));
+  check("O2 the rows add up: as listed + other key + no key + no answer + not dialed = ACTIVE", w19.answered_as_listed + w19.answered_other_key + w19.answered_no_key + w19.no_answer + w19.not_dialed === w19.watched);
+  [one, ...s19].forEach((x) => x.stop(true));
+}
+
+console.log("\n[" + TAG + "] published origins and dialed addresses");
+{
+  // Two seeds serving a given list; a round over it with a given resolver.
+  async function roundOver(list, resolveOrigin) {
+    const ss = [0, 1].map(() => Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { const p = (await req.json()).params[0];
+      return Response.json(p.message === "getValidators" ? { result: 200, response: list } : { result: 200, response: { minValidatorStake: "1" } }); } }));
+    const r = await runValidatorRound({ seeds: ss.map((x, i) => ({ name: "s" + i, url: "http://127.0.0.1:" + x.port })), resolveOrigin, reference: ref(HEIGHT), history: createWatchHistory(3600000, 60000) });
+    ss.forEach((x) => x.stop(true));
+    return publicValidatorWatch(r, r.roundAt, {});
+  }
+  let dials = 0;
+  const one = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { dials++; return Response.json({ identity: KEY(0xc0), peerlist: [{ identity: KEY(0xc0), sync: { block: HEIGHT } }] }); } });
+  const pinned = "http://127.0.0.1:" + one.port;
+  // Two different published names that resolve to the same address: one dial, two published origins; the second row's
+  // answer names a key that is not listed on its own published origin, so it is another key, not a shared origin.
+  const names = async (u) => { const p = parseProbeOrigin(u); return p && p.protocol === "http:" && (p.hostname === "alpha.example" || p.hostname === "beta.example") ? pinned : loopResolver(u); };
+  const w20 = await roundOver([row(0xc0, "2", "http://alpha.example:53550"), row(0xc1, "2", "http://beta.example:53550")], names);
+  check("W20 two published names on one address: dialed once, two published origins, the second row is another key, not a shared origin",
+    dials === 1 && w20.origins_dialed === 2 && w20.max_rows_per_origin === 1 && w20.answered_as_listed === 1 && w20.answered_other_key === 1 && w20.other_key_shared === 0 && w20.other_key_shared_origins === 0,
+    JSON.stringify([dials, w20.origins_dialed, w20.max_rows_per_origin, w20.answered_other_key, w20.other_key_shared]));
+  one.stop(true);
+  // Three rows on one published origin that does not answer: three no answer, none shared.
+  const w21 = await roundOver([row(0xc2, "2", closedUrl), row(0xc3, "2", closedUrl), row(0xc4, "2", closedUrl)], loopResolver);
+  check("W21 a shared published origin that does not answer: every row there is no answer, none is counted as sharing",
+    w21.no_answer === 3 && w21.other_key_shared === 0 && w21.origins_dialed === 1 && w21.max_rows_per_origin === 3, JSON.stringify([w21.no_answer, w21.other_key_shared, w21.origins_dialed]));
+  // Three rows on one published origin that answers with a key none of them lists: three other key, none shared.
+  const w22 = await roundOver([row(0xc5, "2", V.e.url), row(0xc6, "2", V.e.url), row(0xc7, "2", V.e.url)], loopResolver);
+  check("W22 a shared published origin answering with an unlisted key: every row there is another key, none is counted as sharing",
+    w22.answered_other_key === 3 && w22.other_key_shared === 0 && w22.other_key_shared_origins === 0, JSON.stringify([w22.answered_other_key, w22.other_key_shared]));
+  // Two ACTIVE rows and one UNSTAKING row publish one origin, and it answers as the UNSTAKING key: that key is listed there,
+  // so the two ACTIVE rows share a published origin with a key that answered. The UNSTAKING row is never counted as watched.
+  const w23 = await roundOver([row(0xc8, "2", V.u.url), row(0xc9, "2", V.u.url), row(0x1e, "3", V.u.url)], loopResolver);
+  check("W23 an origin answering as a listed key that is not ACTIVE: the ACTIVE rows there share it with a key that answered",
+    w23.watched === 2 && w23.answered_other_key === 2 && w23.other_key_shared === 2 && w23.other_key_shared_origins === 1, JSON.stringify([w23.watched, w23.answered_other_key, w23.other_key_shared]));
+}
+
+console.log("\n[" + TAG + "] the sentence for readers without JavaScript");
+{
+  const oc = { state: "agreed", active: 35, seeds_agreed: 2, seeds_configured: 3, observed_at: "2026-09-29T11:31:45.000Z" };
+  const w = { state: "observed", answered_as_listed: 7, at_seed_height: 7, every_round_last_hour: null, window: { minutes: 60, observed_minutes: 23 },
+    other_key_shared: 18, other_key_shared_origins: 1, not_dialed_reasons: { no_address: 9 } };
+  const s1 = validatorsSentence(oc, w);
+  check("N1 the 29 Sep reading: the ladder's counts, the advisor's sentence, the rows with no address",
+    s1 === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Of these, 7 answered DNO as the listed key at the address each published, 7 at the seeds' height; every round in the last hour: insufficient observation (23 of 60 min). 18 listed keys share one published origin with a key that answered. That is not 18 nodes down. 9 ACTIVE rows publish no address on chain. Not in status.", s1);
+  const s2 = validatorsSentence(oc, Object.assign({}, w, { other_key_shared: 1, other_key_shared_origins: 1, not_dialed_reasons: { no_address: 1 } }));
+  const s3 = validatorsSentence(oc, Object.assign({}, w, { other_key_shared: 5, other_key_shared_origins: 2, not_dialed_reasons: { no_address: 0 } }));
+  check("N2 one key, one row: singular forms; several origins: each with a key that answered",
+    s2.includes(" 1 listed key shares one published origin with a key that answered. That is not a node down. 1 ACTIVE row publishes no address on chain.")
+    && s3.includes(" 5 listed keys share 2 published origins, each with a key that answered. That is not 5 nodes down. Not in status.") && !/no address/.test(s3), s2 + " | " + s3);
+  check("N3 no agreed list: no sentence; dials off: the list only", validatorsSentence(Object.assign({}, oc, { state: "not_agreed" }), w) === null
+    && validatorsSentence(oc, { state: "disabled" }) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Not in status.");
 }
 
 console.log("\n[" + TAG + "] every round, last hour");
@@ -342,6 +418,121 @@ console.log("\n[" + TAG + "] hardening");
   const zw = publicValidatorWatch(zr, zr.roundAt, {});
   check("H11 an agreed empty list: zero ACTIVE, zero watched, nothing dialed", publicOnChainValidators(zr, zr.listAt, {}).active === 0 && zw.watched === 0 && zw.answered_as_listed === 0);
   stopAll(zs);
+}
+
+console.log("\n[" + TAG + "] the first-agreed clock (DNO's clock)");
+{
+  const H = 3600000, D = 24 * H;
+  const K = (n) => Array.from({ length: n }, (_, i) => "k" + i);
+  const t0 = 1_800_000_000_000;
+  let db = new Database(":memory:");
+  let st = createFirstAgreedStore(db);
+  let s0 = st.summary(t0);
+  check("G1 empty store: no figure, and says why (T5)", s0.today === null && s0.week === null && s0.month === null && s0.since === null && s0.reason === "no agreed list with an ACTIVE key has been recorded yet", JSON.stringify(s0));
+  st.record(t0, K(35));
+  let s1 = st.summary(t0 + H);
+  check("G2 the store's first list is a baseline: +today is not reported until the record covers 24 h, never +35", s1.today === null && s1.reason === "the record started less than 24 h ago" && st.size() === 35, JSON.stringify(s1));
+  // one round a minute for the next 25 hours, same list (rounds are sparse here: the rule only looks at the round before)
+  for (let t = t0 + 60000; t <= t0 + 25 * H; t += 30 * 60000) st.record(t, K(35));
+  const tA = t0 + 25 * H;
+  let s2 = st.summary(tA);
+  check("G3 warm store, no new key: +today 0, not null (T1); +week not yet", s2.today === 0 && s2.week === null && s2.reason === "the record started less than 7 days ago", JSON.stringify(s2));
+  st.record(tA + 60000, K(35).concat(["new1"]));
+  let s3 = st.summary(tA + 60000);
+  check("G4 one new ACTIVE key on an agreed list: +today 1 (T2)", s3.today === 1, JSON.stringify(s3));
+  // restart: a new store on the same database
+  const st2 = createFirstAgreedStore(db);
+  check("G5 a restart keeps the figures (T4)", JSON.stringify(st2.summary(tA + 60000)) === JSON.stringify(s3) && st2.size() === 36);
+  // a 3 h gap inside the window: keys first seen after it still count, the list before the gap being inside the window
+  st2.record(tA + 3 * H, K(35).concat(["new1", "gap1"]));
+  check("G6 a key first seen after a gap inside the window counts", st2.summary(tA + 3 * H).today === 2, JSON.stringify(st2.summary(tA + 3 * H)));
+  // a 30 h gap that crosses the start of the day: the key's join time is not known, so +today has no figure
+  st2.record(tA + 33 * H, K(35).concat(["new1", "gap1", "gap2"]));
+  const s4 = st2.summary(tA + 33 * H);
+  check("G7 a gap across the start of the window: no figure for that window, and says why", s4.today === null && s4.reason === "a gap in the record crosses the start of the last 24 h", JSON.stringify(s4));
+  // keys that later leave ACTIVE still count where they first appeared
+  st2.record(tA + 33 * H + 60000, K(35));
+  const dbx = new Database(":memory:"), stx = createFirstAgreedStore(dbx);
+  for (let t = t0; t <= tA; t += 30 * 60000) stx.record(t, K(3));
+  stx.record(tA + 60000, K(3).concat(["x1"]));
+  stx.record(tA + 120000, K(3));
+  check("G8 not net of exits: a key that left ACTIVE still counts where it first appeared", stx.summary(tA + 120000).today === 1 && stx.size() === 4, JSON.stringify(stx.summary(tA + 120000)));
+  // after 31 days of record, the baseline 35 are never new: +month counts only the keys added after the first list
+  let tB = t0 + 31 * D;
+  for (let t = tA + 34 * H; t <= tB; t += 50 * 60000) st2.record(t, K(35));
+  const s6 = st2.summary(tB);
+  check("G9 the store's first list never counts, even a month later: +month 3 (new1, gap1, gap2), +week 0, +today 0", s6.month === 3 && s6.week === 0 && s6.today === 0 && s6.reason === null, JSON.stringify(s6));
+  // a write that fails leaves memory unchanged and every figure empty
+  const db3 = new Database(":memory:"), st3 = createFirstAgreedStore(db3);
+  st3.record(t0, K(3));
+  db3.run("DROP TABLE validator_first_agreed");
+  const ok3 = st3.record(t0 + 60000, K(4));
+  const s7 = st3.summary(t0 + 60000);
+  check("G10 a failed write: nothing recorded in memory, every figure null, and says why", ok3 === false && st3.size() === 3 && s7.today === null && s7.month === null && s7.reason === "the store could not record this round's list", JSON.stringify(s7));
+  // A write that fails once (a busy database): the figures come back with the next write that succeeds, and the key the
+  // failed write missed counts from the list that recorded it.
+  const real = new Database(":memory:");
+  let failNext = false;
+  const flaky = { run: (...a) => real.run(...a), query: (...a) => real.query(...a), transaction: (fn) => real.transaction(fn),
+    prepare: (...a) => { if (failNext) throw new Error("database is locked"); return real.prepare(...a); } };
+  const st5 = createFirstAgreedStore(flaky);
+  for (let t = t0; t <= tA; t += 30 * 60000) st5.record(t, K(3));
+  failNext = true;
+  const okA = st5.record(tA + 60000, K(3).concat(["late1"])), sA = st5.summary(tA + 60000);
+  failNext = false;
+  const okB = st5.record(tA + 120000, K(3).concat(["late1"])), sB = st5.summary(tA + 120000);
+  check("G10b a write that fails once: no figure while it fails, then +today 1 from the next list that is recorded", okA === false && sA.today === null && sA.reason === "the store could not record this round's list"
+    && okB === true && sB.today === 1 && sB.reason === "the record started less than 7 days ago" && st5.size() === 4, JSON.stringify([sA, sB]));
+  const cantOpen = createFirstAgreedStore({ run: () => { throw new Error("disk I/O error"); } });
+  check("G10c a store that cannot be opened: every figure null, nothing recorded, and says why", cantOpen.record(t0, K(3)) === false && cantOpen.size() === 0 && cantOpen.summary(t0).reason === "the store is not available on this server");
+  check("G11 no database: every figure null, and says why", createFirstAgreedStore(null).summary(t0).reason === "no store is configured on this server");
+  // An agreed list with no ACTIVE key does not start the record: the next list's keys are the baseline, never +35.
+  const st6 = createFirstAgreedStore(new Database(":memory:"));
+  st6.record(t0, []);
+  const s8 = st6.summary(t0 + 1000);
+  for (let t = t0 + 60000; t <= t0 + 25 * H; t += 30 * 60000) st6.record(t, K(35));
+  const s9 = st6.summary(t0 + 60000 + 24 * H);
+  check("G15 an empty first list does not start the record; the first list with keys is the baseline (+0, never +35)",
+    s8.since === null && s8.reason === "no agreed list with an ACTIVE key has been recorded yet" && s9.today === 0 && s9.since === t0 + 60000, JSON.stringify([s8, s9]));
+  // The boundary: a record that started exactly at the start of the window covers it.
+  const st7 = createFirstAgreedStore(new Database(":memory:"));
+  for (let t = t0; t <= t0 + D; t += 30 * 60000) st7.record(t, K(3));
+  check("G16 a record that started exactly 24 h ago covers the day: +today 0", st7.summary(t0 + D).today === 0, JSON.stringify(st7.summary(t0 + D)));
+  // A gap that crosses the start of the week but not of the day: the week has no figure, the day does.
+  const st8 = createFirstAgreedStore(new Database(":memory:"));
+  for (let t = t0; t <= t0 + 2 * D; t += 30 * 60000) st8.record(t, K(3));
+  const tG = t0 + 2 * D + 5 * D;                                 // five days without an agreed list
+  st8.record(tG, K(3).concat(["late"]));
+  for (let t = tG + 30 * 60000; t <= tG + 3 * D; t += 30 * 60000) st8.record(t, K(3).concat(["late"]));
+  const s10 = st8.summary(tG + 3 * D);                         // the week now starts a day after the list before the gap
+  check("G17 a gap across the start of the last 7 days only: +today 0, +week null with the reason, +month null (record under 30 days)",
+    s10.today === 0 && s10.week === null && s10.month === null && s10.reason === "a gap in the record crosses the start of the last 7 days", JSON.stringify(s10));
+  // Agreed lists with no ACTIVE key are not coverage: three days of them, then five keys never seen, is a gap across the
+  // day's start, not "+5 today".
+  const st9 = createFirstAgreedStore(new Database(":memory:"));
+  for (let t = t0; t <= t0 + 2 * D; t += 30 * 60000) st9.record(t, K(35));
+  for (let t = t0 + 2 * D + 30 * 60000; t <= t0 + 5 * D; t += 30 * 60000) st9.record(t, []);
+  st9.record(t0 + 5 * D + 60000, K(35).concat(["n1", "n2", "n3", "n4", "n5"]));
+  const s11 = st9.summary(t0 + 5 * D + 60000);
+  check("G18 a stretch of agreed lists with no ACTIVE key is a gap, not coverage: +today null with the reason, never +5",
+    s11.today === null && s11.reason === "a gap in the record crosses the start of the last 24 h", JSON.stringify(s11));
+
+  // Through a round: figures only while the list agrees; no key, URL or protocol time in what is published (T3, T6).
+  const gdb = new Database(":memory:"), gst = createFirstAgreedStore(gdb);
+  let clock = 1_900_000_000_000;
+  const rg1 = await round({ growth: gst, now: () => clock });
+  const og1 = publicOnChainValidators(rg1, rg1.listAt, {});
+  check("G12 a round records the agreed ACTIVE keys; the first list is a baseline", gst.size() === 19 && og1.first_agreed_today === null && og1.first_agreed_reason === "the record started less than 24 h ago" && og1.first_agreed_since === new Date(clock).toISOString() && og1.first_agreed_as_of === new Date(clock).toISOString(), JSON.stringify(og1));
+  SEED.b = { list: BASE_ROWS.slice(0, 5), stake: "1000000000000" }; SEED.c = { list: BASE_ROWS.slice(0, 4), stake: "1000000000000" };
+  clock += 60000;
+  const rg2 = await round({ growth: gst, now: () => clock });
+  const og2 = publicOnChainValidators(rg2, rg2.listAt, {});
+  check("G13 seeds disagree: every first-agreed figure null, nothing recorded, the list's own reason (T3)", og2.state === "not_agreed" && og2.first_agreed_today === null && og2.first_agreed_week === null && og2.first_agreed_as_of === null && gst.size() === 19
+    && og2.first_agreed_reason === og2.reason && publicOnChainValidators(null, clock, {}).first_agreed_reason === "no read has completed yet"
+    && publicOnChainValidators(rg2, rg2.listAt + 10 * 60000, {}).first_agreed_reason === "the last read is older than 300 s", JSON.stringify(og2));
+  SEED.b = { list: BASE_ROWS, stake: "1000000000000" }; SEED.c = { list: BASE_ROWS.slice(0, 5), stake: "2000000000000" };
+  const txt = JSON.stringify([og1, og2]);
+  check("G14 no key, URL, protocol time or stake in what is published (T6)", FORBIDDEN(txt).length === 0 && !/firstSeen|validAt|stakedAmount|first_seen/.test(txt), FORBIDDEN(txt).join(" "));
 }
 
 Object.values(V).concat([trap]).forEach((v) => v.srv.stop(true));

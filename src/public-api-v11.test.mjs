@@ -161,16 +161,32 @@ try {
   check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));
   // SPEC-v7: the on-chain validators read and watch, on /health only, counts only.
   const ocv = health.on_chain_validators, vwt = health.validator_watch;
-  const OC_KEYS = "active,listed,min_validator_stake,observed_at,other_status,reason,seeds_agreed,seeds_answered,seeds_configured,state,unstaking";
-  const VW_KEYS = "answered_as_listed,answered_no_key,answered_other_key,at_seed_height,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,no_answer,not_dialed,not_dialed_reasons,off_seed_height,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
+  const OC_KEYS = "active,first_agreed_as_of,first_agreed_month,first_agreed_reason,first_agreed_since,first_agreed_today,first_agreed_week,listed,min_validator_stake,observed_at,other_status,reason,seeds_agreed,seeds_answered,seeds_configured,state,unstaking";
+  const VW_KEYS = "answered_as_listed,answered_as_listed_seeds,answered_no_key,answered_other_key,at_seed_height,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,max_rows_per_origin,no_answer,not_dialed,not_dialed_reasons,off_seed_height,origins_dialed,other_key_shared,other_key_shared_origins,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
   check("V1 /health on_chain_validators: exactly the published keys", ocv && Object.keys(ocv).sort().join(",") === OC_KEYS, ocv && Object.keys(ocv).sort().join(","));
   check("V2 /health validator_watch: exactly the published keys", vwt && Object.keys(vwt).sort().join(",") === VW_KEYS, vwt && Object.keys(vwt).sort().join(","));
   check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
-  const ocCounts = ["listed", "active", "unstaking", "other_status"], vwCounts = ["watched", "not_dialed", "no_answer", "answered_other_key", "answered_no_key", "answered_as_listed", "every_round_last_hour"];
+  const ocCounts = ["listed", "active", "unstaking", "other_status", "first_agreed_today", "first_agreed_week", "first_agreed_month", "first_agreed_as_of"];
+  const vwCounts = ["watched", "not_dialed", "no_answer", "answered_other_key", "answered_no_key", "answered_as_listed", "every_round_last_hour",
+    "origins_dialed", "max_rows_per_origin", "other_key_shared", "other_key_shared_origins", "answered_as_listed_seeds"];
   check("V4 a count only in the agreed or observed state", ocv && vwt && (ocv.state === "agreed" || ocCounts.every((k) => ocv[k] === null)) && (vwt.state === "observed" || vwCounts.every((k) => vwt[k] === null))
     && (ocv.state !== "agreed" || (Number.isInteger(ocv.active) && ocv.seeds_agreed >= 2)) && (ocv.min_validator_stake === null || /^\d+$/.test(ocv.min_validator_stake)));
   const vLeaks = stringsDeep([ocv, vwt]).filter((x) => FULL_ID.test(x) || IPV4.test(x) || HOSTPORT.test(x) || /https?:|0x[0-9a-f]{8,}/i.test(x));
   check("V5 neither object carries an address, key, URL or host", vLeaks.length === 0, vLeaks.slice(0, 3).join(", "));
+  // SPEC-v7.1: every ACTIVE row in exactly one outcome; the first-agreed windows nest and say why when empty.
+  const z = (v) => (Number.isInteger(v) ? v : 0);
+  const part = !vwt || vwt.state !== "observed" || (
+    z(vwt.not_dialed) + z(vwt.no_answer) + z(vwt.answered_other_key) + z(vwt.answered_no_key) + z(vwt.answered_as_listed) === vwt.watched
+    && Object.values(vwt.not_dialed_reasons || {}).reduce((t, n) => t + z(n), 0) === vwt.not_dialed
+    && z(vwt.at_seed_height) + z(vwt.off_seed_height) + z(vwt.height_not_reported) + z(vwt.height_not_compared) === vwt.answered_as_listed
+    && z(vwt.other_key_shared) <= vwt.answered_other_key && z(vwt.answered_as_listed_seeds) <= vwt.answered_as_listed
+    && (vwt.other_key_shared === 0) === (vwt.other_key_shared_origins === 0) && vwt.origins_dialed <= vwt.watched - vwt.not_dialed);
+  check("V7 validator_watch: every ACTIVE row in exactly one outcome, and each subset inside its set", part, vwt && JSON.stringify(vwt).slice(0, 400));
+  const win = ocv ? [ocv.first_agreed_today, ocv.first_agreed_week, ocv.first_agreed_month] : [];
+  const nest = win.every((v) => v === null || (Number.isInteger(v) && v >= 0)) && (win.includes(null) ? typeof ocv.first_agreed_reason === "string" && ocv.first_agreed_reason.length > 0 : ocv.first_agreed_reason === null)
+    && [[0, 1], [1, 2], [0, 2]].every(([a, b]) => win[a] === null || win[b] === null || win[a] <= win[b])
+    && (ocv.first_agreed_since === null || ocv.first_agreed_as_of === null || Date.parse(ocv.first_agreed_since) <= Date.parse(ocv.first_agreed_as_of));
+  check("V8 on_chain_validators first-agreed windows: counts or null with a reason, today <= week <= month", ocv && nest, ocv && JSON.stringify(win) + " " + ocv.first_agreed_reason);
   check("V6 /organism carries neither", !("on_chain_validators" in o) && !("validator_watch" in o) && !JSON.stringify(o).includes("min_validator_stake"));
   // Site kit: assets under a content hash, cached; every page carries the one header with the locked mark.
   const aboutPage = await get("/about-demos");
