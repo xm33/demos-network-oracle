@@ -1,6 +1,12 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
 const HEALTH_URL = process.env.SENTINEL_HEALTH_URL || "http://127.0.0.1:55225";
+// Fleet history is served only on the agent's loopback internal listener (INTERNAL_PORT); the public port answers 404.
+const HISTORY_URL = process.env.SENTINEL_HISTORY_URL || (process.env.INTERNAL_PORT ? "http://127.0.0.1:" + process.env.INTERNAL_PORT : null);
+if (!HISTORY_URL) {
+  console.error("[SENTINEL] No fleet history source: set INTERNAL_PORT (the agent's internal listener) or SENTINEL_HISTORY_URL. Not starting.");
+  process.exit(1);
+}
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
@@ -48,7 +54,8 @@ async function fetchHealth() {
 }
 
 async function fetchHistory() {
-  var r = await fetch(HEALTH_URL + "/history", { signal: AbortSignal.timeout(8000) });
+  var r = await fetch(HISTORY_URL + "/history", { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error("history answered HTTP " + r.status + " at " + HISTORY_URL + " (set SENTINEL_HISTORY_URL or INTERNAL_PORT)");
   var d = await r.json();
   return d.data || [];
 }
@@ -168,6 +175,8 @@ async function runSentinel() {
     } else {
       log("  Clean — no anomalies");
     }
+    // The agent's /sentinel reports "ok" only while this stamp is recent.
+    var stamp = loadDedup(); stamp._lastCheck = Date.now(); saveDedup(stamp);
   } catch(e) { log("Cycle error: " + e.message); }
 }
 

@@ -103,11 +103,11 @@ check("B6 no hw-fleet-count fleet-size element in source",
 check("P0-TW public discovered_validators message has no fleet token",
       /crawl-visible this cycle/.test(SRC) && !/non-fleet validator\(s\) discovered/.test(SRC),
       "old non-fleet discovered message still in agent.mjs");
-check("P0-TW /reference h2 names the catalog table, not the cycle",
-      /<h2[^>]*>Crawl-observed identities<\/h2>/.test(SRC)
-        && !/>Discovered Validators<\/h2>/.test(SRC)
+check("P0-TW /reference h2 names the peer-listed identities, not the cycle or validators",
+      /<h2[^>]*>Peer-listed identities<\/h2>/.test(SRC)
+        && !/Discovered Validators/.test(SRC)
         && !/<h2[^>]*>Crawl-visible this cycle<\/h2>/.test(SRC),
-      "h2 is still cycle-named or Discovered Validators");
+      "h2 is still cycle-named or calls the rows validators");
 
 {
   const hRes = await fetch(BASE + "/health");
