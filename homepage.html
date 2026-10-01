@@ -186,10 +186,9 @@ h2 { font-size: 1.375rem; line-height: 1.2; font-weight: 500; color: var(--metal
 .status-value { display: flex; align-items: center; gap: 14px; font-size: clamp(2.125rem, 4.8vw, 3rem); line-height: 1; font-weight: 500; color: var(--metal-2); letter-spacing: 0.01em; }
 .status-value .ind { width: 14px; height: 14px; border-width: 2px; }
 .status-text { display: grid; gap: 8px; }
-.status-reason { font-size: 1.125rem; line-height: 1.4; color: var(--ink); }
+.cycle-lead { font-size: 1.125rem; line-height: 1.4; color: var(--ink); }
 .seeds { color: var(--metal-1); }
-.calm { color: var(--metal-1); font-size: 0.9375rem; padding-left: 12px; border-left: 1px solid var(--metal-0); }
-.calm[hidden] { display: none; }
+.door { font-family: var(--mono); font-size: 0.875rem; color: var(--metal-1); }
 .door a { font-family: var(--mono); font-size: 0.875rem; }
 .panel[data-state="unread"] .status-block, .panel[data-state="pending"] .status-block {
   background: repeating-linear-gradient(-45deg, transparent 0 9px, var(--elevated) 9px 10px); /* no signal, hatched along the needle's direction */
@@ -693,7 +692,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       <div class="panel" id="panel" data-state="pending">
         <header class="panel-head">
           <h2 id="cycle-title">This cycle</h2>
-          <p class="meta"><span>GET /organism</span><span class="wide"><span class="sep">/</span><span id="countdown">first read in progress</span></span></p>
+          <p class="meta"><span>GET /organism, GET /health</span><span class="wide"><span class="sep">/</span><span id="countdown">first read in progress</span></span></p>
         </header>
         <div class="panel-tools" role="group" aria-label="Update controls">
           <button type="button" class="btn" id="btn-pause" aria-pressed="false">Pause</button>
@@ -707,10 +706,9 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
             <p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain status</button></p>
           </div>
           <div class="status-text">
-            <p class="status-reason" id="status-reason" data-src="api" aria-live="polite">The first request to /organism is in flight.</p>
-            <p class="calm" id="calm" hidden>Public seeds answered and their reported heights agree.</p>
-            <p class="seeds" id="seeds-line">Awaiting first reading of /health.</p>
-            <p class="door"><a href="#catalog" id="door">find a node</a></p>
+            <p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p>
+            <p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>
+            <p class="door"><span id="door-n"></span><a href="#catalog" id="door">find a node</a></p>
           </div>
         </div>
         <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span>, or the observation is stale. Public assessment is unknown. Peer-listed identities do not enter status.</p>
@@ -1299,36 +1297,131 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   }
   const lower = (v) => (typeof v === 'string' && v ? v.toLowerCase() : null);
 
+  // The card's three lines (advisor, 1 Oct) are src/home-cycle.mjs, carried here verbatim by the build:
+  const HOME_CYCLE = (() => {
+// home-cycle.mjs — the This cycle card's lines, one source: the agent's page for readers without JavaScript and the
+// page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases. No imports.
+
+var NUM_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+var isNum = function(v) { return typeof v === "number" && Number.isFinite(v); };
+var fmt = function(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+
+// The count the lead prints (on_chain_validators while agreed), or null. Line 2 names the same count or none.
+function leadCount(oc) {
+  return oc && oc.state === "agreed" && isNum(oc.active) && isNum(oc.seeds_agreed) ? oc.active : null;
+}
+// The ACTIVE count as the agreeing seeds list it, or why there is none this cycle.
+function cycleLead(oc) {
+  if (!oc || oc.state === "pending") return "ACTIVE on chain: reading.";
+  if (leadCount(oc) !== null) return fmt(oc.active) + " ACTIVE on chain as " + (NUM_WORD[oc.seeds_agreed] || fmt(oc.seeds_agreed)) + " public seeds list them.";
+  return "ACTIVE on chain: not reported this cycle" + (typeof oc.reason === "string" && oc.reason ? " (" + oc.reason + ")" : "") + ".";
+}
+
+// The second line, in parts. r is one observation: { publicNodes (the configured seeds, each with ok), agreement (the
+// object /health publishes, or /organism's string), data_quality_reason, staleness_seconds, height_static_seconds,
+// active_incidents }. active: leadCount() of the same /health, or null.
+function seedsParts(r, active) {
+  r = r || {};
+  var ag = r.agreement && typeof r.agreement === "object" ? r.agreement : { state: r.agreement };
+  var st = typeof ag.state === "string" ? ag.state.toLowerCase() : null;
+  var compared = st === "strong" || st === "moderate" || st === "weak";
+  var nodes = Array.isArray(r.publicNodes) && r.publicNodes.length ? r.publicNodes : null;
+  var k = nodes ? nodes.filter(function(n) { return n && n.ok === true; }).length : null;
+  var m = isNum(ag.total_nodes) ? ag.total_nodes : null;          // seeds that gave their own height
+  var dq = typeof r.data_quality_reason === "string" ? r.data_quality_reason : null;
+  var own = function(x) { return x === 0 ? "none gave its own height" : x === 1 ? "1 gave its own height" : x + " gave their own height"; };
+  var fewer = nodes && m !== null && m < k && (compared || dq === "too_few_heights");
+  var p = { answered: null, heights: null, stall: null, incidents: null, status: null };
+  if (dq === "no_observation") p.answered = "No observation of the configured seeds has completed yet.";
+  else if (dq === "stale") {
+    p.answered = "The last observation of the configured seeds is " + (isNum(r.staleness_seconds) ? Math.floor(r.staleness_seconds / 60) + " min old." : "more than 5 min old.");
+    p.heights = "Heights were not compared.";
+  } else {
+    if (nodes) p.answered = k + " of " + nodes.length + " configured seeds answered" + (fewer ? "; " + own(m) : "") + ".";
+    else if (compared && m !== null) p.answered = m + " configured seeds gave their own height.";
+    else if (dq === "too_few_answers") p.answered = "Fewer than two configured seeds answered.";
+    else if (dq === "too_few_heights") p.answered = "Fewer than two configured seeds gave their own height.";
+    else p.answered = "Seeds: not reported in this reading.";
+    if (!compared) p.heights = "Heights were not compared.";
+    else {
+      var subject = fewer ? "Those heights" : nodes || m !== null ? "Their heights" : "The seeds' heights";
+      if (st === "strong") p.heights = subject + " align.";
+      else if (isNum(ag.block_spread)) {
+        p.heights = subject + " differ by " + (m === 2 ? "" : "up to ") + fmt(ag.block_spread) + " blocks"
+          + (m !== null && m >= 3 && isNum(ag.aligned_nodes) && ag.aligned_nodes < m ? "; " + ag.aligned_nodes + " of " + m + (ag.aligned_nodes === 1 ? " is" : " are") + " within 25 blocks of the median" : "") + ".";
+      } else p.heights = "Height agreement is " + st + ".";
+    }
+  }
+  // A stale observation's figures are as old as the observation: the height is not said to be still.
+  if (dq !== "stale" && isNum(r.height_static_seconds) && r.height_static_seconds >= 300) p.stall = "The height has not moved for " + Math.floor(r.height_static_seconds / 60) + " min.";
+  if (isNum(r.active_incidents) && r.active_incidents > 0) p.incidents = r.active_incidents + " active public incident" + (r.active_incidents === 1 ? "" : "s") + ".";
+  p.status = "Status is those seeds" + (isNum(active) ? ", not the " + fmt(active) : "") + ".";
+  return p;
+}
+function cycleSeeds(r, active) {
+  var p = seedsParts(r, active);
+  return [p.answered, p.heights, p.stall, p.incidents, p.status].filter(Boolean).join(" ");
+}
+// The slim bar that follows the reader repeats the card, what moves status first: incidents, then the seeds and heights.
+function readbarText(r) {
+  var p = seedsParts(r, null);
+  return [p.incidents, p.answered, p.heights, p.stall].filter(Boolean).join(" ");
+}
+
+// The peer-listed count for the door line, or null when it is not known.
+function cycleDoor(discovered) {
+  return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
+}
+return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
+})();
+  function leadLine(vm) {
+    if (vm.mode === 'oneread') return `${fmtInt(ONE_READ.active)} ACTIVE on chain in one read on ${stamp(Date.parse(ONE_READ.at))}, as two public seeds listed them. Not this cycle.`;
+    if (vm.mode === 'unread') return 'ACTIVE on chain: not read.';
+    if (vm.mode === 'pending') return 'ACTIVE on chain: reading.';
+    return HOME_CYCLE.cycleLead(vm.oc);
+  }
+  // Line 2 is made from one document: /health (seeds and agreement) when it carries the same observation as /organism,
+  // or, read this cycle, agrees with it on what status is made of (status, data quality, agreement, incidents); else
+  // /organism's own fields, which hold no answered count. An api 1.0 server's agreement counts are not the 1.1
+  // own-height counts, so only its word is used.
+  const agWord = (a) => lower(a && typeof a === 'object' ? a.state : a);
+  const statusAlike = (h, o) => lower(h.status) === lower(o.status) && agWord(h.agreement) === agWord(o.agreement)
+    && (h.data_quality_reason || null) === (o.data_quality_reason || null) && h.active_incidents === o.active_incidents;
+  function seedsReading(o, h) {
+    if (h && (h.observed_at === o.observed_at || (!reads.health.error && statusAlike(h, o)))) {
+      return API10 ? Object.assign({}, h, { agreement: { state: h.agreement && typeof h.agreement === 'object' ? h.agreement.state : h.agreement } }) : h;
+    }
+    const d = !API10 && o.agreement_detail && typeof o.agreement_detail === 'object' ? o.agreement_detail : {};
+    return { agreement: Object.assign({}, d, { state: o.agreement }), data_quality_reason: o.data_quality_reason, staleness_seconds: o.staleness_seconds,
+      height_static_seconds: o.height_static_seconds, active_incidents: o.active_incidents };
+  }
   function renderCycle() {
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
-    // Seeds sentence and door (from /health)
-    const nodes = h && Array.isArray(h.publicNodes) ? h.publicNodes : null;
-    if (nodes) {
-      const n = nodes.length, k = nodes.filter((x) => x && x.ok === true).length;
-      setText($('seeds-line'), `${k} of ${n} seeds answered. Those ${n} are the only endpoints whose answers enter status. Status does not use the catalog.`);
-    } else setText($('seeds-line'), h ? 'Seeds: not reported in this reading of /health.' : reads.health.error ? `Seeds: not read. ${reads.health.error}.` : 'Awaiting first reading of /health.');
+    const vm = validatorModel();
+    const active = vm.mode === 'live' ? HOME_CYCLE.leadCount(vm.oc) : vm.mode === 'oneread' ? ONE_READ.active : null;
+    setText($('cycle-lead'), leadLine(vm));
+    const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
+    setText($('door-n'), vg && isNum(vg.discovered) ? `${API10 ? `${fmtInt(vg.discovered)} recorded from peerlists` : HOME_CYCLE.cycleDoor(vg.discovered)} · ` : '');
 
     if (!o) {
       const failed = !!reads.organism.error;
       panel.dataset.state = failed ? 'unread' : 'pending';
       setTone($('status-ind'), failed ? 'unknown' : 'pending');
       setText($('status-value'), failed ? 'UNKNOWN' : 'READING');
-      setText($('status-reason'), failed ? `No reading: ${reads.organism.error}.${reads.organism.expired ? ' The last reading received is more than 300 s old and is no longer shown.' : ''} This is a failure to read, not an observation about the network.` : 'The first request to /organism is in flight.');
+      const why = failed ? `No reading: ${reads.organism.error}.${reads.organism.expired ? ' The last reading received is more than 300 s old and is no longer shown.' : ''} This is a failure to read, not an observation about the network.` : 'The first request to /organism is in flight.';
+      setText($('seeds-line'), why);
       $('insufficient').hidden = true;
-      $('calm').hidden = true;
       for (const k of ['trend', 'risk', 'confidence', 'data_quality']) setCard(k, failed ? 'unknown' : 'pending', failed ? 'unknown' : 'reading', failed ? 'not read' : '');
-      renderNotices(); renderReadbar();
+      renderNotices(); renderReadbar(failed ? `No reading: ${reads.organism.error}.` : '');
       return;
     }
     panel.dataset.state = 'live';
     const st = lower(o.status);
     setTone($('status-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
     setText($('status-value'), st ? st.toUpperCase() : 'UNKNOWN');
-    const reason = typeof o.status_reason === 'string' && o.status_reason ? o.status_reason : (typeof o.summary === 'string' && o.summary ? o.summary : '');
-    setText($('status-reason'), reason || 'No reason published in this reading.');
+    const r = seedsReading(o, h);
+    setText($('seeds-line'), HOME_CYCLE.cycleSeeds(r, active));
     $('insufficient').hidden = lower(o.data_quality) !== 'insufficient';
-    // The calm sentence speaks for this cycle: it is not repeated over a reading kept after a failed read.
-    $('calm').hidden = !isCalm(o, h) || !!reads.organism.error || !!reads.health.error;
 
     const card = (key, subText) => { const v = lower(o[key]); setCard(key, v ? (TONE[key][v] || 'neutral') : 'unknown', v || 'unknown', subText); };
     card('trend', '');
@@ -1341,25 +1434,16 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     const dqr = lower(o.data_quality) === 'insufficient' && typeof o.data_quality_reason === 'string' ? DQ_REASON[o.data_quality_reason] : '';
     card('data_quality', dqr || '');
     renderExplain('x-cycle');
-    renderNotices(); renderReadbar();
+    renderNotices(); renderReadbar(HOME_CYCLE.readbarText(r));
   }
-  // A calm reading, from this vantage only: stable, strong agreement, sufficient data, a height that moved in the last
-  // five minutes, and identities that more than one public peerlist lists. The sentence says no more than that.
-  function isCalm(o, h) {
-    if (!o || lower(o.status) !== 'stable' || lower(o.data_quality) !== 'sufficient') return false;
-    if (!h || !h.agreement || lower(h.agreement.state) !== 'strong') return false;
-    if (!isNum(o.height_static_seconds) || o.height_static_seconds >= 300) return false;
-    const rows = h.validator_growth && Array.isArray(h.validator_growth.validators) ? h.validator_growth.validators : [];
-    return rows.some((v) => v && v.monitored !== true && v.listed_this_cycle === true && isNum(v.listed_by) && v.listed_by >= 2);
-  }
-  // The slim bar that follows the reader once the panel has scrolled away. It repeats the panel; it adds nothing.
-  function renderReadbar() {
+  // The slim bar that follows the reader once the panel has scrolled away. It repeats the panel: status, then what
+  // moves it (incidents first, then the seeds and their heights); it adds nothing.
+  function renderReadbar(text) {
     const o = reads.organism.data;
     const st = o ? lower(o.status) : null;
     setTone($('rb-ind'), st ? (TONE.status[st] || 'neutral') : (reads.organism.error ? 'unknown' : 'pending'));
     setText($('rb-status'), st ? st.toUpperCase() : (reads.organism.error ? 'UNKNOWN' : 'READING'));
-    const reason = o && typeof o.status_reason === 'string' ? o.status_reason : (reads.organism.error ? `No reading: ${reads.organism.error}.` : '');
-    setText($('rb-reason'), reason);
+    setText($('rb-reason'), text || '');
     setText($('rb-live'), $('live-text').textContent);
   }
   if ('IntersectionObserver' in window) {

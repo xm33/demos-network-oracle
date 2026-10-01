@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { cycleLead } from "./home-cycle.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, "..");
@@ -45,8 +46,8 @@ const card = (key, label) => '<div data-card="' + key + '"><p class="k">' + labe
 const MARKERS = [
   '<div class="panel" id="panel" data-state="pending">',
   '<span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span>',
-  '<p class="status-reason" id="status-reason" data-src="api" aria-live="polite">The first request to /organism is in flight.</p>',
-  '<p class="seeds" id="seeds-line">Awaiting first reading of /health.</p>',
+  '<p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p>',
+  '<p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>',
   '<p class="insufficient" id="insufficient" hidden>',
   '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   '<span id="live-text">connecting</span>',
@@ -55,6 +56,9 @@ const MARKERS = [
 const VW_MARKER = '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>';
 MARKERS.forEach((m, i) => check("H" + (i + 1) + " fill marker present once: " + m.slice(0, 48), count(HOME, m) === 1, "count " + count(HOME, m)));
 check("H25 validators line: marker present once, and the agent fills it from the same text", count(HOME, VW_MARKER) === 1 && SRC.includes("validators: '" + VW_MARKER + "'"), "count " + count(HOME, VW_MARKER));
+const DOOR_MARKER = '<span id="door-n"></span>';
+check("H26 This cycle door: the peer-listed count marker present once, and the agent fills it", count(HOME, DOOR_MARKER) === 1 && SRC.includes("door: '" + DOOR_MARKER + "'"), "count " + count(HOME, DOOR_MARKER));
+check("H27 This cycle card: no 'nodes aligned' and no calm or status-reason line in the page", !/nodes aligned/.test(HOME.slice(HOME.indexOf('id="panel"'), HOME.indexOf('id="cards"'))) && !HOME.includes('id="calm"') && !HOME.includes('id="status-reason"'));
 check("H12 agent builds the same markers", MARKERS.slice(0, 7).every((m) => SRC.includes(JSON.stringify(m).slice(1, -1).replace(/\\"/g, '"')) || SRC.includes("'" + m + "'")));
 const markSha = createHash("sha256").update(readFileSync(join(ROOT, "assets", "dno-mark.jpg"))).digest("hex");
 const shaInSrc = (SRC.match(/MARK_ASSET_SHA256 = "([0-9a-f]{64})"/) || [])[1];
@@ -222,6 +226,13 @@ try {
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
+  const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('id="cards"'));
+  const ocH = health.on_chain_validators;
+  check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then the seeds status is made of; no 'nodes aligned'",
+    !o.observed_at || (/<p class="cycle-lead" id="cycle-lead" data-src="api">([\d,]+ ACTIVE on chain as \w+ public seeds list them\.|ACTIVE on chain: (reading|not reported this cycle[^<]*)\.)<\/p>/.test(cardHtml)
+      && (ocH.state !== "agreed" || cardHtml.includes(">" + cycleLead(ocH) + "<"))
+      && /<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ Status is those seeds(, not the [\d,]+)?\.<\/p>/.test(cardHtml)
+      && !/nodes aligned/.test(cardHtml)), cardHtml.slice(0, 600));
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());
   check("S26 the mark asset is served byte-for-byte, cached", mk.status === 200 && mk.headers.get("content-type") === "image/jpeg" && /immutable/.test(mk.headers.get("cache-control") || "") && createHash("sha256").update(mkBytes).digest("hex") === markSha);

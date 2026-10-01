@@ -34,6 +34,7 @@ import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from ".
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus } from "./validator-watch.mjs";
+import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -275,8 +276,9 @@ function homeCardMarker(key) {
 var HOME_MARKERS = {
   panel: '<div class="panel" id="panel" data-state="pending">',
   status: '<span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span>',
-  reason: '<p class="status-reason" id="status-reason" data-src="api" aria-live="polite">The first request to /organism is in flight.</p>',
-  seeds: '<p class="seeds" id="seeds-line">Awaiting first reading of /health.</p>',
+  lead: '<p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p>',
+  seeds: '<p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>',
+  door: '<span id="door-n"></span>',
   insufficient: '<p class="insufficient" id="insufficient" hidden>',
   agreement: '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   live: '<span id="live-text">connecting</span>',
@@ -290,12 +292,17 @@ function renderHomepageNoJs(html) {
     var e = escHtml;
     html = html.replace(HOME_MARKERS.panel, '<div class="panel" id="panel" data-state="live">');
     html = html.replace(HOME_MARKERS.status, '<span class="ind" id="status-ind" data-tone="' + homeTone("status", c.status) + '"></span><span id="status-value">' + e(String(c.status || "unknown").toUpperCase()) + '</span>');
-    html = html.replace(HOME_MARKERS.reason, '<p class="status-reason" id="status-reason" data-src="api" aria-live="polite">' + e(c.status_reason || c.summary || "No reason published in this reading.") + '</p>');
-    var nodes = latestPublicNodes || [];
-    if (nodes.length) {
-      var k = nodes.filter(function(n) { return n.ok; }).length;
-      html = html.replace(HOME_MARKERS.seeds, '<p class="seeds" id="seeds-line">' + k + ' of ' + nodes.length + ' seeds answered. Those ' + nodes.length + ' are the only endpoints whose answers enter status. Status does not use the catalog.</p>');
-    }
+    // The card's three lines (src/home-cycle.mjs, the same file the page's script carries): the ACTIVE count as the
+    // agreeing seeds list it, what status is made of in this observation, and the peer-listed count. The API's
+    // status_reason is not on the card; it stays in /organism.
+    var ocV = publicOnChainValidators(latestValidatorRound, Date.now(), validatorPublishConfig());
+    html = html.replace(HOME_MARKERS.lead, '<p class="cycle-lead" id="cycle-lead" data-src="api">' + e(cycleLead(ocV)) + '</p>');
+    var seedLine = cycleSeeds({ publicNodes: latestPublicNodes || [], agreement: c.agreement, data_quality_reason: c.data_quality_reason,
+      staleness_seconds: c.staleness_seconds, height_static_seconds: c.height_static_seconds, active_incidents: c.active_incidents }, leadCount(ocV));
+    html = html.replace(HOME_MARKERS.seeds, '<p class="seeds" id="seeds-line" aria-live="polite">' + e(seedLine) + '</p>');
+    var door = null;
+    try { door = cycleDoor(getValidatorGrowth().discovered); } catch (ignore) {}
+    if (door) html = html.replace(HOME_MARKERS.door, '<span id="door-n">' + e(door) + ' · </span>');
     if (c.data_quality === "insufficient") html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
     var subs = {
       trend: "",
