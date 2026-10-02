@@ -37,6 +37,14 @@ check("P1 timeout category", probeErrorCategory(timeout) === "timeout");
 check("P2 connection text never passes through", probeErrorCategory(new Error("Unable to connect. Is the computer able to access the url?")) === "connection failed");
 check("P3 HTTP status category", probeErrorCategory(null, 503) === "HTTP 503");
 check("P4 invalid JSON category", probeErrorCategory(new SyntaxError("x")) === "invalid response");
+check("P4b an aborted read is a timeout", probeErrorCategory(new DOMException("The operation was aborted.", "AbortError")) === "timeout" && probeErrorCategory(new DOMException("The operation timed out.", "TimeoutError")) === "timeout");
+check("P5 a fault in DNO's own read is not reported as the peer's connection failing", probeErrorCategory(new TypeError("resp.body.getReader is not a function")) === "internal error" && probeErrorCategory(new ReferenceError("x is not defined")) === "internal error");
+{
+  // What the runtime's fetch throws for a peer that cannot be reached: a plain Error with a code, never a TypeError.
+  const freed = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") }), nobody = "http://127.0.0.1:" + freed.port + "/"; freed.stop(true);   // a port nothing listens on
+  let refused = null; try { await Bun.fetch(nobody); } catch (e) { refused = e; }
+  check("P6 a refused connection is 'connection failed'", refused !== null && !(refused instanceof TypeError) && probeErrorCategory(refused) === "connection failed", refused && refused.name + " " + refused.code);
+}
 const TOKEN = "t".repeat(24);
 check("A1 exact token matches", adminTokenMatches(TOKEN, TOKEN));
 check("A2 empty configuration never matches", !adminTokenMatches("", "") && !adminTokenMatches(undefined, undefined) && !adminTokenMatches("", undefined));
@@ -88,8 +96,12 @@ check("S1 agent imports public-safety", /from "\.\/public-safety\.mjs"/.test(SRC
 check("S2 no unescaped toLocaleString() into server-built HTML cells", !/'<td>' \+ \(\w+(\.\w+)? \? \w+(\.\w+)?\.toLocaleString\(\)/.test(SRC));
 check("S3 admin token compared with adminTokenMatches, never read from the query string", /adminTokenMatches\(/.test(SRC) && !/reqQuery\.get\(\s*"token"\s*\)/.test(SRC));
 check("S4 discovered-peer probes resolve their target first", /resolvePublicProbeOrigin\(/.test(SRC));
-check("S4b discovered-peer probes do not follow redirects and read capped bodies", /fetch\(connUrl \+ "\/info", Object\.assign\(\{[^}]*redirect: "manual"[^)]*CAPPED_FETCH_OPTIONS/.test(SRC) && /readJsonCapped\(resp, INFO_BODY_MAX_BYTES\)/.test(SRC));
-check("S4c seed probes read capped bodies", /fetch\(node\.url \+ "\/info", Object\.assign\(\{[^}]*\}, CAPPED_FETCH_OPTIONS\)\)/.test(SRC) && /readJsonCapped\(res, INFO_BODY_MAX_BYTES\)/.test(SRC));
+check("S4b discovered-peer probes go through the one capped read, and do not follow redirects", /cappedJson\(connUrl \+ "\/info", \{ redirect: "manual" \}, \{ timeoutMs: 5000, maxBytes: INFO_BODY_MAX_BYTES \}\)/.test(SRC));
+const SEEDREAD = readFileSync(join(__dir, "seed-read.mjs"), "utf8");
+check("S4c seed reads go through the shared seed read (one capped read), cross-check reads through the capped read",
+  /readSeedInfo\(node, \{ timeoutMs: 5000, maxBytes: INFO_BODY_MAX_BYTES \}\)/.test(SRC) && /cappedJson\(node\.url \+ "\/info", null, \{/.test(SEEDREAD) && !/\bfetch\(/.test(SEEDREAD.replace(/fetch: o\.fetch/g, ""))
+  && /cappedJson\(rpc\.url, null, \{ timeoutMs: PUBLIC_PROBE_TIMEOUT_MS, maxBytes: INFO_BODY_MAX_BYTES \}\)/.test(SRC));
+check("S4d the agent makes no capped read of its own: no readJsonCapped, no CAPPED_FETCH_OPTIONS", !/readJsonCapped|CAPPED_FETCH_OPTIONS/.test(SRC));
 check("S5 request handler is wrapped (a throwing route cannot stop the process)", /function safeHandle\(/.test(SRC) && /createServer\(safeHandle\(/.test(SRC));
 check("S6 /home no longer writes headers twice", !/"Location": "\/" \}\);\s*res\.end\(\);\s*res\.writeHead\(200/.test(SRC));
 check("S7 no IPv4 literal outside loopback in agent.mjs", !/\b(?!127\.0\.0\.1\b)(?!0\.0\.0\.0\b)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(SRC.replace(/"\d+\.\d+\.\d+"/g, "")));

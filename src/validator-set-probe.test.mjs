@@ -5,7 +5,8 @@
 // are reported and make the tool exit non-zero.
 // Run: bun src/validator-set-probe.test.mjs   (executable harness, not `bun test`)
 
-import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue } from "../tools/validator-set-probe.mjs";
+import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue, agentSeedReads, agentSeedLine, agentReadsReport, agentRpcReads, agentVerdict, seedsForRound, seedsUnread, run } from "../tools/validator-set-probe.mjs";
+import { parseProbeOrigin } from "./public-safety.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -78,6 +79,24 @@ console.log("\n[" + TAG + "] seeds come from the agent's configuration");
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "agent.mjs"), "utf8");
   const seeds = seedsFromAgent(src);
   check("S1 the three configured seeds, by name", seeds.map((s) => s.name).join(",") === "kyne-node2,kyne-node3,kyne-node3b" && seeds.every((s) => /^https?:\/\//.test(s.url)), seeds.map((s) => s.name).join(","));
+  check("S1b each with its configured identity (compared with the answer by the pre-restart check, never printed)", seeds.every((s) => /^0x[0-9a-fA-F]{64}$/.test(s.identity)) && new Set(seeds.map((s) => s.identity)).size === 3);
+  // A configuration the tool cannot read in full is an error for the pre-restart check, not a shorter list of seeds.
+  const a0 = src.indexOf("const PUBLIC_NODES = {"), a1 = src.indexOf("};", a0), block = src.slice(a0, a1);
+  const noId = src.slice(0, a0) + block.replace(/identity:\s*"0x[0-9a-fA-F]+"/, 'identity: SOME_CONSTANT') + src.slice(a1);
+  const nested = src.slice(0, a0) + block.replace(/url:\s*"[^"]+"/, 'extra: { a: 1 }, $&') + src.slice(a1);
+  check("S1c every configured seed is read; an entry without a literal identity, or one the pattern cannot take in, is reported",
+    seedsUnread(src, seeds) === null && /configures 3 seeds; 2 could be read/.test(seedsUnread(noId, seedsFromAgent(noId)) || "") && /configures 3 seeds; 2 could be read/.test(seedsUnread(nested, seedsFromAgent(nested)) || ""),
+    JSON.stringify([seedsUnread(src, seeds), seedsUnread(noId, seedsFromAgent(noId)), seedsUnread(nested, seedsFromAgent(nested))]));
+  // A commented-out entry is not a seed of the agent; an entry whose url is not a string literal, or whose name the
+  // pattern does not take, is reported, not skipped.
+  const entry = block.match(/"kyne-node3b":\s*\{[^}]*\},?/)[0];
+  const commented = src.slice(0, a0) + block.replace(entry, entry.split("\n").map((l) => "  // " + l.trim()).join("\n")) + src.slice(a1);
+  const computed = src.slice(0, a0) + block.replace(/url:\s*"[^"]+"/, 'url: BASE + "/x"') + src.slice(a1);
+  const oddName = src.slice(0, a0) + block.replace('"kyne-node3":', '"Kyne_Node3":') + src.slice(a1);
+  check("S1d a commented-out entry is not read and not counted; a url that is not a string literal, or a name the pattern does not take, is reported",
+    seedsFromAgent(commented).map((x) => x.name).join() === "kyne-node2,kyne-node3" && seedsUnread(commented, seedsFromAgent(commented)) === null
+    && /configures 3 seeds; 2 could be read/.test(seedsUnread(computed, seedsFromAgent(computed)) || "") && /configures 3 seeds; 2 could be read/.test(seedsUnread(oddName, seedsFromAgent(oddName)) || ""),
+    JSON.stringify([seedsFromAgent(commented).map((x) => x.name), seedsUnread(commented, seedsFromAgent(commented)), seedsUnread(computed, seedsFromAgent(computed)), seedsUnread(oddName, seedsFromAgent(oddName))]));
 }
 
 console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
@@ -152,6 +171,99 @@ console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
   const prod = await dialReport(seeds, results);
   check("X3 --dial with the agent's resolver dials no loopback address, seeds included", prod.watch.state === "no_agreed_list" && /no figure/.test(prod.text), prod.text);
   [D1, D2, val].forEach((s) => s.stop(true));
+}
+
+console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, its own rule, and a verdict");
+{
+  // Seeds as the agent needs them: /info names the seed's key and lists it with its own height; nodeCalls as above.
+  const K = (b) => "0x" + b.repeat(32);
+  const dialHits = { n: 0 };
+  const val = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { dialHits.n++; return Response.json({ identity: K("c7"), peerlist: [{ identity: K("c7"), sync: { block: 7001 } }] }); } });
+  const vrows = (extra) => [{ address: K("c7"), status: "2", connectionUrl: "http://127.0.0.1:" + val.port, stakedAmount: "1", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }].concat(extra || []);
+  const agentSeed = (key, o = {}) => Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    if (o.status) return new Response("busy", { status: o.status });
+    if (req.method === "GET") {
+      return Response.json({ identity: o.names || key, version: "0.9.9 RC", peerlist: [{ identity: K("ee"), sync: { block: 6960 } }].concat(o.noSelf ? [] : [{ identity: key, sync: { block: 7000 } }]) });
+    }
+    const msg = (await req.json()).params[0].message;
+    return Response.json({ result: 200, response: msg === "getValidators" ? vrows(o.extraRow ? [{ address: K("d9"), status: "2", connectionUrl: null, stakedAmount: "1", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }] : []) : { minValidatorStake: "1000" } });
+  } });
+  const G1 = agentSeed(K("a1")), G2 = agentSeed(K("a2")), NOSELF = agentSeed(K("a3"), { noSelf: true }), OTHERKEY = agentSeed(K("a4"), { names: K("a9") }), DOWN = agentSeed(K("a5"), { status: 503 }), DIFF = agentSeed(K("a6"), { extraRow: true });
+  const cfg = (name, srv, key) => ({ name, url: url(srv), identity: key });
+  // The global fetch is replaced the way the Demos SDK's import replaces it: the agent's read must not use it.
+  const realGlobal = globalThis.fetch;
+  globalThis.fetch = () => { throw new Error("the global fetch must not be used for the agent's read"); };
+  const reads = await agentSeedReads([cfg("seed-a", G1, K("a1")), cfg("seed-b", G2, K("a2")), cfg("seed-noself", NOSELF, K("a3")), cfg("seed-otherkey", OTHERKEY, K("a4")), cfg("seed-down", DOWN, K("a5")), { name: "seed-gone", url: "http://127.0.0.1:1", identity: K("a7") }]);
+  const named = await agentSeedReads([{ name: "by-url", url: url(G1) + "/" }]);
+  const rpcs = await agentRpcReads([{ name: "fleet-secret-name", url: url(G1) + "/info" }, { name: "fleet-other-name", url: url(DOWN) + "/info" }, { name: "x", url: "http://127.0.0.1:1" }, { name: "y", url: url(DOWN) + "/info" }]);
+  globalThis.fetch = realGlobal;
+  const lines = reads.map(agentSeedLine);
+  check("G1 the agent's seed read works while the global fetch throws; each seed is read against its configured identity",
+    reads[0].ok && reads[0].height_source === "self" && reads[0].block === 7000 && reads[1].height_source === "self" && reads[2].height_source === "first_peer" && reads[3].identityMatch === false && reads[3].block === null
+    && reads[4].error === "HTTP 503" && reads[5].error === "connection failed", JSON.stringify(reads.map((r) => [r.name, r.ok, r.height_source, r.error])));
+  check("G2 one line per seed: a name and words", lines.join(" | ") === ["seed-a  answered · names the configured key · its own height", "seed-b  answered · names the configured key · its own height",
+    "seed-noself  answered · names the configured key · does not list itself: its first listed peer's height, which is not counted", "seed-otherkey  answered · names another key: no height is taken from it · no height",
+    "seed-down  no answer (HTTP 503)", "seed-gone  no answer (connection failed)"].join(" | "), lines.join(" | "));
+  check("G3 a seed given as name=url is read against the key it names itself", named[0].ok && named[0].height_source === "self" && named[0].identityMatch === true);
+  check("G4 cross-check RPCs: a count and categories, never a name", JSON.stringify(rpcs) === JSON.stringify({ total: 4, ok: 1, failed: ["2 HTTP 503", "1 connection failed"] }) && (await agentRpcReads([])) === null && (await agentRpcReads(null)) === null, JSON.stringify(rpcs));
+  const rep = agentReadsReport(reads, true, rpcs);
+  check("G5 the report: the runtime's version, the SDK line, the counts the agent's rule uses, the RPC count; no host, key or fleet name",
+    rep.text.includes("bun " + Bun.version + " · the Demos SDK was loaded first, as in the agent; it replaced the global fetch") && rep.text.includes("4 of 6 seeds answered; 2 gave their own height. The agent needs two for a status.")
+    && rep.text.includes("cross-check RPCs (not in status), the agent's capped read: 1 of 4 answered (2 HTTP 503 · 1 connection failed)") && rep.sufficient === true && leaks(rep.text).length === 0 && !/fleet-secret-name|fleet-other-name/.test(rep.text), rep.text);
+
+  const own = { ok: true, block: 7000, height_source: "self" }, fp = { ok: true, block: 6960, height_source: "first_peer" }, no = { ok: false, error: "HTTP 503" };
+  const v = (r, list, shape) => { const x = agentVerdict(r, list, shape || 0); return x.code + " " + x.text; };
+  check("V1 two own heights and an agreed list: OK, exit 0", v([own, own, no], "agreed") === "0 AGENT READS OK: 2 of 3 seeds gave their own height, and two seeds agree on the validator list.");
+  check("V2 one seed answered: FAILED, exit 3", v([own, no, no], "agreed") === "3 AGENT READS FAILED: 1 of 3 seeds answered /info, and the agent needs two. Do not restart on this.");
+  check("V3 two answered but one own height: FAILED, exit 3 (the agent would publish unknown)", v([own, fp, no], "agreed") === "3 AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two. Do not restart on this.");
+  check("V4 no seed lists itself: FAILED", v([fp, fp, fp], "agreed") === "3 AGENT READS FAILED: 0 of the 3 seeds that answered gave their own height, and the agent needs two. Do not restart on this.");
+  check("V5 the list is not agreed: FAILED, exit 3", v([own, own, own], "not_agreed") === "3 AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this.");
+  check("V6 only an unexpected answer shape: FAILED, exit 2, never OK", v([own, own, no], "agreed", 1) === "2 AGENT READS FAILED: an answer had an unexpected shape (see above). Do not restart on this.");
+  check("V7 several problems: all named, exit 3", v([own, no, no], "stale", 2) === "3 AGENT READS FAILED: 1 of 3 seeds answered /info, and the agent needs two; no validator list was agreed by two seeds; an answer had an unexpected shape (see above). Do not restart on this.");
+  check("V8 no list read: the seeds alone", v([own, own], null) === "0 AGENT READS OK: 2 of 2 seeds gave their own height.");
+
+  // run(): the whole check, as tools/pre-restart-check.mjs calls it. Loopback seeds need a resolver that admits them.
+  const loop = async (u) => { const p = parseProbeOrigin(u); return p && p.hostname === "127.0.0.1" ? "http://127.0.0.1:" + p.port : null; };
+  const runOut = async (args, ctx) => { const out = [], log = console.log; console.log = (...a) => out.push(a.join(" ")); let code; try { code = await run(args, Object.assign({ agentReads: true, sdkReplaced: true, resolveOrigin: loop }, ctx)); } finally { console.log = log; } return { code, text: out.join("\n") }; };
+  const pair = (a, b) => ["seed-a=" + url(a), "seed-b=" + url(b)];
+  dialHits.n = 0;
+  const good = await runOut(["--dial", ...pair(G1, G2)]);
+  check("W1 two good seeds, with dials: exit 0, the verdict last, the published origin dialed once", good.code === 0 && good.text.trim().endsWith("AGENT READS OK: 2 of 2 seeds gave their own height, and two seeds agree on the validator list.") && dialHits.n === 1
+    && good.text.includes("Watch (one round, --dial)") && leaks(good.text).length === 0, good.code + " | " + good.text.split("\n").slice(-3).join(" | ") + " | dials " + dialHits.n);
+  dialHits.n = 0;
+  const nodial = await runOut(pair(G1, G2));
+  check("W2 without --dial (VALIDATOR_WATCH_DIALS=0): the list is still read and agreed, and no published address is dialed", nodial.code === 0 && dialHits.n === 0 && nodial.text.includes("Watch (one round: the list only, no dials)")
+    && nodial.text.trim().endsWith("and two seeds agree on the validator list."), nodial.code + " | dials " + dialHits.n);
+  const few = await runOut(["--dial", ...pair(G1, NOSELF)]);
+  check("W3 a seed that does not list itself: exit 3, FAILED (the agent would publish unknown)", few.code === 3 && few.text.trim().endsWith("AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two. Do not restart on this."), few.code + " | " + few.text.split("\n").slice(-1));
+  const one = await runOut(["--dial", ...pair(G1, DOWN)]);
+  check("W4 one seed down: exit 3, FAILED on both counts", one.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two; no validator list was agreed by two seeds\. Do not restart on this\.$/.test(one.text.trim()), one.code + " | " + one.text.split("\n").slice(-1));
+  const differ = await runOut(["--dial", ...pair(G1, DIFF)]);
+  check("W5 the seeds' lists differ: exit 3", differ.code === 3 && differ.text.trim().endsWith("AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this."), differ.code + " | " + differ.text.split("\n").slice(-1));
+  // A seed whose /info names another key than the configured one is not asked for the list, as in the agent.
+  const three = [cfg("seed-a", G1, K("a1")), cfg("seed-b", G2, K("a2")), cfg("seed-otherkey", OTHERKEY, K("a4"))];
+  const forRound = seedsForRound(three, await agentSeedReads(three));
+  check("W5b the seed that named another key is excluded from the validator round, with the agent's words; the others are not",
+    forRound.map((x) => x.exclude).join("|") === "||its last /info answered with another key" && seedsForRound(three, null).every((x) => x.exclude === null), JSON.stringify(forRound.map((x) => x.exclude)));
+  const excluded = await dialReport(forRound, await Promise.all(three.map(probeSeed)), { resolveOrigin: loop, dials: false });
+  check("W5c the list is then agreed by the two seeds that are asked", excluded.onChain.state === "agreed" && excluded.onChain.seeds_agreed === 2 && excluded.onChain.seeds_answered === 2, JSON.stringify(excluded.onChain));
+  // run() with the seeds taken from the agent's configuration, as tools/pre-restart-check.mjs runs it with no arguments.
+  const conf = (entries) => "const PUBLIC_NODES = {\n" + entries.map(([n, srv, key]) => `  "${n}": {\n    url: ${typeof srv === "string" ? srv : JSON.stringify(url(srv))},\n    identity: "${key}",\n    source_type: "public"\n  },`).join("\n") + "\n};\n";
+  const errOut = async (ctx) => { const err = [], e = console.error; console.error = (...a) => err.push(a.join(" ")); try { return Object.assign(await runOut([], ctx), { err: err.join("\n") }); } finally { console.error = e; } };
+  const fromConf = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-b", G2, K("a2")], ["seed-otherkey", OTHERKEY, K("a4")]]) });
+  check("W7 seeds from the configuration, one answering with another key: it is not asked for the validator list (2 of 3 return it, though all three would), exit 0",
+    fromConf.code === 0 && fromConf.text.includes("seed-otherkey  answered · names another key: no height is taken from it · no height") && fromConf.text.includes("getValidators answered by 3 of 3")
+    && fromConf.text.includes("  list: 2 of 3 public seeds returned the same list") && fromConf.text.trim().endsWith("AGENT READS OK: 2 of 3 seeds gave their own height, and two seeds agree on the validator list.") && leaks(fromConf.text).length === 0,
+    fromConf.code + " | " + fromConf.text.split("\n").filter((l) => /another key|AGENT|  list:|getValidators answered by/.test(l)).join(" | "));
+  const twoOnly = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]) });
+  check("W7b with one seed left to ask, no list is agreed: exit 3", twoOnly.code === 3 && /no validator list was agreed by two seeds\. Do not restart on this\.$/.test(twoOnly.text.trim()), twoOnly.code + " | " + twoOnly.text.split("\n").slice(-1));
+  const unread = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-b", 'BASE + "/x"', K("a2")]]) });
+  check("W8 a configured seed the check cannot read in full: exit 64 before any read, and it says how many", unread.code === 64 && unread.text === "" && unread.err === "src/agent.mjs configures 2 seeds; 1 could be read with a url and an identity. The pre-restart check needs all of them.", JSON.stringify(unread));
+  const noBlock = await errOut({ agentSource: "const OTHER = {};" });
+  check("W8b a source with no seed configuration: exit 64, said plainly", noBlock.code === 64 && noBlock.err === "The seeds could not be read from src/agent.mjs: it has no PUBLIC_NODES block.", JSON.stringify(noBlock));
+  const plain = await runOut(pair(G1, G2), { agentReads: false });
+  check("W6 the plain probe (no agent reads) prints no verdict and keeps its exit codes", plain.code === 0 && !/AGENT READS/.test(plain.text) && !/Watch \(/.test(plain.text));
+  [G1, G2, NOSELF, OTHERKEY, DOWN, DIFF, val].forEach((x) => x.stop(true));
 }
 
 [A, B, C, E].forEach((s) => s.stop(true));

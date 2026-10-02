@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { Database } from "bun:sqlite";
 import { sanitizeHeight } from "./public-safety.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -205,6 +206,35 @@ console.log("\n[" + TAG + "] blocks advanced in the last 24 hours (as observed)"
   check("G4b a round where one seed alone answered is not a comparison point", lone.blocks_advanced === 15 * 79, JSON.stringify(lone));
   const none = cm(rows(() => null, 20));
   check("G5 no heights: no figure", none.blocks_advanced === undefined || none.blocks_advanced === null, JSON.stringify(none));
+}
+
+console.log("\n[" + TAG + "] which rule wrote a history row is on the row");
+{
+  // The shipped table, the older agent's INSERT (def1a71: it names its columns, so a column added later stays empty in
+  // its rows) and this version's INSERT, taken from the source.
+  const create = "CREATE TABLE public_node_history (" + SRC.match(/CREATE TABLE IF NOT EXISTS public_node_history \(([\s\S]*?)\)`/)[1] + ")";
+  const OLDER = "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const THIS = SRC.match(/"(INSERT INTO public_node_history \([^)]*\) VALUES \([^)]*\))"/)[1];
+  const args = (ts, h) => [ts, "stable", "low", "clear", "sufficient", "strong", h, 0, 3, 3, "[]"];
+  const since = new Function(extract("function ownHeightSince(") + "\nreturn ownHeightSince;")();
+  const db = new Database(":memory:");
+  db.run(create);
+  check("O1 a new store: every row will carry the mark, so no row is excluded", since(db) === 0 && db.query("SELECT name FROM pragma_table_info('public_node_history')").all().some((c) => c.name === "own_height"));
+  for (let k = 0; k < 5; k++) db.run(OLDER, args(T0 + k * 20 * S, 900 + k));
+  check("O2 rows the older agent wrote: the start is just after the newest of them", since(db) === T0 + 4 * 20 * S + 1, since(db));
+  for (let k = 5; k < 10; k++) db.run(THIS, args(T0 + k * 20 * S, 500 + k));
+  check("O3 then this version's rows: the start stays at the end of the older rows, and all of this version's rows are after it",
+    since(db) === T0 + 4 * 20 * S + 1 && db.query("SELECT COUNT(*) AS n FROM public_node_history WHERE own_height = 1 AND ts >= ?").get(since(db)).n === 5, since(db));
+  for (let k = 10; k < 13; k++) db.run(OLDER, args(T0 + k * 20 * S, 900 + k));              // a rollback: the older agent runs on the same store
+  check("O4 after a rollback the older agent's INSERT still works, and the start moves past its rows (this version's earlier rows are no longer used)",
+    since(db) === T0 + 12 * 20 * S + 1, since(db));
+  for (let k = 13; k < 15; k++) db.run(THIS, args(T0 + k * 20 * S, 513 + k));
+  const used = db.query("SELECT ts, median_block FROM public_node_history WHERE median_block IS NOT NULL AND ts < ? AND ts >= ? ORDER BY ts DESC LIMIT 2000").all(T0 + 99 * 20 * S, since(db));
+  check("O5 the start-up query then reads only rows written after the rollback, all under the own-height rule", used.length === 2 && used.every((r) => r.median_block >= 526), JSON.stringify(used));
+  check("O6 this version's INSERT sets the mark", /node_states, own_height\) VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?, \?, 1\)/.test(THIS), THIS);
+  check("O7 no stored stamp for it: the agent neither reads nor writes own_height_since", !/own_height_since/.test(SRC));
+  check("O8 every read of median, spread or agreement from stored rows is bounded by the start: the start-up clock, 24 h chain movement, the trend",
+    /\.all\(since, OWN_HEIGHT_SINCE\)/.test(SRC) && /\.all\(observedAt, OWN_HEIGHT_SINCE\)/.test(SRC) && /WHERE ts > \? AND ts >= \? ORDER BY ts DESC LIMIT 15 OFFSET 1"\)\.all\(trendSince, OWN_HEIGHT_SINCE\)/.test(SRC));
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

@@ -65,5 +65,21 @@ const s2 = run();
 check("L4 with only condition records and fleet incidents open, both counts are 0", s2.active_critical_public_incidents === 0 && s2.critical_public_incidents_in_window === 0, JSON.stringify([s2.active_critical_public_incidents, s2.critical_public_incidents_in_window]));
 check("L5 no malformed-row warning for well-formed rows", !logs.some((m) => /malformed/.test(m)), logs.join(" | "));
 
+console.log("\n[" + TAG + "] chain movement is published only when own-height rows cover the window");
+{
+  // The same store, read by an agent whose own-height rows begin inside the window (a deploy two hours ago, or a
+  // rollback and a new deploy): every row counts toward coverage, but the heights before the rule changed are another
+  // rule's. A figure from the last two hours next to "coverage 24/24h" would be read as the day's.
+  const at = (ownSince) => new Function("sharedDb", "log", "MONITOR_INTERVAL_MS", "FLEET_NODE_NAMES", "OWN_HEIGHT_SINCE", "process",
+    code + "\nreturn compute24hSummary;")(db, (m) => logs.push(m), 20000, ["n1", "n2", "n3"], ownSince, { env: {} })();
+  const whole = at(0), twoHours = at(now - 2 * H), justInside = at(now - DAY + 60000), before = at(now - DAY - 60000);
+  check("L6 every row under the rule: the figure for the day", whole.chain_movement.state === "normal" && whole.chain_movement.blocks_advanced > 4000, JSON.stringify(whole.chain_movement));
+  check("L7 the rule's rows began two hours ago: coverage is still the day's, and chain movement is unknown with the reason, not two hours' blocks",
+    twoHours.sufficient === true && twoHours.coverage_pct >= 99 && JSON.stringify(twoHours.chain_movement) === JSON.stringify({ state: "unknown", reason: "own_height_record_shorter_than_window", blocks_advanced: null }), JSON.stringify(twoHours.chain_movement));
+  check("L8 the same one minute into the window", justInside.chain_movement.state === "unknown" && justInside.chain_movement.blocks_advanced === null);
+  check("L9 once the rule's rows begin before the window, the figure is published again", before.chain_movement.state === "normal" && before.chain_movement.blocks_advanced === whole.chain_movement.blocks_advanced, JSON.stringify(before.chain_movement));
+  check("L10 the other parts of the summary do not change", ["coverage_pct", "typical_set_size", "longest_non_stable_minutes", "active_critical_public_incidents"].every((k) => twoHours[k] === whole[k]));
+}
+
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
 if (failed) process.exit(1);

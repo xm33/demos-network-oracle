@@ -7,7 +7,8 @@
 // every-round window; versions sanitised; stale and disabled states; counts only in what is published.
 // Run: bun src/validator-watch.test.mjs   (executable harness, not `bun test`)
 
-import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence, listedStatus } from "./validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
+import { readFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { parseProbeOrigin, resolvePublicProbeOrigin } from "./public-safety.mjs";
 
@@ -552,6 +553,25 @@ console.log("\n[" + TAG + "] the first-agreed clock (DNO's clock)");
   SEED.b = { list: BASE_ROWS, stake: "1000000000000" }; SEED.c = { list: BASE_ROWS.slice(0, 5), stake: "2000000000000" };
   const txt = JSON.stringify([og1, og2]);
   check("G14 no key, URL, protocol time or stake in what is published (T6)", FORBIDDEN(txt).length === 0 && !/firstSeen|validAt|stakedAmount|first_seen/.test(txt), FORBIDDEN(txt).join(" "));
+}
+
+console.log("\n[" + TAG + "] the dial switch");
+{
+  // As the value reaches the code: the agent's own .env reader keeps quotes and a trailing comment, the runtime's does not.
+  const off = ["0", " 0 ", '"0"', "'0'", "`0`", "0 # no dials on this host", "0#off", '"0" # no dials', "false", "FALSE", "off", "Off", "no", '"off"', "off#x"];
+  const on = [undefined, null, "", "1", "true", "on", "yes", "00", "0x", "#0", '"1"', '"1#0"', "1 # 0"];
+  check("D1 0, false, off and no switch the dials off, also in quotes of any kind, in another case or with a trailing comment (with or without a space)", off.every((v) => dialsEnabled(v) === false), JSON.stringify(off.filter((v) => dialsEnabled(v) !== false)));
+  check("D2 nothing set, or anything else, leaves them on", on.every((v) => dialsEnabled(v) === true), JSON.stringify(on.filter((v) => dialsEnabled(v) !== true)));
+  // The agent's .env reader, as written in agent.mjs: the value keeps its quotes. The switch must still be read as off.
+  const AGENT = readFileSync(new URL("./agent.mjs", import.meta.url), "utf8"), PRE = readFileSync(new URL("../tools/pre-restart-check.mjs", import.meta.url), "utf8");
+  const envLine = AGENT.split("\n").find((l) => l.includes('readFileSync(".env","utf8")')) || "";
+  const parse = (text) => { const env = {}; text.split("\n").forEach(function(line) { var m = line.match(/^([^#=]+)=(.*)$/); if (m) env[m[1].trim()] = m[2].trim(); }); return env; };
+  check("D3 a quoted 0 in .env, read as the agent reads .env, is off", envLine.includes("line.match(/^([^#=]+)=(.*)$/)") && envLine.includes("process.env[m[1].trim()] = m[2].trim()")
+    && parse('VALIDATOR_WATCH_DIALS="0"').VALIDATOR_WATCH_DIALS === '"0"' && dialsEnabled(parse('VALIDATOR_WATCH_DIALS="0"').VALIDATOR_WATCH_DIALS) === false
+    && dialsEnabled(parse("VALIDATOR_WATCH_DIALS=0 # off").VALIDATOR_WATCH_DIALS) === false, envLine.slice(0, 160));
+  check("D4 the agent and the pre-restart check read the switch with this function, and neither compares it to \"0\" itself",
+    AGENT.includes("const VALIDATOR_WATCH_DIALS = dialsEnabled(process.env.VALIDATOR_WATCH_DIALS);") && PRE.includes("const dials = dialsEnabled(process.env.VALIDATOR_WATCH_DIALS);")
+    && !/VALIDATOR_WATCH_DIALS\s*[!=]==/.test(AGENT + PRE));
 }
 
 Object.values(V).concat([trap]).forEach((v) => v.srv.stop(true));
