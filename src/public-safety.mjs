@@ -49,12 +49,17 @@ export function escHtml(value) {
 // ---- probe errors ------------------------------------------------------------------------------------
 // Raw fetch errors carry runtime text ("Unable to connect. Is the computer able to access the url?")
 // and sometimes addresses. Public surfaces get a category only.
+// "internal error": a TypeError or ReferenceError. The runtime's fetch reports a peer that cannot be reached as a plain
+// Error with a code, so these are a fault in DNO's own read (or a configured URL that is not one), and saying
+// "connection failed" about the peer would be false. On 2026-10-01 every seed read threw a TypeError and was published
+// as "connection failed".
 export function probeErrorCategory(err, httpStatus) {
   if (Number.isInteger(httpStatus)) return "HTTP " + httpStatus;
   if (!err) return "no answer";
   if (err.name === "TimeoutError" || err.name === "AbortError") return "timeout";
   if (err.name === "ResponseTooLarge") return "response too large";
   if (err instanceof SyntaxError || err instanceof RangeError) return "invalid response";  // RangeError: e.g. nesting too deep
+  if (err instanceof TypeError || err instanceof ReferenceError) return "internal error";
   return "connection failed";
 }
 
@@ -161,12 +166,46 @@ export async function resolvePublicProbeOrigin(connection, lookupFn) {
   return u.protocol + "//" + (isIP(ip) === 6 ? "[" + ip + "]" : ip) + (u.port ? ":" + u.port : "");
 }
 
-// Bodies DNO reads from peers are capped. Fetch them with CAPPED_FETCH_OPTIONS (the runtime must not expand a
-// compressed body before the cap applies; identity encoding is requested), then parse with readJsonCapped(): at most
-// maxBytes are read from the wire and at most maxBytes are produced by decompression. Past the cap the error is
-// named ResponseTooLarge; a peer streaming an endless or highly compressed body cannot exhaust memory.
+// DNO's own reads use the runtime's fetch, never the global one. Importing the Demos SDK replaces globalThis.fetch
+// (@bundlr-network/client -> near-api-js/lib/connect.js sets it to its node-fetch import, which under Bun is the
+// runtime's node-fetch shim). That replacement's bodies are Node streams, which readJsonCapped cannot read: on
+// 2026-10-01 every capped read threw. Bun.fetch is the runtime's own and is not replaced. Every capped read goes
+// through nativeFetch.
+export const nativeFetch = typeof Bun !== "undefined" && typeof Bun.fetch === "function" ? Bun.fetch.bind(Bun) : globalThis.fetch.bind(globalThis);
+
+// Bodies DNO reads from peers are capped, and cappedJson() below is the one way to read one. It fetches with
+// CAPPED_FETCH_OPTIONS (identity encoding is requested and the runtime must not expand a compressed body before the cap
+// applies) and parses with readJsonCapped(): at most maxBytes are read from the wire and at most maxBytes are produced
+// by decompression. Past the cap the error is named ResponseTooLarge; a peer streaming an endless or highly compressed
+// body cannot exhaust memory.
 export const CAPPED_FETCH_OPTIONS = Object.freeze({ decompress: false, headers: Object.freeze({ "Accept-Encoding": "identity" }) });
 function responseTooLarge(maxBytes) { var e = new Error("response larger than " + maxBytes + " bytes"); e.name = "ResponseTooLarge"; return e; }
+// One capped read with the runtime's fetch, and the only way DNO makes one. Resolves to { status, ok, headersMs, data }:
+// data is the parsed JSON body when the status is read (2xx, or opts.read(status)), else undefined. It throws what the
+// fetch or readJsonCapped throw (TimeoutError, ResponseTooLarge, SyntaxError, ...). On every path the request is aborted
+// before this returns: cancelling a body does not make the runtime stop receiving it, so a response that is not read to
+// its end (a status that is not read, a declared or streamed size past the cap) would be buffered until the timeout.
+// Redirects are never followed: a 3xx is a status like any other (not ok, no data). An answer may not send DNO's read to
+// another address, a loopback or private one included; the caller's init cannot turn this off.
+// opts: { timeoutMs (5 s), maxBytes (2 MB), read(status) -> boolean, fetch } (fetch defaults to nativeFetch; tests may
+// pass another). A call that names no cap is still capped.
+export const CAPPED_DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+export async function cappedJson(url, init, opts) {
+  var o = opts || {}, ctl = new AbortController(), started = Date.now();
+  var maxBytes = Number.isFinite(o.maxBytes) && o.maxBytes > 0 ? o.maxBytes : CAPPED_DEFAULT_MAX_BYTES;
+  var timer = setTimeout(function() { ctl.abort(new DOMException("The operation timed out.", "TimeoutError")); }, o.timeoutMs || 5000);
+  try {
+    // The fixed options come last, so a caller's init cannot change them: no automatic decompression, no redirect, this
+    // read's own signal (a caller's signal is not used), and identity encoding whatever case the caller named it in.
+    var headers = new Headers((init && init.headers) || {});
+    Object.keys(CAPPED_FETCH_OPTIONS.headers).forEach(function(k) { headers.set(k, CAPPED_FETCH_OPTIONS.headers[k]); });
+    var resp = await (o.fetch || nativeFetch)(url, Object.assign({}, init || {}, {
+      decompress: CAPPED_FETCH_OPTIONS.decompress, redirect: "manual", signal: ctl.signal, headers: headers }));
+    var out = { status: resp.status, ok: resp.ok, headersMs: Date.now() - started, data: undefined };
+    if (o.read ? o.read(resp.status) : resp.ok) out.data = await readJsonCapped(resp, maxBytes);
+    return out;
+  } finally { clearTimeout(timer); try { ctl.abort(); } catch (e) {} }
+}
 export async function readJsonCapped(resp, maxBytes) {
   var declared = Number(resp.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) throw responseTooLarge(maxBytes);

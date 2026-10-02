@@ -3,6 +3,7 @@
 // Static part: homepage.html against agent.mjs (server-side fill markers, mark asset, ban list).
 // Served part: every public representation of the new data, against a running agent.
 // Run:  bun src/public-api-v11.test.mjs [baseUrl]   (executable harness, not `bun test`)
+//       bun src/public-api-v11.test.mjs --static    the static part only: needs no running agent (before a restart)
 
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -14,7 +15,8 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, "..");
 const SRC = readFileSync(join(__dir, "agent.mjs"), "utf8");
 const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
-const BASE = process.argv[2] || "http://localhost:55225";
+const STATIC_ONLY = process.argv.includes("--static");
+const BASE = process.argv.slice(2).find((a) => !a.startsWith("--")) || "http://localhost:55225";
 const TAG = "PUBLIC_API_V11";
 let passed = 0, failed = 0;
 function check(name, cond, detail) {
@@ -72,6 +74,35 @@ check("H18 homepage: no old seed sentence (DNO dials more than the seeds)", !HOM
 check("H19 lookup is requested in one place, inside the explicit button's handler", count(HOME, "getJSON('/catalog/lookup") === 1
   && /\$\('lookup-btn'\)\.addEventListener\('click', async \(\) => \{[^}]*?getJSON\('\/catalog\/lookup\?key='/.test(HOME));
 // R2: what a peerlist's readiness flag means has not been confirmed on a real /info, so it is on no public surface.
+// The validator changes when a reading turns stale: the body then says unknown, so a 304 for the body that said
+// "stable" would be wrong. Runs the shipped function and the body's own test with a fixed clock: the two must turn at
+// the same instant (the body rounds to whole seconds, so that is 300.5 s, not 300.0 s).
+{
+  const i = SRC.indexOf("  function observationValidators(route) {"), fn = SRC.slice(i, SRC.indexOf("\n  }\n", i) + 5);
+  const g = SRC.indexOf("function getStaleness() {"), stalenessFn = SRC.slice(g, SRC.indexOf("\n}\n", g) + 3);
+  const limit = Number(SRC.match(/const PUBLIC_STALE_AFTER_SECONDS = (\d+);/)[1]);
+  const at = Date.UTC(2026, 9, 1, 12, 0, 0);
+  const tagAt = (now, route, round) => new Function("lastPublicObservedAt", "cycleCount", "latestValidatorRound", "Date", "PUBLIC_STALE_AFTER_SECONDS", stalenessFn + fn + "\nreturn observationValidators;")(
+    at, 7, round || null, class extends Date { static now() { return now; } }, limit)(route);
+  // The body's test, as computeCanonicalState writes it.
+  const bodyRule = SRC.match(/var stalenessSeconds = Math\.max\(0, Math\.round\(\(nowMs - \(observedAtMs \|\| AGENT_STARTED_AT\)\) \/ 1000\)\);/) && /else if \(stalenessSeconds > PUBLIC_STALE_AFTER_SECONDS\) dataQualityReason = "stale";/.test(SRC);
+  const bodyStale = (now) => Math.max(0, Math.round((now - at) / 1000)) > limit;
+  const fresh = tagAt(at + 299000, "organism"), stale = tagAt(at + 301000, "organism"), later = tagAt(at + 900000, "organism");
+  check("H19b the ETag is the same while a reading is fresh, changes once when it turns stale, and then stays",
+    i > 0 && g > 0 && limit === 300 && stale.etag !== fresh.etag && later.etag === stale.etag && /-stale"$/.test(stale.etag) && stale.lastModified === fresh.lastModified, JSON.stringify([fresh, stale]));
+  const around = [299999, 300000, 300001, 300013, 300250, 300492, 300499, 300500, 300501, 301000];
+  check("H19c the ETag turns stale at the same instant as the body, not half a second before it",
+    !!bodyRule && around.every((d) => /-stale"$/.test(tagAt(at + d, "organism").etag) === bodyStale(at + d)) && !bodyStale(at + 300499) && bodyStale(at + 300500),
+    JSON.stringify(around.map((d) => [d, /-stale"$/.test(tagAt(at + d, "organism").etag), bodyStale(at + d)])));
+  // Each route computes its validators once, before its body, and sends them with the 200. Computed again after the
+  // body, a stale ETag could go out with a body that was built while the reading was still fresh.
+  const routeBody = (path) => { const a = SRC.indexOf('reqPath === "' + path + '") {'); return SRC.slice(a, SRC.indexOf("} else if (reqPath ===", a + 10)); };
+  const once = (path, name, firstBodyCall) => { const b = routeBody(path), calls = b.split('observationValidators("' + name + '")').length - 1; return calls === 1 && b.indexOf('observationValidators("' + name + '")') < b.indexOf(firstBodyCall); };
+  check("H19e /organism, /health and /catalog each compute their validators once, before the body",
+    once("/organism", "organism", "computeCanonicalState()") && once("/health", "health", "computeCanonicalState()") && once("/catalog", "catalog", "getPublicCatalog()"),
+    JSON.stringify(["/organism", "/health", "/catalog"].map((p) => routeBody(p).split("observationValidators(").length - 1)));
+  check("H19d /health keeps its validator-round part after the stale mark", tagAt(at + 301000, "health", { roundAt: 5 }).etag === 'W/"health-' + at + '-7-stale-v5"' && tagAt(at + 1000, "health", { roundAt: 5 }).etag === 'W/"health-' + at + '-7-v5"');
+}
 check("H20 no readiness flag in public output (toPublicPeer, catalog rows, validator_growth rows)", !/readiness_flag\s*:|reported_readiness_flag|reported_ready\b/.test(SRC)
   && !/^\s+ready: /m.test(SRC.slice(SRC.indexOf("function toPublicPeer"), SRC.indexOf("function toPublicPeer") + 900)));
 
@@ -85,6 +116,11 @@ const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
+if (STATIC_ONLY) {
+  console.log("\n[" + TAG + "] served checks skipped (--static)");
+  console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
+  process.exit(failed ? 1 : 0);
+}
 console.log("\n[" + TAG + "] served (base: " + BASE + ")");
 async function get(path, headers) { const r = await fetch(BASE + path, { headers: headers || {} }); let body = null; try { body = await r.clone().json(); } catch (e) { body = await r.text(); } return { status: r.status, headers: r.headers, body }; }
 try {
@@ -163,6 +199,19 @@ try {
   const firstPeer = pn.filter((n) => n.height_source === "first_peer").map((n) => n.name);
   const vgSeeds = (vg.validators || []).filter((v) => v.monitored && firstPeer.includes(v.display));
   check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));
+  // New peer-listed identities: a window the count does not cover has no figure, and says why; the 1.0 fields stay numbers.
+  const fc = vg.first_counted, WIN = ["today", "week", "month"];
+  check("G1 validator_growth.first_counted: exactly its keys, each window an integer or null, since an ISO time or null",
+    fc && Object.keys(fc).sort().join(",") === "month,note,reason,since,today,week" && WIN.every((w) => fc[w] === null || (Number.isInteger(fc[w]) && fc[w] >= 0))
+      && (fc.since === null || !Number.isNaN(Date.parse(fc.since))) && typeof fc.note === "string", JSON.stringify(fc));
+  check("G2 a window without a figure has a reason, and a later window never has a figure when an earlier one has none",
+    fc && (WIN.every((w) => fc[w] !== null) ? fc.reason === null : typeof fc.reason === "string" && fc.reason.length > 0)
+      && !(fc.today === null && fc.week !== null) && !(fc.week === null && fc.month !== null), JSON.stringify(fc));
+  check("G3 the 1.0 today, week and month are numbers, equal to first_counted where it has a figure, and never above the rows counted after the starting set",
+    fc && WIN.every((w) => Number.isInteger(vg[w]) && vg[w] >= 0 && vg[w] <= vg.discovered && (fc[w] === null || fc[w] === vg[w])) && vg.today <= vg.week && vg.week <= vg.month, JSON.stringify([vg.today, vg.week, vg.month, fc]));
+  const firstTimes = (cat.rows || []).map((r) => Date.parse(r.first_seen)).filter((t) => !Number.isNaN(t));
+  check("G4 since is set once an identity is published: one hour after the count's start, which is not later than the earliest first_seen in /catalog",
+    firstTimes.length === 0 ? fc.since === null || !Number.isNaN(Date.parse(fc.since)) : fc.since !== null && Date.parse(fc.since) <= Math.min(...firstTimes) + 3600000, JSON.stringify([fc && fc.since, firstTimes.length && new Date(Math.min(...firstTimes)).toISOString()]));
   // SPEC-v7: the on-chain validators read and watch, on /health only, counts only.
   const ocv = health.on_chain_validators, vwt = health.validator_watch;
   const OC_KEYS = "active,first_agreed_as_of,first_agreed_month,first_agreed_reason,first_agreed_since,first_agreed_today,first_agreed_week,listed,min_validator_stake,observed_at,other_status,reason,seeds_agreed,seeds_answered,seeds_configured,state,unstaking";

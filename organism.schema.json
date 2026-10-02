@@ -56,7 +56,7 @@
         "chain_movement": { "type": "object", "required": ["state"],
           "properties": {
             "state": { "enum": ["unknown","normal","interrupted"] },
-            "reason": { "type": "string", "description": "Present on some non-normal states. Examples: no_data, insufficient_buckets, low_advance_ratio." },
+            "reason": { "type": "string", "description": "Present on some non-normal states. Examples: no_data, insufficient_buckets, low_advance_ratio, own_height_record_shorter_than_window (rounds recorded under the own-height rule do not cover the window yet; chain movement is not published until they do)." },
             "pct_advancing": { "type": "number" },
             "longest_static_minutes": { "type": "number" },
             "blocks_advanced": { "type": ["integer","null"], "minimum": 0, "description": "Median height at the newest round in the window minus the oldest, over rounds where at least two seeds reported their own height; as observed from the public seeds. Null when there is no pair to compare, or when the median went down by more than 25 blocks between two such rounds (a reset, or seeds far apart). No target rate. Additive in 1.1." },

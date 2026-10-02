@@ -1763,7 +1763,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     items.push(item('chain movement', el('span', { class: 'lv' }, ind(TONE.movement[cm] || 'neutral'), el('span', { text: cm }))));
     if (l.chain_movement && typeof l.chain_movement === 'object' && 'blocks_advanced' in l.chain_movement) {
       const ba = l.chain_movement.blocks_advanced;
-      items.push(item('blocks advanced (observed)', el('span', { text: isNum(ba) ? fmtInt(ba) : 'not published' }), isNum(ba) ? 'newest median minus oldest · no target rate' : 'no comparable pair in the window'));
+      items.push(item('blocks advanced (observed)', el('span', { text: isNum(ba) ? fmtInt(ba) : 'not published' }), isNum(ba) ? 'newest median minus oldest · no target rate'
+        : l.chain_movement.reason === 'own_height_record_shorter_than_window' ? 'own heights recorded for less than 24 h' : 'no comparable pair in the window'));
     }
     items.push(item('longest non-stable interval', el('span', { text: isNum(l.longest_non_stable_minutes) ? (l.longest_non_stable_minutes > 0 ? `${l.longest_non_stable_minutes}m` : 'none observed') : 'not reported' })));
     items.push(item('active critical public incidents', el('span', { text: isNum(l.active_critical_public_incidents) ? String(l.active_critical_public_incidents) : 'not reported' })));
@@ -1880,19 +1881,20 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   $('vw-acct').addEventListener('pointerleave', () => markAccounting(null));
   // First counted by DNO: ACTIVE keys first seen on an agreed list in the last 24 h, 7 days and 30 days (the DNO clock).
   // A window with no figure says "not reported", and why, never +0.
+  // In window order: "+n today", and each run of windows without a figure in one clause: "this week, this month: not reported".
+  function windowLine(src, W) {
+    const out = [];
+    let gap = [];
+    const flush = () => { if (gap.length) out.push(`${gap.join(', ')}: not reported`); gap = []; };
+    W.forEach(([f, l]) => { if (src && isNum(src[f])) { flush(); out.push(`+${fmtInt(src[f])} ${l}`); } else gap.push(l); });
+    flush();
+    return out.join(' · ');
+  }
   function renderGrowth(vm) {
     const box = $('vw-growth'), { mode, oc } = vm;
     if (mode === 'pending' || mode === 'unread') { box.hidden = true; return; }
     const W = [['first_agreed_today', 'today'], ['first_agreed_week', 'this week'], ['first_agreed_month', 'this month']];
-    // In window order: "+n today", and each run of windows without a figure in one clause: "this week, this month: not reported".
-    const line = (src) => {
-      const out = [];
-      let gap = [];
-      const flush = () => { if (gap.length) out.push(`${gap.join(', ')}: not reported`); gap = []; };
-      W.forEach(([f, l]) => { if (src && isNum(src[f])) { flush(); out.push(`+${fmtInt(src[f])} ${l}`); } else gap.push(l); });
-      flush();
-      return out.join(' · ');
-    };
+    const line = (src) => windowLine(src, W);
     let n = null, text, why = null;
     if (mode === 'oneread') {
       n = ONE_READ.active; text = line(null);
@@ -2012,7 +2014,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     setVal($('gc-answered'), vg ? num(vg.monitored_online) : why);
     setVal($('gc-head'), vg ? num(vg.monitored_at_head) : why);
     setVal($('gc-seeds'), vg ? num(vg.monitored) : why);
-    setText($('growth-line'), vg && isNum(vg.today) && isNum(vg.week) && isNum(vg.month) ? `+${vg.today} today · +${vg.week} this week · +${vg.month} this month` : '');
+    const fc = vg && vg.first_counted && typeof vg.first_counted === 'object' ? vg.first_counted : null;
+    const CW = [['today', 'today'], ['week', 'this week'], ['month', 'this month']];
+    setText($('growth-line'), fc ? windowLine(fc, CW) + (typeof fc.reason === 'string' && fc.reason && CW.some(([f]) => !isNum(fc[f])) ? ` (${fc.reason})` : '')
+      : vg && isNum(vg.today) && isNum(vg.week) && isNum(vg.month) ? `+${vg.today} today · +${vg.week} this week · +${vg.month} this month` : '');
     const crawlAt = vg ? parseTime(vg.catalog_crawl_completed_at) : null;
     const crawlLine = $('crawl-line');
     if (vg && ('catalog_crawl_completed_at' in vg || 'public_peerlists_read' in vg)) {

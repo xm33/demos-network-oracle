@@ -21,7 +21,7 @@
 // Runtime tests: bun src/validator-watch.test.mjs
 
 import { isIP } from "node:net";
-import { sanitizeHeight, probeErrorCategory, mapWithConcurrency, readJsonCapped, parseProbeOrigin, CAPPED_FETCH_OPTIONS } from "./public-safety.mjs";
+import { sanitizeHeight, probeErrorCategory, mapWithConcurrency, cappedJson, parseProbeOrigin, nativeFetch } from "./public-safety.mjs";
 
 export const STATUS_ACTIVE = "2";
 export const STATUS_UNSTAKING = "3";
@@ -44,17 +44,26 @@ export const WATCH_DEFAULTS = Object.freeze({
 const VERSION_RE = /^v?\d{1,2}\.\d{1,3}(\.\d{1,3})?([ -]?(rc|beta|alpha)[ .]?\d{0,2})?$/i;
 export function versionOf(value) { return typeof value === "string" && VERSION_RE.test(value.trim()) ? value.trim() : null; }
 
+// The dial switch, VALIDATOR_WATCH_DIALS, as it may be written in .env or a service unit. Off: 0, false, off, no, in any
+// case, in quotes (", ' or `) or with a trailing # comment, with or without a space before it. On: anything else, or
+// nothing. One function for the agent and for the pre-restart check: the agent's own .env reader keeps quotes and
+// comments, the runtime's strips them, and a switch read two ways would stop the dials in one and not in the other.
+export function dialsEnabled(value) {
+  var s = String(value === undefined || value === null ? "" : value).trim();
+  var quoted = s.match(/^(["'`])(.*?)\1/);
+  s = (quoted ? quoted[2] : s.replace(/#.*$/, "")).trim().toLowerCase();
+  return !(s === "0" || s === "false" || s === "off" || s === "no");
+}
+
 // ---- wire -------------------------------------------------------------------------------------------------------
 export function nodeCallBody(message, data) {
   return JSON.stringify({ method: "nodeCall", params: [{ type: "nodeCall", message: message, sender: null, receiver: null, timestamp: null, data: data || {}, extra: "" }] });
 }
-// CAPPED_FETCH_OPTIONS (identity encoding, no automatic decompression) with redirects refused: a 3xx is no answer.
-function fetchInit(extra, timeoutMs) {
-  return Object.assign({}, CAPPED_FETCH_OPTIONS, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) }, extra, {
-    headers: Object.assign({}, CAPPED_FETCH_OPTIONS.headers, (extra && extra.headers) || {})
-  });
+// One capped read (identity encoding, no automatic decompression, stopped when done) with redirects refused: a 3xx is no
+// answer. Only a 200 is read.
+function readOne(url, init, o) {
+  return cappedJson(url, Object.assign({ redirect: "manual" }, init), { timeoutMs: o.timeoutMs, maxBytes: o.maxBytes, fetch: o.fetch, read: function(status) { return status === 200; } });
 }
-async function discard(resp) { try { if (resp.body) await resp.body.cancel(); } catch (e) {} }
 function withTimeout(promise, ms) {
   var timer;
   return Promise.race([promise, new Promise(function(resolve) { timer = setTimeout(function() { resolve(null); }, ms); })]).finally(function() { clearTimeout(timer); });
@@ -63,9 +72,9 @@ function withTimeout(promise, ms) {
 // One nodeCall to a pinned origin. { ok: true, response } or { ok: false, error } (a category, never runtime text).
 async function nodeCall(origin, message, data, o) {
   try {
-    var resp = await o.fetch(origin + "/", fetchInit({ method: "POST", body: nodeCallBody(message, data), headers: { "Content-Type": "application/json" } }, o.timeoutMs));
-    if (resp.status !== 200) { await discard(resp); return { ok: false, error: probeErrorCategory(null, resp.status) }; }
-    var body = await readJsonCapped(resp, o.maxBytes);
+    var resp = await readOne(origin + "/", { method: "POST", body: nodeCallBody(message, data), headers: { "Content-Type": "application/json" } }, o);
+    if (resp.status !== 200) return { ok: false, error: probeErrorCategory(null, resp.status) };
+    var body = resp.data;
     if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "invalid response" };
     if (body.result !== 200) return { ok: false, error: "result " + (Number.isInteger(body.result) ? body.result : "missing") };
     return { ok: true, response: body.response };
@@ -161,9 +170,9 @@ export function countStatuses(rows) {
 // One /info answer from an origin: the key it names, that key's own height from its own peerlist entry, its version.
 async function dialInfo(origin, o) {
   try {
-    var resp = await o.fetch(origin + "/info", fetchInit({ method: "GET" }, o.timeoutMs));
-    if (resp.status !== 200) { await discard(resp); return { answered: false, error: probeErrorCategory(null, resp.status) }; }
-    var data = await readJsonCapped(resp, o.maxBytes);
+    var resp = await readOne(origin + "/info", { method: "GET" }, o);
+    if (resp.status !== 200) return { answered: false, error: probeErrorCategory(null, resp.status) };
+    var data = resp.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) return { answered: false, error: "invalid response" };
     var key = keyOf(data.identity), height = null;
     if (key !== null && Array.isArray(data.peerlist)) {
@@ -379,7 +388,8 @@ export function createFirstAgreedStore(db, opts) {
 // o: { seeds: [{name, url, exclude?}], resolveOrigin(url) -> Promise<origin|null>, reference() -> {height, observedAt}|null,
 //      history, now() -> ms, fetch, dials (boolean), and any WATCH_DEFAULTS override }.
 export async function runValidatorRound(opts) {
-  var o = Object.assign({}, WATCH_DEFAULTS, { fetch: fetch, now: Date.now, dials: true }, opts);
+  // The runtime's fetch, not the global one: the Demos SDK replaces the global (see nativeFetch in public-safety.mjs).
+  var o = Object.assign({}, WATCH_DEFAULTS, { fetch: nativeFetch, now: Date.now, dials: true }, opts);
   var reads = await Promise.all(o.seeds.map(function(s) { return readSeed(s, o); }));
   var list = agreeLists(reads);
   var listAt = o.now();

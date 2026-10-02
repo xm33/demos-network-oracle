@@ -18,27 +18,51 @@
 // seeds agree on, then GET /info once at the address each ACTIVE validator published on chain, only when it is a public
 // http origin (pinned address, no redirects, 2 MB). It prints the counts the agent would publish on /health, nothing else.
 //
+// The named test before a restart is tools/pre-restart-check.mjs: it loads the Demos SDK first, as the agent does, and
+// then runs this tool with the agent's own seed read added (run(args, { agentReads: true })): readSeedInfo and
+// seedsSufficient from src/seed-read.mjs, the functions the agent's public round calls. It ends with a verdict line.
+//
 // Run:  bun tools/validator-set-probe.mjs                 (seeds from src/agent.mjs)
 //       bun tools/validator-set-probe.mjs name=url ...    (explicit seeds)
 //       bun tools/validator-set-probe.mjs --dial [name=url ...]
-// Exit: 0 when every answer had the expected shape (or no answer came), 2 when an answer had an unexpected shape.
+// Exit: 0 when every answer had the expected shape (or no answer came), 2 when an answer had an unexpected shape,
+//       3 from the pre-restart check when the agent could not publish a status from these reads (fewer than two seeds
+//       gave their own height) or no validator list was agreed.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, keyOf, WATCH_DEFAULTS, reduceValidatorRows, listSignature, largestGroup } from "../src/validator-watch.mjs";
-import { resolvePublicProbeOrigin, sanitizeHeight } from "../src/public-safety.mjs";
+import { resolvePublicProbeOrigin, sanitizeHeight, cappedJson, probeErrorCategory, nativeFetch } from "../src/public-safety.mjs";
+import { readSeedInfo, seedsSufficient } from "../src/seed-read.mjs";
 
 const TIMEOUT_MS = 8000;
 const BODY_MAX_BYTES = 2 * 1024 * 1024;
 // Status codes the SDK documents for the validators table (ValidatorTypes.d.ts): "2" ACTIVE, "3" UNSTAKING, "0" EXITED.
 export const STATUS_WORD = { "2": "ACTIVE", "3": "UNSTAKING", "0": "EXITED" };
 
-export function seedsFromAgent(agentSource) {
+// The PUBLIC_NODES block of agent.mjs, without whole-line comments: a commented-out entry is not a seed of the agent.
+function publicNodesBlock(agentSource) {
   const start = agentSource.indexOf("const PUBLIC_NODES = {");
   if (start < 0) throw new Error("PUBLIC_NODES not found in agent.mjs");
-  const block = agentSource.slice(start, agentSource.indexOf("};", start));
-  return [...block.matchAll(/"([a-z0-9-]+)":\s*\{[^}]*?url:\s*"([^"]+)"/g)].map((m) => ({ name: m[1], url: m[2] }));
+  return agentSource.slice(start, agentSource.indexOf("};", start)).replace(/^\s*\/\/.*$/gm, "");
+}
+export function seedsFromAgent(agentSource) {
+  const block = publicNodesBlock(agentSource);
+  // name, url, and the configured identity (compared with the answer, never printed).
+  return [...block.matchAll(/"([a-z0-9-]+)":\s*\{([^}]*)\}/g)].map((m) => {
+    const url = /url:\s*"([^"]+)"/.exec(m[2]), id = /identity:\s*"(0x[0-9a-fA-F]+)"/.exec(m[2]);
+    return url ? { name: m[1], url: url[1], identity: id ? id[1] : null } : null;
+  }).filter(Boolean);
+}
+
+// The pre-restart check compares each answer with the configured identity: an entry of PUBLIC_NODES it cannot read in
+// full is an error, not a seed to skip or to take on its word. null when every configured seed was read.
+// Entries are counted by their names ("name": {), so one whose url is not a string literal is seen as not read.
+export function seedsUnread(agentSource, seeds) {
+  const configured = (publicNodesBlock(agentSource).match(/"[^"\n]+":\s*\{/g) || []).length;
+  const full = seeds.filter((s) => s.identity).length;
+  return configured > 0 && seeds.length === configured && full === configured ? null : `src/agent.mjs configures ${configured} seeds; ${full} could be read with a url and an identity.`;
 }
 
 async function readCapped(res) {
@@ -56,7 +80,8 @@ async function readCapped(res) {
 }
 
 async function getJson(url, init) {
-  const res = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
+  // The runtime's fetch: under the SDK's replacement (pre-restart check) a body has no getReader and would be read uncapped.
+  const res = await nativeFetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
   const text = await readCapped(res);
   let body = null;
   try { body = JSON.parse(text); } catch { return { status: res.status, body: null, parseError: true }; }
@@ -68,6 +93,64 @@ function nodeCall(url, message, data = {}) {
   // { result, response, ... }; the SDK hands back `response`.
   const content = { type: "nodeCall", message, sender: null, receiver: null, timestamp: null, data, extra: "" };
   return getJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method: "nodeCall", params: [content] }) });
+}
+
+// The seeds as the agent reads them: readSeedInfo, the function the agent's public round calls, with the agent's timeout
+// and cap, all seeds at once as in the agent. A seed from src/agent.mjs is read at its configured URL against its
+// configured identity. A seed given as name=url has no configured identity: it is first asked which key it names.
+export async function agentSeedReads(seeds, opts = {}) {
+  return Promise.all(seeds.map(async (seed) => {
+    const node = { url: seed.identity ? seed.url : seed.url.replace(/\/+$/, ""), identity: seed.identity || "" };
+    if (!seed.identity) { const first = await readSeedInfo(node, opts); node.identity = first.ok && first.answeredId ? first.answeredId : ""; }
+    return Object.assign({ name: seed.name }, await readSeedInfo(node, opts));
+  }));
+}
+// One line per seed: names, categories and words, never a host, an address or a key.
+export function agentSeedLine(r) {
+  if (!r.ok) return `${r.name}  no answer (${r.error})`;
+  const key = r.identityMatch === true ? "names the configured key" : r.identityMatch === false ? "names another key: no height is taken from it" : "names no key";
+  const height = r.height_source === "self" ? "its own height" : r.height_source === "first_peer" ? "does not list itself: its first listed peer's height, which is not counted" : "no height";
+  return `${r.name}  answered · ${key} · ${height}`;
+}
+// sdkReplaced: whether loading the SDK replaced the global fetch (pre-restart check), or null when no SDK was loaded.
+export function agentReadsReport(reads, sdkReplaced, rpcs) {
+  const s = seedsSufficient(reads);
+  const lines = ["", "As the agent reads (readSeedInfo, the agent's own seed read)",
+    `  bun ${typeof Bun !== "undefined" ? Bun.version : "?"} · ` + (sdkReplaced === null || sdkReplaced === undefined ? "no SDK was loaded for this run" : `the Demos SDK was loaded first, as in the agent; it ${sdkReplaced ? "replaced" : "did not replace"} the global fetch`),
+    ...reads.map((r) => "  " + agentSeedLine(r)),
+    `  ${s.answered} of ${reads.length} seeds answered; ${s.ownHeights} gave ${s.ownHeights === 1 ? "its" : "their"} own height. The agent needs two for a status.`];
+  if (rpcs) lines.push(`  cross-check RPCs (not in status), the agent's capped read: ${rpcs.ok} of ${rpcs.total} answered` + (rpcs.total > rpcs.ok ? ` (${rpcs.failed.join(" · ")})` : ""));
+  return { answered: s.answered, ownHeights: s.ownHeights, sufficient: s.sufficient, text: lines.join("\n") };
+}
+// The cross-check RPCs in src/fleet.config.mjs, read as the agent reads them. Counts and categories only: their names are
+// fleet names and are not printed. null when there is no fleet config here. Not part of the verdict.
+export async function agentRpcReads(rpcList) {
+  if (!Array.isArray(rpcList) || rpcList.length === 0) return null;
+  const out = await Promise.all(rpcList.map(async (rpc) => {
+    try { const res = await cappedJson(rpc.url, null, { timeoutMs: 10000, maxBytes: BODY_MAX_BYTES }); return res.ok ? null : probeErrorCategory(null, res.status); }   // the agent's PUBLIC_PROBE_TIMEOUT_MS
+    catch (e) { return probeErrorCategory(e); }
+  }));
+  const failed = out.filter((x) => x !== null), counts = {};
+  failed.forEach((c) => { counts[c] = (counts[c] || 0) + 1; });
+  return { total: out.length, ok: out.length - failed.length, failed: Object.keys(counts).sort().map((c) => `${counts[c]} ${c}`) };
+}
+// The seeds as the agent hands them to its validator round: a seed whose /info named another key than the configured
+// one is not asked for the list (its answers would not be that seed's). reads: agentSeedReads, or null.
+export function seedsForRound(seeds, reads) {
+  return seeds.map((s) => { const r = reads && reads.find((x) => x.name === s.name); return Object.assign({}, s, { exclude: r && r.ok && r.identityMatch === false ? "its last /info answered with another key" : null }); });
+}
+// The verdict of the pre-restart check. reads: agentSeedReads; listState: the validator list's state when it was read
+// (null when it was not); shapeErrors: how many answers had an unexpected shape. OK only when the agent could publish a
+// status from these reads (seedsSufficient, the agent's own rule) and two seeds agreed on the validator list.
+export function agentVerdict(reads, listState, shapeErrors) {
+  const s = seedsSufficient(reads), problems = [];
+  if (s.reason === "too_few_answers") problems.push(`${s.answered} of ${reads.length} seeds answered /info, and the agent needs two`);
+  else if (s.reason === "too_few_heights") problems.push(`${s.ownHeights} of the ${s.answered} seeds that answered gave ${s.ownHeights === 1 ? "its" : "their"} own height, and the agent needs two`);
+  if (listState !== null && listState !== "agreed") problems.push("no validator list was agreed by two seeds");
+  const shapeOnly = problems.length === 0 && shapeErrors > 0;
+  if (shapeErrors > 0) problems.push("an answer had an unexpected shape (see above)");
+  if (problems.length === 0) return { ok: true, code: 0, text: `AGENT READS OK: ${s.ownHeights} of ${reads.length} seeds gave their own height` + (listState === null ? "." : ", and two seeds agree on the validator list.") };
+  return { ok: false, code: shapeOnly ? 2 : 3, text: "AGENT READS FAILED: " + problems.join("; ") + ". Do not restart on this." };
 }
 
 const keysOf = (o) => (o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o).sort() : []);
@@ -245,11 +328,12 @@ export async function dialReport(seeds, results, opts = {}) {
   const hs = results.map((r) => (r.info && r.info.answered ? r.info.ownHeight : null)).filter((h) => h !== null && h !== undefined).sort((a, b) => a - b);
   const reference = hs.length >= 2 ? { height: hs[Math.floor(hs.length / 2)], observedAt: Date.now() } : null;
   const seedKeys = new Set(results.map((r) => (r.info && r.info.answered ? r.info.key : null)).filter(Boolean));
+  const dials = opts.dials !== false;
   const round = await runValidatorRound({ seeds, resolveOrigin: opts.resolveOrigin || resolvePublicProbeOrigin, reference: () => reference, seedKeys,
-    history: createWatchHistory(WATCH_DEFAULTS.windowMs, WATCH_DEFAULTS.intervalMs) });
+    history: createWatchHistory(WATCH_DEFAULTS.windowMs, WATCH_DEFAULTS.intervalMs), dials });
   const oc = publicOnChainValidators(round, round.listAt, { seedsConfigured: seeds.length });
-  const w = publicValidatorWatch(round, round.roundAt, {});
-  const lines = ["", "Watch (one round, --dial)"];
+  const w = publicValidatorWatch(round, round.roundAt, { dials });
+  const lines = ["", dials ? "Watch (one round, --dial)" : "Watch (one round: the list only, no dials)"];
   lines.push(`  list: ${oc.state === "agreed" ? `${oc.seeds_agreed} of ${oc.seeds_configured} public seeds returned the same list · ${oc.listed} rows · ACTIVE ${oc.active} · UNSTAKING ${oc.unstaking === null ? "none listed" : oc.unstaking} · other ${oc.other_status}` : `no figure: ${oc.reason}`}`);
   lines.push(`  seeds' median: ${reference ? `${reference.height} (from ${hs.length} own heights)` : "not known (fewer than two own heights): heights not compared"}`);
   if (w.state !== "observed") { lines.push(`  dials: none (${w.reason})`); return { text: lines.join("\n"), onChain: oc, watch: w }; }
@@ -265,25 +349,45 @@ export async function dialReport(seeds, results, opts = {}) {
   return { text: lines.join("\n"), onChain: oc, watch: w };
 }
 
-if (import.meta.main) {
-  const all = process.argv.slice(2);
+// args: [--dial] [name=url ...]. ctx.agentReads adds the agent's own /info read and a verdict line (pre-restart check).
+// ctx.agentSource: the text to take the seeds from in place of src/agent.mjs (tests). Returns the exit code.
+export async function run(all, ctx = {}) {
   const dial = all.includes("--dial");
   const args = all.filter((a) => a !== "--dial");
   const bad = args.filter((a) => !/^[A-Za-z0-9._-]+=https?:\/\/\S+$/.test(a));
-  if (bad.length) { console.error("Not a name=url pair: " + bad.map((a) => a.slice(0, 40)).join(", ") + "\nUsage: bun validator-set-probe.mjs [--dial] name=http://host:port ..."); process.exit(64); }
+  if (bad.length) { console.error("Not a name=url pair: " + bad.map((a) => a.slice(0, 40)).join(", ") + "\nUsage: bun validator-set-probe.mjs [--dial] name=http://host:port ..."); return 64; }
   const here = dirname(fileURLToPath(import.meta.url));
   let seeds;
   if (args.length) seeds = args.map((a) => { const i = a.indexOf("="); return { name: a.slice(0, i), url: a.slice(i + 1) }; });
   else {
     let src = null;
-    try { src = readFileSync(join(here, "..", "src", "agent.mjs"), "utf8"); } catch (e) {}
-    if (!src) { console.error("No src/agent.mjs next to this tool. Give the seeds: bun validator-set-probe.mjs [--dial] name=http://host:port ..."); process.exit(64); }
-    seeds = seedsFromAgent(src);
+    try { src = typeof ctx.agentSource === "string" ? ctx.agentSource : readFileSync(join(here, "..", "src", "agent.mjs"), "utf8"); } catch (e) {}
+    if (!src) { console.error("No src/agent.mjs next to this tool. Give the seeds: bun validator-set-probe.mjs [--dial] name=http://host:port ..."); return 64; }
+    let missing;
+    try { seeds = seedsFromAgent(src); missing = seedsUnread(src, seeds); }
+    catch (e) { console.error("The seeds could not be read from src/agent.mjs: it has no PUBLIC_NODES block."); return 64; }
+    if (ctx.agentReads && missing) { console.error(missing + " The pre-restart check needs all of them."); return 64; }
   }
   const results = [];
   for (const seed of seeds) results.push(await probeSeed(seed));
   const { text, summary } = formatReport(results);
   console.log(text);
-  if (dial) console.log((await dialReport(seeds, results)).text);
-  process.exit(summary.shapeErrors.length ? 2 : 0);
+  let reads = null;
+  if (ctx.agentReads) {
+    reads = await agentSeedReads(seeds);
+    console.log(agentReadsReport(reads, ctx.sdkReplaced, await agentRpcReads(ctx.rpcs)).text);
+  }
+  // The pre-restart check always reads the validator list, as the agent does; it dials only with --dial.
+  let listState = null;
+  if (dial || ctx.agentReads) {
+    const d = await dialReport(seedsForRound(seeds, reads), results, Object.assign({ dials: dial }, ctx.resolveOrigin ? { resolveOrigin: ctx.resolveOrigin } : {}));
+    console.log(d.text);
+    listState = d.onChain.state;
+  }
+  if (!ctx.agentReads) return summary.shapeErrors.length ? 2 : 0;
+  const verdict = agentVerdict(reads, listState, summary.shapeErrors.length);
+  console.log("\n" + verdict.text);
+  return verdict.code;
 }
+
+if (import.meta.main) process.exit(await run(process.argv.slice(2)));
