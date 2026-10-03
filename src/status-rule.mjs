@@ -80,10 +80,9 @@ export function selectWitnesses(input) {
     out.validatorsCounted = near.length;
     return out;
   }
-  if (vals.length < 2) return out;
   var m = upperMedian(vals);
   var around = vals.filter(function(v) { return Math.abs(v - m) <= RULE.bandBlocks; });
-  if (around.length < 2 || around.length * 2 <= vals.length) return out;
+  if (around.length < 2 || around.length * 2 <= vals.length) return out;   // at least two counted, and more than half of those that gave a height
   out.mode = "validators_only"; out.counted = around; out.compare = around.slice(); out.reference = m; out.validatorsCounted = around.length;
   return out;
 }

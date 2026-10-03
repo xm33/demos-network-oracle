@@ -1685,14 +1685,14 @@ let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
 let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
 // Height movement. maxHeight is the highest height a seed reported in the latest round (null when no seed returned
-// one); advancedAt is the last round in which some seed reported a higher height than in its own previous answer,
-// so a leading seed that stops answering is not mistaken for a stalled chain.
+// one); advancedAt is the last round that showed a new height: one above the node's own last answer and above every
+// node's last answer within the window. A leading seed that stops answering is not mistaken for a stalled chain, and
+// a lagging seed catching up is not mistaken for a new height.
 // compared: DNO has compared heights across rounds (or history shows a static run), so height_static_seconds can be
 // published; advanceKnown: the last advance was observed (or bounded by history), so height_last_advanced_at can be.
 // lastBySeed: each seed's last answer { h, at }.
 var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false };
-const HEIGHT_RECENT_MS = 3 * MONITOR_INTERVAL_MS;   // a seed's own previous answer is compared only when this recent
-const HEIGHT_WINDOW_MS = 10 * 60000;                 // a new or returning seed is compared with answers from this window
+const HEIGHT_WINDOW_MS = 10 * 60000;   // a height nobody has reported for this long is forgotten (a chain restarted lower is followed again)
 // Public history rows older than this were not written under the own-height rule (1.0 read a seed's first listed peer),
 // or are older than a row that was not. Median-based figures (the height clock at start-up, 24 h chain movement) do not
 // use them.
@@ -2236,9 +2236,8 @@ async function probePublicNodes() {
   return results;
 }
 
-// Per round: the highest height a seed reported, and whether some seed reported a higher height than in its own
-// previous answer. On the first round with a height the clock starts from retained public history, so a restart
-// during a stall does not reset it.
+// Per round: the highest height a seed reported, and whether the round showed a new height. On the first round with a
+// height the clock starts from retained public history, so a restart during a stall does not reset it.
 function updateHeightTracker(results, observedAt) {
   var seen = {};
   (results || []).forEach(function(r) { var h = ownHeight(r); if (h !== null) seen[r.name] = h; });
@@ -2246,17 +2245,14 @@ function updateHeightTracker(results, observedAt) {
   if (!names.length) { heightTracker.maxHeight = null; return; }
   var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
   var maxH = hs[hs.length - 1], medH = hs[Math.floor(hs.length / 2)];
-  // An advance: a seed reports more than in its own recent previous answer, or a seed with no recent answer of its
-  // own (new, or back after a gap) reports more than both its own last answer and every answer seen within the
-  // window. A seed that skipped rounds and comes back at the same height, or one that returns at the height the
-  // others stalled on, is no advance.
+  // A new height: above the node's own last answer, however old, and above the last answer of every node that
+  // answered within the window. A node that reports more than before while another already reported that much is
+  // catching up: no advance. Nor is a node back at the height it left on, or back at the height the others stand on.
   var last = heightTracker.lastBySeed, recentMax = null;
   for (var k in last) if (observedAt - last[k].at <= HEIGHT_WINDOW_MS && (recentMax === null || last[k].h > recentMax)) recentMax = last[k].h;
   var comparedNow = false, rose = false;
   names.forEach(function(n) {
-    var prev = last[n];
-    if (prev && observedAt - prev.at <= HEIGHT_RECENT_MS) { comparedNow = true; if (seen[n] > prev.h) rose = true; return; }
-    var ref = recentMax;
+    var prev = last[n], ref = recentMax;
     if (prev && (ref === null || prev.h > ref)) ref = prev.h;
     if (ref !== null) { comparedNow = true; if (seen[n] > ref) rose = true; }
   });

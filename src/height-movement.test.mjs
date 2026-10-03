@@ -19,7 +19,7 @@ function check(name, cond, detail) {
 }
 
 const extract = (start) => { const i = SRC.indexOf(start); if (i < 0) throw new Error("not in agent.mjs: " + start); return SRC.slice(i, SRC.indexOf("\n}\n", i) + 3); };
-const decl = SRC.match(/var heightTracker = \{[^;]*\};\nconst HEIGHT_RECENT_MS = [^;]*;[^\n]*\nconst HEIGHT_WINDOW_MS = [^;]*;/)[0];
+const decl = SRC.match(/var heightTracker = \{[^;]*\};\nconst HEIGHT_WINDOW_MS = [^;]*;/)[0];
 const line = (start) => { const i = SRC.indexOf(start); if (i < 0) throw new Error("not in agent.mjs: " + start); return SRC.slice(i, SRC.indexOf("\n", i) + 1); };
 const code = decl + "\n" + line("function ownHeight(") + extract("function updateHeightTracker(") + extract("function heightMovement(");
 const MONITOR_INTERVAL_MS = Number(SRC.match(/const MONITOR_INTERVAL_MS = parseInt\(process\.env\.MONITOR_INTERVAL_MS \|\| "(\d+)"\)/)[1]);
@@ -55,10 +55,10 @@ console.log("\n[" + TAG + "] start, advance, static");
   check("A2 an observed advance: static 0, advancing", p.staticS === 0 && p.advancedAt === T0 + 20 * S && p.reason === "advancing", JSON.stringify(p));
   update(round({ a: 101, b: 101 }), T0 + 40 * S);
   p = published(t, T0 + 40 * S);
-  check("A3 a lagging seed catching up is an advance too", p.staticS === 0, JSON.stringify(p));
+  check("A3 a lagging seed catching up is no advance: the height it reaches was already reported", p.staticS === 20 && p.advancedAt === T0 + 20 * S, JSON.stringify(p));
   for (let k = 3; k <= 20; k++) update(round({ a: 101, b: 101 }), T0 + k * 20 * S);
   p = published(t, T0 + 400 * S);
-  check("A4 six minutes without a higher height: unchanged", p.staticS === 360 && p.reason === "unchanged", JSON.stringify(p));
+  check("A4 six minutes without a new height: unchanged, counted from the round that showed it", p.staticS === 380 && p.reason === "unchanged", JSON.stringify(p));
 }
 {
   const { t, update } = fresh2(null);
@@ -78,7 +78,46 @@ console.log("\n[" + TAG + "] seeds leaving and joining");
   check("B1 the leading seed stops answering: not an advance, not a stall either", p.staticS === 20 && p.reason === "advancing", JSON.stringify(p));
   update(round({ b: 192 }), T0 + 60 * S);
   p = published(t, T0 + 60 * S);
-  check("B2 the remaining seed advancing is seen", p.staticS === 0, JSON.stringify(p));
+  check("B2 the remaining seed rising towards the height the leader left on is no advance", p.staticS === 40 && p.advancedAt === T0 + 20 * S, JSON.stringify(p));
+  for (let k = 4; k <= 12; k++) update(round({ b: 189 + k }), T0 + k * 20 * S);      // 193 ... 201
+  p = published(t, T0 + 240 * S);
+  check("B2b nor when it reaches that height", p.staticS === 220, JSON.stringify(p));
+  update(round({ b: 202 }), T0 + 260 * S);
+  p = published(t, T0 + 260 * S);
+  check("B2c the first height above it is the advance", p.staticS === 0 && p.advancedAt === T0 + 260 * S && p.reason === "advancing", JSON.stringify(p));
+}
+{
+  const { t, update } = fresh2(null);
+  update(round({ a: 200, b: 100 }), T0);
+  update(round({ a: 201, b: 101 }), T0 + 20 * S);
+  for (let k = 2; k <= 31; k++) update(round({ b: 100 + k }), T0 + k * 20 * S);      // the leader is away; b keeps rising, far below 201
+  let p = published(t, T0 + 620 * S);
+  check("B8 while the leader's last height is within the window, a lower seed rising is no advance", p.staticS === 600 && p.reason === "unchanged", JSON.stringify(p));
+  update(round({ b: 132 }), T0 + 640 * S);
+  p = published(t, T0 + 640 * S);
+  check("B9 ten minutes after the leader's last answer its height is forgotten, and the seed that still answers is followed", p.staticS === 0 && p.reason === "advancing", JSON.stringify(p));
+}
+{
+  // 2 October 2026, as n3's store shows it: one seed alone advanced until 11:47 UTC and then stood on one height; the
+  // other seed came back an hour later, far behind, and caught up over eight minutes. Before 1.2 every step of that
+  // catching up counted as an advance, and the published "last advance" moved to 12:52.
+  const { t, update } = fresh2(null);
+  const HEAD = 429825, MIN = 60 * S;
+  let at = T0, n3 = HEAD - 60;
+  update(round({ n2: n3, n3 }), at);
+  while (n3 < HEAD) { at += 20 * S; n3 += 2; update(round({ n3 }), at); }
+  const stoodAt = at;
+  while (at < stoodAt + 57 * MIN) { at += 20 * S; update(round({ n3: HEAD }), at); }
+  let n2 = HEAD - 1200;
+  while (n2 < HEAD) { at += 20 * S; n2 = Math.min(HEAD, n2 + 50); update(round({ n2, n3: HEAD }), at); }
+  let p = published(t, at);
+  check("H1 2 October: a seed returning far behind and catching up does not restart the clock", p.advancedAt === stoodAt && p.staticS === Math.round((at - stoodAt) / 1000) && p.staticS > 57 * 60 && p.reason === "unchanged", JSON.stringify(p));
+  while (at < stoodAt + 179 * MIN) { at += 20 * S; update(round({ n2: HEAD, n3: HEAD }), at); }
+  p = published(t, at);
+  check("H2 and three hours on the published last advance is still the round the height last rose", p.advancedAt === stoodAt && p.staticS === 179 * 60, JSON.stringify(p));
+  update(round({ n2: HEAD, n3: HEAD + 1 }), at + 20 * S);
+  p = published(t, at + 20 * S);
+  check("H3 the next new height ends it", p.staticS === 0 && p.advancedAt === at + 20 * S, JSON.stringify(p));
 }
 {
   const { t, update } = fresh2(null);
