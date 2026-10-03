@@ -574,6 +574,39 @@ console.log("\n[" + TAG + "] the dial switch");
     && !/VALIDATOR_WATCH_DIALS\s*[!=]==/.test(AGENT + PRE));
 }
 
+console.log("\n[" + TAG + "] witness candidates: who may stand in for a seed (witnesses.mjs)");
+{
+  SEED.a = { list: BASE_ROWS, stake: "1000000000000" }; SEED.b = { list: BASE_ROWS, stake: "1000000000000" }; SEED.c = { list: BASE_ROWS.slice(0, 5), stake: "2000000000000" };
+  const k = (n) => keyOf(KEY(n));
+  const r = await round();
+  const got = (r.witnessCandidates || []).map((c) => c.key + "@" + c.url).join(" ");
+  check("K1 a counted round names them: the rows answered as the listed key at the seeds' height, each with the origin it published",
+    got === [[0x11, V.a], [0x12, V.b], [0x1c, V.l], [0x1d, V.m]].map(([n, v]) => k(n) + "@" + v.url).join(" "), got);
+  check("K2 not the row off the seeds' height, not the one that gave no height, not one that answered with another key or not at all",
+    ![0x13, 0x14, 0x15, 0x16, 0x17, 0x1f, 0x20, 0x24].some((n) => (r.witnessCandidates || []).some((c) => c.key === k(n))));
+  const seeded = await round({ seedKeys: new Set([k(0x11), k(0x1d)]) });
+  check("K3 a configured seed's own key is never a candidate", seeded.witnessCandidates.map((c) => c.key).join() === [k(0x12), k(0x1c)].join());
+  const noRef = await round({ reference: ref(null) });
+  SEED.b = { list: "down", stake: "1" };
+  const noList = await round();
+  SEED.b = { list: BASE_ROWS, stake: "1000000000000" };
+  const noDials = await round({ dials: false });
+  check("K4 only a counted round has candidates: none when the seeds' median is not known, when no list agreed, or when the dials are off (the ones already kept stand)",
+    noRef.witnessCandidates === null && noRef.list.agreed === true && noList.witnessCandidates === null && noDials.witnessCandidates === null);
+  const hist = createWatchHistory(3600000, 60000);
+  hist.record(Date.now() - 60000, true, new Set([k(0x1d), k(0x1c)]));
+  hist.record(Date.now() - 30000, true, new Set([k(0x1d)]));
+  const ordered = await round({ history: hist });
+  check("K5 the longest record in the window comes first, then key order", ordered.witnessCandidates.map((c) => c.key).join() === [k(0x1d), k(0x1c), k(0x11), k(0x12)].join(), ordered.witnessCandidates.map((c) => c.key.slice(0, 2)).join());
+  HEIGHT += 500;                                    // every validator is now far from the reference the round is given
+  const moved = await round({ reference: ref(HEIGHT - 500) });
+  HEIGHT -= 500;
+  check("K6 a counted round in which no validator is at the seeds' height names none (an empty list replaces the kept ones)", Array.isArray(moved.witnessCandidates) && moved.witnessCandidates.length === 0 && moved.counted === true);
+  const pub = JSON.stringify([publicOnChainValidators(r, r.listAt, { seedsConfigured: 3 }), publicValidatorWatch(r, r.roundAt, {})]) + roundLogLine(r);
+  check("K7 nothing published or logged carries a candidate: no key, no origin", FORBIDDEN(pub).length === 0 && !/witnessCandidates|"published"|"url"|"key"/.test(pub) && FORBIDDEN(JSON.stringify(r.witnessCandidates)).length > 0, FORBIDDEN(pub).join());
+  check("K8 okCount: the counted rounds in the window in which a key was at the seeds' height", hist.okCount(k(0x1d)) === 3 && hist.okCount(k(0x1c)) === 2 && hist.okCount(k(0x11)) === 1 && hist.okCount("nobody") === 0);
+}
+
 Object.values(V).concat([trap]).forEach((v) => v.srv.stop(true));
 Object.values(S).forEach((s) => s.srv.stop(true));
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

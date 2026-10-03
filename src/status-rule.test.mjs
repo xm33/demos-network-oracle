@@ -235,5 +235,22 @@ console.log("\n[" + TAG + "] words");
   check("X6 the module is pure: no import, no clock, no I/O", !/^\s*import\s/m.test(SRC) && !/Date\.now|new Date|process\.|fetch\(|readFileSync|console\./.test(SRC));
 }
 
+console.log("\n[" + TAG + "] the agent takes its reading from this module");
+{
+  const AGENT = readFileSync(join(__dir, "agent.mjs"), "utf8");
+  const body = (start) => { const i = AGENT.indexOf(start); return i < 0 ? "" : AGENT.slice(i, AGENT.indexOf("\n}\n", i) + 3); };
+  const ccs = body("function computeCanonicalState() {"), inc = body("function evaluatePublicIncidents() {"), hist = body("function recordPublicNodeHistory() {");
+  check("M1 computeCanonicalState calls assess() with the seeds' heights, the round's witness reads, the incidents and the height movement", /var reading = assess\(\{ timeReason: timeReason, seedReason: timeReason \? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,\n    seedHeights: heights, validators: witnessInput\(\), maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,\n    movement: \{ staticSeconds: hm\.staticSeconds, advancing: hm\.advancing, stalled: hm\.stalled, staticSince: hm\.staticSince \} \}\);/.test(ccs));
+  check("M2 and decides nothing itself: no status, risk, confidence or agreement word is assigned there", !/(status|risk|confidence|agState|state) = "(stable|degraded|unstable|unknown|low|elevated|high|clear|uncertain|strong|moderate|weak)"/.test(ccs) && !/<= 25|<= 20|> 50|\* 0\.6/.test(ccs));
+  check("M3 what it returns is the reading's: status, risk, data quality and its reason, confidence, agreement, the reason strings, the witnesses", ["status: reading.status", "risk: reading.risk", "data_quality: reading.data_quality", "data_quality_reason: reading.data_quality_reason", "confidence: reading.confidence",
+    "confidence_reason: reading.confidence_reason", "summary: reading.summary", "status_reason: reading.status_reason", "risk_factors: reading.risk_factors", "agreement_reason: reading.agreement_reason", "witnesses: reading.witnesses",
+    "height_standstill_after_seconds: RULE.standstillSeconds", "condition_reason: reading.condition_reason"].every((t) => ccs.includes(t)) && ccs.includes("var agreement = reading.agreement;"));
+  check("M4 the condition records take their opens and closes from stepConditionRecords, with the agent's two limits, and open with the reading's condition_reason",
+    inc.includes("var step = stepConditionRecords(c, canonical, open, { open: PUBLIC_INCIDENT_OPEN_CYCLES, resolve: PUBLIC_INCIDENT_RESOLVE_CYCLES });") && inc.includes("var reason = canonical.condition_reason ? String(canonical.condition_reason) : \"\";")
+    && !/c\.(obs|deg|uns)(Bad|Good)\+\+/.test(inc) && AGENT.includes('const PUBLIC_INCIDENT_OPEN_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_OPEN_CYCLES || "3", 10);') && AGENT.includes('const PUBLIC_INCIDENT_RESOLVE_CYCLES = parseInt(process.env.PUBLIC_INCIDENT_RESOLVE_CYCLES || "9", 10);'));
+  check("M5 a stored round keeps how many seeds gave their own height, in every mode", hist.includes("canonical.seed_heights,") && !hist.includes("canonical.agreement.total_nodes,"));
+  check("M6 the standstill limit has no switch: it is the module's number", !/STANDSTILL|standstillSeconds\s*=/.test(AGENT) && !/process\.env/.test(readFileSync(join(__dir, "status-rule.mjs"), "utf8")));
+}
+
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

@@ -36,7 +36,8 @@ import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
-import { RULE, assess, stepConditionRecords } from "./status-rule.mjs";
+import { RULE, assess, stepConditionRecords, clockReadings } from "./status-rule.mjs";
+import { createCandidateStore, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -1068,17 +1069,17 @@ function computeCanonicalState() {
   }
 
   // Height movement as observed: seconds since the last round that showed a new height (updateHeightTracker).
-  // Null when the latest observation returned no height (nothing to compare). Its cause is not known from here.
+  // Null when the latest observation gave the clock no height (nothing to compare). Its cause is not known from here.
   // Before any comparison (first round after a start) both stay null. Without an observed advance the static
   // duration is counted from the first round that showed the current height: a lower bound. See heightMovement().
-  var hm = heightMovement(observedAtMs, heights.length > 0);
+  var hm = heightMovement(observedAtMs, heightTracker.maxHeight !== null);
 
   // The reading: which witnesses count, agreement, confidence, status, risk and every reason string (status-rule.mjs).
   // Status is what the witnesses show of the network, not observer coverage: seeds that do not answer raise risk,
   // and status only when no reading is left. A reading that would be stable reads degraded once no new height has
   // been seen for RULE.standstillSeconds.
   var reading = assess({ timeReason: timeReason, seedReason: timeReason ? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,
-    seedHeights: heights, validators: null, maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,
+    seedHeights: heights, validators: witnessInput(), maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,
     movement: { staticSeconds: hm.staticSeconds, advancing: hm.advancing, stalled: hm.stalled, staticSince: hm.staticSince } });
   var agreement = reading.agreement;
 
@@ -1609,8 +1610,8 @@ let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
 // observed_at and Last-Modified are measured from here, never from the start of the fleet cycle.
 let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
-// Height movement. maxHeight is the highest height a seed reported in the latest round (null when no seed returned
-// one); advancedAt is the last round that showed a new height: one above the node's own last answer and above every
+// Height movement, over the readings the clock follows (clockResults: the seeds, or the counted validators when no seed
+// gave a height). maxHeight is the highest of them in the latest round (null when there was none); advancedAt is the last round that showed a new height: one above the node's own last answer and above every
 // node's last answer within the window. A leading seed that stops answering is not mistaken for a stalled chain, and
 // a lagging seed catching up is not mistaken for a new height.
 // compared: DNO has compared heights across rounds (or history shows a static run), so height_static_seconds can be
@@ -2230,10 +2231,15 @@ function heightMovement(observedAtMs, anyHeight) {
 async function publicObservationCycle() {
   catalogBeginCrawl();
   var publicNodeResults = await probePublicNodes();
+  // Fewer than two seeds gave their own height: the validator candidates are read in this same round, so their
+  // heights are as old as the seeds'. The seeds, the witnesses and the observation time change together: one
+  // observation, one ETag.
+  var roundWitnesses = await readRoundWitnesses(publicNodeResults);
   latestPublicNodes = publicNodeResults;
+  latestWitnesses = roundWitnesses;
   lastPublicObservedAt = Date.now();
   catalogFinishCrawl(publicNodeResults, lastPublicObservedAt);
-  updateHeightTracker(publicNodeResults, lastPublicObservedAt);
+  updateHeightTracker(clockResults(publicNodeResults, roundWitnesses), lastPublicObservedAt);
   recordPublicNodeHistory();
   recordObservationHistory();
   evaluatePublicIncidents();
@@ -2249,10 +2255,12 @@ function startPublicObservationLoop() {
   tick();
 }
 
-// --- On-chain validators: the read (Path A seeds) and the watch (Path B). Neither enters status or /organism. ---------
+// --- On-chain validators: the read (Path A seeds) and the watch (Path B) ------------------------------------------------
 // Each round sends getValidators and getNetworkParameters to the configured seeds, then dials GET /info once at the
 // address each ACTIVE validator published on chain, when that address is a public http origin (src/validator-watch.mjs).
 // /health publishes counts only. VALIDATOR_WATCH_DIALS=0 keeps the read and stops the dials.
+// While two seeds give their own height neither enters status. The watch's counted rounds name the witness candidates
+// (readRoundWitnesses below): validators the public round reads when fewer than two seeds gave a height.
 function envMs(name, def, min) { var n = parseInt(process.env[name] || "", 10); return Number.isFinite(n) ? Math.max(min, n) : def; }
 const VALIDATOR_WATCH_INTERVAL_MS = envMs("VALIDATOR_WATCH_INTERVAL_MS", 60000, 5000);
 const VALIDATOR_WATCH_WINDOW_MS = envMs("VALIDATOR_WATCH_WINDOW_MS", 3600000, 60000);
@@ -2264,6 +2272,33 @@ var validatorFirstAgreed = null;
 // The configured seed keys, to count how many validators that answered as themselves are Path A seeds (an overlap count).
 const SEED_KEYS = new Set(Object.keys(PUBLIC_NODES).map(function(n) { return keyOf(PUBLIC_NODES[n].identity); }).filter(Boolean));
 var latestValidatorRound = null;
+// Validators that can stand in for a seed that gave no height (witnesses.mjs). The candidates come from the watch's
+// last counted round and are kept in the store. latestWitnesses is one public round's reads of them, set together with
+// latestPublicNodes and the observation time, or null when none were read: two seeds gave their own height, there is
+// no candidate, or the dials are off (VALIDATOR_WATCH_DIALS=0 stops these reads too).
+var witnessCandidates = null;
+let latestWitnesses = null;
+async function readRoundWitnesses(publicNodeResults) {
+  if (!VALIDATOR_WATCH_DIALS || !witnessCandidates) return null;
+  if (publicNodeResults.filter(function(n) { return ownHeight(n) !== null; }).length >= 2) return null;
+  var kept = witnessCandidates.load(Date.now());
+  if (!kept.candidates.length) return null;
+  var snap = witnessSnapshot(await readWitnesses(kept.candidates, { resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, maxBytes: INFO_BODY_MAX_BYTES }), kept.agreedAt);
+  log("  Witnesses: " + snap.read + " validator" + (snap.read === 1 ? "" : "s") + " read, " + snap.rows.length + " answered as listed with a height");
+  return snap;
+}
+// The round's witness reads as the status rule takes them (assess in status-rule.mjs), or null.
+function witnessInput() {
+  var w = latestWitnesses;
+  return w ? { read: w.read, heights: w.rows.map(function(r) { return r.height; }), listAgreedAt: w.listAgreedAt ? new Date(w.listAgreedAt).toISOString() : null } : null;
+}
+// The readings the height clock follows this round (clockReadings in status-rule.mjs), as updateHeightTracker reads
+// them: the seeds' while a seed gave its own height, else the validators counted in the reading.
+function clockResults(publicNodeResults, witnesses) {
+  var seeds = publicNodeResults.map(function(n) { return { id: n.name, h: ownHeight(n) }; });
+  var validators = witnesses ? witnesses.rows.map(function(r) { return { id: "validator:" + r.key, h: r.height }; }) : null;
+  return clockReadings(seeds, validators).map(function(r) { return { name: r.id, ok: true, block: r.h, height_source: "self" }; });
+}
 function validatorPublishConfig() {
   return { seedsConfigured: Object.keys(PUBLIC_NODES).length, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS, dials: VALIDATOR_WATCH_DIALS };
 }
@@ -2284,6 +2319,9 @@ async function validatorWatchRound() {
   latestValidatorRound = await runValidatorRound({ seeds: seeds, resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, reference: seedMedianReference,
     history: validatorHistory, growth: validatorFirstAgreed, seedKeys: SEED_KEYS, dials: VALIDATOR_WATCH_DIALS, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS });
   log("  " + roundLogLine(latestValidatorRound));
+  // A counted round (an agreed list and a known seed median) renews the witness candidates; any other round leaves them.
+  if (latestValidatorRound.witnessCandidates && witnessCandidates && !witnessCandidates.save(latestValidatorRound.witnessCandidates, latestValidatorRound.listAt))
+    logError("[validators] the witness candidates could not be written to the store; they are kept in memory");
 }
 function startValidatorWatchLoop() {
   if (!validatorFirstAgreed) validatorFirstAgreed = createFirstAgreedStore(sharedDb || null);
@@ -2857,10 +2895,15 @@ function catalogFinishCrawl(results, observedAt) {
   if (hitCount > 0) logError("  [catalog] " + hitCount + " public peerlist" + (hitCount === 1 ? "" : "s") + " listed more than " + CATALOG_MAX_NEW_PER_PEERLIST + " new identities this crawl; " + budgetSkipped + " identit" + (budgetSkipped === 1 ? "y was" : "ies were") + " not counted (a later crawl counts them)");
 }
 
+// The highest own height among the configured seeds in the latest public observation; null when none gave one.
+function highestSeedHeight() {
+  var hs = (latestPublicNodes || []).map(ownHeight).filter(function(h) { return h !== null; });
+  return hs.length ? Math.max.apply(null, hs) : null;
+}
 // Public catalog row (no connection string, no full identity). Reported fields only when listed this round.
 function catalogPublicRow(dbRow, nowMs) {
   var live = discoveredPeers[dbRow.identity] || null;
-  var networkHead = heightTracker.maxHeight;
+  var networkHead = highestSeedHeight();
   var block = live ? live.block : null;
   return {
     display: resolveNodeDisplay({ identity: dbRow.identity }),
@@ -4439,6 +4482,11 @@ async function main() {
 
   // Start health API server
   startHealthServer();
+
+  // The witness candidates kept by the last counted validator round, before the first public round: a restart while
+  // seeds are not answering then still has a reading, and opens no visibility record of its own making.
+  witnessCandidates = createCandidateStore(sharedDb);
+  log("  Witness candidates kept: " + witnessCandidates.load(Date.now()).candidates.length);
 
   // Public observation starts now, before and independent of the wallet.
   startPublicObservationLoop();

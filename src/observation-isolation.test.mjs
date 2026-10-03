@@ -149,6 +149,22 @@ check("the runtime writer assigns from publicNodeResults",
   !!runtimeWrite && /latestPublicNodes\s*=\s*publicNodeResults\b/.test(runtimeWrite),
   runtimeWrite ? runtimeWrite.trim() : "no runtime write found");
 
+// The second canonical input (1.2): latestWitnesses, one public round's reads of the validator candidates
+// (witnesses.mjs). It is assigned from that round's reads and nothing else, on the line after latestPublicNodes.
+const witnessWrites = LINES.filter((l) => /(^|[^.\w])latestWitnesses\s*=[^=]/.test(l));
+check("latestWitnesses has exactly one runtime writer (+ its declaration)",
+  witnessWrites.length === 2,
+  `found ${witnessWrites.length} assignment lines: ${JSON.stringify(witnessWrites.map(s=>s.trim()))}`);
+const witnessWrite = witnessWrites.find((l) => !/let\s+latestWitnesses/.test(l));
+check("the runtime writer assigns from this round's witness reads",
+  !!witnessWrite && /latestWitnesses\s*=\s*roundWitnesses\b/.test(witnessWrite) && /var roundWitnesses = await readRoundWitnesses\(publicNodeResults\);/.test(SRC),
+  witnessWrite ? witnessWrite.trim() : "no runtime write found");
+// The modules the canonical function now calls hold no observation reference either.
+for (const mod of ["status-rule.mjs", "witnesses.mjs", "seed-read.mjs"]) {
+  const text = readFileSync(join(__dir, mod), "utf8");
+  check(`${mod}: no observation reference`, FORBIDDEN_CANONICAL_REFERENCES.every((ref) => !text.includes(ref)));
+}
+
 // ============================================================================
 // LAYER B — negative reachability: no forbidden reference inside any
 // canonical/admission body. Includes raw SQL strings (catches a

@@ -1,16 +1,20 @@
 // validator-watch.mjs — the on-chain validators read and the validator watch.
 //
-// The read (Path A seeds, not in status): each round, getValidators and getNetworkParameters are sent to the configured
+// The read (Path A seeds): each round, getValidators and getNetworkParameters are sent to the configured
 // public seeds with the Demos SDK's nodeCall wire format (POST to the seed's root, unauthenticated, read-only). A figure
 // is published only when at least two seeds return the same list (the same address–status pairs) and no other group of
 // seeds is as large; minValidatorStake by the same rule. Rows are reduced on arrival to address, status and published
 // connection URL: stake and timestamps are never kept.
 //
-// The watch (Path B, not in status): every ACTIVE row of the agreed list is dialed once per round at the connection URL
+// The watch (Path B): every ACTIVE row of the agreed list is dialed once per round at the connection URL
 // the agreeing seeds list for it — GET /info, only when that URL is a bare public http origin, pinned to the address that
 // was checked, redirects refused, at most 2 MB read. One outcome per row: not dialed, no answer, answered with another
 // key, answered without a key, or answered as the listed key; for the last, its own height against the seeds' median
 // (±25 blocks, the agreement band). "Every round, last hour" is kept in memory over counted rounds.
+//
+// Neither enters status while two public seeds give their own height. The rows answered as the listed key at the seeds'
+// height are the witness candidates (witnesses.mjs): the agent reads them in a public round where fewer than two seeds
+// gave a height, and status-rule.mjs says what those reads mean.
 //
 // Published objects carry counts only: never an address, connection URL, host, per-row height, per-row outcome or stake.
 // Version groups are published only in a strict version shape and only when at least two validators share one.
@@ -209,8 +213,9 @@ async function lookupNames(names, o) {
 // once, so published origins that resolve to the same address share its one answer. Within a published origin the
 // answer names at most one of the keys listed there; the others are answered_other_key, with shared set only when the
 // answer named one of the keys listed on that same published origin. Returns { results: one per ACTIVE row
-// { key, outcome, notDialed?, shared?, origin?, seed?, height?, version? }, origins: { dialed: published origins dialed,
-// maxRows: the most ACTIVE rows on one of them } }.
+// { key, outcome, notDialed?, shared?, origin?, seed?, height?, version?, published? }, origins: { dialed: published
+// origins dialed, maxRows: the most ACTIVE rows on one of them } }. published: the bare origin a row answered as listed
+// at (kept for the witness candidates; never published).
 export async function dialActive(rows, o) {
   var active = rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).sort(function(a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
   // Every key the list shows on a published origin, whatever its status: an answer naming any of them is a key listed there.
@@ -268,7 +273,7 @@ export async function dialActive(rows, o) {
       if (!a.answered) results.push({ key: r.key, outcome: "no_answer" });
       else if (a.key === null) results.push({ key: r.key, outcome: "answered_no_key" });
       else if (a.key !== r.key) results.push({ key: r.key, outcome: "answered_other_key", shared: matched, origin: idx });
-      else results.push({ key: r.key, outcome: "answered_as_listed", seed: seedKeys.has(r.key), height: a.height, version: a.version });
+      else results.push({ key: r.key, outcome: "answered_as_listed", seed: seedKeys.has(r.key), height: a.height, version: a.version, published: published });
     });
   });
   return { results: results, origins: { dialed: order.length, maxRows: maxRows } };
@@ -301,6 +306,8 @@ export function createWatchHistory(windowMs, intervalMs) {
       }
       prune(at);
     },
+    // Counted rounds inside the window in which this key answered as listed at the seeds' height.
+    okCount: function(key) { var ts = okTimes.get(key); return ts ? ts.length : 0; },
     summary: function(now) {
       prune(now);
       var expected = Math.max(1, Math.floor(windowMs / intervalMs));
@@ -430,12 +437,24 @@ export async function runValidatorRound(opts) {
   o.history.record(roundAt, isCounted, isCounted ? new Set(results.filter(function(r) { return r.place === "at"; }).map(function(r) { return r.key; })) : null);
   var every = o.history.summary(roundAt);
   every.window.counted_this_round = isCounted;
+  // Witness candidates (witnesses.mjs): the rows answered as the listed key at the seeds' height this round, never a
+  // configured seed's key. Those with the most counted rounds in the window come first, then key order; the store keeps
+  // the first few. Only a counted round (an agreed list and a known seed median) has candidates: null otherwise, and
+  // the ones already kept stand.
+  var candidates = null;
+  if (isCounted) {
+    candidates = results.filter(function(r) { return r.place === "at" && !r.seed && r.published; })
+      .map(function(r) { return { key: r.key, url: r.published, rounds: typeof o.history.okCount === "function" ? o.history.okCount(r.key) : 0 }; })
+      .sort(function(a, b) { return b.rounds - a.rounds || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0); })
+      .map(function(c) { return { key: c.key, url: c.url }; });
+  }
   return {
     listAt: listAt, roundAt: roundAt, seedsConfigured: o.seeds.length, list: list,
     counts: list.agreed ? countStatuses(list.rows) : null,
     outcomes: outcomes, versions: versions, counted: isCounted, growth: growth,
     reference: reference ? { height: reference.height, observedAt: reference.observedAt } : null,
     everyRound: every,
+    witnessCandidates: candidates,   // keys and published origins: for the agent's candidate store, never published
     seedErrors: reads.map(function(r) { return { name: r.name, list: r.listError }; })
   };
 }
