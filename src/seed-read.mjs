@@ -7,6 +7,7 @@
 // Runtime tests: bun src/seed-read.test.mjs
 
 import { cappedJson, isValidIdentity, sanitizeHeight, sanitizeLabel, probeErrorCategory } from "./public-safety.mjs";
+import { seedReasonOf } from "./status-rule.mjs";
 
 export const SEED_INFO_TIMEOUT_MS = 5000;
 export const SEED_INFO_MAX_BYTES = 2 * 1024 * 1024;   // a real /info is tens of KB
@@ -49,6 +50,6 @@ export async function readSeedInfo(node, opts) {
 export function seedsSufficient(readings) {
   var answered = readings.filter(function(r) { return r && r.ok; });
   var own = answered.filter(function(r) { return r.height_source === "self" && sanitizeHeight(r.block) !== null; });
-  var reason = answered.length < 2 ? "too_few_answers" : own.length < 2 ? "too_few_heights" : null;
+  var reason = seedReasonOf(answered.length, own.length);   // one text for the seed-level rule (status-rule.mjs)
   return { answered: answered.length, ownHeights: own.length, sufficient: reason === null, reason: reason };
 }

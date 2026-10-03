@@ -268,7 +268,7 @@ else {
   const rpc = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { rpcHits++; return Response.json({ result: 200, response: { block: 1 } }); } });
   try {
     mkdirSync(join(box, "src")); mkdirSync(join(box, "tools"));
-    for (const f of ["tools/pre-restart-check.mjs", "tools/validator-set-probe.mjs", "src/public-safety.mjs", "src/seed-read.mjs", "src/validator-watch.mjs"]) copyFileSync(join(__dir, "..", f), join(box, f));
+    for (const f of ["tools/pre-restart-check.mjs", "tools/validator-set-probe.mjs", "src/public-safety.mjs", "src/seed-read.mjs", "src/status-rule.mjs", "src/validator-watch.mjs"]) copyFileSync(join(__dir, "..", f), join(box, f));
     symlinkSync(join(__dir, "..", "node_modules"), join(box, "node_modules"), "dir");
     writeFileSync(join(box, "src", "agent.mjs"), `const PUBLIC_NODES = {\n  // "seed-off": { url: "http://127.0.0.1:9", identity: "${KEY(7)}" },\n  "seed-a": { url: "${A.url}", identity: "${KEY(9)}" },\n  "seed-b": { url: "${B.url}", identity: "${KEY(8)}" },\n};\n`);
     writeFileSync(join(box, "src", "fleet.config.mjs"), `export const FLEET_CROSS_VALIDATION_RPCS = [{ name: "rpc-name-not-to-print", url: "http://127.0.0.1:${rpc.port}" }];\n`);
