@@ -1,5 +1,5 @@
 // public-api-v11.test.mjs — PUBLIC_API_V11 guard: the 1.1 additions (catalog, exact lookup, condition records,
-// height movement, conditional GET) and the homepage that renders them.
+// height movement, conditional GET), the 1.2 additions (witnesses, the standstill limit) and the homepage that renders them.
 // Static part: homepage.html against agent.mjs (server-side fill markers, mark asset, ban list).
 // Served part: every public representation of the new data, against a running agent.
 // Run:  bun src/public-api-v11.test.mjs [baseUrl]   (executable harness, not `bun test`)
@@ -126,7 +126,7 @@ async function get(path, headers) { const r = await fetch(BASE + path, { headers
 try {
   const org = await get("/organism");
   const o = org.body;
-  check("S1 api_version 1.1", o.api_version === "1.1", o.api_version);
+  check("S1 api_version 1.2", o.api_version === "1.2", o.api_version);
   check("S2 additive fields typed", (o.observed_at === null || typeof o.observed_at === "string")
     && (o.height_static_seconds === null || Number.isInteger(o.height_static_seconds))
     && Number.isInteger(o.active_public_conditions) && o.active_public_conditions >= 0
@@ -195,7 +195,27 @@ try {
   // R1: a seed that did not list itself has no height; its first listed peer's height is on its row only.
   const pn = health.publicNodes || [];
   const own = pn.filter((n) => n.ok && n.height_source === "self" && Number.isInteger(n.block)).length;
-  check("S34 agreement counts only seeds that reported their own height", (o.agreement_detail || {}).total_nodes === own, (o.agreement_detail || {}).total_nodes + " vs " + own);
+  // 1.2: what the reading rests on. Counts and one time; the mode decides what agreement compared.
+  const wt = o.witnesses || {}, wv = wt.validators, ps = wt.public_seeds || {}, ad = o.agreement_detail || {};
+  const compared = wt.mode === "seed_and_validators" ? 2 : wt.mode === "validators_only" ? (wv || {}).counted : own;
+  check("S34 agreement counts the heights compared: the seeds that reported their own height; beside one seed, that seed and one validator; with no seed, the counted validators", ad.total_nodes === compared, ad.total_nodes + " vs " + compared + " (" + wt.mode + ")");
+  check("W1 /organism witnesses: exactly its keys, and a mode from the documented set", Object.keys(wt).sort().join(",") === "counted,mode,public_seeds,validators" && ["seeds_only", "seed_and_validators", "validators_only", "insufficient"].includes(wt.mode)
+    && Object.keys(ps).sort().join(",") === "answered,configured,own_height" && (wv === null || Object.keys(wv).sort().join(",") === "counted,list_agreed_at,own_height,read"), JSON.stringify(wt));
+  check("W2 the seed counts are the /health rows' own: configured, answered, with their own height", ps.configured === pn.length && ps.answered === pn.filter((n) => n.ok).length && ps.own_height === own, JSON.stringify(ps) + " vs " + pn.length + "/" + own);
+  check("W3 the mode follows the counts: two seed heights are seeds_only with no validator read; one is never seeds_only; a reading without a seed height is validators_only",
+    (own >= 2 ? wt.mode === "seeds_only" || o.data_quality_reason === "stale" || o.data_quality_reason === "no_observation" : wt.mode !== "seeds_only") && (wt.mode !== "seeds_only" || wv === null)
+    && (wt.mode !== "seed_and_validators" || (own === 1 && wv && wv.counted >= 1)) && (wt.mode !== "validators_only" || (own === 0 && wv && wv.counted >= 2 && wv.counted * 2 > wv.own_height)), JSON.stringify(wt));
+  check("W4 counted: the heights the reading rests on, none without a reading", wt.counted === (wt.mode === "seeds_only" ? own : wt.mode === "seed_and_validators" ? 1 + wv.counted : wt.mode === "validators_only" ? wv.counted : 0)
+    && (wv === null || (wv.counted <= wv.own_height && wv.own_height <= wv.read && wv.read <= 8)), JSON.stringify(wt));
+  check("W5 no reading is unknown and insufficient, and a reading is neither: the three go together", (wt.mode === "insufficient") === (o.status === "unknown") && (wt.mode === "insufficient") === (o.data_quality === "insufficient"), wt.mode + " " + o.status + " " + o.data_quality);
+  check("W6 a reading that rests on validators says so: risk is not low, a risk factor names it, and validators alone are uncertain", wt.mode === "seeds_only" || wt.mode === "insufficient"
+    || (o.risk !== "low" && o.risk_factors.some((f) => /validator/.test(f)) && (wt.mode !== "validators_only" || o.confidence === "uncertain")), JSON.stringify([o.risk, o.risk_factors, o.confidence]));
+  check("W7 list_agreed_at is a time at most 24 h before the observation", wv === null || (wv.list_agreed_at !== null && Date.parse(o.observed_at) - Date.parse(wv.list_agreed_at) <= 86400000 && Date.parse(wv.list_agreed_at) <= Date.parse(o.observed_at)), wv && wv.list_agreed_at);
+  check("W8 witnesses carries no key, address, URL or height", !stringsDeep(wt).some((x) => FULL_ID.test(x) || IPV4.test(x) || HOSTPORT.test(x) || /https?:|0x[0-9a-f]{8,}/i.test(x)) && !/\d{5,}/.test(JSON.stringify(wt).replace(/"list_agreed_at":"[^"]*"/, "")), JSON.stringify(wt));
+  check("W9 the standstill limit is published, and status obeys it: a reading at or past it is not stable", o.height_standstill_after_seconds === 1800 && health.height_standstill_after_seconds === 1800
+    && !(o.status === "stable" && Number.isInteger(o.height_static_seconds) && o.height_static_seconds >= o.height_standstill_after_seconds), o.status + " " + o.height_static_seconds);
+  check("W10 /health carries the same witnesses object (the two requests may fall in different rounds: the keys and the seed counts must match)", health.witnesses && Object.keys(health.witnesses).sort().join(",") === "counted,mode,public_seeds,validators"
+    && health.witnesses.public_seeds.configured === ps.configured, JSON.stringify(health.witnesses));
   const firstPeer = pn.filter((n) => n.height_source === "first_peer").map((n) => n.name);
   const vgSeeds = (vg.validators || []).filter((v) => v.monitored && firstPeer.includes(v.display));
   check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));

@@ -69,7 +69,7 @@ var CHAIN_ADVANCE_PCT_24H = parseFloat(process.env.PHASE_B_CHAIN_ADVANCE_PCT || 
 var COVERAGE_GATE_24H = 0.50;
 // Public API version. 1.x is additive-only (organism.schema.json x-changelog); 1.1 adds observation-time and
 // catalog fields and corrects field meanings documented there.
-var API_VERSION = "1.1";
+var API_VERSION = "1.2";
 
 // Expected public observation rounds in 24 h, from the configured cadence (4320 at 20 s).
 function expectedCycles24h() { return Math.max(1, Math.round(86400000 / MONITOR_INTERVAL_MS)); }
@@ -201,8 +201,28 @@ function isPublicConditionMarker(inc) {
 // Append one entry per published release; never edit history.
 var TIMELINE_RELEASE_EVENTS = [
   { date: "2026-06-10", type: "contract", text: "Public API contract v1.0 published at /organism/schema: 17 required top-level fields, additive-only within api_version 1.x." },
-  { date: "2026-06-11", type: "methodology", text: "Methodology v1.0 published: versioned, with changelog. The schema binds; the methodology explains." }
+  { date: "2026-06-11", type: "methodology", text: "Methodology v1.0 published: versioned, with changelog. The schema binds; the methodology explains." },
+  { date: "2026-10-02", type: "contract", text: "API 1.1 and methodology v1.1 served from this day: a seed counts only with its own block height; data_quality_reason, observed_at, height movement, condition records and agreement_detail are published; the catalog counts an identity once two public peerlists list it." }
 ];
+// A release dated by this server's store: the day the API version that carries it first started here (dno_meta,
+// written once by loadApiFirstStart). A release has no entry until that version has run on this store.
+var TIMELINE_STORE_DATED_RELEASES = [
+  { api: "1.2", type: "contract", text: "API 1.2 and methodology v1.2 served from this day: when fewer than two public seeds give their own height, validators that answer as listed stand in for the missing seed, and /organism says so in witnesses; status reads degraded after 30 minutes without a new height; a seed catching up is no longer counted as a new height." }
+];
+var apiFirstStarts = {};   // api version -> ms, as kept in the store
+function loadApiFirstStart(db, nowMs) {
+  db.run("CREATE TABLE IF NOT EXISTS dno_meta (key TEXT PRIMARY KEY, value TEXT)");
+  var out = {};
+  db.query("SELECT key, value FROM dno_meta WHERE key LIKE 'api_first_start:%'").all().forEach(function(r) {
+    var t = Number(r.value);
+    if (Number.isFinite(t) && t > 0) out[r.key.slice("api_first_start:".length)] = t;
+  });
+  if (!out[API_VERSION]) {
+    db.run("INSERT OR REPLACE INTO dno_meta (key, value) VALUES (?, ?)", ["api_first_start:" + API_VERSION, String(nowMs)]);
+    out[API_VERSION] = nowMs;
+  }
+  return out;
+}
 var publicIncidentCounters = { obsBad: 0, obsGood: 0, degBad: 0, degGood: 0, unsBad: 0, unsGood: 0 };
 var publicBackfillChecked = false;
 const CONSENSUS_ENABLED = process.env.CONSENSUS_ENABLED === "1";     // Path 2 (2026-06-10): disabled by default - zero reports ever received
@@ -1145,6 +1165,9 @@ function renderTimelinePage() {
   for (var j = 0; j < TIMELINE_RELEASE_EVENTS.length; j++) {
     events.push({ d: TIMELINE_RELEASE_EVENTS[j].date + "T12:00:00.000Z", kind: TIMELINE_RELEASE_EVENTS[j].type, text: TIMELINE_RELEASE_EVENTS[j].text });
   }
+  TIMELINE_STORE_DATED_RELEASES.forEach(function(rel) {
+    if (apiFirstStarts[rel.api]) events.push({ d: new Date(apiFirstStarts[rel.api]).toISOString(), kind: rel.type, text: rel.text });
+  });
   events.sort(function(a,b){ return a.d < b.d ? 1 : -1; });
   var items = "";
   for (var k = 0; k < events.length; k++) {
@@ -1235,8 +1258,8 @@ function computeChainMovement_24h(rows) {
   var totalBuckets = advancing + nonAdvancing;
   var pctAdvancing = totalBuckets > 0 ? advancing / totalBuckets : 0;
   var longestStaticMin = maxStaticRun * CHAIN_BUCKET_MIN_24H;
-  // Blocks advanced in the window, as observed: newest median minus oldest median, over rounds where at least two
-  // seeds reported their own height (data quality sufficient). Null when there is no pair to compare, or when the
+  // Blocks advanced in the window, as observed: newest median minus oldest median, over rounds with a reading (data
+  // quality sufficient: two seeds reported their own height, or validators stood in for a missing seed). Null when there is no pair to compare, or when the
   // median went down by more than the ±25 agreement band between two such rounds (a reset, or seeds far apart):
   // one difference would not describe the chain then. No target rate is implied.
   var medians = rows.filter(function(r) { return r.median_block !== null && r.median_block !== undefined && (r.data_quality === undefined || r.data_quality === "sufficient"); });
@@ -3223,6 +3246,8 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         height_last_advanced_at: canonical.height_last_advanced_at,
         height_static_seconds: canonical.height_static_seconds,
         active_public_conditions: canonical.active_public_conditions,
+        witnesses: canonical.witnesses,
+        height_standstill_after_seconds: canonical.height_standstill_after_seconds,
         // === Derived ===
         publicNodes: (latestPublicNodes || []).map(function(n) {
           var o = {};
@@ -3396,7 +3421,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         height_last_advanced_at: canonical.height_last_advanced_at,
         height_static_seconds: canonical.height_static_seconds,
         active_public_conditions: canonical.active_public_conditions,
-        agreement_detail: { aligned_nodes: canonical.agreement.aligned_nodes, total_nodes: canonical.agreement.total_nodes, median_block: canonical.agreement.median_block, block_spread: canonical.agreement.block_spread }
+        agreement_detail: { aligned_nodes: canonical.agreement.aligned_nodes, total_nodes: canonical.agreement.total_nodes, median_block: canonical.agreement.median_block, block_spread: canonical.agreement.block_spread },
+        // additive in 1.2: what the reading rests on (counts and one time; never a key, an address or a height), and
+        // the standstill limit status uses
+        witnesses: canonical.witnesses,
+        height_standstill_after_seconds: canonical.height_standstill_after_seconds
       };
       var orgHdrs = { "Content-Type": "application/json", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*", "ETag": orgV.etag };
       if (orgV.lastModified) orgHdrs["Last-Modified"] = orgV.lastModified;
@@ -4487,6 +4516,8 @@ async function main() {
   // seeds are not answering then still has a reading, and opens no visibility record of its own making.
   witnessCandidates = createCandidateStore(sharedDb);
   log("  Witness candidates kept: " + witnessCandidates.load(Date.now()).candidates.length);
+  try { apiFirstStarts = loadApiFirstStart(sharedDb, Date.now()); }
+  catch (eApi) { logError("  [timeline] the first start of API " + API_VERSION + " was not kept: " + eApi.message); }
 
   // Public observation starts now, before and independent of the wallet.
   startPublicObservationLoop();
