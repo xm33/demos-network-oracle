@@ -36,6 +36,7 @@ import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
+import { RULE, assess, stepConditionRecords } from "./status-rule.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -680,34 +681,23 @@ function evaluatePublicIncidents() {
       }
     }
 
-    // Observability hysteresis
-    if (obsBad) { c.obsBad++; c.obsGood = 0; } else { c.obsGood++; c.obsBad = 0; }
-    if (!activeIncidents[PUBLIC_VISIBILITY_MARKER] && c.obsBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
-      openIncident("warning", [PUBLIC_VISIBILITY_MARKER], visibilityText, null);
-    }
-    if (activeIncidents[PUBLIC_VISIBILITY_MARKER] && c.obsGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
-      resolveIncident(PUBLIC_VISIBILITY_MARKER, null);
-    }
-
-    // Network-condition incidents — suppressed while observability is bad:
-    // DNO does not claim the network is degraded while admitting it cannot see it.
-    var reason = canonical.status_reason ? String(canonical.status_reason) : "";
-    var degBad = (!obsBad && canonical.status === "degraded");
-    var unsBad = (!obsBad && canonical.status === "unstable");
-    if (degBad) { c.degBad++; c.degGood = 0; } else { c.degGood++; c.degBad = 0; }
-    if (unsBad) { c.unsBad++; c.unsGood = 0; } else { c.unsGood++; c.unsBad = 0; }
-    if (!activeIncidents[PUBLIC_DEGRADED_MARKER] && c.degBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
-      openIncident("warning", [PUBLIC_DEGRADED_MARKER], "Public network condition observed: " + (reason || "status=degraded"), null);
-    }
-    if (activeIncidents[PUBLIC_DEGRADED_MARKER] && c.degGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
-      resolveIncident(PUBLIC_DEGRADED_MARKER, null);
-    }
-    if (!activeIncidents[PUBLIC_UNSTABLE_MARKER] && c.unsBad >= PUBLIC_INCIDENT_OPEN_CYCLES) {
-      openIncident("critical", [PUBLIC_UNSTABLE_MARKER], "Public network condition observed: " + (reason || "status=unstable"), null);
-    }
-    if (activeIncidents[PUBLIC_UNSTABLE_MARKER] && c.unsGood >= PUBLIC_INCIDENT_RESOLVE_CYCLES) {
-      resolveIncident(PUBLIC_UNSTABLE_MARKER, null);
-    }
+    // Condition records follow status: each opens after PUBLIC_INCIDENT_OPEN_CYCLES rounds of its condition and closes
+    // after PUBLIC_INCIDENT_RESOLVE_CYCLES rounds without it. While visibility is poor no degraded or unstable record
+    // opens: DNO does not claim the network is degraded while admitting it cannot see it (stepConditionRecords).
+    // A record's text is fixed when it opens, so it is the reading's condition_reason: a standstill is told by when
+    // it began ("No new height since ... UTC"), which stays true while the record is open.
+    var reason = canonical.condition_reason ? String(canonical.condition_reason) : "";
+    var records = {
+      visibility: { marker: PUBLIC_VISIBILITY_MARKER, severity: "warning", text: visibilityText },
+      degraded: { marker: PUBLIC_DEGRADED_MARKER, severity: "warning", text: "Public network condition observed: " + (reason || "status=degraded") },
+      unstable: { marker: PUBLIC_UNSTABLE_MARKER, severity: "critical", text: "Public network condition observed: " + (reason || "status=unstable") }
+    };
+    var open = { visibility: !!activeIncidents[PUBLIC_VISIBILITY_MARKER], degraded: !!activeIncidents[PUBLIC_DEGRADED_MARKER], unstable: !!activeIncidents[PUBLIC_UNSTABLE_MARKER] };
+    var step = stepConditionRecords(c, canonical, open, { open: PUBLIC_INCIDENT_OPEN_CYCLES, resolve: PUBLIC_INCIDENT_RESOLVE_CYCLES });
+    step.actions.forEach(function(a) {
+      var r = records[a.record];
+      if (a.action === "open") openIncident(r.severity, [r.marker], r.text, null); else resolveIncident(r.marker, null);
+    });
   } catch (e) { log("  [public-incidents] eval error: " + e.message); }
 }
 
@@ -1033,6 +1023,7 @@ function lookupCatalogKey(key) {
  *
  * - Status MUST NOT degrade solely due to reduced observer coverage.
  *   Node loss affects risk, not status, unless operability is impacted.
+ *   The rule itself is src/status-rule.mjs (assess); this function gathers its inputs.
  *
  * - Risk captures reduced redundancy even when status is stable.
  *
@@ -1052,44 +1043,14 @@ function computeCanonicalState() {
   var heights = pubOnline.map(ownHeight)
     .filter(function(h) { return h !== null; }).sort(function(a, b) { return a - b; });   // seeds that returned their own height
 
-  // Data quality: at least two seeds reported their own height, and the observation is at most 300 s old.
+  // Data quality: the observation is at most 300 s old, and it holds a reading: two seeds reported their own height,
+  // or validators that answer as listed stood in for a missing seed (status-rule.mjs). The reason code names the
+  // observation's age first, then what the seeds gave; it is null whenever there is a reading.
   var dataQualityReason = null;
   if (!observedAtMs) dataQualityReason = "no_observation";
   else if (stalenessSeconds > PUBLIC_STALE_AFTER_SECONDS) dataQualityReason = "stale";
   else dataQualityReason = seedsSufficient(publicNodes).reason;   // too_few_answers, too_few_heights or null (seed-read.mjs; the pre-restart check uses the same rule)
-  var data_quality = dataQualityReason ? "insufficient" : "sufficient";
-  var unknownText = {
-    no_observation: "no public observation has completed yet",
-    stale: "the last public observation is older than 300 s",
-    too_few_answers: "fewer than 2 public nodes answered",
-    too_few_heights: "fewer than 2 public nodes reported their own block height"
-  }[dataQualityReason] || "";
-
-  // Agreement compares heights only when data quality is sufficient. In the unknown state total_nodes is
-  // still "seeds that reported their own height"; aligned_nodes and block_spread are null because nothing was compared.
-  var agreement;
-  if (dataQualityReason) {
-    agreement = { state: "unknown", aligned_nodes: null, total_nodes: heights.length, median_block: (heights.length === 1 && dataQualityReason !== "stale") ? heights[0] : null, block_spread: null };
-  } else {
-    var medianBlock = heights[Math.floor(heights.length / 2)];
-    var blockSpread = heights[heights.length - 1] - heights[0];
-    var alignedCount = heights.filter(function(h) { return Math.abs(h - medianBlock) <= 25; }).length;
-    var agState;
-    if (alignedCount === heights.length && blockSpread <= 20) agState = "strong";
-    else if (alignedCount >= Math.ceil(heights.length * 0.6)) agState = "moderate";
-    else agState = "weak";
-    agreement = { state: agState, aligned_nodes: alignedCount, total_nodes: heights.length, median_block: medianBlock, block_spread: blockSpread, max_block: heights[heights.length - 1], min_block: heights[0] };
-  }
-
-  var confidence = "clear";
-  var confidenceReason = "Observed public signals agree";
-  if (data_quality === "insufficient") {
-    confidence = "uncertain";
-    confidenceReason = "No cross-check: " + unknownText;
-  } else if (heights[heights.length - 1] - heights[0] > 50) {
-    confidence = "uncertain";
-    confidenceReason = "Public nodes report block heights more than 50 blocks apart";
-  }
+  var timeReason = dataQualityReason === "no_observation" || dataQualityReason === "stale" ? dataQualityReason : null;
 
   // Public incidents that feed status: public scope, excluding DNO's own condition records (which follow status).
   var publicActiveIncs = Object.values(activeIncidents).filter(function(inc) {
@@ -1106,27 +1067,26 @@ function computeCanonicalState() {
     else if (sev === "info" && max_incident_severity === "none") max_incident_severity = "info";
   }
 
-  // Status = network operability (NOT observer coverage)
-  // Do not degrade status only because some monitored nodes are offline
-  var status;
-  if (data_quality === "insufficient") status = "unknown";
-  else if (max_incident_severity === "critical" || agreement.state === "weak") status = "unstable";
-  else if (max_incident_severity === "warning" || agreement.state === "moderate") status = "degraded";
-  else status = "stable";
+  // Height movement as observed: seconds since the last round that showed a new height (updateHeightTracker).
+  // Null when the latest observation returned no height (nothing to compare). Its cause is not known from here.
+  // Before any comparison (first round after a start) both stay null. Without an observed advance the static
+  // duration is counted from the first round that showed the current height: a lower bound. See heightMovement().
+  var hm = heightMovement(observedAtMs, heights.length > 0);
 
-  // Risk = resilience / safety margin
-  // Includes reduced node redundancy even when status is stable
-  var risk;
-  if (status === "unknown") risk = "elevated";
-  else if (status === "unstable" || max_incident_severity === "critical" || agreement.state === "weak") risk = "high";
-  else if (status === "degraded" || max_incident_severity === "warning" || confidence === "uncertain" || agreement.state === "moderate" || (pubTotal > 2 && pubTotal - pubReachable > 1)) risk = "elevated";
-  else risk = "low";
+  // The reading: which witnesses count, agreement, confidence, status, risk and every reason string (status-rule.mjs).
+  // Status is what the witnesses show of the network, not observer coverage: seeds that do not answer raise risk,
+  // and status only when no reading is left. A reading that would be stable reads degraded once no new height has
+  // been seen for RULE.standstillSeconds.
+  var reading = assess({ timeReason: timeReason, seedReason: timeReason ? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,
+    seedHeights: heights, validators: null, maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,
+    movement: { staticSeconds: hm.staticSeconds, advancing: hm.advancing, stalled: hm.stalled, staticSince: hm.staticSince } });
+  var agreement = reading.agreement;
 
   // M4: Trend — current cycle against the average of up to 15 previous cycles, all inside a bounded window,
   // so a restart or a gap resets trend to unknown instead of comparing against rows from before the gap. Only rows
   // written under the own-height rule (OWN_HEIGHT_SINCE): an older agent's spread and agreement followed another rule.
   var trend = "unknown";
-  if (data_quality === "sufficient" && sharedDb) {
+  if (reading.data_quality === "sufficient" && sharedDb) {
     try {
       var trendSince = nowMs - Math.round(24 * MONITOR_INTERVAL_MS);
       var histRows = sharedDb.query("SELECT nodes_reachable, nodes_total, agreement_state, block_spread FROM public_node_history WHERE ts > ? AND ts >= ? ORDER BY ts DESC LIMIT 15 OFFSET 1").all(trendSince, OWN_HEIGHT_SINCE);
@@ -1161,45 +1121,10 @@ function computeCanonicalState() {
     } catch(trendErr) { trend = "unknown"; }
   }
 
-  // Height movement as observed: seconds since some seed last reported a higher height than in its previous answer.
-  // Null when the latest observation returned no height (nothing to compare). A static height is reported as
-  // observed; its cause is not known from here, so it does not change status.
-  // Before any comparison (first round after a start) both stay null. Without an observed advance the static
-  // duration is counted from the first round that showed the current height: a lower bound. See heightMovement().
-  var hm = heightMovement(observedAtMs, heights.length > 0);
-  var heightStaticSeconds = hm.staticSeconds, heightAdvancedAtIso = hm.advancedAtIso, heightsAdvancing = hm.advancing, heightsStatic = hm.stalled;
-  var staticText = heightStaticSeconds === null ? "" : "height unchanged for " + Math.floor(heightStaticSeconds / 60) + " min";
-
-  var summary;
-  if (status === "unknown") summary = "Insufficient data: " + unknownText + ".";
-  else if (status === "stable") {
-    summary = (pubReachable === pubTotal ? "All " + pubTotal : pubReachable + " of " + pubTotal) + " public seeds answered and their reported heights agree.";
-    if (publicIncidentCount > 0) summary += " " + publicIncidentCount + " info-level incident" + (publicIncidentCount === 1 ? "" : "s") + " active.";
-    if (heightsStatic) summary += " " + staticText.charAt(0).toUpperCase() + staticText.slice(1) + ".";
-  }
-  else {
-    var offCount = pubTotal - pubReachable;
-    var parts = [];
-    if (offCount > 0) parts.push(offCount + " of " + pubTotal + " public node" + (offCount === 1 ? "" : "s") + " did not answer");
-    if (publicIncidentCount > 0) parts.push(publicIncidentCount + " active incident" + (publicIncidentCount === 1 ? "" : "s"));
-    parts.push("agreement " + agreement.state);
-    summary = (status === "degraded" ? "Degraded reading of the public seeds: " : "Unstable reading of the public seeds: ") + parts.join("; ") + ".";
-  }
-
-  var statusReason = "";
-  if (status === "stable") statusReason = heightsAdvancing ? "Heights advancing; public nodes aligned" : heightsStatic ? "Public nodes aligned; " + staticText : "Public nodes aligned";
-  else if (status === "unstable") statusReason = agreement.state === "weak" ? "Significant disagreement among public node heights" : max_incident_severity === "critical" ? "Critical incidents active" : "Network operability impaired";
-  else if (status === "degraded") statusReason = max_incident_severity === "warning" ? "Warning-level incidents active" : "Agreement reduced among public nodes";
-  else statusReason = "Insufficient data: " + unknownText;
-  var riskFactors = [];
-  if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("Only " + pubReachable + " of " + pubTotal + " public nodes answered — limited cross-checking");
-  if (max_incident_severity === "warning") riskFactors.push("warning-level incidents active");
-  if (max_incident_severity === "critical") riskFactors.push("critical incidents active");
-  if (agreement.state === "moderate") riskFactors.push("agreement is moderate, not strong");
-  var agreementReason = agreement.state === "unknown"
-    ? "Not compared: " + unknownText
-    : agreement.aligned_nodes + " of " + agreement.total_nodes + " public nodes with a height within ±25 blocks of the median (spread: " + agreement.block_spread + " blocks)";
-  return { status: status, trend: trend, risk: risk, data_quality: data_quality, data_quality_reason: dataQualityReason, confidence: confidence, confidence_reason: confidenceReason, agreement: agreement, active_incidents: publicIncidentCount, active_public_conditions: countActivePublicConditions(), max_incident_severity: max_incident_severity, summary: summary, status_reason: statusReason, risk_factors: riskFactors, agreement_reason: agreementReason, staleness_seconds: stalenessSeconds, observed_at: observedAtMs ? new Date(observedAtMs).toISOString() : null, height_last_advanced_at: heightAdvancedAtIso, height_static_seconds: heightStaticSeconds, last_updated: new Date(observedAtMs || AGENT_STARTED_AT).toISOString(), api_version: API_VERSION };
+  // seed_heights (seeds that gave their own height) and condition_reason (the text a condition record opens with)
+  // are for the store and the records; no route publishes them.
+  return { status: reading.status, trend: trend, risk: reading.risk, data_quality: reading.data_quality, data_quality_reason: reading.data_quality_reason, confidence: reading.confidence, confidence_reason: reading.confidence_reason, agreement: agreement, active_incidents: publicIncidentCount, active_public_conditions: countActivePublicConditions(), max_incident_severity: max_incident_severity, summary: reading.summary, status_reason: reading.status_reason, risk_factors: reading.risk_factors, agreement_reason: reading.agreement_reason, staleness_seconds: stalenessSeconds, observed_at: observedAtMs ? new Date(observedAtMs).toISOString() : null, height_last_advanced_at: hm.advancedAtIso, height_static_seconds: hm.staticSeconds, last_updated: new Date(observedAtMs || AGENT_STARTED_AT).toISOString(), api_version: API_VERSION,
+    witnesses: reading.witnesses, height_standstill_after_seconds: RULE.standstillSeconds, condition_reason: reading.condition_reason, seed_heights: heights.length };
 }
 
 // ============================================================================
@@ -1513,7 +1438,7 @@ function recordPublicNodeHistory() {
         canonical.agreement.state,
         canonical.agreement.median_block,
         canonical.agreement.block_spread,
-        canonical.agreement.total_nodes,
+        canonical.seed_heights,   // seeds that reported their own height, in every mode: a row that is sufficient with fewer than two was read with validators
         nodes.filter(function(n) { return n.ok; }).length,
         JSON.stringify(nodes)
       ]
@@ -2284,13 +2209,17 @@ function updateHeightTracker(results, observedAt) {
 
 // Published height movement, derived from heightTracker: seconds without an advance (null before any comparison or
 // when this observation returned no height), when the last observed advance happened, and the two status_reason
-// phrases ("Heights advancing" within the last two rounds; "height unchanged" past the static threshold).
+// phrases ("Heights advancing" within the last two rounds; "height unchanged" past the static threshold). Status
+// itself changes only at RULE.standstillSeconds (status-rule.mjs).
 function heightMovement(observedAtMs, anyHeight) {
   var t = heightTracker;
   var staticSeconds = t.compared && t.advancedAt && observedAtMs && anyHeight ? Math.max(0, Math.round((observedAtMs - t.advancedAt) / 1000)) : null;
   return {
     staticSeconds: staticSeconds,
     advancedAtIso: t.advanceKnown && t.advancedAt ? new Date(t.advancedAt).toISOString() : null,
+    // Since when no new height was seen, to the minute (UTC): the last observed advance, or without one the first
+    // round that showed the height now standing. A condition record opens with it.
+    staticSince: staticSeconds !== null ? new Date(t.advancedAt).toISOString().slice(0, 16).replace("T", " ") : null,
     advancing: staticSeconds !== null && t.advanceKnown && staticSeconds <= 2 * Math.round(MONITOR_INTERVAL_MS / 1000),
     stalled: staticSeconds !== null && staticSeconds >= CHAIN_STATIC_RUN_MIN_24H * 60
   };

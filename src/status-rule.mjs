@@ -247,19 +247,21 @@ export function assess(input) {
 // reading: { status, data_quality }. active: { visibility, degraded, unstable } (records open now).
 // cfg: { open, resolve } consecutive rounds. While visibility is poor, no degraded or unstable record opens: DNO does
 // not describe a condition it cannot see.
+// -> { open, resolve, actions }: the record names that open and close, and the same as one ordered list
+//    [{ record, action }] (visibility, degraded, unstable; a record's open before its close), the order to apply them in.
 export function stepConditionRecords(counters, reading, active, cfg) {
-  var c = counters, open = [], resolve = [];
+  var c = counters, actions = [];
   var obsBad = reading.status === "unknown" || reading.data_quality === "insufficient";
-  if (obsBad) { c.obsBad++; c.obsGood = 0; } else { c.obsGood++; c.obsBad = 0; }
-  if (!active.visibility && c.obsBad >= cfg.open) open.push("visibility");
-  if (active.visibility && c.obsGood >= cfg.resolve) resolve.push("visibility");
   var degBad = !obsBad && reading.status === "degraded";
   var unsBad = !obsBad && reading.status === "unstable";
-  if (degBad) { c.degBad++; c.degGood = 0; } else { c.degGood++; c.degBad = 0; }
-  if (unsBad) { c.unsBad++; c.unsGood = 0; } else { c.unsGood++; c.unsBad = 0; }
-  if (!active.degraded && c.degBad >= cfg.open) open.push("degraded");
-  if (active.degraded && c.degGood >= cfg.resolve) resolve.push("degraded");
-  if (!active.unstable && c.unsBad >= cfg.open) open.push("unstable");
-  if (active.unstable && c.unsGood >= cfg.resolve) resolve.push("unstable");
-  return { open: open, resolve: resolve };
+  var one = function(record, bad, badKey, goodKey) {
+    if (bad) { c[badKey]++; c[goodKey] = 0; } else { c[goodKey]++; c[badKey] = 0; }
+    if (!active[record] && c[badKey] >= cfg.open) actions.push({ record: record, action: "open" });
+    if (active[record] && c[goodKey] >= cfg.resolve) actions.push({ record: record, action: "resolve" });
+  };
+  one("visibility", obsBad, "obsBad", "obsGood");
+  one("degraded", degBad, "degBad", "degGood");
+  one("unstable", unsBad, "unsBad", "unsGood");
+  var names = function(action) { return actions.filter(function(a) { return a.action === action; }).map(function(a) { return a.record; }); };
+  return { open: names("open"), resolve: names("resolve"), actions: actions };
 }

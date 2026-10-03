@@ -49,7 +49,7 @@ console.log("\n[" + TAG + "] start, advance, static");
   const { t, update } = fresh2(null);
   update(round({ a: 100, b: 100 }), T0);
   let p = published(t, T0);
-  check("A1 first round after a start: nothing claimed", p.staticS === null && p.advancedAt === null && p.reason === "aligned", JSON.stringify(p));
+  check("A1 first round after a start: nothing claimed", p.staticS === null && p.advancedAt === null && p.reason === "aligned" && current.movement(T0, true).staticSince === null, JSON.stringify(p));
   update(round({ a: 101, b: 100 }), T0 + 20 * S);
   p = published(t, T0 + 20 * S);
   check("A2 an observed advance: static 0, advancing", p.staticS === 0 && p.advancedAt === T0 + 20 * S && p.reason === "advancing", JSON.stringify(p));
@@ -59,6 +59,9 @@ console.log("\n[" + TAG + "] start, advance, static");
   for (let k = 3; k <= 20; k++) update(round({ a: 101, b: 101 }), T0 + k * 20 * S);
   p = published(t, T0 + 400 * S);
   check("A4 six minutes without a new height: unchanged, counted from the round that showed it", p.staticS === 380 && p.reason === "unchanged", JSON.stringify(p));
+  const since = current.movement(T0 + 400 * S, true).staticSince;
+  check("A6 since when, for a condition record: the minute of the last new height, UTC", since === new Date(T0 + 20 * S).toISOString().slice(0, 16).replace("T", " ") && /^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(since), since);
+  check("A7 and nothing when no height movement is published", current.movement(T0 + 400 * S, false).staticSince === null);
 }
 {
   const { t, update } = fresh2(null);
