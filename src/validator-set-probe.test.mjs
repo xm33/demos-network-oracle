@@ -5,7 +5,7 @@
 // are reported and make the tool exit non-zero.
 // Run: bun src/validator-set-probe.test.mjs   (executable harness, not `bun test`)
 
-import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue, agentSeedReads, agentSeedLine, agentReadsReport, agentRpcReads, agentVerdict, seedsForRound, seedsUnread, run } from "../tools/validator-set-probe.mjs";
+import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue, agentSeedReads, agentSeedLine, agentReadsReport, agentRpcReads, agentVerdict, seedsForRound, seedsUnread, keysOf, run } from "../tools/validator-set-probe.mjs";
 import { parseProbeOrigin } from "./public-safety.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -317,6 +317,29 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     fromConf.code + " | " + fromConf.text.split("\n").filter((l) => /another key|AGENT|  list:|getValidators answered by/.test(l)).join(" | "));
   const twoOnly = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]) });
   check("W7b with one seed left to ask (this run has no --dial), no list is agreed and one seed gave a height: exit 3, both said", twoOnly.code === 3 && twoOnly.text.trim().endsWith("AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two, or validators that stand in (the dials are off); no validator list was agreed by two seeds. Do not restart on this."), twoOnly.code + " | " + twoOnly.text.split("\n").slice(-1));
+  // One seed with its own height, one that answers as another key (and lists that key with a height), one that does not
+  // list itself; the store keeps no candidates. The agent has one seed height, its watch counts no round, and it would
+  // publish unknown. Before the round's reference followed the agent's read rule, this check counted the other key's
+  // height as a second seed height, named candidates from its own round and said OK.
+  const ALIAS = agentSeed(K("b9"));
+  const mixed = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-alias", ALIAS, K("a4")], ["seed-noself", NOSELF, K("a3")]]) }), mixedDial = Object.assign(await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-alias", ALIAS, K("a4")], ["seed-noself", NOSELF, K("a3")]]) }));
+  check("W9 a height from a seed that answers as another key is not a seed height here either: the round does not count, no candidate is named, exit 3",
+    mixedDial.code === 3 && mixedDial.text.includes("  seeds' median: not known (fewer than two own heights): heights not compared") && mixedDial.text.includes("  candidates: none (this run's validator round did not count, and the agent keeps none here)")
+    && mixedDial.text.trim().endsWith("AGENT READS FAILED: 1 of the 3 seeds that answered gave its own height, and the agent needs two, or validators that stand in (the agent keeps no candidates here). Do not restart on this.") && mixed.code === 3,
+    mixedDial.code + " | " + mixedDial.text.split("\n").filter((l) => /median|candidates|AGENT/.test(l)).join(" | "));
+  ALIAS.stop(true);
+  // Text a peer chose is not echoed: a field name, a status or a result that carries an address.
+  const HOSTILE = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    if (req.method === "GET") return Response.json({ identity: K("f1"), "peer at 10.9.8.7:53550": 1, version: "0.9.9 RC", peerlist: [{ identity: K("f1"), sync: { block: 7000 }, "http://10.9.8.7": { "10.9.8.7": 1, port: 2 } }] });
+    const msg = (await req.json()).params[0].message;
+    return Response.json(msg === "getValidators" ? { result: 200, response: [{ address: K("c7"), status: "http://10.9.8.7:53550", connectionUrl: null, "url 10.9.8.7:53550": 1 }] } : { result: "see 10.9.8.7", response: null });
+  } });
+  const hostile = await runOut(["seed-x=" + url(HOSTILE)], { agentReads: false });
+  check("W10 a field name, a status or a result that is not a plain name, a status or a number is counted, not printed", !/10\.9\.8\.7/.test(hostile.text) && hostile.text.includes("keys: identity, peerlist, version, (1 other name not printed)")
+    && hostile.text.includes("peerlist entry keys: identity, sync{block}, (1 other name not printed)") && hostile.text.includes('status "(not a status)": 1') && hostile.text.includes("no answer (result not a number)")
+    && hostile.text.includes("row keys: address, connectionUrl, status, (1 other name not printed)"), hostile.text.split("\n").slice(0, 8).join(" | "));
+  check("W10b plain names are printed as before", JSON.stringify(keysOf({ version_name: 1, identity: 2, peerlist: [] })) === JSON.stringify(["identity", "peerlist", "version_name"]) && keysOf(null).length === 0 && keysOf([1]).length === 0);
+  HOSTILE.stop(true);
   const unread = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-b", 'BASE + "/x"', K("a2")]]) });
   check("W8 a configured seed the check cannot read in full: exit 64 before any read, and it says how many", unread.code === 64 && unread.text === "" && unread.err === "src/agent.mjs configures 2 seeds; 1 could be read with a url and an identity. The pre-restart check needs all of them.", JSON.stringify(unread));
   const noBlock = await errOut({ agentSource: "const OTHER = {};" });

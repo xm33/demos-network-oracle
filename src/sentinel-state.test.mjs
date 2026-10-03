@@ -36,18 +36,20 @@ console.log("\n[" + TAG + "] one file for both services");
 console.log("\n[" + TAG + "] what /sentinel answers from the file the sentinel wrote");
 {
   // The route's own lines, run against a file written the way the sentinel writes it.
-  const a = AGENT.indexOf("      var sentinelData = { status: \"unknown\", last_check: null, alerts_24h: null };"), b = AGENT.indexOf("      res.writeHead(200", a);
+  const a = AGENT.indexOf("      var sentinelData = { status: \"unknown\", last_check: null };"), b = AGENT.indexOf("      res.writeHead(200", a);
   const route = new Function("readFileSync", "sentinelStatePath", "LOG_DIR", "internal", "Date", AGENT.slice(a, b) + "\nreturn sentinelData;");
   const dir = mkdtempSync(join(tmpdir(), "dno-sentinel-")), NOW = 1_790_000_000_000;
   class At extends Date { static now() { return NOW; } }
   const answer = (internal) => route(readFileSync, sentinelStatePath, dir, internal, At);
-  check("R1 no file yet: unknown, and nothing thrown", a > 0 && b > a && JSON.stringify(answer(false)) === JSON.stringify({ status: "unknown", last_check: null, alerts_24h: null }));
+  check("R1 no file yet: unknown, and nothing thrown", a > 0 && b > a && JSON.stringify(answer(false)) === JSON.stringify({ status: "unknown", last_check: null }) && JSON.stringify(answer(true)) === JSON.stringify({ status: "unknown", last_check: null, alerts_24h: null }));
   writeFileSync(sentinelStatePath(dir), JSON.stringify({ "stall:fleet-n3": NOW - 3600000, "lag:fleet-n4": NOW - 30 * 3600000, _lastCheck: NOW - 120000 }));
   const pub = answer(false), int = answer(true);
-  check("R2 a check two minutes ago: ok, with the count of alerts of the last 24 h", pub.status === "ok" && pub.alerts_24h === 1 && pub.last_check === new Date(NOW - 120000).toISOString(), JSON.stringify(pub));
-  check("R3 the public answer carries counts only; the alert keys (they name fleet nodes) go to the internal listener", !("recent_alert_keys" in pub) && !/fleet-n/.test(JSON.stringify(pub)) && JSON.stringify(int.recent_alert_keys) === JSON.stringify(["stall:fleet-n3"]));
+  check("R2 a check two minutes ago: ok, with when", pub.status === "ok" && pub.last_check === new Date(NOW - 120000).toISOString(), JSON.stringify(pub));
+  check("R3 the public answer is status and last_check and nothing else: no alert count (it is a number about the operator's own nodes), no alert key", JSON.stringify(Object.keys(pub)) === JSON.stringify(["status", "last_check"]) && !/fleet-n|alerts/.test(JSON.stringify(pub)));
+  check("R3b the internal listener gets the count of the last 24 h and the keys", int.alerts_24h === 1 && JSON.stringify(int.recent_alert_keys) === JSON.stringify(["stall:fleet-n3"]));
   writeFileSync(sentinelStatePath(dir), JSON.stringify({ _lastCheck: NOW - 16 * 60000 }));
-  check("R4 no check for more than 15 minutes: unknown, and no count", answer(false).status === "unknown" && answer(false).alerts_24h === null);
+  check("R4 no check for more than 15 minutes: unknown; no count on either listener", answer(false).status === "unknown" && !("alerts_24h" in answer(false)) && answer(true).alerts_24h === null);
+  check("R5 /docs says what the public route gives", AGENT.includes("docsEntry('GET /sentinel', 'Whether DNO\\'s own alert process completed a check in the last 15 minutes: status ok or unknown, and last_check. No counts.')"));
   rmSync(dir, { recursive: true, force: true });
 }
 

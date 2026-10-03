@@ -387,6 +387,8 @@ export function createFirstAgreedStore(db, opts) {
       });
       return out;
     },
+    // When the first agreed list that showed this key ACTIVE was read (ms), or null: the order of the witness candidates.
+    firstAgreedAt: function(key) { var v = keys.get(key); return v ? v.first : null; },
     size: function() { return keys.size; }
   };
 }
@@ -437,15 +439,22 @@ export async function runValidatorRound(opts) {
   o.history.record(roundAt, isCounted, isCounted ? new Set(results.filter(function(r) { return r.place === "at"; }).map(function(r) { return r.key; })) : null);
   var every = o.history.summary(roundAt);
   every.window.counted_this_round = isCounted;
-  // Witness candidates (witnesses.mjs): the rows answered as the listed key at the seeds' height this round, never a
-  // configured seed's key. Those with the most counted rounds in the window come first, then key order; the store keeps
-  // the first few. Only a counted round (an agreed list and a known seed median) has candidates: null otherwise, and
-  // the ones already kept stand.
+  // Witness candidates (witnesses.mjs). A candidate is an ACTIVE row of this round's agreed list that publishes a bare
+  // http origin, is not a configured seed's key, and answered as the listed key at the seeds' height in at least one
+  // counted round inside the window, this one included: one round in which it did not answer does not drop it.
+  // Order: the keys DNO has listed longest first (the first agreed list that showed each; a new key cannot be made
+  // older, so it cannot be ground to the front), then the most counted rounds in the window, then key order. The store
+  // keeps the first few. Only a counted round (an agreed list and a known seed median) names candidates: null
+  // otherwise, and the ones already kept stand.
   var candidates = null;
   if (isCounted) {
-    candidates = results.filter(function(r) { return r.place === "at" && !r.seed && r.published; })
-      .map(function(r) { return { key: r.key, url: r.published, rounds: typeof o.history.okCount === "function" ? o.history.okCount(r.key) : 0 }; })
-      .sort(function(a, b) { return b.rounds - a.rounds || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0); })
+    var seedKeys = o.seedKeys instanceof Set ? o.seedKeys : new Set();
+    var rounds = function(key) { return typeof o.history.okCount === "function" ? o.history.okCount(key) : 0; };
+    var listedSince = function(key) { var t = o.growth && typeof o.growth.firstAgreedAt === "function" ? o.growth.firstAgreedAt(key) : null; return Number.isFinite(t) ? t : Infinity; };
+    candidates = list.rows.filter(function(r) { return r.status === STATUS_ACTIVE && !r.noUrl && !r.urlsDiffer && r.url && !seedKeys.has(r.key) && rounds(r.key) > 0; })
+      .map(function(r) { var p = parseProbeOrigin(r.url); return p && p.protocol === "http:" ? { key: r.key, url: p.protocol + "//" + p.host, rounds: rounds(r.key), since: listedSince(r.key) } : null; })
+      .filter(Boolean)
+      .sort(function(a, b) { return (a.since === b.since ? 0 : a.since < b.since ? -1 : 1) || b.rounds - a.rounds || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0); })
       .map(function(c) { return { key: c.key, url: c.url }; });
   }
   return {

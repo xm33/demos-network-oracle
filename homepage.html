@@ -1007,7 +1007,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <li>Why a validator did not answer DNO. No answer from here does not change its row on chain.</li>
           <li>What stands behind a published address that several keys share. Its answer names one key.</li>
           <li>Whether the chain stopped, or only the nodes DNO reads did. The three seeds are public URLs of one organization.</li>
-          <li>Who runs a validator that stands in for a seed. One that repeats the seed's height is enough for a reading; with no seed, two validators that agree are.</li>
+          <li>Who runs a validator that stands in for a seed: DNO does not check. One within 25 blocks of the seed's height is enough for a reading; with no seed, two validators that agree are.</li>
           <li>Whether two nodes at the same height hold the same block. Heights are compared; block hashes are not.</li>
           <li>Blocks and transactions are on the chain explorer. This page is the public reading from named seeds, and from validators that stand in for them.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
@@ -1031,12 +1031,12 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         <div>
           <p class="words-k">DNO's words · seen from outside</p>
           <dl class="words-list">
-            <div><dt><code>stable</code></dt><dd>this cycle's reading of the public seeds, or of the validators standing in for them, with a new height seen in the last 30 minutes. Not <code>ok</code>, not <code>ACTIVE</code>.</dd></div>
+            <div><dt><code>stable</code></dt><dd>this cycle's reading of the public seeds, or of the validators standing in for them, while DNO has not counted 30 minutes without a new height. Not <code>ok</code>, not <code>ACTIVE</code>.</dd></div>
             <div><dt><code>strong</code></dt><dd>every height counted sits within ±25 blocks of the median, and the spread is at most 20 blocks.</dd></div>
             <div><dt><code>sufficient</code></dt><dd><span data-v10="at least two seeds answered, and the observation is at most 300 s old.">at least two seeds reported their own height, or validators that answer as listed stood in for the missing one, and the observation is at most 300 s old.</span> It describes DNO's vantage, not the network.</dd></div>
             <div><dt>peer-reported</dt><dd>what a public peerlist said. Never confirmed by DNO.</dd></div>
             <div><dt>at the seeds' height</dt><dd>a validator's own height, in its answer to DNO, within ±25 blocks of the seeds' median. Not Demos' sync check.</dd></div>
-            <div><dt>stands in</dt><dd>a validator that answered as the key the validators list holds, read in the place of a seed that gave no height. It can confirm a seed's height. It cannot contradict one.</dd></div>
+            <div><dt>stands in</dt><dd>a validator that answered as the key the validators list holds, read in the place of a seed that gave no height. It can count with a seed. It cannot count against one.</dd></div>
             <div><dt>first counted</dt><dd>on DNO's own clock. A peer-listed identity: when a public peerlist first listed it, once a second has. An ACTIVE key: the first agreed validators list that showed it. Not the chain's <code>firstSeen</code>.</dd></div>
           </dl>
         </div>
@@ -1191,8 +1191,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   };
   const DEFS = {
     status: { note: 'Status does not use the catalog. "Public incident" here excludes the condition records DNO opens when its reading stays unknown, degraded or unstable.', values: [
-      ['stable', 'Data quality sufficient, no critical or warning-level public incident active, agreement neither weak nor moderate, and a new height seen in the last 30 minutes.'],
-      ['degraded', 'A warning-level public incident is active, agreement is moderate, or no new height has been seen for 30 minutes.'],
+      ['stable', 'Data quality sufficient, no critical or warning-level public incident active, agreement neither weak nor moderate, and DNO has not counted 30 minutes without a new height.'],
+      ['degraded', 'A warning-level public incident is active, agreement is moderate, or DNO has counted 30 minutes without a new height: a median above the highest it has read.'],
       ['unstable', 'A critical public incident is active, or agreement is weak.'],
       ['unknown', 'Data quality insufficient: fewer than two seeds reported their own block height and no validator stood in for the missing one, or the observation is stale.']] },
     trend: { note: 'Backward-looking: trend describes what has changed, never what will change.', values: [
@@ -1205,8 +1205,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       ['elevated', 'Status degraded or unknown, a warning-level public incident, uncertain confidence, moderate agreement, more than one seed not answering, or validators standing in for a seed.'],
       ['high', 'Status unstable, a critical public incident, or weak agreement.']] },
     confidence: { note: '', values: [
-      ['clear', 'The heights compared are within 50 blocks of each other, and at least one of them is a seed\'s own.'],
-      ['uncertain', 'Heights more than 50 blocks apart, a reading that rests on validators alone, or data quality insufficient.']] },
+      ['clear', 'The heights compared are within 50 blocks of each other, at least one of them is a seed\'s own, and beside one seed most validators read are within 25 blocks of it.'],
+      ['uncertain', 'Heights more than 50 blocks apart, a reading that rests on validators alone, half or more of the validators read more than 25 blocks from the one seed, or data quality insufficient.']] },
     data_quality: { note: 'When insufficient, status is unknown and risk elevated, by design.', values: [
       ['sufficient', 'At least two seeds reported their own block height, or validators that answer as listed stood in for the missing one, and the observation is at most 300 s old.'],
       ['insufficient', 'Fewer than two probed seeds reported their own block height and no validator stood in, or the observation is stale.']] },
@@ -1357,8 +1357,11 @@ function seedsParts(r, active) {
     else if (dq === "too_few_heights") p.answered = "Fewer than two configured seeds gave their own height.";
     else p.answered = "Seeds: not reported in this reading.";
     if (stoodIn && mode === "seed_and_validators") {
+      // Validators that gave a height further than 25 blocks from the seed are left out of the reading, and said.
+      var far = isNum(wv.own_height) && wv.own_height > n ? wv.own_height - n : 0;
       p.heights = listed(n) + (n === 1 ? " is" : " are") + " within 25 blocks of it."
-        + (st !== "strong" && isNum(ag.block_spread) ? " The closest is " + fmt(ag.block_spread) + " blocks from it." : "");
+        + (st !== "strong" && isNum(ag.block_spread) ? " The closest is " + fmt(ag.block_spread) + " blocks from it." : "")
+        + (far > 0 ? " " + far + (far === 1 ? " other is" : " others are") + " more than 25 blocks from it." : "");
     } else if (stoodIn) {
       p.heights = listed(n) + " report heights " + (st === "strong" ? "that align." : isNum(ag.block_spread) ? "up to " + fmt(ag.block_spread) + " blocks apart." : "with " + st + " agreement.");
     } else if (!compared) {
@@ -1610,7 +1613,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
           ? `This server does not read the validators table yet. One read with DNO's probe tool on ${stamp(Date.parse(ONE_READ.at))}: two of three public seeds returned the same ${ONE_READ.listed} rows, all ACTIVE.`
           : `${every} DNO sends two read-only calls to the three public seeds: getValidators, the on-chain validators table, and getNetworkParameters. A count is published only when at least two seeds return the same answer.` }),
         el('p', { text: `${vm.mode === 'oneread' ? 'A server that publishes on_chain_validators also dials' : 'DNO dials'} GET /info once at the address each ACTIVE validator published on chain, only when it is a public http origin: the probe connects to the address it checked, does not follow redirects and reads at most 2 MB. An address that several keys publish is dialed once, and its answer names one key. /health publishes counts, never an address.` }),
-        el('p', { text: 'While two seeds give their own height, none of this enters status. When fewer do, DNO reads up to 8 of the validators that answered as listed, at the seeds\' height, when two seeds last agreed on the list. Beside one seed, a validator within 25 blocks of it confirms it. With no seed, a reading needs at least two validators, more than half of those that gave a height, within 25 blocks of their median, and confidence is uncertain.' }),
+        el('p', { text: 'While two seeds give their own height, none of this enters status. When fewer do, DNO reads up to 8 validators that answered as listed, at the seeds\' height, in the hour up to the round where two seeds last agreed on the list. Beside one seed, a validator within 25 blocks of it counts with it. With no seed, a reading needs at least two validators, more than half of those that gave a height, within 25 blocks of their median, and confidence is uncertain.' }),
         links(['#validators', 'validators on chain'], ['/methodology#validators', 'methodology'])];
       facts = [
         ['ACTIVE', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : vm.mode === 'oneread' ? dim(`${ONE_READ.active} in one read`) : shown(vm.R.active)],
@@ -1705,7 +1708,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     renderExplain('x-agree');
     renderLanes();
   }
-  // Seconds since some seed last reported a higher height than in its previous answer (api 1.1). Absent: no line.
+  // Seconds since the last new height: a published median above the highest one read (the field is api 1.1's, the rule 1.2's). Absent: no line.
   function renderHeightLine() {
     const node = $('ag-height'), hs = pick('height_static_seconds');
     if (hs === undefined) { node.hidden = true; return; }
@@ -1733,7 +1736,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     setText($('agree-cap'), `Shaded: ±${tol} blocks, ${src}.`);
     if (key !== laneKey) {
       laneKey = key; laneMarks.clear();
-      const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Each configured seed\'s block height against the median of seeds that returned one' });
+      const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': 'Each configured seed\'s block height against the median this cycle publishes' });
       svg.append(sv('rect', { class: 'band', x: X(-tol), y: top, width: X(tol) - X(-tol), height: lanes * laneH }));
       for (const v of [-tol, tol]) svg.append(sv('line', { class: 'gl', x1: X(v), x2: X(v), y1: top, y2: top + lanes * laneH }));
       svg.append(sv('line', { class: 'mid', x1: X(0), x2: X(0), y1: top, y2: top + lanes * laneH }));

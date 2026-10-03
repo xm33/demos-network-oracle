@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { Database } from "bun:sqlite";
 import { createCandidateStore, readWitnesses, witnessSnapshot, WITNESS_MAX, CANDIDATE_MAX_AGE_MS, WITNESS_LOOKUP_TIMEOUT_MS } from "./witnesses.mjs";
 import { parseProbeOrigin } from "./public-safety.mjs";
+import { keyOf } from "./validator-watch.mjs";
 
 const TAG = "WITNESSES";
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -178,13 +179,17 @@ console.log("\n[" + TAG + "] the sources");
   const fn = AGENT.slice(AGENT.indexOf("async function readRoundWitnesses("), AGENT.indexOf("\n}\n", AGENT.indexOf("async function readRoundWitnesses(")));
   check("A4 the agent reads witnesses only when the dials are on, fewer than two seeds gave their own height, and candidates are kept",
     fn.includes("if (!VALIDATOR_WATCH_DIALS || !witnessCandidates) return null;") && fn.includes("if (publicNodeResults.filter(function(n) { return ownHeight(n) !== null; }).length >= 2) return null;")
-    && fn.includes("if (!kept.candidates.length) return null;") && (AGENT.match(/await readWitnesses\(/g) || []).length === 1 && !/catalogIngestPeerlist/.test(fn));
+    && fn.includes("var candidates = kept.candidates.filter(function(c) { return !SEED_KEYS.has(c.key); });\n  if (!candidates.length) return null;") && fn.includes("await readWitnesses(candidates, {")
+    && (AGENT.match(/await readWitnesses\(/g) || []).length === 1 && !/catalogIngestPeerlist/.test(fn));
+  check("A4b a configured seed's key is never read as a witness: the keys are compared in the form the candidates are kept in", /const SEED_KEYS = new Set\(Object\.keys\(PUBLIC_NODES\)\.map\(function\(n\) \{ return keyOf\(PUBLIC_NODES\[n\]\.identity\); \}\)\.filter\(Boolean\)\);/.test(AGENT)
+    && keyOf("0x" + "AB".repeat(32)) === "ab".repeat(32) && createCandidateStore(null).save([{ key: "ab".repeat(32), url: "http://203.0.113.9:53550" }], 1) === true);
   check("A5 its log line carries counts only", fn.includes('log("  Witnesses: " + snap.read + " validator" + (snap.read === 1 ? "" : "s") + " read, " + snap.rows.length + " answered as listed with a height");') && (fn.match(/\blog\(/g) || []).length === 1);
   const cycle = AGENT.slice(AGENT.indexOf("async function publicObservationCycle()"), AGENT.indexOf("\n}\n", AGENT.indexOf("async function publicObservationCycle()")));
   check("A6 one observation: the seeds, the witnesses and the observation time are set together, with nothing awaited in between",
     /var roundWitnesses = await readRoundWitnesses\(publicNodeResults\);\n  latestPublicNodes = publicNodeResults;\n  latestWitnesses = roundWitnesses;\n  lastPublicObservedAt = Date\.now\(\);/.test(cycle)
     && !/await/.test(cycle.slice(cycle.indexOf("latestPublicNodes = publicNodeResults;"))), cycle.slice(0, 300));
-  check("A7 the height clock is given the readings the rule names (clockReadings), not the seeds' rows as such", cycle.includes("updateHeightTracker(clockResults(publicNodeResults, roundWitnesses), lastPublicObservedAt);") && AGENT.includes("return clockReadings(seeds, validators).map("));
+  check("A7 the height clock is stepped with the round's seeds and witness reads, on the median the rule names (clockHeight)", cycle.includes("stepPublicHeightClock(publicNodeResults, roundWitnesses, lastPublicObservedAt);")
+    && AGENT.includes("var v = clockHeight(seedHeights, witnesses ? witnesses.rows.map(function(r) { return r.height; }) : null);"));
   check("A8 the candidates are renewed only by a counted validator round, and loaded before the first public round",
     AGENT.includes("if (latestValidatorRound.witnessCandidates && witnessCandidates && !witnessCandidates.save(latestValidatorRound.witnessCandidates, latestValidatorRound.listAt))")
     && (AGENT.match(/witnessCandidates\.save\(/g) || []).length === 1 && AGENT.indexOf("witnessCandidates = createCandidateStore(sharedDb);") > 0

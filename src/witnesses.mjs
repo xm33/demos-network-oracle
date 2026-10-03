@@ -1,10 +1,10 @@
 // witnesses.mjs — validators that can stand in for a public seed that did not give its height.
 //
-// A candidate is an ACTIVE validator on the last validator list two public seeds agreed on that, in that round,
-// answered as the key the list holds, at the address it published on chain, at the seeds' height (the validator watch,
-// validator-watch.mjs). A configured seed's own key is never a candidate. The candidates are kept in the store
-// (dno_meta, one row), so a restart while seeds are not answering keeps them; after candidateMaxAgeMs without a new
-// agreed list there are none.
+// A candidate is an ACTIVE validator on the last validator list two public seeds agreed on that publishes a bare http
+// origin and that, in at least one counted round of the watch window, answered there as the key the list holds, at the
+// seeds' height (the validator watch, validator-watch.mjs, which also orders them). A configured seed's own key is never
+// a candidate. The candidates are kept in the store (dno_meta, one row), so a restart while seeds are not answering
+// keeps them; after candidateMaxAgeMs without a new agreed list there are none.
 //
 // A witness read is the seed read itself (readSeedInfo in seed-read.mjs): GET /info at the published address, pinned to
 // the public address it was checked against, redirects refused, the body capped. The validator counts as read "as
@@ -100,7 +100,7 @@ export async function readWitnesses(candidates, opts) {
 }
 
 // What one round's witness reads give the status rule: how many were read, and the heights of those that answered as
-// listed with their own height. rows keeps each height with its key for the height clock; the agent publishes neither.
+// listed with their own height. rows keeps each height with its key; the agent publishes neither.
 export function witnessSnapshot(reads, listAgreedAt) {
   var rows = (Array.isArray(reads) ? reads : []).filter(function(r) { return r && r.asListed && r.height !== null; }).map(function(r) { return { key: r.key, height: r.height }; });
   return { listAgreedAt: Number.isFinite(listAgreedAt) ? listAgreedAt : null, read: Array.isArray(reads) ? reads.length : 0, rows: rows };

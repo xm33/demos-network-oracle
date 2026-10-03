@@ -221,8 +221,17 @@ export function agentVerdict(reads, listState, shapeErrors, witness) {
   return { ok: true, code: 0, text: `AGENT READS OK: ${s.ownHeights} of ${reads.length} seeds gave their own height` + (listState === null ? "." : ", and two seeds agree on the validator list.") };
 }
 
-const keysOf = (o) => (o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o).sort() : []);
-const nested = (o) => keysOf(o).map((k) => (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? `${k}{${keysOf(o[k]).join(", ")}}` : k));
+// Field names as a peer sent them are text the peer chose: only plain names (letters and underscores) are printed, the
+// rest are counted. A name could otherwise carry an address or a host into this report.
+const PLAIN_NAME = /^[A-Za-z_]{1,40}$/;
+export const keysOf = (o) => {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return [];
+  const all = Object.keys(o), plain = all.filter((k) => PLAIN_NAME.test(k)).sort(), other = all.length - plain.length;
+  return other ? plain.concat(["(" + other + " other name" + (other === 1 ? "" : "s") + " not printed)"]) : plain;
+};
+const STATUS_SHAPE = /^[0-9A-Za-z_]{1,8}$/;
+const resultWord = (v) => (Number.isInteger(v) ? String(v) : "not a number");
+const nested = (o) => keysOf(o).map((k) => (PLAIN_NAME.test(k) && o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? `${k}{${keysOf(o[k]).join(", ")}}` : k));
 
 export async function probeSeed(seed) {
   const out = { name: seed.name, info: null, params: null, validators: null, shapeErrors: [] };
@@ -245,7 +254,7 @@ export async function probeSeed(seed) {
     const r = await nodeCall(root, "getNetworkParameters");
     const b = r.body;
     if (r.status !== 200 || !b) out.params = { answered: false, why: r.status !== 200 ? "HTTP " + r.status : "not JSON" };
-    else if (b.result !== 200) out.params = { answered: false, why: "result " + b.result };
+    else if (b.result !== 200) out.params = { answered: false, why: "result " + resultWord(b.result) };
     else if (!b.response || typeof b.response !== "object" || typeof b.response.minValidatorStake !== "string" || !/^\d+$/.test(b.response.minValidatorStake)) {
       out.params = { answered: true, shapeOk: false }; out.shapeErrors.push("getNetworkParameters: no minValidatorStake digit string");
     } else out.params = { answered: true, shapeOk: true, minValidatorStake: b.response.minValidatorStake, keys: keysOf(b.response) };
@@ -255,13 +264,14 @@ export async function probeSeed(seed) {
     const r = await nodeCall(root, "getValidators", {});
     const b = r.body;
     if (r.status !== 200 || !b) out.validators = { answered: false, why: r.status !== 200 ? "HTTP " + r.status : "not JSON" };
-    else if (b.result !== 200) out.validators = { answered: false, why: "result " + b.result };
+    else if (b.result !== 200) out.validators = { answered: false, why: "result " + resultWord(b.result) };
     else if (!Array.isArray(b.response) || !b.response.every((v) => v && typeof v === "object" && typeof v.status === "string")) {
       out.validators = { answered: true, shapeOk: false }; out.shapeErrors.push("getValidators: not a list of rows with a status");
     } else {
       const byStatus = {}, firstSeen = new Map();
       b.response.forEach((v) => {
-        byStatus[v.status] = (byStatus[v.status] || 0) + 1;
+        const st = STATUS_SHAPE.test(v.status.trim()) ? v.status.trim() : "(not a status)";
+        byStatus[st] = (byStatus[st] || 0) + 1;
         // ACTIVE rows' firstSeen, kept in memory only to count agreement; never printed.
         const k = keyOf(v.address);
         if (k && v.status === "2") firstSeen.set(k, firstSeenValue(v.firstSeen));
@@ -390,10 +400,14 @@ export function formatReport(results, when = new Date()) {
   return { text: lines.join("\n"), summary: s };
 }
 
-// --dial: one watch round with the agent's module. The seeds' median comes from the seeds' own heights in this run's
-// /info answers (at least two). opts.resolveOrigin exists for tests; the default is the agent's resolver.
+// --dial: one watch round with the agent's module. The seeds' median comes from the seeds' own heights (at least two):
+// by the agent's own read rule when its reads are at hand (opts.reads: a seed that answered with another key gives no
+// height there, as in the agent), else from this run's /info answers. opts.resolveOrigin exists for tests; the default is
+// the agent's resolver.
 export async function dialReport(seeds, results, opts = {}) {
-  const hs = results.map((r) => (r.info && r.info.answered ? r.info.ownHeight : null)).filter((h) => h !== null && h !== undefined).sort((a, b) => a - b);
+  const hs = (Array.isArray(opts.reads)
+    ? opts.reads.map((r) => (r.ok && r.height_source === "self" ? sanitizeHeight(r.block) : null))
+    : results.map((r) => (r.info && r.info.answered ? r.info.ownHeight : null))).filter((h) => h !== null && h !== undefined).sort((a, b) => a - b);
   const reference = hs.length >= 2 ? { height: hs[Math.floor(hs.length / 2)], observedAt: Date.now() } : null;
   const seedKeys = new Set(results.map((r) => (r.info && r.info.answered ? r.info.key : null)).filter(Boolean));
   const dials = opts.dials !== false;
@@ -448,7 +462,7 @@ export async function run(all, ctx = {}) {
   // The pre-restart check always reads the validator list, as the agent does; it dials only with --dial.
   let listState = null, fromRound = null;
   if (dial || ctx.agentReads) {
-    const d = await dialReport(seedsForRound(seeds, reads), results, Object.assign({ dials: dial }, ctx.resolveOrigin ? { resolveOrigin: ctx.resolveOrigin } : {}));
+    const d = await dialReport(seedsForRound(seeds, reads), results, Object.assign({ dials: dial, reads }, ctx.resolveOrigin ? { resolveOrigin: ctx.resolveOrigin } : {}));
     console.log(d.text);
     listState = d.onChain.state; fromRound = d.candidates;
   }

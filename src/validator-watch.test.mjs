@@ -580,7 +580,7 @@ console.log("\n[" + TAG + "] witness candidates: who may stand in for a seed (wi
   const k = (n) => keyOf(KEY(n));
   const r = await round();
   const got = (r.witnessCandidates || []).map((c) => c.key + "@" + c.url).join(" ");
-  check("K1 a counted round names them: the rows answered as the listed key at the seeds' height, each with the origin it published",
+  check("K1 a counted round names them: the ACTIVE rows that answered as the listed key at the seeds' height in the window, each with the origin it publishes",
     got === [[0x11, V.a], [0x12, V.b], [0x1c, V.l], [0x1d, V.m]].map(([n, v]) => k(n) + "@" + v.url).join(" "), got);
   check("K2 not the row off the seeds' height, not the one that gave no height, not one that answered with another key or not at all",
     ![0x13, 0x14, 0x15, 0x16, 0x17, 0x1f, 0x20, 0x24].some((n) => (r.witnessCandidates || []).some((c) => c.key === k(n))));
@@ -597,14 +597,37 @@ console.log("\n[" + TAG + "] witness candidates: who may stand in for a seed (wi
   hist.record(Date.now() - 60000, true, new Set([k(0x1d), k(0x1c)]));
   hist.record(Date.now() - 30000, true, new Set([k(0x1d)]));
   const ordered = await round({ history: hist });
-  check("K5 the longest record in the window comes first, then key order", ordered.witnessCandidates.map((c) => c.key).join() === [k(0x1d), k(0x1c), k(0x11), k(0x12)].join(), ordered.witnessCandidates.map((c) => c.key.slice(0, 2)).join());
+  check("K5 among keys listed equally long, the longest record in the window comes first, then key order", ordered.witnessCandidates.map((c) => c.key).join() === [k(0x1d), k(0x1c), k(0x11), k(0x12)].join(), ordered.witnessCandidates.map((c) => c.key.slice(0, 2)).join());
+  // How long DNO has listed a key decides first: a key cannot be made older, so it cannot be ground to the front.
+  const listed = { [k(0x12)]: 100, [k(0x1c)]: 100, [k(0x11)]: 200, [k(0x1d)]: 300 };
+  const senior = await round({ history: hist, growth: { record() { return true; }, summary() { return null; }, firstAgreedAt: (key) => (key in listed ? listed[key] : null) } });
+  check("K9 the keys DNO has listed longest come first, whatever their record in the window or their key order", senior.witnessCandidates.map((c) => c.key).join() === [k(0x1c), k(0x12), k(0x11), k(0x1d)].join(), senior.witnessCandidates.map((c) => c.key.slice(0, 2)).join());
+  const partly = await round({ history: hist, growth: { record() { return true; }, summary() { return null; }, firstAgreedAt: (key) => (key === k(0x1d) ? 5 : null) } });
+  check("K10 a key with no known first list comes after every key that has one", partly.witnessCandidates.map((c) => c.key).join() === [k(0x1d), k(0x1c), k(0x11), k(0x12)].join() && partly.witnessCandidates[0].key === k(0x1d));
+  const real = createFirstAgreedStore(new Database(":memory:"));
+  real.record(1000, [k(0x1d), k(0x1c)]); real.record(2000, [k(0x1d), k(0x1c), k(0x11)]);
+  check("K11 the store says when the first agreed list showed a key, and nothing for a key it never saw", real.firstAgreedAt(k(0x1d)) === 1000 && real.firstAgreedAt(k(0x11)) === 2000 && real.firstAgreedAt(k(0x12)) === null && createFirstAgreedStore(null).firstAgreedAt(k(0x1d)) === null);
   HEIGHT += 500;                                    // every validator is now far from the reference the round is given
   const moved = await round({ reference: ref(HEIGHT - 500) });
   HEIGHT -= 500;
-  check("K6 a counted round in which no validator is at the seeds' height names none (an empty list replaces the kept ones)", Array.isArray(moved.witnessCandidates) && moved.witnessCandidates.length === 0 && moved.counted === true);
+  check("K6 a counted round with no validator at the seeds' height, and none in the window before it, names none (an empty list replaces the kept ones)", Array.isArray(moved.witnessCandidates) && moved.witnessCandidates.length === 0 && moved.counted === true);
+  HEIGHT += 500;
+  const stays = await round({ history: hist, reference: ref(HEIGHT - 500) });   // hist: 0x1d, 0x1c, 0x11 and 0x12 were at the seeds' height earlier in the window
+  HEIGHT -= 500;
+  check("K12 a validator that was at the seeds' height earlier in the window stays a candidate in a round where it is not: one bad round does not empty the list",
+    stays.counted === true && stays.outcomes.at_seed_height === 0 && stays.witnessCandidates.map((c) => c.key + "@" + c.url).join(" ") === [[0x1d, V.m], [0x1c, V.l], [0x11, V.a], [0x12, V.b]].map(([n, v]) => k(n) + "@" + v.url).join(" "),
+    JSON.stringify(stays.witnessCandidates));
+  // A record in the window is not enough: the row must be ACTIVE on this round's list and publish a bare http origin.
+  const stale = createWatchHistory(3600000, 60000);
+  stale.record(Date.now() - 60000, true, new Set([k(0x1e), k(0x22), k(0x23), k(0x24), k(0x25), k(0x21), k(0x99), k(0x1c)]));
+  const strict = await round({ history: stale, reference: ref(null) }), strict2 = await round({ history: stale, reference: ref(HEIGHT + 5000) });
+  check("K13 never a row that is not ACTIVE on this round's list, publishes no address, an https one or one with a path, or is not on the list at all",
+    strict.witnessCandidates === null && strict2.witnessCandidates.map((c) => c.key).join() === [k(0x1c), k(0x21)].join() && strict2.witnessCandidates.every((c) => /^http:\/\/[0-9.]+:\d+$/.test(c.url)),
+    JSON.stringify(strict2.witnessCandidates));
   const pub = JSON.stringify([publicOnChainValidators(r, r.listAt, { seedsConfigured: 3 }), publicValidatorWatch(r, r.roundAt, {})]) + roundLogLine(r);
   check("K7 nothing published or logged carries a candidate: no key, no origin", FORBIDDEN(pub).length === 0 && !/witnessCandidates|"published"|"url"|"key"/.test(pub) && FORBIDDEN(JSON.stringify(r.witnessCandidates)).length > 0, FORBIDDEN(pub).join());
-  check("K8 okCount: the counted rounds in the window in which a key was at the seeds' height", hist.okCount(k(0x1d)) === 3 && hist.okCount(k(0x1c)) === 2 && hist.okCount(k(0x11)) === 1 && hist.okCount("nobody") === 0);
+  // hist: two rounds recorded by hand, then three counted rounds at the seeds' height (K5, K9, K10) and one away from it (K12).
+  check("K8 okCount: the counted rounds in the window in which a key was at the seeds' height", hist.okCount(k(0x1d)) === 5 && hist.okCount(k(0x1c)) === 4 && hist.okCount(k(0x11)) === 3 && hist.okCount("nobody") === 0);
 }
 
 Object.values(V).concat([trap]).forEach((v) => v.srv.stop(true));

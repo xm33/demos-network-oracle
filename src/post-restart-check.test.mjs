@@ -78,8 +78,8 @@ console.log("\n[" + TAG + "] what /health says");
   check("H16 one seed and two validators within 25 blocks of it: reading, and the lines say what it rests on", fb.reading && fb.mode === "seed_and_validators" && fb.counted === 2 && !fb.listAgreed && fb.listExpected === false
     && fb.lines[1] === "  reading: one seed and 2 validators within 25 blocks of it · their list was agreed at 2026-10-02 11:00 UTC (seed_and_validators)", JSON.stringify(fb));
   check("H17 no seed, three validators: reading, and it says so", al.reading && al.mode === "validators_only" && al.lines[1] === "  reading: 3 validators that answer as listed, no seed · their list was agreed at 2026-10-02 11:00 UTC (validators_only)"
-    && readingWords(al) === "no seed gave its own height, and the status comes from 3 validators that answer as listed" && readingWords(fb) === "one seed gave its own height, 2 validators that answer as listed confirm it, and the status comes from them"
-    && readingWords(v(health(Object.assign({}, FALLBACK, { witnesses: wit("seed_and_validators", oneSeed, VAL(1)) })))) === "one seed gave its own height, 1 validator that answers as listed confirms it, and the status comes from them"
+    && readingWords(al) === "no seed gave its own height, and the status comes from 3 validators that answer as listed" && readingWords(fb) === "one seed gave its own height, 2 validators that answer as listed are within 25 blocks of it, and the status comes from them"
+    && readingWords(v(health(Object.assign({}, FALLBACK, { witnesses: wit("seed_and_validators", oneSeed, VAL(1)) })))) === "one seed gave its own height, 1 validator that answers as listed is within 25 blocks of it, and the status comes from them"
     && readingWords(good) === "two seeds gave their own height and the status comes from them", JSON.stringify(al));
   const wrong = [v(health({ publicNodes: oneSeed, witnesses: wit("seeds_only", oneSeed) })), v(health({ witnesses: wit("seed_and_validators", [own("a"), own("b")], VAL(2)) })), v(health(Object.assign({}, ALONE, { witnesses: wit("validators_only", noSeed, VAL(1)) })))];
   check("H18 a mode the seed rows do not bear out is not a reading: seeds_only with one own height, seed_and_validators with two, validators_only with one validator", wrong.every((x) => !x.reading)
@@ -171,8 +171,8 @@ console.log("\n[" + TAG + "] the wait and the verdict");
     && listOnly.out[listOnly.out.length - 1].startsWith(`THE VALIDATOR LIST IS NOT AGREED after ${W} s. It is no reason to roll back`) && !/Roll back\./.test(listOnly.out.join("\n")), JSON.stringify(listOnly.out));
   // 1.2: a reading that rests on validators. One seed cannot agree a list, so the check does not wait for one.
   const stoodIn = await sim([starting, at(FALLBACK)]);
-  check("R13 one seed and validators that confirm it: exit 0 at that poll, and it says what the status comes from", stoodIn.code === 0 && stoodIn.polls === 2
-    && stoodIn.out[stoodIn.out.length - 1] === "AGENT IS READING: one seed gave its own height, 2 validators that answer as listed confirm it, and the status comes from them. No validator list is agreed while fewer than two seeds answer; the agent keeps its witness candidates for 24 h.", JSON.stringify(stoodIn.out));
+  check("R13 one seed and validators within 25 blocks of it: exit 0 at that poll, and it says what the status comes from", stoodIn.code === 0 && stoodIn.polls === 2
+    && stoodIn.out[stoodIn.out.length - 1] === "AGENT IS READING: one seed gave its own height, 2 validators that answer as listed are within 25 blocks of it, and the status comes from them. No validator list is agreed while fewer than two seeds answer; the agent keeps its witness candidates for 24 h.", JSON.stringify(stoodIn.out));
   const validatorsAlone = await sim([at(ALONE)]);
   check("R14 no seed and validators alone: exit 0, and it says so", validatorsAlone.code === 0 && validatorsAlone.polls === 1
     && validatorsAlone.out[validatorsAlone.out.length - 1] === "AGENT IS READING: no seed gave its own height, and the status comes from 3 validators that answer as listed. No validator list is agreed while fewer than two seeds answer; the agent keeps its witness candidates for 24 h.", JSON.stringify(validatorsAlone.out));

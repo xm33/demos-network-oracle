@@ -36,7 +36,7 @@ import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
-import { RULE, assess, stepConditionRecords, clockReadings } from "./status-rule.mjs";
+import { RULE, assess, stepConditionRecords, clockHeight, newHeightClock, stepHeightClock, heightMovementOf } from "./status-rule.mjs";
 import { createCandidateStore, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { sentinelStatePath } from "./sentinel-state.mjs";
 
@@ -274,7 +274,7 @@ docsEntry('GET /timeline', 'Public incidents, condition records and release even
 docsEntry('GET /federate', 'Prometheus text: the oracle version, plus cross-check RPC reachability and probe latency observed from this vantage, under neutral names.') +
 docsEntry('GET /badge', 'An SVG of the current status word.') +
 docsEntry('GET /version', 'Running agent version and the version most seeds report.') +
-docsEntry('GET /sentinel', 'Anomaly detector: alert count for the last 24 h, or unknown when unavailable.') +
+docsEntry('GET /sentinel', 'Whether DNO\'s own alert process completed a check in the last 15 minutes: status ok or unknown, and last_check. No counts.') +
 '</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s.</p></section>' +
 '<section id="internal"><h2>Internal only</h2><p>Fleet views, <code>/dashboard</code>, <code>/history</code> and <code>/history/export</code>, are served on DNO\'s internal listener only (INTERNAL_PORT). The public site answers 404 for them.</p></section>' +
 '</article></div></main><!--dno:footer--></body></html>';
@@ -1102,11 +1102,15 @@ function computeCanonicalState() {
     else if (sev === "info" && max_incident_severity === "none") max_incident_severity = "info";
   }
 
-  // Height movement as observed: seconds since the last round that showed a new height (updateHeightTracker).
-  // Null when the latest observation gave the clock no height (nothing to compare). Its cause is not known from here.
-  // Before any comparison (first round after a start) both stay null. Without an observed advance the static
-  // duration is counted from the first round that showed the current height: a lower bound. See heightMovement().
-  var hm = heightMovement(observedAtMs, heightTracker.maxHeight !== null);
+  // Height movement as observed: seconds since the last round whose median was a new height (the height clock in
+  // status-rule.mjs). Null when the latest round had no height, and before anything was compared. Without a new
+  // height DNO saw arrive, the duration is counted from the first round that showed the highest median: a lower
+  // bound. Why a height does not move is not known from here.
+  var hm = heightMovementOf(heightClock, observedAtMs, heightClockHadHeight, { roundSeconds: Math.round(MONITOR_INTERVAL_MS / 1000), stalledSeconds: CHAIN_STATIC_RUN_MIN_24H * 60 });
+  // When the last new height arrived (if DNO saw it arrive), and since when none was seen, to the minute (UTC): a
+  // condition record opens with it.
+  var advancedAtIso = hm.advancedAt === null ? null : new Date(hm.advancedAt).toISOString();
+  var staticSince = hm.since === null ? null : new Date(hm.since).toISOString().slice(0, 16).replace("T", " ");
 
   // The reading: which witnesses count, agreement, confidence, status, risk and every reason string (status-rule.mjs).
   // Status is what the witnesses show of the network, not observer coverage: seeds that do not answer raise risk,
@@ -1114,7 +1118,7 @@ function computeCanonicalState() {
   // been seen for RULE.standstillSeconds.
   var reading = assess({ timeReason: timeReason, seedReason: timeReason ? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,
     seedHeights: heights, validators: witnessInput(), maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,
-    movement: { staticSeconds: hm.staticSeconds, advancing: hm.advancing, stalled: hm.stalled, staticSince: hm.staticSince } });
+    movement: { staticSeconds: hm.staticSeconds, advancing: hm.advancing, stalled: hm.stalled, staticSince: staticSince } });
   var agreement = reading.agreement;
 
   // M4: Trend — current cycle against the average of up to 15 previous cycles, all inside a bounded window,
@@ -1158,7 +1162,7 @@ function computeCanonicalState() {
 
   // seed_heights (seeds that gave their own height) and condition_reason (the text a condition record opens with)
   // are for the store and the records; no route publishes them.
-  return { status: reading.status, trend: trend, risk: reading.risk, data_quality: reading.data_quality, data_quality_reason: reading.data_quality_reason, confidence: reading.confidence, confidence_reason: reading.confidence_reason, agreement: agreement, active_incidents: publicIncidentCount, active_public_conditions: countActivePublicConditions(), max_incident_severity: max_incident_severity, summary: reading.summary, status_reason: reading.status_reason, risk_factors: reading.risk_factors, agreement_reason: reading.agreement_reason, staleness_seconds: stalenessSeconds, observed_at: observedAtMs ? new Date(observedAtMs).toISOString() : null, height_last_advanced_at: hm.advancedAtIso, height_static_seconds: hm.staticSeconds, last_updated: new Date(observedAtMs || AGENT_STARTED_AT).toISOString(), api_version: API_VERSION,
+  return { status: reading.status, trend: trend, risk: reading.risk, data_quality: reading.data_quality, data_quality_reason: reading.data_quality_reason, confidence: reading.confidence, confidence_reason: reading.confidence_reason, agreement: agreement, active_incidents: publicIncidentCount, active_public_conditions: countActivePublicConditions(), max_incident_severity: max_incident_severity, summary: reading.summary, status_reason: reading.status_reason, risk_factors: reading.risk_factors, agreement_reason: reading.agreement_reason, staleness_seconds: stalenessSeconds, observed_at: observedAtMs ? new Date(observedAtMs).toISOString() : null, height_last_advanced_at: advancedAtIso, height_static_seconds: hm.staticSeconds, last_updated: new Date(observedAtMs || AGENT_STARTED_AT).toISOString(), api_version: API_VERSION,
     witnesses: reading.witnesses, height_standstill_after_seconds: RULE.standstillSeconds, condition_reason: reading.condition_reason, seed_heights: heights.length };
 }
 
@@ -1649,15 +1653,11 @@ let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
 // observed_at and Last-Modified are measured from here, never from the start of the fleet cycle.
 let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
-// Height movement, over the readings the clock follows (clockResults: the seeds, or the counted validators when no seed
-// gave a height). maxHeight is the highest of them in the latest round (null when there was none); advancedAt is the last round that showed a new height: one above the node's own last answer and above every
-// node's last answer within the window. A leading seed that stops answering is not mistaken for a stalled chain, and
-// a lagging seed catching up is not mistaken for a new height.
-// compared: DNO has compared heights across rounds (or history shows a static run), so height_static_seconds can be
-// published; advanceKnown: the last advance was observed (or bounded by history), so height_last_advanced_at can be.
-// lastBySeed: each seed's last answer { h, at }.
-var heightTracker = { maxHeight: null, advancedAt: null, initialized: false, lastBySeed: {}, compared: false, advanceKnown: false };
-const HEIGHT_WINDOW_MS = 10 * 60000;   // a height nobody has reported for this long is forgotten (a chain restarted lower is followed again)
+// The height clock (status-rule.mjs): one step per public round, on the median that round publishes. heightClock holds
+// the highest median seen and when it was first and last read; heightClockHadHeight says whether the latest round had a
+// height; heightClockRestored whether the stored rounds have been replayed after this start.
+var heightClock = newHeightClock();
+var heightClockHadHeight = false, heightClockRestored = false;
 // Public history rows older than this were not written under the own-height rule (1.0 read a seed's first listed peer),
 // or are older than a row that was not. Median-based figures (the height clock at start-up, 24 h chain movement) do not
 // use them.
@@ -2201,68 +2201,24 @@ async function probePublicNodes() {
   return results;
 }
 
-// Per round: the highest height a seed reported, and whether the round showed a new height. On the first round with a
-// height the clock starts from retained public history, so a restart during a stall does not reset it.
-function updateHeightTracker(results, observedAt) {
-  var seen = {};
-  (results || []).forEach(function(r) { var h = ownHeight(r); if (h !== null) seen[r.name] = h; });
-  var names = Object.keys(seen);
-  if (!names.length) { heightTracker.maxHeight = null; return; }
-  var hs = names.map(function(n) { return seen[n]; }).sort(function(a, b) { return a - b; });
-  var maxH = hs[hs.length - 1], medH = hs[Math.floor(hs.length / 2)];
-  // A new height: above the node's own last answer, however old, and above the last answer of every node that
-  // answered within the window. A node that reports more than before while another already reported that much is
-  // catching up: no advance. Nor is a node back at the height it left on, or back at the height the others stand on.
-  var last = heightTracker.lastBySeed, recentMax = null;
-  for (var k in last) if (observedAt - last[k].at <= HEIGHT_WINDOW_MS && (recentMax === null || last[k].h > recentMax)) recentMax = last[k].h;
-  var comparedNow = false, rose = false;
-  names.forEach(function(n) {
-    var prev = last[n], ref = recentMax;
-    if (prev && (ref === null || prev.h > ref)) ref = prev.h;
-    if (ref !== null) { comparedNow = true; if (seen[n] > ref) rose = true; }
-  });
-  heightTracker.maxHeight = maxH;
-  names.forEach(function(n) { last[n] = { h: seen[n], at: observedAt }; });
-  if (!heightTracker.initialized) {
-    // First round with a height after a start: nothing compared yet. Retained history can extend a static run back
-    // past a restart: the median has stayed at exactly this round's median since the earliest of the most recent
-    // consecutive rows at that median; a lower row before that run bounds when the last advance happened. A higher
-    // median (a chain reset, or lagging seeds now in the middle) says nothing about this height, so nothing is claimed
-    // until the next round compares.
-    heightTracker.initialized = true;
-    heightTracker.advancedAt = observedAt;
+// One step of the height clock per public round, on the median this round publishes (clockHeight). Before the first
+// step after a start the stored rounds are replayed through the same fold: a restart during a standstill keeps it, and
+// nothing is said that the stored rounds do not show. Rows written under the older height rule are not replayed
+// (OWN_HEIGHT_SINCE).
+function stepPublicHeightClock(publicNodeResults, witnesses, observedAt) {
+  if (!heightClockRestored) {
+    heightClockRestored = true;
     if (sharedDb) {
       try {
         var rows = sharedDb.query("SELECT ts, median_block FROM public_node_history WHERE median_block IS NOT NULL AND ts < ? AND ts >= ? ORDER BY ts DESC LIMIT 2000").all(observedAt, OWN_HEIGHT_SINCE);
-        for (var i = 0; i < rows.length; i++) {
-          if (rows[i].median_block === medH) { heightTracker.advancedAt = rows[i].ts; heightTracker.compared = true; continue; }
-          if (rows[i].median_block < medH && heightTracker.compared) heightTracker.advanceKnown = true;
-          break;
-        }
+        for (var i = rows.length - 1; i >= 0; i--) heightClock = stepHeightClock(heightClock, rows[i].median_block, rows[i].ts);
       } catch (e) {}
     }
-    return;
   }
-  if (comparedNow) heightTracker.compared = true;
-  if (rose) { heightTracker.advancedAt = observedAt; heightTracker.advanceKnown = true; }
-}
-
-// Published height movement, derived from heightTracker: seconds without an advance (null before any comparison or
-// when this observation returned no height), when the last observed advance happened, and the two status_reason
-// phrases ("Heights advancing" within the last two rounds; "height unchanged" past the static threshold). Status
-// itself changes only at RULE.standstillSeconds (status-rule.mjs).
-function heightMovement(observedAtMs, anyHeight) {
-  var t = heightTracker;
-  var staticSeconds = t.compared && t.advancedAt && observedAtMs && anyHeight ? Math.max(0, Math.round((observedAtMs - t.advancedAt) / 1000)) : null;
-  return {
-    staticSeconds: staticSeconds,
-    advancedAtIso: t.advanceKnown && t.advancedAt ? new Date(t.advancedAt).toISOString() : null,
-    // Since when no new height was seen, to the minute (UTC): the last observed advance, or without one the first
-    // round that showed the height now standing. A condition record opens with it.
-    staticSince: staticSeconds !== null ? new Date(t.advancedAt).toISOString().slice(0, 16).replace("T", " ") : null,
-    advancing: staticSeconds !== null && t.advanceKnown && staticSeconds <= 2 * Math.round(MONITOR_INTERVAL_MS / 1000),
-    stalled: staticSeconds !== null && staticSeconds >= CHAIN_STATIC_RUN_MIN_24H * 60
-  };
+  var seedHeights = publicNodeResults.map(ownHeight).filter(function(h) { return h !== null; });
+  var v = clockHeight(seedHeights, witnesses ? witnesses.rows.map(function(r) { return r.height; }) : null);
+  heightClock = stepHeightClock(heightClock, v, observedAt);
+  heightClockHadHeight = v !== null;
 }
 
 // Public observation round: Path A seeds, catalog crawl, public history and public incidents. Runs on its own
@@ -2278,7 +2234,7 @@ async function publicObservationCycle() {
   latestWitnesses = roundWitnesses;
   lastPublicObservedAt = Date.now();
   catalogFinishCrawl(publicNodeResults, lastPublicObservedAt);
-  updateHeightTracker(clockResults(publicNodeResults, roundWitnesses), lastPublicObservedAt);
+  stepPublicHeightClock(publicNodeResults, roundWitnesses, lastPublicObservedAt);
   recordPublicNodeHistory();
   recordObservationHistory();
   evaluatePublicIncidents();
@@ -2321,8 +2277,10 @@ async function readRoundWitnesses(publicNodeResults) {
   if (!VALIDATOR_WATCH_DIALS || !witnessCandidates) return null;
   if (publicNodeResults.filter(function(n) { return ownHeight(n) !== null; }).length >= 2) return null;
   var kept = witnessCandidates.load(Date.now());
-  if (!kept.candidates.length) return null;
-  var snap = witnessSnapshot(await readWitnesses(kept.candidates, { resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, maxBytes: INFO_BODY_MAX_BYTES }), kept.agreedAt);
+  // A configured seed's key is never read as a witness, also when the candidates were kept before that seed was configured.
+  var candidates = kept.candidates.filter(function(c) { return !SEED_KEYS.has(c.key); });
+  if (!candidates.length) return null;
+  var snap = witnessSnapshot(await readWitnesses(candidates, { resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, maxBytes: INFO_BODY_MAX_BYTES }), kept.agreedAt);
   log("  Witnesses: " + snap.read + " validator" + (snap.read === 1 ? "" : "s") + " read, " + snap.rows.length + " answered as listed with a height");
   return snap;
 }
@@ -2330,13 +2288,6 @@ async function readRoundWitnesses(publicNodeResults) {
 function witnessInput() {
   var w = latestWitnesses;
   return w ? { read: w.read, heights: w.rows.map(function(r) { return r.height; }), listAgreedAt: w.listAgreedAt ? new Date(w.listAgreedAt).toISOString() : null } : null;
-}
-// The readings the height clock follows this round (clockReadings in status-rule.mjs), as updateHeightTracker reads
-// them: the seeds' while a seed gave its own height, else the validators counted in the reading.
-function clockResults(publicNodeResults, witnesses) {
-  var seeds = publicNodeResults.map(function(n) { return { id: n.name, h: ownHeight(n) }; });
-  var validators = witnesses ? witnesses.rows.map(function(r) { return { id: "validator:" + r.key, h: r.height }; }) : null;
-  return clockReadings(seeds, validators).map(function(r) { return { name: r.id, ok: true, block: r.h, height_source: "self" }; });
 }
 function validatorPublishConfig() {
   return { seedsConfigured: Object.keys(PUBLIC_NODES).length, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS, dials: VALIDATOR_WATCH_DIALS };
@@ -2487,7 +2438,7 @@ function discoverFixnetValidators(anchorInfoData) {
           [identity, now, now, connection, online, block]
         );
         added++;
-        log("  [fixnet-discovery] NEW peer " + identity.substring(0, 16) + "... via " + (connection || "?"));
+        log("  [fixnet-discovery] NEW peer " + identity.substring(0, 16) + "...");   // no address in the log: a peer's connection string is its host
       } else {
         // Update last_seen and (optionally) block/online from anchor's view
         sharedDb.run(
@@ -3737,9 +3688,12 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
     } else if (reqPath === "/sentinel") {
-      // Counts only on the public listener: alert keys name fleet nodes. Unknown when the sentinel file is unreadable.
-      // The file is in the log directory (sentinel-state.mjs): this service's /tmp is private, the sentinel's is not.
-      var sentinelData = { status: "unknown", last_check: null, alerts_24h: null };
+      // The public listener says whether the sentinel completed a check lately, and when: nothing else. The alert count
+      // and the alert keys are about the operator's own nodes (a count can be matched to them), so they go to the
+      // internal listener only. Unknown when the sentinel file is unreadable. The file is in the log directory
+      // (sentinel-state.mjs): this service's /tmp is private, the sentinel's is not.
+      var sentinelData = { status: "unknown", last_check: null };
+      if (internal) sentinelData.alerts_24h = null;
       try {
         var dedup = JSON.parse(readFileSync(sentinelStatePath(LOG_DIR), "utf8"));
         var sNow = Date.now();
@@ -3747,8 +3701,8 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         // "ok" only when the sentinel completed a check in the last 15 minutes (it polls every 5); otherwise unknown.
         var lastCheck = typeof dedup._lastCheck === "number" ? dedup._lastCheck : null;
         var fresh = lastCheck !== null && sNow - lastCheck < 15 * 60000;
-        sentinelData = { status: fresh ? "ok" : "unknown", last_check: lastCheck !== null ? new Date(lastCheck).toISOString() : null, alerts_24h: fresh ? recentKeys.length : null };
-        if (internal) sentinelData.recent_alert_keys = recentKeys;
+        sentinelData = { status: fresh ? "ok" : "unknown", last_check: lastCheck !== null ? new Date(lastCheck).toISOString() : null };
+        if (internal) { sentinelData.alerts_24h = fresh ? recentKeys.length : null; sentinelData.recent_alert_keys = recentKeys; }
       } catch (se) { /* file missing or unreadable: status stays unknown */ }
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(sentinelData, null, 2));
@@ -3865,7 +3819,7 @@ h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
 <!-- SECTION 8: How we know -->
 <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:0.82em;color:#8b949e">
   <span style="color:#58a6ff;font-weight:600">How we know</span> &nbsp;·&nbsp;
-  Public network observed via <span id="hw-public-count">—</span> public nodes &nbsp;·&nbsp;
+  Public reading rests on <span id="hw-public-count">—</span> &nbsp;·&nbsp;
   Updated every 20s &nbsp;·&nbsp;
   Data quality: <span id="hw-quality">—</span> &nbsp;·&nbsp;
   <a href="/methodology" style="color:#58a6ff">Methodology</a>
@@ -3973,7 +3927,7 @@ async function refresh(){
     var pubTotal = (d.agreement&&d.agreement.total_nodes) || "?";
     var pubAligned = (d.agreement&&d.agreement.aligned_nodes) || "?";
     document.getElementById("updated").textContent="Block "+pubBlock+
-      " | "+pubAligned+"/"+pubTotal+" public nodes | Updated "+new Date(d.last_updated).toLocaleTimeString()+
+      " | "+pubAligned+"/"+pubTotal+" heights aligned | Updated "+new Date(d.last_updated).toLocaleTimeString()+
       " | Staleness "+(d.staleness_seconds||0)+"s";
     var re=document.getElementById("rec");
     re.textContent=(d.status||"unknown").toUpperCase();
@@ -3984,10 +3938,10 @@ async function refresh(){
     if(d.agreement){
       var na=d.agreement;
       var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
-      mg.innerHTML+='<div class="metric"><div class="label">Network Block</div><div class="value">'+(na.max_block||na.median_block||"?")+'</div></div>';
+      mg.innerHTML+='<div class="metric"><div class="label">Highest height compared</div><div class="value">'+(na.max_block||na.median_block||"?")+'</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Agreement</div><div class="value" style="color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
       var compared=typeof na.aligned_nodes==="number"&&typeof na.block_spread==="number";
-      mg.innerHTML+='<div class="metric"><div class="label">Public Nodes</div><div class="value">'+(compared?na.aligned_nodes+'/'+na.total_nodes+' aligned':'not computed')+'</div></div>';
+      mg.innerHTML+='<div class="metric"><div class="label">Heights compared</div><div class="value">'+(compared?na.aligned_nodes+'/'+na.total_nodes+' aligned':'not computed')+'</div></div>';
       mg.innerHTML+='<div class="metric"><div class="label">Block Spread</div><div class="value" style="color:'+(!compared?"#8b949e":na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+(compared?na.block_spread:'not computed')+'</div></div>';
     }
     var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
@@ -4023,7 +3977,8 @@ async function refresh(){
     // How we know box
     var hwPublic=document.getElementById("hw-public-count");
     var hwQuality=document.getElementById("hw-quality");
-    if(hwPublic&&d.agreement) hwPublic.textContent=d.agreement.total_nodes;
+    // What the reading rests on (witnesses, API 1.2): the seeds, one seed and validators, validators alone, or nothing.
+    if(hwPublic&&d.witnesses){var wv=d.witnesses.validators,wn=wv?wv.counted:0;hwPublic.textContent={seeds_only:d.witnesses.public_seeds.own_height+" seed heights",seed_and_validators:"one seed and "+wn+" validator"+(wn===1?"":"s"),validators_only:wn+" validators, no seed",insufficient:"nothing: no reading"}[d.witnesses.mode]||"not reported";}
     if(hwQuality&&d.data_quality) hwQuality.textContent=d.data_quality.toUpperCase();
     var gb=document.getElementById("growth-status");
     if(gb&&d.validator_growth){
@@ -4113,7 +4068,7 @@ async function refresh(){
     var sr=await fetch("/sentinel");var sd=await sr.json();
     var sb=document.getElementById("sentinel-status");
     if(sb){
-      // /sentinel on the public listener: { status, last_check, alerts_24h } (counts only), or status "unknown".
+      // /sentinel on the internal listener (where this page is served): { status, last_check, alerts_24h, recent_alert_keys }. The public one has status and last_check only.
       var known=sd&&sd.status==="ok"&&typeof sd.alerts_24h==="number";
       var n24=known?sd.alerts_24h:null;
       var html='<div style="display:flex;gap:16px;margin-bottom:12px">';

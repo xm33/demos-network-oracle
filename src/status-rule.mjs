@@ -9,10 +9,11 @@
 //   - an ACTIVE validator that answered as the key the validator list holds, at the address it published on chain.
 //
 // Two or more seed heights: the seeds decide, as before 1.2, and no validator is read (mode seeds_only).
-// One seed height h: a validator within the band of h confirms it; one further away is left out. With at least one
-//   confirmation there is a reading (seed_and_validators). Agreement compares the seed with the validator closest to
-//   it, and the published median is the seed's own height: a validator can confirm the seed, and it can neither
-//   contradict it nor pull the reading towards a number of its own.
+// One seed height h: a validator within the band of h counts with it; one further away is left out. With at least one
+//   counted there is a reading (seed_and_validators). Agreement compares the seed with the validator closest to it, and
+//   the published median is the seed's own height: a validator can count with the seed, and it can neither count
+//   against it nor pull the reading towards a number of its own. When the validators within the band are not more than
+//   half of those that gave a height, confidence is uncertain and the reading says how many were left out.
 // No seed height: validators within the band of the upper median of all validator heights are counted; a reading
 //   needs at least two of them and more than half of those that gave a height (validators_only). Agreement is taken
 //   around that same median, so every counted validator is aligned and validators alone can never read weak.
@@ -24,6 +25,7 @@ export const RULE = Object.freeze({
   moderateShare: 0.6,        // moderate: at least this share of the compared heights aligned
   confidenceGapBlocks: 50,   // confidence is uncertain when the compared heights are further apart than this
   standstillSeconds: 1800,   // a reading that would be stable reads degraded after this long without a new height
+  clockForgetSeconds: 600,   // the highest median seen is given up when it has not been read for this long and the median below it rises
   witnessMax: 8,             // validators read in one round, at most (witnesses.mjs)
   candidateMaxAgeMs: 24 * 3600 * 1000   // a validator stays a candidate this long after the last agreed list
 });
@@ -74,7 +76,7 @@ export function selectWitnesses(input) {
     var h = seeds[0];
     var near = vals.filter(function(v) { return Math.abs(v - h) <= RULE.bandBlocks; });
     if (!near.length) return out;
-    // The closest confirmation; of two equally close, the lower (the one that claims less).
+    // The closest validator; of two equally close, the lower (the one that claims less).
     var closest = near.reduce(function(best, v) { return Math.abs(v - h) < Math.abs(best - h) ? v : best; }, near[0]);
     out.mode = "seed_and_validators"; out.counted = sorted([h].concat(near)); out.compare = sorted([h, closest]); out.reference = h;
     out.validatorsCounted = near.length;
@@ -87,16 +89,68 @@ export function selectWitnesses(input) {
   return out;
 }
 
-// The readings the standstill clock follows; each is { id, h }. While a seed gives its own height the clock follows
-// the seeds alone, so a validator can neither start it nor stop it. With no seed height it follows the validators
-// counted in the reading; when they form no reading none is counted, and the clock follows nothing.
-export function clockReadings(seedReadings, validatorReadings) {
-  var ok = function(r) { return !!r && isHeight(r.h); };
-  var seeds = (Array.isArray(seedReadings) ? seedReadings : []).filter(ok);
-  if (seeds.length || !Array.isArray(validatorReadings)) return seeds;
-  var vals = validatorReadings.filter(ok);
-  var w = selectWitnesses({ seedHeights: [], validatorHeights: vals.map(function(r) { return r.h; }) });
-  return vals.filter(function(r) { return w.counted.indexOf(r.h) !== -1; });
+// ---- the height clock -----------------------------------------------------------------------------------------------
+// One height per round: the median that round publishes. The clock is a fold over those medians, so the live rounds and
+// the stored rounds a restart replays follow one rule.
+//   above the highest median seen: a new height;
+//   equal to it: that height, read again;
+//   below it: no new height. When the highest median has not been read for RULE.clockForgetSeconds and the median below
+//     it is rising (above the lowest read since it went below), a chain on a lower base is producing blocks, and the
+//     clock starts over from that median. The first reading below the top after such an absence claims nothing: whether
+//     the median is rising is not known yet.
+// What moves the clock is what moves the published median. Beside a seed that is the seed's own height, so no
+// validator moves it. With no seed it is the validators' median, which one validator among three or more cannot move.
+
+// The median one round publishes, or null when the round has no height: the upper median of two or more seed heights;
+// the one seed's height (whether or not a validator stands with it); with no seed, the validators' median when they form a
+// reading. assess() publishes the same number as agreement.median_block.
+export function clockHeight(seedHeights, validatorHeights) {
+  var seeds = sorted(seedHeights);
+  if (seeds.length >= 2) return upperMedian(seeds);
+  if (seeds.length === 1) return seeds[0];
+  var w = selectWitnesses({ seedHeights: [], validatorHeights: Array.isArray(validatorHeights) ? validatorHeights : null });
+  return w.mode === "validators_only" ? w.reference : null;
+}
+
+// top: the highest median seen. topSince: when it was first read (the last new height). topSeenAt: when it was last read.
+// compared: a later round has been set against it, so "no new height for N s" can be said. advanceKnown: topSince is a
+// new height DNO saw arrive, not just the first median it read. below: the lowest median read since the median went
+// below the top. hold: this round claims nothing (see above).
+export function newHeightClock() { return { top: null, topSince: null, topSeenAt: null, compared: false, advanceKnown: false, below: null, hold: false }; }
+
+// One round: v is clockHeight() of the round (null: no height, the clock is not moved), at its observation time in ms.
+export function stepHeightClock(state, v, at) {
+  var s = state || newHeightClock();
+  if (!isHeight(v) || typeof at !== "number" || !isFinite(at)) return s;
+  var start = { top: v, topSince: at, topSeenAt: at, compared: false, advanceKnown: false, below: null, hold: false };
+  if (s.top === null) return start;
+  if (v > s.top) return { top: v, topSince: at, topSeenAt: at, compared: true, advanceKnown: true, below: null, hold: false };
+  if (v === s.top) return { top: s.top, topSince: s.topSince, topSeenAt: at, compared: true, advanceKnown: s.advanceKnown, below: null, hold: false };
+  var away = at - s.topSeenAt > RULE.clockForgetSeconds * 1000;
+  if (away && s.below !== null && v > s.below) return start;   // a chain on a lower base is producing: follow it
+  return { top: s.top, topSince: s.topSince, topSeenAt: s.topSeenAt, compared: true, advanceKnown: s.advanceKnown,
+    below: s.below === null ? v : Math.min(s.below, v), hold: away && s.below === null };
+}
+
+// What is published about height movement at observedAt (ms). hadHeight: the latest round had a height.
+// cfg: { roundSeconds, stalledSeconds }: "Heights advancing" within two rounds of a new height DNO saw arrive, while
+// the median still stands on it; "height unchanged" from stalledSeconds on. Status changes only at
+// RULE.standstillSeconds (assess).
+//   staticSeconds: seconds since the last new height; without one DNO saw arrive, since the first round that showed the
+//     highest median (a lower bound). null before any comparison, without a height this round, or on hold.
+//   advancedAt: when the last new height arrived (ms), if DNO saw it arrive. since: the moment staticSeconds is counted
+//     from (ms), whenever staticSeconds is published: a condition record opens with it. The caller formats both.
+export function heightMovementOf(state, observedAt, hadHeight, cfg) {
+  var s = state || newHeightClock(), c = cfg || {};
+  var said = s.compared && !s.hold && !!hadHeight && s.topSince !== null && typeof observedAt === "number" && observedAt > 0;
+  var staticSeconds = said ? Math.max(0, Math.round((observedAt - s.topSince) / 1000)) : null;
+  return {
+    staticSeconds: staticSeconds,
+    advancedAt: s.advanceKnown && !s.hold && s.topSince !== null ? s.topSince : null,
+    since: staticSeconds !== null ? s.topSince : null,
+    advancing: staticSeconds !== null && s.advanceKnown && s.below === null && staticSeconds <= 2 * (c.roundSeconds || 0),
+    stalled: staticSeconds !== null && typeof c.stalledSeconds === "number" && staticSeconds >= c.stalledSeconds
+  };
 }
 
 const UNKNOWN_TEXT = Object.freeze({
@@ -136,7 +190,7 @@ function reasonPhrases(mode, n) {
 //   seedHeights:  the own heights of the seeds that gave one
 //   validators:   null (none read) | { read, heights, listAgreedAt }   (candidates read this round)
 //   maxIncidentSeverity: "none" | "info" | "warning" | "critical"; publicIncidentCount: public incidents that feed status
-//   movement:     { staticSeconds, advancing, stalled, staticSince }   (heightMovement(); staticSince: "YYYY-MM-DD HH:MM" UTC, or null)
+//   movement:     { staticSeconds, advancing, stalled, staticSince }   (heightMovementOf(); staticSince: "YYYY-MM-DD HH:MM" UTC, or null)
 // }
 export function assess(input) {
   var i = input || {};
@@ -157,6 +211,10 @@ export function assess(input) {
   var unknownText = unknownTextOf(reason, seedHeights.length, v ? sorted(v.heights).length : null);
   var mode = sufficient ? w.mode : "insufficient";
   var n = sufficient && w.validatorsCounted !== null ? w.validatorsCounted : 0;   // validators counted in this reading
+  // Beside one seed: validators that gave a height more than the band away from it. They are left out and move
+  // nothing; when those within the band are not more than half, the reading says so in confidence and risk.
+  var withHeight = mode === "seed_and_validators" ? w.validatorsWithHeight : 0, leftOut = mode === "seed_and_validators" ? withHeight - n : 0;
+  var seedOutnumbered = mode === "seed_and_validators" && n * 2 <= withHeight;
 
   var agreement;
   if (!sufficient) {
@@ -170,6 +228,7 @@ export function assess(input) {
   if (!sufficient) { confidence = "uncertain"; confidenceReason = "No cross-check: " + unknownText; }
   else if (w.compare[w.compare.length - 1] - w.compare[0] > RULE.confidenceGapBlocks) { confidence = "uncertain"; confidenceReason = "Public nodes report block heights more than 50 blocks apart"; }
   else if (mode === "validators_only") { confidence = "uncertain"; confidenceReason = "No public seed reported its own height: the reading rests on validators alone"; }
+  else if (seedOutnumbered) { confidence = "uncertain"; confidenceReason = leftOut + " of " + withHeight + " validators that answered as listed " + plural(leftOut, "is", "are") + " more than 25 blocks from the one public seed"; }
 
   // Status. A standstill turns a reading that would be stable into degraded; it never touches another status.
   var status;
@@ -194,7 +253,8 @@ export function assess(input) {
   if (status === "unknown") summary = "Insufficient data: " + unknownText + ".";
   else if (status === "stable") {
     if (mode === "seeds_only") summary = (pubReachable === pubTotal ? "All " + pubTotal : pubReachable + " of " + pubTotal) + " public seeds answered and their reported heights agree.";
-    else if (mode === "seed_and_validators") summary = "One public seed reported its own height, and " + validatorsWord(n) + " that " + plural(n, "answers", "answer") + " as listed " + plural(n, "is", "are") + " within 25 blocks of it.";
+    else if (mode === "seed_and_validators") summary = "One public seed reported its own height, and " + validatorsWord(n) + " that " + plural(n, "answers", "answer") + " as listed " + plural(n, "is", "are") + " within 25 blocks of it."
+      + (leftOut > 0 ? " " + leftOut + " " + plural(leftOut, "other is", "others are") + " more than 25 blocks from it." : "");
     else summary = "No public seed reported its own height. " + validatorsWord(n) + " that answer as listed report heights within 25 blocks of each other.";
     if (incidentCount > 0) summary += " " + incidentCount + " info-level incident" + (incidentCount === 1 ? "" : "s") + " active.";
     if (stalled) summary += " " + capital(staticText) + ".";
@@ -216,13 +276,14 @@ export function assess(input) {
   else if (status === "degraded") statusReason = sev === "warning" ? "Warning-level incidents active" : agreement.state === "moderate" ? phrase.reduced : capital(staticText) + "; " + aligned;
   else statusReason = "Insufficient data: " + unknownText;
 
-  // A condition record's text is fixed when the record opens, so it must stay true while the record is open:
-  // a standstill is told by when it began, not by how long it has lasted.
-  var conditionReason = standstill ? (move.staticSince ? "No new height since " + move.staticSince + " UTC" : "No new height for " + Math.floor(RULE.standstillSeconds / 60) + " min or more") : statusReason;
+  // A condition record's text is fixed when the record opens and the record can outlast its cause (a degraded reading
+  // may go on for another reason), so the text is anchored at both ends: when the standstill began, and the opening.
+  var conditionReason = standstill ? (move.staticSince ? "No new height from " + move.staticSince + " UTC until this record opened" : "No new height for " + Math.floor(RULE.standstillSeconds / 60) + " min or more when this record opened") : statusReason;
 
   var riskFactors = [];
   if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("Only " + pubReachable + " of " + pubTotal + " public nodes answered — limited cross-checking");
-  if (mode === "seed_and_validators") riskFactors.push("one public seed reported its own height; " + validatorsWord(n) + " " + plural(n, "confirms", "confirm") + " it");
+  if (mode === "seed_and_validators") riskFactors.push("one public seed reported its own height; " + validatorsWord(n) + " " + plural(n, "is", "are") + " within 25 blocks of it");
+  if (leftOut > 0) riskFactors.push(leftOut + " of " + withHeight + " validators that answered as listed " + plural(leftOut, "is", "are") + " more than 25 blocks from the seed");
   if (mode === "validators_only") riskFactors.push("no public seed reported its own height; the reading rests on " + validatorsWord(n));
   if (sev === "warning") riskFactors.push("warning-level incidents active");
   if (sev === "critical") riskFactors.push("critical incidents active");
@@ -231,7 +292,7 @@ export function assess(input) {
 
   var agreementReason;
   if (agreement.state === "unknown") agreementReason = "Not compared: " + unknownText;
-  else if (mode === "seed_and_validators") agreementReason = "One public seed and the closest of " + validatorsWord(n) + " within ±25 blocks of it (spread: " + agreement.block_spread + " blocks)";
+  else if (mode === "seed_and_validators") agreementReason = "One public seed and " + (n === 1 ? "1 validator" : "the closest of " + validatorsWord(n)) + " within ±25 blocks of it (spread: " + agreement.block_spread + " blocks)";
   else agreementReason = agreement.aligned_nodes + " of " + agreement.total_nodes + (mode === "validators_only" ? " validators" : " public nodes") + " with a height within ±25 blocks of the median (spread: " + agreement.block_spread + " blocks)";
 
   var witnesses = {

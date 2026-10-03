@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { RULE, MODES, agreementOf, upperMedian, seedReasonOf, selectWitnesses, clockReadings, assess, stepConditionRecords } from "./status-rule.mjs";
+import { RULE, MODES, agreementOf, upperMedian, seedReasonOf, selectWitnesses, clockHeight, newHeightClock, stepHeightClock, heightMovementOf, assess, stepConditionRecords } from "./status-rule.mjs";
 
 const TAG = "STATUS_RULE";
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -109,19 +109,33 @@ console.log("\n[" + TAG + "] two seeds decide: the 1.1 reading, word for word");
   const info = round(3, [H, H, H], null, { maxIncidentSeverity: "info", publicIncidentCount: 1 });
   check("S14 an info-level incident does not change status and is said", info.status === "stable" && info.summary === "All 3 public seeds answered and their reported heights agree. 1 info-level incident active.");
   check("S15 the seed-level reason the caller passes is used as given", round(2, [H], null, { seedReason: "too_few_heights" }).data_quality_reason === "too_few_heights");
-  check("S16 a reading holds no list of heights or nodes: the clock's readings are the caller's (clockReadings)", !("clock_heights" in a) && Object.keys(a).sort().join() === "agreement,agreement_reason,condition_reason,confidence,confidence_reason,data_quality,data_quality_reason,risk,risk_factors,standstill,status,status_reason,summary,witnesses");
+  check("S16 a reading holds no list of heights or nodes: the clock is stepped by the caller (clockHeight, stepHeightClock)", !("clock_heights" in a) && Object.keys(a).sort().join() === "agreement,agreement_reason,condition_reason,confidence,confidence_reason,data_quality,data_quality_reason,risk,risk_factors,standstill,status,status_reason,summary,witnesses");
   check("S17 the summary's noun follows the total: 1 of 3 public nodes, 2 of 3 public nodes; 1 of 1 public node", round(2, [H - 30, H], null).summary === "Unstable reading of the public seeds: 1 of 3 public nodes did not answer; agreement weak."
     && round(1, [H], [H + 22]).summary.includes(": 2 of 3 public nodes did not answer; ") && round(0, [], [H - 24, H, H], { seedsTotal: 1 }).summary === "Degraded reading of 3 validators, with no public seed: 1 of 1 public node did not answer; agreement moderate."
     && !round(3, [H - 30, H, H], null).summary.includes("did not answer"));
 }
 
-console.log("\n[" + TAG + "] one seed, confirmed by validators");
+console.log("\n[" + TAG + "] one seed, and validators within 25 blocks of it");
 {
   const a = round(1, [H], [H, H - 1, H - 300]);
   check("F1 one seed and two validators within the band: a reading, stable, clear", a.status === "stable" && a.data_quality === "sufficient" && a.data_quality_reason === null && a.confidence === "clear" && a.witnesses.mode === "seed_and_validators");
-  check("F2 risk is elevated, and the factor names the cause (also when only one seed did not answer, where two seed heights would read low)", a.risk === "elevated" && round(2, [H], [H]).risk === "elevated" && round(2, [H, H], null).risk === "low" && a.risk_factors.includes("one public seed reported its own height; 2 validators confirm it") && round(1, [H], [H]).risk_factors.includes("one public seed reported its own height; 1 validator confirms it"));
-  check("F3 its words", a.summary === "One public seed reported its own height, and 2 validators that answer as listed are within 25 blocks of it." && a.status_reason === "Heights advancing; one public seed and 2 validators aligned"
+  check("F2 risk is elevated, and the factor names the cause (also when only one seed did not answer, where two seed heights would read low)", a.risk === "elevated" && round(2, [H], [H]).risk === "elevated" && round(2, [H, H], null).risk === "low" && a.risk_factors.includes("one public seed reported its own height; 2 validators are within 25 blocks of it") && round(1, [H], [H]).risk_factors.includes("one public seed reported its own height; 1 validator is within 25 blocks of it")
+    && !JSON.stringify(a.risk_factors).includes("confirm"));
+  check("F3 its words", a.summary === "One public seed reported its own height, and 2 validators that answer as listed are within 25 blocks of it. 1 other is more than 25 blocks from it." && a.status_reason === "Heights advancing; one public seed and 2 validators aligned"
     && a.agreement_reason === "One public seed and the closest of 2 validators within ±25 blocks of it (spread: 0 blocks)" && round(1, [H], [H + 2]).summary === "One public seed reported its own height, and 1 validator that answers as listed is within 25 blocks of it.", a.summary + " | " + a.status_reason + " | " + a.agreement_reason);
+  const out = round(1, [H], [H + 1, H + 400, H - 900, H + 5000]), tie = round(1, [H], [H, H + 400]), most = round(1, [H], [H, H + 1, H + 400]);
+  check("F15 the validators within 25 blocks are not more than half of those that gave a height: the status still follows the seed, and confidence is uncertain, with the count",
+    out.status === "stable" && out.agreement.state === "strong" && out.agreement.median_block === H && out.confidence === "uncertain"
+    && out.confidence_reason === "3 of 4 validators that answered as listed are more than 25 blocks from the one public seed" && out.risk === "elevated"
+    && out.risk_factors.includes("3 of 4 validators that answered as listed are more than 25 blocks from the seed")
+    && out.summary === "One public seed reported its own height, and 1 validator that answers as listed is within 25 blocks of it. 3 others are more than 25 blocks from it.", JSON.stringify([out.confidence_reason, out.risk_factors, out.summary]));
+  check("F16 exactly half is not more than half: uncertain; two of three within the band: clear, and the one left out is still said", tie.confidence === "uncertain" && tie.confidence_reason === "1 of 2 validators that answered as listed is more than 25 blocks from the one public seed"
+    && most.confidence === "clear" && most.confidence_reason === "Observed public signals agree" && most.risk_factors.includes("1 of 3 validators that answered as listed is more than 25 blocks from the seed")
+    && most.summary.endsWith("1 other is more than 25 blocks from it."), JSON.stringify([tie.confidence_reason, most.risk_factors]));
+  check("F18 the agreement reason: 'the closest of N validators', and plainly '1 validator' when there is one", round(1, [H], [H + 2]).agreement_reason === "One public seed and 1 validator within ±25 blocks of it (spread: 2 blocks)"
+    && round(1, [H], [H + 2, H - 9]).agreement_reason === "One public seed and the closest of 2 validators within ±25 blocks of it (spread: 2 blocks)");
+  check("F17 a validator that gave no height is not counted as being far; with every validator within the band nothing is added", round(1, [H], [H, null, null]).confidence === "clear" && round(1, [H], [H, null, null]).risk_factors.length === 2
+    && round(1, [H], [H, H + 3]).summary === "One public seed reported its own height, and 2 validators that answer as listed are within 25 blocks of it." && round(0, [], [H, H, H + 400]).confidence_reason === "No public seed reported its own height: the reading rests on validators alone");
   eq("F4 what is published: the seed's height as the median, the seed and its closest validator as the two compared", round(1, [H], [H + 3, H - 9, H - 300]).agreement, { state: "strong", aligned_nodes: 2, total_nodes: 2, median_block: H, block_spread: 3, max_block: H + 3, min_block: H });
   eq("F5 the witnesses object: counts only", a.witnesses, { mode: "seed_and_validators", counted: 3, public_seeds: { configured: 3, answered: 1, own_height: 1 }, validators: { read: 3, own_height: 3, counted: 2, list_agreed_at: "2026-10-02T08:07:00.000Z" } });
   const far = round(1, [H], [H + 400, H - 900]);
@@ -170,16 +184,30 @@ console.log("\n[" + TAG + "] no seed: validators alone");
   check("V9 a seed that answered without its own height is counted as answered, and validators still give the reading", round(1, [], [H, H]).witnesses.mode === "validators_only" && round(1, [], [H, H]).witnesses.public_seeds.answered === 1 && round(1, [], [H]).data_quality_reason === "too_few_answers" && round(2, [], [H]).data_quality_reason === "too_few_heights");
 }
 
-console.log("\n[" + TAG + "] the readings the standstill clock follows");
+console.log("\n[" + TAG + "] the height clock: a fold over the median each round publishes (the sequences are in height-movement.test.mjs)");
 {
-  const ids = (list) => list.map((r) => r.id + ":" + r.h).join(",");
-  const seeds = [{ id: "a", h: H }, { id: "b", h: H - 2 }, { id: "c", h: null }], vals = [{ id: "v1", h: H }, { id: "v2", h: H + 1 }, { id: "v3", h: H + 5000 }, { id: "v4", h: null }];
-  check("C1 two seed heights: the seeds", ids(clockReadings(seeds, null)) === "a:" + H + ",b:" + (H - 2) && ids(clockReadings(seeds, vals)) === "a:" + H + ",b:" + (H - 2));
-  check("C2 beside one seed the clock follows the seed alone: a validator can neither start it nor stop it", ids(clockReadings([seeds[0], seeds[2]], vals)) === "a:" + H);
-  check("C3 one seed and no reading: still the seed, as in 1.1", ids(clockReadings([seeds[0]], [{ id: "v3", h: H + 5000 }])) === "a:" + H && ids(clockReadings([seeds[0]], null)) === "a:" + H);
-  check("C4 no seed height: the validators counted in the reading, and not the far one", ids(clockReadings([seeds[2]], vals)) === "v1:" + H + ",v2:" + (H + 1) && ids(clockReadings([], vals)) === "v1:" + H + ",v2:" + (H + 1));
-  check("C5 no seed height and no reading from the validators: nothing", clockReadings([], [vals[0], vals[2]]).length === 0 && clockReadings([], [vals[0]]).length === 0 && clockReadings([], null).length === 0 && clockReadings(null, undefined).length === 0);
-  check("C6 what is not a height is not followed", clockReadings([{ id: "a", h: "431000" }, { id: "b", h: -1 }, null], null).length === 0);
+  const T0 = 1_800_000_000_000, S = 1000, cfg = { roundSeconds: 20, stalledSeconds: 300 };
+  const run = (steps) => steps.reduce((s, [v, at]) => stepHeightClock(s, v, T0 + at * S), newHeightClock());
+  check("C1 two seed heights: their upper median; validators do not change it", clockHeight([H, H - 2], null) === H && clockHeight([H, H - 2], [H + 9, H + 9, H + 9]) === H);
+  check("C2 beside one seed the clock follows the seed's own height: no validator moves it", clockHeight([H], [H + 20, H + 20, H - 25]) === H && clockHeight([H], [H + 5000]) === H && clockHeight([H], null) === H);
+  check("C3 no seed height: the validators' median when they form a reading; one validator of three cannot move it", clockHeight([], [H, H, H + 1]) === H && clockHeight([], [H, H, H + 24]) === H && clockHeight([], [H, H + 1, H + 5000]) === H + 1);
+  check("C4 no seed height and no reading from the validators: no height, and the clock is not moved", clockHeight([], [H, H + 900]) === null && clockHeight([], [H]) === null && clockHeight([], null) === null
+    && JSON.stringify(stepHeightClock(run([[H, 0], [H + 1, 20]]), null, T0 + 40 * S)) === JSON.stringify(run([[H, 0], [H + 1, 20]])));
+  const s = run([[H, 0], [H + 1, 20], [H + 1, 40]]);
+  check("C5 above the highest median: a new height; equal: read again; the state says when it was first and last read", s.top === H + 1 && s.topSince === T0 + 20 * S && s.topSeenAt === T0 + 40 * S && s.compared && s.advanceKnown && s.below === null);
+  const low = stepHeightClock(s, H - 3, T0 + 60 * S);
+  check("C6 below it: no new height; the lowest median since is kept", low.top === H + 1 && low.topSince === T0 + 20 * S && low.topSeenAt === T0 + 40 * S && low.below === H - 3 && stepHeightClock(low, H - 1, T0 + 80 * S).below === H - 3 && stepHeightClock(low, H - 9, T0 + 80 * S).below === H - 9);
+  check("C7 the top is given up only when it has not been read for more than 600 s and the median below it has risen", stepHeightClock(low, H - 2, T0 + 640 * S).top === H + 1 && stepHeightClock(low, H - 2, T0 + 641 * S).top === H - 2
+    && stepHeightClock(low, H - 3, T0 + 9000 * S).top === H + 1 && stepHeightClock(low, H - 4, T0 + 9000 * S).top === H + 1);
+  const over = stepHeightClock(low, H - 2, T0 + 641 * S);
+  check("C8 starting over claims nothing: no comparison yet, no new height seen arriving", over.compared === false && over.advanceKnown === false && over.topSince === T0 + 641 * S && heightMovementOf(over, T0 + 641 * S, true, cfg).staticSeconds === null);
+  const held = stepHeightClock(s, H - 3, T0 + 2000 * S);
+  check("C9 the first median below the top after it went unread for more than 600 s: nothing is published in that round", held.hold === true && heightMovementOf(held, T0 + 2000 * S, true, cfg).staticSeconds === null && heightMovementOf(held, T0 + 2000 * S, true, cfg).advancedAt === null
+    && stepHeightClock(held, H - 3, T0 + 2020 * S).hold === false && heightMovementOf(stepHeightClock(held, H - 3, T0 + 2020 * S), T0 + 2020 * S, true, cfg).staticSeconds === 2000);
+  const m = heightMovementOf(s, T0 + 40 * S, true, cfg);
+  check("C10 what is published: seconds since the new height, when it arrived, 'advancing' within two rounds while the median stands on it", m.staticSeconds === 20 && m.advancedAt === T0 + 20 * S && m.since === T0 + 20 * S && m.advancing === true && m.stalled === false
+    && heightMovementOf(s, T0 + 61 * S, true, cfg).advancing === false && heightMovementOf(low, T0 + 60 * S, true, cfg).advancing === false && heightMovementOf(s, T0 + 320 * S, true, cfg).stalled === true);
+  check("C11 nothing is published without a height in the latest round, or before any comparison", heightMovementOf(s, T0 + 40 * S, false, cfg).staticSeconds === null && heightMovementOf(run([[H, 0]]), T0, true, cfg).staticSeconds === null && heightMovementOf(null, T0, true, cfg).staticSeconds === null);
 }
 
 console.log("\n[" + TAG + "] standstill: a reading that would be stable reads degraded after 30 minutes without a new height");
@@ -188,8 +216,8 @@ console.log("\n[" + TAG + "] standstill: a reading that would be stable reads de
   check("T1 1,799 s: stable; 1,800 s: degraded", before.status === "stable" && before.standstill === false && at.status === "degraded" && at.standstill === true && at.risk === "elevated");
   check("T2 its words", at.status_reason === "Height unchanged for 30 min; public nodes aligned" && at.summary === "Degraded reading of the public seeds: 1 of 3 public nodes did not answer; height unchanged for 30 min; agreement strong."
     && JSON.stringify(at.risk_factors) === JSON.stringify(["no new height for 30 min"]) && at.agreement.state === "strong" && at.confidence === "clear", at.summary + " | " + JSON.stringify(at.risk_factors));
-  check("T3 the record's text says when it began, so it stays true while the record is open", at.condition_reason === "No new height since 2026-10-02 11:47 UTC" && long.condition_reason === at.condition_reason && long.status_reason === "Height unchanged for 150 min; public nodes aligned");
-  check("T4 when the start is not known the record says the limit, not a duration", round(2, [H, H], null, { movement: { staticSeconds: 4000, advancing: false, stalled: true, staticSince: null } }).condition_reason === "No new height for 30 min or more");
+  check("T3 the record's text says when the standstill began and that it lasted until the record opened: it stays true however long the record is open, and whatever keeps it open", at.condition_reason === "No new height from 2026-10-02 11:47 UTC until this record opened" && long.condition_reason === at.condition_reason && long.status_reason === "Height unchanged for 150 min; public nodes aligned");
+  check("T4 when the start is not known the record says the limit, not a duration", round(2, [H, H], null, { movement: { staticSeconds: 4000, advancing: false, stalled: true, staticSince: null } }).condition_reason === "No new height for 30 min or more when this record opened");
   check("T5 nothing compared yet (after a start): no standstill", round(2, [H, H], null, { movement: mv(null) }).status === "stable");
   check("T6 unknown stays unknown, however long the one height has stood", round(1, [H], null, { movement: mv(9000) }).status === "unknown" && round(1, [H], null, { movement: mv(9000) }).standstill === false);
   const u = round(2, [H - 30, H], null, { movement: mv(9000) }), m = round(3, [H - 300, H, H], null, { movement: mv(9000) });
@@ -252,7 +280,7 @@ console.log("\n[" + TAG + "] the agent takes its reading from this module");
   const AGENT = readFileSync(join(__dir, "agent.mjs"), "utf8");
   const body = (start) => { const i = AGENT.indexOf(start); return i < 0 ? "" : AGENT.slice(i, AGENT.indexOf("\n}\n", i) + 3); };
   const ccs = body("function computeCanonicalState() {"), inc = body("function evaluatePublicIncidents() {"), hist = body("function recordPublicNodeHistory() {");
-  check("M1 computeCanonicalState calls assess() with the seeds' heights, the round's witness reads, the incidents and the height movement", /var reading = assess\(\{ timeReason: timeReason, seedReason: timeReason \? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,\n    seedHeights: heights, validators: witnessInput\(\), maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,\n    movement: \{ staticSeconds: hm\.staticSeconds, advancing: hm\.advancing, stalled: hm\.stalled, staticSince: hm\.staticSince \} \}\);/.test(ccs));
+  check("M1 computeCanonicalState calls assess() with the seeds' heights, the round's witness reads, the incidents and the height movement", /var reading = assess\(\{ timeReason: timeReason, seedReason: timeReason \? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,\n    seedHeights: heights, validators: witnessInput\(\), maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,\n    movement: \{ staticSeconds: hm\.staticSeconds, advancing: hm\.advancing, stalled: hm\.stalled, staticSince: staticSince \} \}\);/.test(ccs));
   check("M2 and decides nothing itself: no status, risk, confidence or agreement word is assigned there", !/(status|risk|confidence|agState|state) = "(stable|degraded|unstable|unknown|low|elevated|high|clear|uncertain|strong|moderate|weak)"/.test(ccs) && !/<= 25|<= 20|> 50|\* 0\.6/.test(ccs));
   check("M3 what it returns is the reading's: status, risk, data quality and its reason, confidence, agreement, the reason strings, the witnesses", ["status: reading.status", "risk: reading.risk", "data_quality: reading.data_quality", "data_quality_reason: reading.data_quality_reason", "confidence: reading.confidence",
     "confidence_reason: reading.confidence_reason", "summary: reading.summary", "status_reason: reading.status_reason", "risk_factors: reading.risk_factors", "agreement_reason: reading.agreement_reason", "witnesses: reading.witnesses",

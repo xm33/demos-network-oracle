@@ -111,7 +111,7 @@
   "status_reason": "Heights advancing; one public seed and 4 validators aligned",
   "risk_factors": [
     "Only 1 of 3 public nodes answered — limited cross-checking",
-    "one public seed reported its own height; 4 validators confirm it"
+    "one public seed reported its own height; 4 validators are within 25 blocks of it"
   ],
   "confidence_reason": "Observed public signals agree",
   "agreement_reason": "One public seed and the closest of 4 validators within ±25 blocks of it (spread: 0 blocks)",
@@ -143,7 +143,7 @@
 <h2>Field Meanings</h2>
 <p><code>status</code> — what DNO saw this cycle of the public seeds, or of the validators standing in for a missing one. A reading that would be stable is degraded after 30 minutes without a new height. <span class="val">stable</span> <span class="val">degraded</span> <span class="val">unstable</span> <span class="val">unknown</span></p>
 <p><code>risk</code> — the observed conditions that reduce the margin of this reading. <span class="val">low</span> <span class="val">elevated</span> <span class="val">high</span></p>
-<p><code>confidence</code> — whether the compared heights are within 50 blocks of each other. <span class="val">clear</span> <span class="val">uncertain</span></p>
+<p><code>confidence</code> — whether the compared heights are within 50 blocks of each other, a seed's own height is among them and, beside one seed, most of the validators read are within 25 blocks of it. <span class="val">clear</span> <span class="val">uncertain</span></p>
 <p><code>data_quality</code> — whether there is a reading (two seeds reported their own height, or validators stood in for the missing one) in an observation at most 300 s old. <span class="val">sufficient</span> <span class="val">insufficient</span></p>
 <p><code>agreement</code> — whether the heights compared sit within ±25 blocks of their median (strong also needs a spread of at most 20 blocks). The heights compared are the seeds' own; with validators standing in, the one seed's and the closest validator's, or the counted validators'. <span class="val">strong</span> <span class="val">moderate</span> <span class="val">weak</span> <span class="val">unknown</span></p>
 <p><code>trend</code> — direction of change. <span class="val">improving</span> <span class="val">stable</span> <span class="val">worsening</span> <span class="val">unknown</span></p>
@@ -155,7 +155,7 @@
 <p><code>risk_factors</code> — array of strings; the concrete observations behind the current risk level.</p>
 <p><code>confidence_reason</code> — why confidence is at its current state.</p>
 <p><code>agreement_reason</code> — why agreement is at its current state.</p>
-<p><code>witnesses</code> — what the reading rests on. <code>mode</code>: <span class="val">seeds_only</span> <span class="val">seed_and_validators</span> <span class="val">validators_only</span> <span class="val">insufficient</span>. <code>counted</code>, <code>public_seeds</code> (<code>configured</code>, <code>answered</code>, <code>own_height</code>) and <code>validators</code> (<code>read</code>, <code>own_height</code>, <code>counted</code>, <code>list_agreed_at</code>; null when no validator was read). Counts and one time only.</p>
+<p><code>witnesses</code> — what the reading rests on. <code>mode</code>: <span class="val">seeds_only</span> <span class="val">seed_and_validators</span> <span class="val">validators_only</span> <span class="val">insufficient</span>. <code>counted</code>, <code>public_seeds</code> (<code>configured</code>, <code>answered</code>, <code>own_height</code>) and <code>validators</code> (<code>read</code>, <code>own_height</code>, <code>counted</code>, <code>list_agreed_at</code>; null when no validator was read). Counts and one time only: no key, no address, and no height attributed to a validator. With validators in the reading, <code>agreement_detail</code> is made of their heights: beside one seed <code>median_block</code> is the seed's own height and <code>block_spread</code> the distance to the closest validator; with no seed both are the validators'.</p>
 <p><code>height_standstill_after_seconds</code> — the standstill limit: once <code>height_static_seconds</code> reaches it, a reading that would be stable is degraded.</p>
 <p><code>last_24h</code> — rolling 24-hour observability summary (coverage, observed vs expected cycles, chain movement, incident counts). Fields inside it may be null while history accumulates.</p>
 </section>
@@ -170,7 +170,7 @@
 <h2>Before Relying on a Reading</h2>
 <p>These fields describe how complete this observation is. DNO informs context; it does not advise, predict, score, certify, or decide action.</p>
 <p><code>data_quality</code> — <span class="val">insufficient</span> means fewer than two seeds reported their own height and no validator stood in, or the observation is stale.</p>
-<p><code>witnesses.mode</code> — what the reading rests on. <span class="val">seed_and_validators</span>: one seed, confirmed by validators within 25 blocks of it. <span class="val">validators_only</span>: no seed; DNO does not know who runs those validators, and confidence is <span class="val">uncertain</span>.</p>
+<p><code>witnesses.mode</code> — what the reading rests on. <span class="val">seed_and_validators</span>: one seed, and the validators within 25 blocks of it. <span class="val">validators_only</span>: no seed; DNO does not check who runs those validators, and confidence is <span class="val">uncertain</span>.</p>
 <p><code>staleness_seconds</code> — how old the observation is. Above 300 s, data quality is insufficient.</p>
 <p><code>confidence</code> — <span class="val">uncertain</span> means the compared heights are more than 50 blocks apart, the reading rests on validators alone, or nothing was compared.</p>
 <div class="aside aside-warn">When <code>data_quality</code> is <span class="val">insufficient</span>, status will be <span class="val">unknown</span> and risk will be <span class="val">elevated</span>. This is intentional — the Oracle treats missing data as a reason for caution.</div>
@@ -178,7 +178,7 @@
 <section id="polling-guidance">
 <h2>Polling Guidance</h2>
 <p>The Oracle observes every 20 seconds, so polling more often than every 10–30 seconds returns the same observation. <code>/organism</code> and <code>/health</code> send an <code>ETag</code> and <code>Last-Modified</code> set to the observation time; a request with <code>If-None-Match</code> gets <code>304</code> until a new observation exists.</p>
-<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long no new height has been seen: a height above the reporting node's previous answer and above every node's last answer of the last ten minutes, so a seed catching up shows none (null when the latest observation returned no height or nothing has been compared yet; a lower bound until DNO has observed an advance); the cause is not known from here. Only a seed's own height counts (<span class="val">too_few_heights</span> means fewer than two seeds reported their own). <code>last_24h.chain_movement.blocks_advanced</code> is the median height at the newest round in the window minus the oldest, over rounds with sufficient data, as observed; it is null when there is no pair to compare or the median fell by more than 25 blocks between two rounds, and it implies no target rate. For 24 hours after the own-height rule starts or restarts on a server that holds rounds an older version recorded, <code>chain_movement</code> is <span class="val">unknown</span> with reason <span class="val">own_height_record_shorter_than_window</span> and <code>blocks_advanced</code> is null: the rounds recorded under that rule do not cover the window yet.</p>
+<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long no new height has been seen. A new height is a round whose <code>median_block</code> is above the highest median DNO has read, so a seed catching up shows none (null when the latest observation returned no height, when nothing has been compared yet, or in the round DNO starts over on a chain restarted lower; a lower bound until DNO has seen a new height arrive); the cause is not known from here. Of a seed, only its own height counts (<span class="val">too_few_heights</span> means fewer than two seeds reported their own). <code>last_24h.chain_movement.blocks_advanced</code> is the median height at the newest round in the window minus the oldest, over rounds with sufficient data, as observed; it is null when there is no pair to compare or the median fell by more than 25 blocks between two rounds, and it implies no target rate. For 24 hours after the own-height rule starts or restarts on a server that holds rounds an older version recorded, <code>chain_movement</code> is <span class="val">unknown</span> with reason <span class="val">own_height_record_shorter_than_window</span> and <code>blocks_advanced</code> is null: the rounds recorded under that rule do not cover the window yet.</p>
 <p>Respect the <code>Cache-Control: public, max-age=5</code> header. Do not poll faster than every 5 seconds.</p>
 <p>For less time-sensitive consumers, polling every 60 seconds is sufficient.</p>
 <p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is an export of observations, nothing more.</p>
@@ -246,10 +246,10 @@ Not enough recent history to compute a trend. Common after Oracle restarts or da
 The Oracle's last observation is more than a minute old. Possible causes: Oracle restarting, high load, network issues between the Oracle and its data sources. The data is the last observation; it is not fresh.</p>
 
 <p><b><code>status: stable</code> + <code>risk: elevated</code></b> (new in 1.2)<br>
-One seed gave its own height and validators within 25 blocks of it confirm it (<code>witnesses.mode: seed_and_validators</code>). Before 1.2 this reading was <span class="val">unknown</span>.</p>
+One seed gave its own height and at least one validator is within 25 blocks of it (<code>witnesses.mode: seed_and_validators</code>). Before 1.2 this reading was <span class="val">unknown</span>.</p>
 
 <p><b><code>status: stable</code> + <code>confidence: uncertain</code></b> (new in 1.2)<br>
-No seed gave its own height and validators alone give the reading (<code>witnesses.mode: validators_only</code>). Their heights agree; who runs them is not known to DNO.</p>
+No seed gave its own height and validators alone give the reading (<code>witnesses.mode: validators_only</code>). Their heights agree; DNO does not check who runs them.</p>
 
 <p>While <code>witnesses.mode</code> is <span class="val">seeds_only</span>, neither occurs with the three configured seeds: stable needs strong agreement (a spread of at most 20 blocks) and uncertain a gap of more than 50, and two silent seeds leave one height.</p>
 </section>

@@ -88,7 +88,7 @@ export function healthVerdict(h, now) {
 }
 // What "AGENT IS READING" says the status comes from.
 export function readingWords(v) {
-  if (v.mode === "seed_and_validators") return `one seed gave its own height, ${v.counted} validator${v.counted === 1 ? " that answers as listed confirms" : "s that answer as listed confirm"} it, and the status comes from them`;
+  if (v.mode === "seed_and_validators") return `one seed gave its own height, ${v.counted} validator${v.counted === 1 ? " that answers as listed is" : "s that answer as listed are"} within 25 blocks of it, and the status comes from them`;
   if (v.mode === "validators_only") return `no seed gave its own height, and the status comes from ${v.counted} validators that answer as listed`;
   return "two seeds gave their own height and the status comes from them";
 }

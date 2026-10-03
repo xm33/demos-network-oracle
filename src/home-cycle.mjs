@@ -52,8 +52,11 @@ export function seedsParts(r, active) {
     else if (dq === "too_few_heights") p.answered = "Fewer than two configured seeds gave their own height.";
     else p.answered = "Seeds: not reported in this reading.";
     if (stoodIn && mode === "seed_and_validators") {
+      // Validators that gave a height further than 25 blocks from the seed are left out of the reading, and said.
+      var far = isNum(wv.own_height) && wv.own_height > n ? wv.own_height - n : 0;
       p.heights = listed(n) + (n === 1 ? " is" : " are") + " within 25 blocks of it."
-        + (st !== "strong" && isNum(ag.block_spread) ? " The closest is " + fmt(ag.block_spread) + " blocks from it." : "");
+        + (st !== "strong" && isNum(ag.block_spread) ? " The closest is " + fmt(ag.block_spread) + " blocks from it." : "")
+        + (far > 0 ? " " + far + (far === 1 ? " other is" : " others are") + " more than 25 blocks from it." : "");
     } else if (stoodIn) {
       p.heights = listed(n) + " report heights " + (st === "strong" ? "that align." : isNum(ag.block_spread) ? "up to " + fmt(ag.block_spread) + " blocks apart." : "with " + st + " agreement.");
     } else if (!compared) {
