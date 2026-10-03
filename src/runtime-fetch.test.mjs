@@ -232,7 +232,7 @@ console.log("SDK-IMPORT fetch " + (globalThis.fetch !== before ? "replaced" : "k
 const { run } = await import("./tools/validator-set-probe.mjs");
 const { parseProbeOrigin } = await import("./src/public-safety.mjs");
 const loop = async (u) => { const p = parseProbeOrigin(u); return p && p.hostname === "127.0.0.1" ? "http://127.0.0.1:" + p.port : null; };
-process.exit(await run(["--dial", "seed-a=" + process.env.SEED_A, "seed-b=" + process.env.SEED_B], { agentReads: true, sdkReplaced: globalThis.fetch !== before, resolveOrigin: loop }));
+process.exit(await run(["--dial", "seed-a=" + process.env.SEED_A, "seed-b=" + process.env.SEED_B], { agentReads: true, sdkReplaced: globalThis.fetch !== before, resolveOrigin: loop, kept: null }));
 `;
 const underSdk = async (a, b) => {
   const kid = Bun.spawn([process.execPath, "-e", child], { cwd: join(__dir, ".."), env: { ...process.env, SEED_A: a, SEED_B: b }, stdout: "pipe", stderr: "pipe" });
@@ -248,7 +248,8 @@ else {
     okRun.out.includes("SDK-IMPORT fetch replaced · others changed: none"), (okRun.out.split("\n").find((l) => l.startsWith("SDK-IMPORT")) || "no SDK-IMPORT line"));
   const brief = (r) => "exit " + r.code + " | " + r.out.split("\n").filter((l) => /AGENT|seeds answered|list:|global fetch/.test(l)).join(" | ");
   check("R11 with the real SDK loaded before DNO's modules, the agent's own seed read and a validator round work (AGENT READS OK, exit 0)",
-    okRun.code === 0 && /it replaced the global fetch|it did not replace the global fetch/.test(okRun.out) && okRun.out.includes("2 of 2 seeds answered; 2 gave their own height. The agent needs two for a status.")
+    okRun.code === 0 && /it replaced the global fetch|it did not replace the global fetch/.test(okRun.out) && okRun.out.includes("2 of 2 seeds answered; 2 gave their own height. Two give a status from the seeds alone; with fewer, validators stand in (Witnesses, below).")
+    && okRun.out.includes("Witnesses (validators the agent reads when fewer than two seeds give their own height)") && okRun.out.includes("(seeds_only)")
     && okRun.out.trim().endsWith("AGENT READS OK: 2 of 2 seeds gave their own height, and two seeds agree on the validator list."), brief(okRun));
   // The same, against one seed that answers and one address where nothing listens: the verdict must be FAILED, exit 3.
   const freed = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") }), nobody = "http://127.0.0.1:" + freed.port; freed.stop(true);   // a port nothing listens on
@@ -268,7 +269,7 @@ else {
   const rpc = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { rpcHits++; return Response.json({ result: 200, response: { block: 1 } }); } });
   try {
     mkdirSync(join(box, "src")); mkdirSync(join(box, "tools"));
-    for (const f of ["tools/pre-restart-check.mjs", "tools/validator-set-probe.mjs", "src/public-safety.mjs", "src/seed-read.mjs", "src/status-rule.mjs", "src/validator-watch.mjs"]) copyFileSync(join(__dir, "..", f), join(box, f));
+    for (const f of ["tools/pre-restart-check.mjs", "tools/validator-set-probe.mjs", "src/public-safety.mjs", "src/seed-read.mjs", "src/status-rule.mjs", "src/validator-watch.mjs", "src/witnesses.mjs"]) copyFileSync(join(__dir, "..", f), join(box, f));
     symlinkSync(join(__dir, "..", "node_modules"), join(box, "node_modules"), "dir");
     writeFileSync(join(box, "src", "agent.mjs"), `const PUBLIC_NODES = {\n  // "seed-off": { url: "http://127.0.0.1:9", identity: "${KEY(7)}" },\n  "seed-a": { url: "${A.url}", identity: "${KEY(9)}" },\n  "seed-b": { url: "${B.url}", identity: "${KEY(8)}" },\n};\n`);
     writeFileSync(join(box, "src", "fleet.config.mjs"), `export const FLEET_CROSS_VALIDATION_RPCS = [{ name: "rpc-name-not-to-print", url: "http://127.0.0.1:${rpc.port}" }];\n`);
@@ -282,7 +283,7 @@ else {
     const given = await tool(["seed-a=" + A.url, "seed-b=" + B.url]);
     check("R11f with the seeds given as arguments, the same tool next to the same fleet config reads no cross-check RPC", given.code === 3 && rpcHits === hitsPlain && !/cross-check RPCs/.test(given.out), "exit " + given.code + " | hits " + rpcHits);
   } finally { rpc.stop(true); rmSync(box, { recursive: true, force: true }); }
-  check("R11b and it says FAILED, exit 3, when the agent could not publish a status from the reads", badRun.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two; no validator list was agreed by two seeds\. Do not restart on this\.\s*$/.test(badRun.out), brief(badRun));
+  check("R11b and it says FAILED, exit 3, when the agent could not publish a status from the reads", badRun.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two, or validators that stand in \(the agent keeps no candidates here\)\. Do not restart on this\.\s*$/.test(badRun.out), brief(badRun));
 }
 
 A.srv.stop(true); B.srv.stop(true);

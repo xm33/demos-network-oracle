@@ -19,22 +19,27 @@
 // http origin (pinned address, no redirects, 2 MB). It prints the counts the agent would publish on /health, nothing else.
 //
 // The named test before a restart is tools/pre-restart-check.mjs: it loads the Demos SDK first, as the agent does, and
-// then runs this tool with the agent's own seed read added (run(args, { agentReads: true })): readSeedInfo and
-// seedsSufficient from src/seed-read.mjs, the functions the agent's public round calls. It ends with a verdict line.
+// then runs this tool with the agent's own reads added (run(args, { agentReads: true })): each seed with readSeedInfo
+// (src/seed-read.mjs), the validators that can stand in for a seed with readWitnesses (src/witnesses.mjs), and the
+// agent's own rule on those reads, assess (src/status-rule.mjs). It ends with a verdict line.
 //
 // Run:  bun tools/validator-set-probe.mjs                 (seeds from src/agent.mjs)
 //       bun tools/validator-set-probe.mjs name=url ...    (explicit seeds)
 //       bun tools/validator-set-probe.mjs --dial [name=url ...]
 // Exit: 0 when every answer had the expected shape (or no answer came), 2 when an answer had an unexpected shape,
 //       3 from the pre-restart check when the agent could not publish a status from these reads (fewer than two seeds
-//       gave their own height) or no validator list was agreed.
+//       gave their own height and no validator stands in), when a read ended in an internal error, or when two seeds
+//       answered and no validator list was agreed.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { Database } from "bun:sqlite";
 import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, keyOf, WATCH_DEFAULTS, reduceValidatorRows, listSignature, largestGroup } from "../src/validator-watch.mjs";
 import { resolvePublicProbeOrigin, sanitizeHeight, cappedJson, probeErrorCategory, nativeFetch } from "../src/public-safety.mjs";
 import { readSeedInfo, seedsSufficient } from "../src/seed-read.mjs";
+import { readWitnesses, createCandidateStore, witnessSnapshot } from "../src/witnesses.mjs";
+import { assess } from "../src/status-rule.mjs";
 
 const TIMEOUT_MS = 8000;
 const BODY_MAX_BYTES = 2 * 1024 * 1024;
@@ -118,7 +123,7 @@ export function agentReadsReport(reads, sdkReplaced, rpcs) {
   const lines = ["", "As the agent reads (readSeedInfo, the agent's own seed read)",
     `  bun ${typeof Bun !== "undefined" ? Bun.version : "?"} · ` + (sdkReplaced === null || sdkReplaced === undefined ? "no SDK was loaded for this run" : `the Demos SDK was loaded first, as in the agent; it ${sdkReplaced ? "replaced" : "did not replace"} the global fetch`),
     ...reads.map((r) => "  " + agentSeedLine(r)),
-    `  ${s.answered} of ${reads.length} seeds answered; ${s.ownHeights} gave ${s.ownHeights === 1 ? "its" : "their"} own height. The agent needs two for a status.`];
+    `  ${s.answered} of ${reads.length} seeds answered; ${s.ownHeights} gave ${s.ownHeights === 1 ? "its" : "their"} own height. Two give a status from the seeds alone; with fewer, validators stand in (Witnesses, below).`];
   if (rpcs) lines.push(`  cross-check RPCs (not in status), the agent's capped read: ${rpcs.ok} of ${rpcs.total} answered` + (rpcs.total > rpcs.ok ? ` (${rpcs.failed.join(" · ")})` : ""));
   return { answered: s.answered, ownHeights: s.ownHeights, sufficient: s.sufficient, text: lines.join("\n") };
 }
@@ -139,18 +144,81 @@ export async function agentRpcReads(rpcList) {
 export function seedsForRound(seeds, reads) {
   return seeds.map((s) => { const r = reads && reads.find((x) => x.name === s.name); return Object.assign({}, s, { exclude: r && r.ok && r.identityMatch === false ? "its last /info answered with another key" : null }); });
 }
+// The witness candidates the agent keeps (dno_meta in its store), read without writing: the store is opened read-only.
+// { agreedAt, candidates } as createCandidateStore gives them; null when there is no store here or it cannot be read.
+export function keptCandidates(storePath, now) {
+  try {
+    if (!existsSync(storePath)) return null;
+    const db = new Database(storePath, { readonly: true });
+    try { return createCandidateStore(db).load(now); } finally { db.close(); }
+  } catch (e) { return null; }
+}
+// The validators that stand in when fewer than two seeds give their own height, read as the agent reads them
+// (readWitnesses), and the agent's own rule on this run's reads (assess). The candidates are this run's when its
+// validator round counted (an agreed list and two seed heights), else the ones the agent keeps in its store. They are
+// read in both cases, so the read itself is tested before every restart; the rule (assess) leaves them out while two
+// seeds gave a height, where the agent does not read them at all. Counts only: never a key, an address or a height.
+// o: { reads (agentSeedReads), dials, fromRound (this run's candidates or null), kept ({ agreedAt, candidates } or null),
+//      resolveOrigin, fetch }. Returns { text, reading, mode, internalErrors, why }.
+export async function witnessReport(o) {
+  const lines = ["", "Witnesses (validators the agent reads when fewer than two seeds give their own height)"];
+  const seedHeights = o.reads.filter((r) => r.ok && r.height_source === "self" && sanitizeHeight(r.block) !== null).map((r) => sanitizeHeight(r.block));
+  const answered = o.reads.filter((r) => r.ok).length;
+  let rows = null, source = null, agreedAt = null, why = null;
+  if (!o.dials) { lines.push("  not read: the dials are off (VALIDATOR_WATCH_DIALS), and the agent then reads no validator"); why = "the dials are off"; }
+  else {
+    if (Array.isArray(o.fromRound)) { source = { list: o.fromRound, words: "from this run's validator list" }; }
+    else if (o.kept && o.kept.candidates.length) { source = { list: o.kept.candidates, words: "kept by the agent from the list two seeds agreed on at " + new Date(o.kept.agreedAt).toISOString().slice(0, 16).replace("T", " ") + " UTC" }; agreedAt = o.kept.agreedAt; }
+    if (!source || !source.list.length) {
+      lines.push("  candidates: none (" + (source ? "no validator answered as listed at the seeds' height in this run" : "this run's validator round did not count, and the agent keeps none here") + ")");
+      why = source ? "no validator answered as listed at the seeds' height" : "the agent keeps no candidates here";
+    } else {
+      rows = await readWitnesses(source.list, Object.assign({}, o.resolveOrigin ? { resolveOrigin: o.resolveOrigin } : {}, o.fetch ? { fetch: o.fetch } : {}));
+      const good = rows.filter((r) => r.asListed && r.height !== null).length, faults = rows.filter((r) => r.error === "internal error").length;
+      lines.push(`  candidates: ${source.list.length}, ${source.words}`);
+      lines.push(`  read as the agent reads them: ${good} of ${rows.length} answered as the listed key with ${good === 1 ? "its" : "their"} own height` + (faults ? ` · ${faults} ended in an internal error` : ""));
+    }
+  }
+  const snap = rows ? witnessSnapshot(rows, agreedAt) : null;
+  const reading = assess({ timeReason: null, seedsTotal: o.reads.length, seedsAnswered: answered, seedHeights,
+    validators: snap ? { read: snap.read, heights: snap.rows.map((r) => r.height), listAgreedAt: null } : null,   // beside two seed heights the rule leaves them out
+    maxIncidentSeverity: "none", publicIncidentCount: 0, movement: {} });
+  const mode = reading.witnesses.mode, n = reading.witnesses.validators ? reading.witnesses.validators.counted : 0;
+  const words = { seeds_only: `${seedHeights.length} seeds gave their own height, so the seeds alone decide and no validator enters the reading`,
+    seed_and_validators: `one seed gave its own height and ${n} validator${n === 1 ? " is" : "s are"} within 25 blocks of it`,
+    validators_only: `no seed gave its own height; ${n} validators agree within 25 blocks`, insufficient: "no reading" }[mode];
+  lines.push(`  the agent's rule on these reads: ${words} (${mode})`);
+  if (mode === "insufficient" && !why) why = seedHeights.length === 1 ? "none of the validators read is within 25 blocks of the seed" : "the validators read give no majority within 25 blocks";
+  return { text: lines.join("\n"), reading, mode, counted: n, internalErrors: rows ? rows.filter((r) => r.error === "internal error").length : 0, why };
+}
+
 // The verdict of the pre-restart check. reads: agentSeedReads; listState: the validator list's state when it was read
-// (null when it was not); shapeErrors: how many answers had an unexpected shape. OK only when the agent could publish a
-// status from these reads (seedsSufficient, the agent's own rule) and two seeds agreed on the validator list.
-export function agentVerdict(reads, listState, shapeErrors) {
-  const s = seedsSufficient(reads), problems = [];
-  if (s.reason === "too_few_answers") problems.push(`${s.answered} of ${reads.length} seeds answered /info, and the agent needs two`);
-  else if (s.reason === "too_few_heights") problems.push(`${s.ownHeights} of the ${s.answered} seeds that answered gave ${s.ownHeights === 1 ? "its" : "their"} own height, and the agent needs two`);
-  if (listState !== null && listState !== "agreed") problems.push("no validator list was agreed by two seeds");
+// (null when it was not); shapeErrors: how many answers had an unexpected shape; witness: witnessReport's result (absent:
+// the seeds alone are judged, as before 1.2). OK only when the agent could publish a status from these reads by its own
+// rule (two seeds with their own height, or validators standing in for the missing one), no read ended in an internal
+// error, and the validator list is agreed. A list that is not agreed is a note, not a failure, while fewer than two
+// seeds answer: two seeds are what agrees a list.
+export function agentVerdict(reads, listState, shapeErrors, witness) {
+  const s = seedsSufficient(reads), problems = [], notes = [];
+  const mode = witness ? witness.mode : s.sufficient ? "seeds_only" : "insufficient";
+  const faults = reads.filter((r) => !r.ok && r.error === "internal error").length + (witness ? witness.internalErrors : 0);
+  if (faults > 0) problems.push(`${faults} read${faults === 1 ? "" : "s"} ended in an internal error, a fault in DNO's own read and not the peer's`);
+  if (mode === "insufficient") {
+    const stand = witness ? `, or validators that stand in (${witness.why})` : "";
+    if (s.reason === "too_few_answers") problems.push(`${s.answered} of ${reads.length} seeds answered /info, and the agent needs two${stand}`);
+    else problems.push(`${s.ownHeights} of the ${s.answered} seeds that answered gave ${s.ownHeights === 1 ? "its" : "their"} own height, and the agent needs two${stand}`);
+  }
+  if (listState !== null && listState !== "agreed") {
+    if (s.answered >= 2 || !witness) problems.push("no validator list was agreed by two seeds");
+    else notes.push("No validator list is agreed while fewer than two seeds answer; the agent keeps the candidates it has for 24 h.");
+  }
   const shapeOnly = problems.length === 0 && shapeErrors > 0;
   if (shapeErrors > 0) problems.push("an answer had an unexpected shape (see above)");
-  if (problems.length === 0) return { ok: true, code: 0, text: `AGENT READS OK: ${s.ownHeights} of ${reads.length} seeds gave their own height` + (listState === null ? "." : ", and two seeds agree on the validator list.") };
-  return { ok: false, code: shapeOnly ? 2 : 3, text: "AGENT READS FAILED: " + problems.join("; ") + ". Do not restart on this." };
+  if (problems.length > 0) return { ok: false, code: shapeOnly ? 2 : 3, text: "AGENT READS FAILED: " + problems.join("; ") + ". Do not restart on this." };
+  const tail = notes.length ? " " + notes.join(" ") : "";
+  if (mode === "seed_and_validators") return { ok: true, code: 0, text: `AGENT READS OK: ${s.ownHeights} of ${reads.length} seeds gave its own height, and ${witness.counted} validator${witness.counted === 1 ? " that answers as listed is" : "s that answer as listed are"} within 25 blocks of it. The agent would publish a reading that rests on them.` + tail };
+  if (mode === "validators_only") return { ok: true, code: 0, text: `AGENT READS OK: no seed gave its own height, and ${witness.counted} validators that answer as listed agree within 25 blocks. The agent would publish a reading that rests on validators alone.` + tail };
+  return { ok: true, code: 0, text: `AGENT READS OK: ${s.ownHeights} of ${reads.length} seeds gave their own height` + (listState === null ? "." : ", and two seeds agree on the validator list.") };
 }
 
 const keysOf = (o) => (o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o).sort() : []);
@@ -336,7 +404,7 @@ export async function dialReport(seeds, results, opts = {}) {
   const lines = ["", dials ? "Watch (one round, --dial)" : "Watch (one round: the list only, no dials)"];
   lines.push(`  list: ${oc.state === "agreed" ? `${oc.seeds_agreed} of ${oc.seeds_configured} public seeds returned the same list · ${oc.listed} rows · ACTIVE ${oc.active} · UNSTAKING ${oc.unstaking === null ? "none listed" : oc.unstaking} · other ${oc.other_status}` : `no figure: ${oc.reason}`}`);
   lines.push(`  seeds' median: ${reference ? `${reference.height} (from ${hs.length} own heights)` : "not known (fewer than two own heights): heights not compared"}`);
-  if (w.state !== "observed") { lines.push(`  dials: none (${w.reason})`); return { text: lines.join("\n"), onChain: oc, watch: w }; }
+  if (w.state !== "observed") { lines.push(`  dials: none (${w.reason})`); return { text: lines.join("\n"), onChain: oc, watch: w, candidates: round.witnessCandidates }; }
   const r = w.not_dialed_reasons;
   lines.push(`  ACTIVE rows dialed at the address each published on chain: ${w.watched - w.not_dialed} of ${w.watched}, on ${w.origins_dialed} origin${w.origins_dialed === 1 ? "" : "s"} (most rows on one origin: ${w.max_rows_per_origin})`);
   lines.push(`    not dialed ${w.not_dialed} (no address published ${r.no_address} · not a public http origin ${r.not_public_http} · name did not resolve to a public address ${r.name_unresolved} · seeds list different addresses ${r.seeds_differ} · over the round cap ${r.over_cap})`);
@@ -346,7 +414,7 @@ export async function dialReport(seeds, results, opts = {}) {
   lines.push(`    answered as the listed key ${w.answered_as_listed} (Path A seed keys among them: ${w.answered_as_listed_seeds}): ${w.at_seed_height === null ? `heights not compared (${w.height_not_compared} with a height)` : `at the seeds' height (±${w.height_band_blocks}) ${w.at_seed_height} · off ${w.off_seed_height}`} · own height not reported ${w.height_not_reported}`);
   lines.push(`  versions among answers as the listed key: ${w.versions.length ? w.versions.map((g) => `${g.version === null ? "no release version" : g.version} ${g.count}`).join(" · ") + (w.versions_other ? ` · other ${w.versions_other}` : "") : w.versions_other ? `other ${w.versions_other}` : "none"}`);
   lines.push(`  every round, last hour: not from one run (the agent keeps an hour of rounds)`);
-  return { text: lines.join("\n"), onChain: oc, watch: w };
+  return { text: lines.join("\n"), onChain: oc, watch: w, candidates: round.witnessCandidates };
 }
 
 // args: [--dial] [name=url ...]. ctx.agentReads adds the agent's own /info read and a verdict line (pre-restart check).
@@ -378,14 +446,19 @@ export async function run(all, ctx = {}) {
     console.log(agentReadsReport(reads, ctx.sdkReplaced, await agentRpcReads(ctx.rpcs)).text);
   }
   // The pre-restart check always reads the validator list, as the agent does; it dials only with --dial.
-  let listState = null;
+  let listState = null, fromRound = null;
   if (dial || ctx.agentReads) {
     const d = await dialReport(seedsForRound(seeds, reads), results, Object.assign({ dials: dial }, ctx.resolveOrigin ? { resolveOrigin: ctx.resolveOrigin } : {}));
     console.log(d.text);
-    listState = d.onChain.state;
+    listState = d.onChain.state; fromRound = d.candidates;
   }
   if (!ctx.agentReads) return summary.shapeErrors.length ? 2 : 0;
-  const verdict = agentVerdict(reads, listState, summary.shapeErrors.length);
+  // The witnesses, as the agent would read them. ctx.kept: the kept candidates (tests); by default the agent's store in
+  // this folder (LOG_DIR as the agent reads it, logs by default), opened read-only.
+  const kept = ctx.kept !== undefined ? ctx.kept : keptCandidates(join(process.env.LOG_DIR || "logs", "marketplace.db"), Date.now());
+  const witness = await witnessReport({ reads, dials: dial, fromRound, kept, resolveOrigin: ctx.resolveOrigin });
+  console.log(witness.text);
+  const verdict = agentVerdict(reads, listState, summary.shapeErrors.length, witness);
   console.log("\n" + verdict.text);
   return verdict.code;
 }

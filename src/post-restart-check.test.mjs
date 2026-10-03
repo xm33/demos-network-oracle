@@ -1,11 +1,12 @@
 // post-restart-check.test.mjs — POST_RESTART_CHECK guard: the named test after a restart (tools/post-restart-check.mjs).
 // It must say NOT READING for what production showed on 2026-10-01 (200 on every route, 0 of 3 seeds read), and READING
-// only when two seeds gave their own height, the status comes from them, and the validator list is agreed.
+// only when the agent has a reading by its own rule: two seeds gave their own height, or validators that answer as
+// listed stand in for a missing seed (witnesses, API 1.2), with no fault in DNO's own read.
 // The rows are in the agent's own shape: a seed that was not read has { ok: false, error } and no height_source key.
 // Synthetic /health bodies and a loopback server only.
 // Run: bun src/post-restart-check.test.mjs   (executable harness, not `bun test`)
 
-import { healthVerdict, run, freshSeconds, FRESH_SECONDS, ROLLBACK_MIN_WAIT_SECONDS, DEFAULT_WAIT_SECONDS } from "../tools/post-restart-check.mjs";
+import { healthVerdict, readingWords, run, freshSeconds, FRESH_SECONDS, ROLLBACK_MIN_WAIT_SECONDS, DEFAULT_WAIT_SECONDS } from "../tools/post-restart-check.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -25,23 +26,38 @@ const own = (name, h = 5000) => Object.assign(row(name), { ok: true, latencyMs: 
 const fp = (name) => Object.assign(row(name), { ok: true, latencyMs: 41, block: 4960, height_source: "first_peer", version: "0.9.9", peers: 46, identityMatch: true });
 const no = (name, error = "HTTP 503") => Object.assign(row(name), { ok: false, error });
 const OC = { state: "agreed", active: 35, seeds_agreed: 2, seeds_configured: 3, reason: "2 of 3 public seeds returned the same validator list" };
-const health = (o = {}) => Object.assign({ observed_at: iso(NOW - 12000), status: "stable", data_quality: "sufficient", data_quality_reason: null,
-  publicNodes: [own("kyne-node2"), own("kyne-node3"), no("kyne-node3b")], on_chain_validators: OC }, o);
+// What 1.2 publishes beside the rows: what the reading rests on. Here it follows the seed rows, as the agent's does when
+// no validator is read; a case with validators passes its own (wit).
+const wit = (mode, nodes, validators = null) => { const ownH = nodes.filter((n) => n.ok && n.height_source === "self").length;
+  return { mode, counted: mode === "seeds_only" ? ownH : mode === "seed_and_validators" ? 1 + validators.counted : mode === "validators_only" ? validators.counted : 0,
+    public_seeds: { configured: nodes.length, answered: nodes.filter((n) => n.ok).length, own_height: ownH }, validators }; };
+const health = (o = {}) => {
+  const h = Object.assign({ observed_at: iso(NOW - 12000), status: "stable", data_quality: "sufficient", data_quality_reason: null,
+    publicNodes: [own("kyne-node2"), own("kyne-node3"), no("kyne-node3b")], on_chain_validators: OC }, o);
+  if (!("witnesses" in o)) h.witnesses = wit(h.data_quality === "sufficient" && h.publicNodes.filter((n) => n.ok && n.height_source === "self").length >= 2 ? "seeds_only" : "insufficient", h.publicNodes);
+  return h;
+};
+const VAL = (counted, read = 3) => ({ read, own_height: Math.max(counted, 1), counted, list_agreed_at: "2026-10-02T11:00:12.000Z" });
+const NOLIST1 = { state: "not_agreed", active: null, seeds_agreed: 0, seeds_configured: 3, reason: "fewer than two public seeds returned a validator list" };
+// One seed answers and validators stand in; no seed answers and validators alone give the reading.
+const oneSeed = [own("kyne-node2"), no("kyne-node3", "timeout"), no("kyne-node3b")], noSeed = [no("kyne-node2", "timeout"), no("kyne-node3", "timeout"), no("kyne-node3b")];
+const FALLBACK = { publicNodes: oneSeed, witnesses: wit("seed_and_validators", oneSeed, VAL(2)), on_chain_validators: NOLIST1 };
+const ALONE = { publicNodes: noSeed, witnesses: wit("validators_only", noSeed, VAL(3)), on_chain_validators: NOLIST1 };
 const v = (h) => healthVerdict(h, NOW);
 
 console.log("\n[" + TAG + "] what /health says");
 {
   const good = v(health());
-  check("H1 two seeds with their own height, sufficient, list agreed: reading, three lines", good.reading && good.listAgreed && !good.older && good.problems.length === 0 && good.lines.join("\n") ===
-    "  seeds: 2 of 3 answered; 2 gave their own height (kyne-node2 own height · kyne-node3 own height · kyne-node3b HTTP 503) · observed 12 s ago\n  data quality: sufficient · status: stable\n  validators list: agreed by 2 of 3 seeds · 35 ACTIVE", good.lines.join(" | "));
+  check("H1 two seeds with their own height, sufficient, list agreed: reading, four lines", good.reading && good.listAgreed && !good.older && good.problems.length === 0 && good.mode === "seeds_only" && good.lines.join("\n") ===
+    "  seeds: 2 of 3 answered; 2 gave their own height (kyne-node2 own height · kyne-node3 own height · kyne-node3b HTTP 503) · observed 12 s ago\n  reading: from the seeds alone (seeds_only)\n  data quality: sufficient · status: stable\n  validators list: agreed by 2 of 3 seeds · 35 ACTIVE", good.lines.join(" | "));
   // 1 Oct: every route answered 200, and this is what /health said.
   const oct1 = v(health({ status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_answers",
     publicNodes: [no("kyne-node2", "connection failed"), no("kyne-node3", "connection failed"), no("kyne-node3b", "connection failed")],
     on_chain_validators: { state: "not_agreed", active: null, seeds_agreed: 0, seeds_configured: 3, reason: "fewer than two public seeds returned a validator list" } }));
-  check("H2 the 1 Oct picture (no row has a height_source key): not reading, the reason is the seeds, and it is this version, not an older one", !oct1.reading && !oct1.older && oct1.problems.join("; ") === "fewer than two seeds answered" && !oct1.listAgreed
-    && oct1.lines[0].startsWith("  seeds: 0 of 3 answered; 0 gave their own height") && oct1.lines[1] === "  data quality: insufficient (too_few_answers) · status: unknown", JSON.stringify(oct1));
+  check("H2 the 1 Oct picture (no row has a height_source key): not reading, the reason is the seeds, and it is this version, not an older one", !oct1.reading && !oct1.older && oct1.problems.join("; ") === "fewer than two seeds answered, and no validator stood in" && !oct1.listAgreed
+    && oct1.lines[0].startsWith("  seeds: 0 of 3 answered; 0 gave their own height") && oct1.lines[1] === "  reading: none · no validator was read (insufficient)" && oct1.lines[2] === "  data quality: insufficient (too_few_answers) · status: unknown", JSON.stringify(oct1));
   const heights = v(health({ status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_heights", publicNodes: [own("kyne-node2"), fp("kyne-node3"), no("kyne-node3b")] }));
-  check("H3 two answered, one own height: not reading", !heights.reading && heights.problems[0] === "fewer than two seeds gave their own height" && heights.lines[0].includes("kyne-node3 first peer's height"));
+  check("H3 two answered, one own height: not reading", !heights.reading && heights.problems[0] === "fewer than two seeds gave their own height, and no validator stood in" && heights.lines[0].includes("kyne-node3 first peer's height"));
   const old = v(health({ observed_at: iso(NOW - (FRESH_SECONDS + 1) * 1000) }));
   check("H4 an observation older than " + FRESH_SECONDS + " s is not this start's: not reading", !old.reading && old.problems[0] === `the last public observation is ${FRESH_SECONDS + 1} s old`);
   const none = v(health({ observed_at: null, publicNodes: [], on_chain_validators: { state: "pending" } }));
@@ -56,7 +72,24 @@ console.log("\n[" + TAG + "] what /health says");
   const dq = v(health({ data_quality: "insufficient", data_quality_reason: "stale", status: "unknown" }));
   check("H8 seeds fine but data quality not sufficient: not reading", !dq.reading && dq.problems.join() === "data quality is insufficient");
   const internal = v(health({ publicNodes: [no("kyne-node2", "internal error"), no("kyne-node3", "internal error"), no("kyne-node3b", "internal error")], data_quality: "insufficient", status: "unknown" }));
-  check("H9 a fault in DNO's own read shows as such on the seeds line", !internal.reading && internal.lines[0].includes("kyne-node2 internal error"));
+  check("H9 a fault in DNO's own read shows as such on the seeds line, and is the first reason", !internal.reading && internal.lines[0].includes("kyne-node2 internal error") && internal.problems[0] === "3 seed reads ended in an internal error, a fault in DNO's own read");
+  // 1.2: validators that answer as listed stand in for a seed that gave no height.
+  const fb = v(health(FALLBACK)), al = v(health(ALONE));
+  check("H16 one seed and two validators within 25 blocks of it: reading, and the lines say what it rests on", fb.reading && fb.mode === "seed_and_validators" && fb.counted === 2 && !fb.listAgreed && fb.listExpected === false
+    && fb.lines[1] === "  reading: one seed and 2 validators within 25 blocks of it · their list was agreed at 2026-10-02 11:00 UTC (seed_and_validators)", JSON.stringify(fb));
+  check("H17 no seed, three validators: reading, and it says so", al.reading && al.mode === "validators_only" && al.lines[1] === "  reading: 3 validators that answer as listed, no seed · their list was agreed at 2026-10-02 11:00 UTC (validators_only)"
+    && readingWords(al) === "no seed gave its own height, and the status comes from 3 validators that answer as listed" && readingWords(fb) === "one seed gave its own height, 2 validators that answer as listed confirm it, and the status comes from them"
+    && readingWords(v(health(Object.assign({}, FALLBACK, { witnesses: wit("seed_and_validators", oneSeed, VAL(1)) })))) === "one seed gave its own height, 1 validator that answers as listed confirms it, and the status comes from them"
+    && readingWords(good) === "two seeds gave their own height and the status comes from them", JSON.stringify(al));
+  const wrong = [v(health({ publicNodes: oneSeed, witnesses: wit("seeds_only", oneSeed) })), v(health({ witnesses: wit("seed_and_validators", [own("a"), own("b")], VAL(2)) })), v(health(Object.assign({}, ALONE, { witnesses: wit("validators_only", noSeed, VAL(1)) })))];
+  check("H18 a mode the seed rows do not bear out is not a reading: seeds_only with one own height, seed_and_validators with two, validators_only with one validator", wrong.every((x) => !x.reading)
+    && wrong[0].problems[0] === "the reading is said to be seeds_only, and the seed rows show 1 own height and 0 validators counted", JSON.stringify(wrong.map((x) => x.problems)));
+  const faulty = v(health(Object.assign({}, FALLBACK, { publicNodes: [own("kyne-node2"), no("kyne-node3", "internal error"), no("kyne-node3b")] })));
+  check("H19 a reading that stands on validators beside a seed read that ended in an internal error is not READING: the fault is DNO's own", !faulty.reading && faulty.problems.join() === "1 seed read ended in an internal error, a fault in DNO's own read");
+  const tried = v(health({ status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_answers", publicNodes: oneSeed, witnesses: wit("insufficient", oneSeed, { read: 3, own_height: 1, counted: 0, list_agreed_at: "2026-10-02T11:00:12.000Z" }), on_chain_validators: NOLIST1 }));
+  check("H20 validators were read and gave no reading: not reading, and the line says how many answered", !tried.reading && tried.lines[1] === "  reading: none · 3 validators read, 1 answered as listed with a height (insufficient)" && tried.problems.join() === "fewer than two seeds answered, and no validator stood in");
+  const v711 = v({ observed_at: iso(NOW - 12000), status: "stable", data_quality: "sufficient", api_version: "1.1", publicNodes: [own("kyne-node2"), own("kyne-node3"), no("kyne-node3b")], on_chain_validators: OC });
+  check("H21 the version before this one (API 1.1: rows with height_source, a validators list, no witnesses) is an older version here: not judged", v711.older && !v711.reading);
   // The agent before 1.1: rows without height_source, no validators list. Nothing can be concluded about it.
   const before = v({ observed_at: iso(NOW - 12000), status: "stable", data_quality: "sufficient", publicNodes: [{ name: "kyne-node2", ok: true, block: 5000 }, { name: "kyne-node3", ok: true, block: 5000 }, { name: "kyne-node3b", ok: false, error: "x" }] });
   check("H7 an older agent's /health is recognised as that, not judged", before.older && !before.reading);
@@ -73,7 +106,7 @@ console.log("\n[" + TAG + "] what /health says");
     && !aged(140, 4320).reading && !aged(140).reading && aged(140, 1440).reading && !aged(151, 1440).reading && aged(600, 288).reading
     && aged(120).reading && !aged(121).reading && aged(150, 1440).reading && !aged(140, "1440").reading && freshSeconds({ last_24h: { expected_cycles: "1440" } }) === 120 && freshSeconds({ last_24h: { expected_cycles: -5 } }) === 120,
     JSON.stringify([freshSeconds({ last_24h: { expected_cycles: 1440 } }), aged(140, 4320).problems, aged(140, 1440).problems]));
-  check("H11 no line carries a key or an address", [good, oct1, heights, internal].every((x) => !/0x[0-9a-f]{8}|\d+\.\d+\.\d+\.\d+/i.test(x.lines.join("\n"))));
+  check("H11 no line carries a key or an address", [good, oct1, heights, internal, fb, al, tried].every((x) => !/0x[0-9a-f]{8}|\d+\.\d+\.\d+\.\d+/i.test(x.lines.join("\n"))));
 }
 
 console.log("\n[" + TAG + "] the wait and the verdict");
@@ -98,10 +131,10 @@ console.log("\n[" + TAG + "] the wait and the verdict");
     on_chain_validators: { state: "not_agreed", reason: "fewer than two public seeds returned a validator list" } });
   const bad = await sim([OCT1]);
   check("R2 the 1 Oct picture for the whole wait: exit 3, the seeds as the reason, and 'Roll back.'", bad.code === 3 && bad.polls === POLLS
-    && bad.out[bad.out.length - 1] === `AGENT IS NOT READING after ${W} s: fewer than two seeds answered. Roll back.`, JSON.stringify(bad.out));
+    && bad.out[bad.out.length - 1] === `AGENT IS NOT READING after ${W} s: fewer than two seeds answered, and no validator stood in. Roll back.`, JSON.stringify(bad.out));
   const short = await sim([OCT1], ["--wait", "30"]);
   check("R2b the same after a wait too short for a start: exit 3, 'NOT READING YET', and no 'Roll back'", short.code === 3 && short.polls === 7
-    && short.out[short.out.length - 1] === "AGENT IS NOT READING YET after 30 s: fewer than two seeds answered. A start needs about a minute: run this again with the default wait before deciding anything." && !/Roll back/.test(short.out.join("\n")), JSON.stringify(short.out));
+    && short.out[short.out.length - 1] === "AGENT IS NOT READING YET after 30 s: fewer than two seeds answered, and no validator stood in. A start needs about a minute: run this again with the default wait before deciding anything." && !/Roll back/.test(short.out.join("\n")), JSON.stringify(short.out));
   const down = await sim([refused]);
   check("R3 /health never answers for a wait long enough for a start: exit 4, and 'roll back'", down.code === 4 && down.out.length === 2 && down.out[1] === `AGENT IS NOT ANSWERING after ${W} s: /health could not be read (connection failed). A start takes under a minute: roll back.`, JSON.stringify(down.out));
   const downShort = await sim([refused], ["--wait", "30"]);
@@ -135,13 +168,25 @@ console.log("\n[" + TAG + "] the wait and the verdict");
   const listOnly = await sim([at({ on_chain_validators: NOLIST })]);
   check("R8 seeds read for the whole wait and the list never agreed: exit 5, READING, and no 'Roll back'", listOnly.code === 5 && listOnly.polls === POLLS
     && listOnly.out[listOnly.out.length - 2] === "AGENT IS READING: two seeds gave their own height and the status comes from them."
-    && listOnly.out[listOnly.out.length - 1].startsWith(`THE VALIDATOR LIST IS NOT AGREED after ${W} s. It is not in status and is no reason to roll back`) && !/Roll back\./.test(listOnly.out.join("\n")), JSON.stringify(listOnly.out));
+    && listOnly.out[listOnly.out.length - 1].startsWith(`THE VALIDATOR LIST IS NOT AGREED after ${W} s. It is no reason to roll back`) && !/Roll back\./.test(listOnly.out.join("\n")), JSON.stringify(listOnly.out));
+  // 1.2: a reading that rests on validators. One seed cannot agree a list, so the check does not wait for one.
+  const stoodIn = await sim([starting, at(FALLBACK)]);
+  check("R13 one seed and validators that confirm it: exit 0 at that poll, and it says what the status comes from", stoodIn.code === 0 && stoodIn.polls === 2
+    && stoodIn.out[stoodIn.out.length - 1] === "AGENT IS READING: one seed gave its own height, 2 validators that answer as listed confirm it, and the status comes from them. No validator list is agreed while fewer than two seeds answer; the agent keeps its witness candidates for 24 h.", JSON.stringify(stoodIn.out));
+  const validatorsAlone = await sim([at(ALONE)]);
+  check("R14 no seed and validators alone: exit 0, and it says so", validatorsAlone.code === 0 && validatorsAlone.polls === 1
+    && validatorsAlone.out[validatorsAlone.out.length - 1] === "AGENT IS READING: no seed gave its own height, and the status comes from 3 validators that answer as listed. No validator list is agreed while fewer than two seeds answer; the agent keeps its witness candidates for 24 h.", JSON.stringify(validatorsAlone.out));
+  const previous = await sim([() => ({ observed_at: iso(NOW), status: "stable", data_quality: "sufficient", api_version: "1.1", publicNodes: [own("kyne-node2"), own("kyne-node3")], on_chain_validators: OC })]);
+  check("R15 the version before this one on the port (the restart did not take effect): exit 6 at once, and it says so", previous.code === 6 && previous.polls === 1
+    && previous.out[previous.out.length - 1] === "AN OLDER VERSION IS ANSWERING: its /health has no witnesses object (API 1.2). This check is for the new version; nothing is concluded. If the service was restarted on the new code, the restart did not take effect.", JSON.stringify(previous.out));
+  const faultRun = await sim([at(Object.assign({}, FALLBACK, { publicNodes: [own("kyne-node2"), no("kyne-node3", "internal error"), no("kyne-node3b")] }))]);
+  check("R16 a fault in DNO's own read for the whole wait is 'Roll back', though validators give a reading", faultRun.code === 3 && faultRun.out[faultRun.out.length - 1] === `AGENT IS NOT READING after ${W} s: 1 seed read ended in an internal error, a fault in DNO's own read. Roll back.`, JSON.stringify(faultRun.out));
   // The verdict is not the last poll alone. The list is never agreed, so the check runs to the end of the wait; in the
   // last round one of the two answering seeds times out.
   const oneOut = at({ status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_answers", publicNodes: [own("kyne-node2"), no("kyne-node3", "timeout"), no("kyne-node3b")], on_chain_validators: NOLIST });
   const flake = await sim([...Array(POLLS - 1).fill(at({ on_chain_validators: NOLIST })), oneOut]);
   check("R10 reading for the whole wait, then one seed times out in the last round: exit 7, not 'Roll back'", flake.code === 7 && flake.polls === POLLS && !/[Rr]oll back\.|AGENT IS READING|NOT READING/.test(flake.out.join("\n"))
-    && flake.out[flake.out.length - 1] === `AGENT WAS READING DURING THIS CHECK AND IS NOT NOW (after ${W} s): fewer than two seeds answered. A seed that stops answering looks like this; the failure of 1 Oct never read. Not a rollback yet: run this again in a minute.`, JSON.stringify(flake.out));
+    && flake.out[flake.out.length - 1] === `AGENT WAS READING DURING THIS CHECK AND IS NOT NOW (after ${W} s): fewer than two seeds answered, and no validator stood in. A seed that stops answering looks like this; the failure of 1 Oct never read. Not a rollback yet: run this again in a minute.`, JSON.stringify(flake.out));
   const flakeMid = await sim([at({ on_chain_validators: NOLIST }), oneOut, at({ on_chain_validators: NOLIST })]);
   check("R10b a round without enough seeds in the middle of the wait changes nothing: exit 5", flakeMid.code === 5 && flakeMid.polls === POLLS);
   const recovered = await sim([OCT1, OCT1, at({})]);
@@ -157,7 +202,7 @@ console.log("\n[" + TAG + "] the wait and the verdict");
   // The wait the runbook uses: no --wait at all.
   const byDefault = await sim([OCT1], []);
   check("R11 with no --wait the check waits " + DEFAULT_WAIT_SECONDS + " s, and the 1 Oct picture ends in 'Roll back.'", byDefault.code === 3 && byDefault.polls === DEFAULT_WAIT_SECONDS / 5 + 1
-    && byDefault.out[0] === `post-restart check · waited ${DEFAULT_WAIT_SECONDS} s` && byDefault.out[byDefault.out.length - 1] === `AGENT IS NOT READING after ${DEFAULT_WAIT_SECONDS} s: fewer than two seeds answered. Roll back.`, JSON.stringify(byDefault.out));
+    && byDefault.out[0] === `post-restart check · waited ${DEFAULT_WAIT_SECONDS} s` && byDefault.out[byDefault.out.length - 1] === `AGENT IS NOT READING after ${DEFAULT_WAIT_SECONDS} s: fewer than two seeds answered, and no validator stood in. Roll back.`, JSON.stringify(byDefault.out));
   const now0 = await sim([at({})], ["--wait", "0"]);
   check("R6 --wait 0 reads once", now0.code === 0 && now0.polls === 1);
   const usage = await run(["not-a-url"], { log: () => {} });
@@ -174,7 +219,7 @@ console.log("\n[" + TAG + "] against a server");
   body = health({ observed_at: iso(Date.now() - 5000), status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_answers", publicNodes: [no("kyne-node2", "internal error"), no("kyne-node3", "internal error"), no("kyne-node3b")] });
   const out2 = [];
   const code2 = await run(["http://127.0.0.1:" + srv.port, "--wait", "0"], { log: (l) => out2.push(l) });
-  check("S2 the same server reading no seed, read once: NOT READING YET, exit 3", code2 === 3 && /^AGENT IS NOT READING YET after 0 s: fewer than two seeds answered\. /.test(out2[out2.length - 1]) && !/Roll back/.test(out2.join("\n")), JSON.stringify(out2));
+  check("S2 the same server reading no seed, read once: NOT READING YET, exit 3, the fault first", code2 === 3 && /^AGENT IS NOT READING YET after 0 s: 2 seed reads ended in an internal error, a fault in DNO's own read; fewer than two seeds answered, and no validator stood in\. /.test(out2[out2.length - 1]) && !/Roll back/.test(out2.join("\n")), JSON.stringify(out2));
   // The command itself, as the runbook runs it: the exit code is the verdict's.
   const cli = async (b) => { body = b; const kid = Bun.spawn([process.execPath, join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "post-restart-check.mjs"), "http://127.0.0.1:" + srv.port, "--wait", "0"], { stdout: "pipe", stderr: "pipe" });
     const text = await new Response(kid.stdout).text(); return { code: await kid.exited, last: text.trim().split("\n").pop() }; };

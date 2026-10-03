@@ -61,21 +61,24 @@ console.log("\n[" + TAG + "] a witness read");
 {
   resetHits();
   const [g, u] = await read([c(0x21, V.good), c(0x22, V.upper)]);
-  eq("W1 the listed key answers and lists itself: read as listed, with its own height", [g, u], [{ key: K(0x21), asListed: true, height: H }, { key: K(0x22), asListed: true, height: H + 1 }]);
+  eq("W1 the listed key answers and lists itself: read as listed, with its own height", [g, u], [{ key: K(0x21), asListed: true, height: H, error: null }, { key: K(0x22), asListed: true, height: H + 1, error: null }]);
   check("W2 one GET /info per candidate, nothing else", hits.good === 1 && hits.upper === 1);
   const [o] = await read([c(0x23, V.other)]);
-  eq("W3 another key answers at that address: not as listed, no height", o, { key: K(0x23), asListed: false, height: null });
+  eq("W3 another key answers at that address: not as listed, no height", o, { key: K(0x23), asListed: false, height: null, error: null });
   const [ns] = await read([c(0x24, V.noSelf)]);
-  eq("W4 the listed key answers but lists itself nowhere: as listed, and no height (the first listed peer's height is not its own)", ns, { key: K(0x24), asListed: true, height: null });
+  eq("W4 the listed key answers but lists itself nowhere: as listed, and no height (the first listed peer's height is not its own)", ns, { key: K(0x24), asListed: true, height: null, error: null });
   const [nk] = await read([c(0x25, V.noKey)]);
-  eq("W5 an answer that names no key is not the listed key answering, even when its peerlist holds that key", nk, { key: K(0x25), asListed: false, height: null });
+  eq("W5 an answer that names no key is not the listed key answering, even when its peerlist holds that key", nk, { key: K(0x25), asListed: false, height: null, error: null });
   const bad = await read([c(0x26, V.err), c(0x27, V.junk), c(0x28, V.big), c(0x2e, { url: "http://127.0.0.1:1" }), c(0x2c, V.text)]);
-  check("W6 an HTTP error, a body that is not JSON, a body over the cap, a closed port: no witness, and nothing thrown", bad.slice(0, 4).every((r) => r.asListed === false && r.height === null), JSON.stringify(bad));
-  eq("W7 a height that is not a plain number is no height", bad[4], { key: K(0x2c), asListed: true, height: null });
+  check("W6 an HTTP error, a body that is not JSON, a body over the cap, a closed port: no witness, nothing thrown, and the reason as a category", bad.slice(0, 4).every((r) => r.asListed === false && r.height === null)
+    && bad.slice(0, 4).map((r) => r.error).join(" | ") === "HTTP 500 | invalid response | response too large | connection failed", JSON.stringify(bad));
+  eq("W7 a height that is not a plain number is no height", bad[4], { key: K(0x2c), asListed: true, height: null, error: null });
   resetHits();
   const [rd] = await read([c(0x2d, V.redirect)]);
   check("W8 a redirect is not followed: the address it points to is never read", rd.asListed === false && hits.redirect === 1 && hits.trap === 0, JSON.stringify(rd) + " trap " + hits.trap);
-  eq("W9 a row holds the key, whether it answered as listed, and its height: no peerlist, no address, no version", Object.keys(g).sort(), ["asListed", "height", "key"]);
+  eq("W9 a row holds the key, whether it answered as listed, its height, and why it did not answer: no peerlist, no address, no version", Object.keys(g).sort(), ["asListed", "error", "height", "key"]);
+  const faulty = await read([c(0x21, V.good)], { fetch: () => { throw new TypeError("x is not a function"); } });
+  check("W10 a fault in DNO's own read is told apart from a validator that does not answer", faulty[0].error === "internal error" && faulty[0].asListed === false && rd.error === "HTTP 302");
 }
 
 console.log("\n[" + TAG + "] the address is checked at every read");
@@ -86,7 +89,7 @@ console.log("\n[" + TAG + "] the address is checked at every read");
   check("N1 the read goes to the address the resolver returned for the published name", n.asListed === true && n.height === H && hits.good === 1);
   resetHits();
   const [refused] = await read([c(0x21, V.good)], { resolveOrigin: async () => null });
-  check("N2 an address the resolver refuses is not read at all", refused.asListed === false && hits.good === 0);
+  check("N2 an address the resolver refuses is not read at all", refused.asListed === false && refused.error === "address not resolved to a public http origin" && hits.good === 0);
   const [thrown] = await read([c(0x21, V.good)], { resolveOrigin: async () => { throw new Error("resolver down"); } });
   check("N3 a resolver that throws: no witness, nothing thrown", thrown.asListed === false && hits.good === 0);
   const t0 = Date.now();
@@ -122,6 +125,8 @@ console.log("\n[" + TAG + "] the candidates, kept");
   const kept = [{ key: K(0x51), url: "http://203.0.113.9:53550" }, { key: K(0x52), url: "http://validator.example:53550" }];
   const db = new Database(":memory:");
   db.run("CREATE TABLE dno_meta (key TEXT PRIMARY KEY, value TEXT)");
+  const { mkdtempSync, rmSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "dno-witness-"));
   db.run("INSERT INTO dno_meta (key, value) VALUES ('catalog_count_started', '1780000000000')");      // a row 7.1.1 wrote
   const s = createCandidateStore(db);
   eq("C1 a new store has none", s.load(T), { agreedAt: null, candidates: [] });
@@ -148,6 +153,16 @@ console.log("\n[" + TAG + "] the candidates, kept");
   check("C13 without a store they are kept in memory", mem.save(list, T) === true && mem.load(T + 1).candidates.length === 2 && createCandidateStore(null).load(T + 1).candidates.length === 0);
   const closed = new Database(":memory:"); const cs = createCandidateStore(closed); closed.close();
   check("C14 a store that cannot be written: save says so, and this process still has them", cs.save(list, T) === false && cs.load(T + 1).candidates.length === 2);
+  // The pre-restart check opens the agent's store read-only: it reads what the agent kept and can write nothing.
+  const file = join(dir, "store.db");
+  const rw = new Database(file); createCandidateStore(rw).save(list, T); rw.close();
+  const ro = new Database(file, { readonly: true }), roStore = createCandidateStore(ro);
+  check("C16 a store opened read-only: the kept candidates are read, and a save changes nothing on disk", roStore.load(T + 1).candidates.length === 2 && roStore.save([], T + 5) === false
+    && (() => { ro.close(); const again = new Database(file, { readonly: true }); const n = createCandidateStore(again).load(T + 6).candidates.length; again.close(); return n; })() === 2);
+  const empty = join(dir, "empty.db"); new Database(empty).close();
+  const roEmpty = new Database(empty, { readonly: true });
+  check("C17 a read-only store without the table (an agent that never ran this version): none, nothing thrown", createCandidateStore(roEmpty).load(T).candidates.length === 0);
+  roEmpty.close(); rmSync(dir, { recursive: true, force: true });
   const broken = { run() { throw new Error("disk"); }, query() { throw new Error("disk"); } };
   check("C15 a store that cannot be read at start: none, nothing thrown", createCandidateStore(broken).load(T).candidates.length === 0);
 }
@@ -158,7 +173,7 @@ console.log("\n[" + TAG + "] the sources");
   const imports = [...SRC.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1]).sort().join();
   check("A1 witnesses.mjs reads only through readSeedInfo: no fetch, no capped read of its own", /await readSeedInfo\(\{ url: origin, identity: "0x" \+ c\.key \}/.test(SRC) && !/cappedJson|nativeFetch|readJsonCapped|\bfetch\(/.test(SRC)
     && imports === "./public-safety.mjs,./seed-read.mjs,./status-rule.mjs", imports);
-  check("A2 a witness counts only when the answer named the listed key, and its height only from its own entry", SRC.includes("if (r.ok && r.identityMatch === true) {") && SRC.includes('if (r.height_source === "self") row.height = r.block;'));
+  check("A2 a witness counts only when the answer named the listed key, and its height only from its own entry", SRC.includes("if (!r.ok) row.error = r.error;\n      else if (r.identityMatch === true) {") && SRC.includes('if (r.height_source === "self") row.height = r.block;') && (SRC.match(/row\.asListed = true;/g) || []).length === 1 && (SRC.match(/row\.height = /g) || []).length === 1);
   check("A3 nothing from a witness read reaches the catalog or the observation tables", !/catalog|discoveredPeers|node_observations|peerlist:/.test(SRC.replace(/^\/\/.*$/gm, "")));
   const fn = AGENT.slice(AGENT.indexOf("async function readRoundWitnesses("), AGENT.indexOf("\n}\n", AGENT.indexOf("async function readRoundWitnesses(")));
   check("A4 the agent reads witnesses only when the dials are on, fewer than two seeds gave their own height, and candidates are kept",
