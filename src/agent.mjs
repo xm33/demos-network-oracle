@@ -246,17 +246,16 @@ function docsEntry(path, text) { return '<div><dt><code>' + path + '</code></dt>
 var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>API · Demos Network Oracle</title><!--dno:head-->' +
 '<style>.docs-kv dt code{white-space:nowrap}.docs-kv{grid-template-columns:minmax(0,19rem) minmax(0,1fr)}@media(max-width:719px){.docs-kv{grid-template-columns:minmax(0,1fr)}}</style></head><body>' +
 '<!--dno:header:docs--><main id="main"><header class="doc-head"><div class="wrap"><div><h1>API</h1>' +
-'<p class="doc-lede">Every public endpoint, read-only, JSON unless noted, served with CORS for any origin. DNO reads three public Demos seeds and publishes whether their reported heights agree.</p>' +
+'<p class="doc-lede">Every public endpoint, read-only, JSON unless noted, served with CORS for any origin. DNO reads three public Demos seeds and publishes whether their reported heights agree. When fewer than two give their own height, validators that answer as listed stand in for the missing one.</p>' +
 '<div class="doc-intro"><p>Oracle wallet: <code>__AGENT_WALLET__</code> · v' + AGENT_VERSION + ' · API ' + API_VERSION + '. ' + (SUPERCOLONY_ENABLED ? 'On-chain publication of DNO\'s own posts is enabled' : 'On-chain publication of DNO\'s own posts is currently disabled') + '; the public reading is never posted. Observation continues independently, and that says nothing by itself about the Demos network.</p></div>' +
 '</div></div></header><div class="wrap doc-grid"><details class="toc" open><summary>On this page</summary><ol>' +
 '<li><a href="#reading">The reading</a></li><li><a href="#identities">Peer-listed identities</a></li><li><a href="#pages">Pages</a></li><li><a href="#integration">Integration</a></li><li><a href="#internal">Internal only</a></li></ol></details>' +
 '<article class="prose">' +
 '<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
-docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail, last_24h.critical_public_incidents_in_window, last_24h.chain_movement.blocks_advanced). No fleet data. ETag / 304 between observations.') +
+docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail, last_24h.critical_public_incidents_in_window, last_24h.chain_movement.blocks_advanced) and the additive 1.2 fields (witnesses: what the reading rests on, as counts; height_standstill_after_seconds: after this long without a new height a reading that would be stable is degraded). No fleet data. ETag / 304 between observations.') +
 docsEntry('GET /organism/schema', 'The JSON Schema contract: stability policy, enums, changelog.') +
-docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields; first_counted has the identities first counted in the last 24 h, 7 days and 30 days, null for a window the count does not cover or that a gap in the count crosses), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). Neither of the last two enters status or /organism.') +
-docsEntry('GET /signals', 'Current signals grouped by severity (critical, warning, info).') +
-docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them.') +
+docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), witnesses, signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields; first_counted has the identities first counted in the last 24 h, 7 days and 30 days, null for a window the count does not cover or that a gap in the count crosses), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). While two seeds give their own height neither of the last two enters status; when fewer do, validators that answered as listed stand in, and witnesses says so. Neither object is in /organism.') +
+docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them. A record may carry note, a dated note DNO added later; the stored record is never edited.') +
 '</dl></section>' +
 '<section id="identities"><h2>Peer-listed identities</h2><dl class="kv docs-kv">' +
 docsEntry('GET /catalog', 'Identities listed on the public seeds\' peerlists, kept after two public peerlists have listed them (one peerlist brings at most 50 new identities into that count per crawl): first recorded (first_seen), last listed, and what the peerlists reported in the latest crawl. ?q= filters by the end of a display name or a truncated key; ?listed=now|not by whether the latest crawl listed the row. ETag / 304 between observations. Never dialed.') +
@@ -328,12 +327,14 @@ function renderHomepageNoJs(html) {
     html = html.replace(HOME_MARKERS.panel, '<div class="panel" id="panel" data-state="live">');
     html = html.replace(HOME_MARKERS.status, '<span class="ind" id="status-ind" data-tone="' + homeTone("status", c.status) + '"></span><span id="status-value">' + e(String(c.status || "unknown").toUpperCase()) + '</span>');
     // The card's three lines (src/home-cycle.mjs, the same file the page's script carries): the ACTIVE count as the
-    // agreeing seeds list it, what status is made of in this observation, and the peer-listed count. The API's
+    // agreeing seeds list it, what status is made of in this observation (the seeds, or a seed and the validators
+    // standing in), and the peer-listed count. The API's
     // status_reason is not on the card; it stays in /organism.
     var ocV = publicOnChainValidators(latestValidatorRound, Date.now(), validatorPublishConfig());
     html = html.replace(HOME_MARKERS.lead, '<p class="cycle-lead" id="cycle-lead" data-src="api">' + e(cycleLead(ocV)) + '</p>');
     var seedLine = cycleSeeds({ publicNodes: latestPublicNodes || [], agreement: c.agreement, data_quality_reason: c.data_quality_reason,
-      staleness_seconds: c.staleness_seconds, height_static_seconds: c.height_static_seconds, active_incidents: c.active_incidents }, leadCount(ocV));
+      staleness_seconds: c.staleness_seconds, height_static_seconds: c.height_static_seconds, active_incidents: c.active_incidents,
+      witnesses: c.witnesses, height_standstill_after_seconds: c.height_standstill_after_seconds }, leadCount(ocV));
     html = html.replace(HOME_MARKERS.seeds, '<p class="seeds" id="seeds-line" aria-live="polite">' + e(seedLine) + '</p>');
     var door = null;
     try { door = cycleDoor(getValidatorGrowth().discovered); } catch (ignore) {}
@@ -424,6 +425,7 @@ function siteFooter(active) {
     + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>'
     + '<p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'
     + '<p class="fine">Built by XM33 · not an official Demos product.</p>'
+    + '<p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet; DNO reads it like any other, and only if it publishes an address on chain.</p>'
     + '</div></footer>'
     + (SITE_JS ? '<script src="' + SITE_JS.path + '" defer></script>' : '');
 }
@@ -3553,7 +3555,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
         h += '<section class="ref-sec" id="fixnet">';
         h += '<h2>Fixnet probe</h2>';
-        h += '<p class="ref-note">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights are the latest reported by a peerlist DNO reads (its operator\'s fixnet nodes\', or an anchor\'s when one is configured) or by the DNO probe, whichever came last. This is not the public testnet catalog.</p>';
+        h += '<p class="ref-note">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights are the latest reported by a peerlist DNO reads (its operator\'s fixnet nodes\', or an anchor\'s when one is configured) or by the DNO probe, whichever came last. This is not the public testnet catalog: an identity the public seeds\' peerlists list is not kept in this table and is not dialed for it.</p>';
         h += '<p class="ref-meta">' + (fxAgoStr ? 'Updated ' + fxAgoStr : '') + '</p>';
         var fxNotProbedN = fxDiscovered.filter(function(n){return n.probed === false}).length;
         h += '<p class="ref-meta">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe' + (fxNotProbedN ? ' · ' + fxNotProbedN + ' not probed' : '') + ' · not a count of the public testnet, not network size</p>';

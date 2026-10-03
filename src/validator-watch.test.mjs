@@ -245,14 +245,14 @@ console.log("\n[" + TAG + "] the sentence for readers without JavaScript");
     other_key_shared: 18, other_key_shared_origins: 1, not_dialed_reasons: { no_address: 9 } };
   const s1 = validatorsSentence(oc, w);
   check("N1 the 29 Sep reading: the ladder's counts, the advisor's sentence, the rows with no address",
-    s1 === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Of these, 7 answered DNO as the listed key at the address each published, 7 at the seeds' height; every round in the last hour: insufficient observation (23 of 60 min). 18 listed keys share one published origin with a key that answered. That is not 18 nodes down. 9 ACTIVE rows publish no address on chain. Not in status.", s1);
+    s1 === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Of these, 7 answered DNO as the listed key at the address each published, 7 at the seeds' height; every round in the last hour: insufficient observation (23 of 60 min). 18 listed keys share one published origin with a key that answered. That is not 18 nodes down. 9 ACTIVE rows publish no address on chain. In status only when fewer than two seeds give their own height.", s1);
   const s2 = validatorsSentence(oc, Object.assign({}, w, { other_key_shared: 1, other_key_shared_origins: 1, not_dialed_reasons: { no_address: 1 } }));
   const s3 = validatorsSentence(oc, Object.assign({}, w, { other_key_shared: 5, other_key_shared_origins: 2, not_dialed_reasons: { no_address: 0 } }));
   check("N2 one key, one row: singular forms; several origins: each with a key that answered",
     s2.includes(" 1 listed key shares one published origin with a key that answered. That is not a node down. 1 ACTIVE row publishes no address on chain.")
-    && s3.includes(" 5 listed keys share 2 published origins, each with a key that answered. That is not 5 nodes down. Not in status.") && !/no address/.test(s3), s2 + " | " + s3);
+    && s3.includes(" 5 listed keys share 2 published origins, each with a key that answered. That is not 5 nodes down. In status only when fewer than two seeds give their own height.") && !/no address/.test(s3), s2 + " | " + s3);
   check("N3 no agreed list: no sentence; dials off: the list only", validatorsSentence(Object.assign({}, oc, { state: "not_agreed" }), w) === null
-    && validatorsSentence(oc, { state: "disabled" }) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Not in status.");
+    && validatorsSentence(oc, { state: "disabled" }) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. In status only when fewer than two seeds give their own height.");
 }
 
 console.log("\n[" + TAG + "] find a node: one key against the agreed list");

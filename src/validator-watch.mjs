@@ -549,7 +549,7 @@ export function validatorsSentence(oc, w) {
       + ". That is not " + (shared === 1 ? "a node" : shared + " nodes") + " down.";
     if (none > 0) s += " " + none + (none === 1 ? " ACTIVE row publishes" : " ACTIVE rows publish") + " no address on chain.";
   }
-  return s + " Not in status.";
+  return s + " In status only when fewer than two seeds give their own height.";
 }
 
 // One log line per round. Counts only.

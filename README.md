@@ -2,7 +2,7 @@
 
 **Live at:** [demos-oracle.com](https://demos-oracle.com)
 
-The Demos Network Oracle (DNO) is an independent, watch-only observer of the public [Demos](https://demos.network) testnet. It reads public nodes, publishes what they report as a machine-readable reading at `/organism`, and explains how each value is derived. It does not operate the protocol, admit validators, advise, predict, score, certify, or decide action.
+The Demos Network Oracle (DNO) is an independent, watch-only observer of the public [Demos](https://demos.network) testnet. It reads public nodes, publishes what they report as a machine-readable reading at `/organism`, and explains how each value is derived. It does not operate the protocol or admit validators. DNO informs context; it does not advise, predict, score, certify, or decide action.
 
 Built by [XM33](https://demos-oracle.com). Not an official Demos or KyneSys product.
 

@@ -108,12 +108,16 @@ const UNKNOWN_TEXT = Object.freeze({
 });
 // Why there is no reading, in words. While no validator was read these are the 1.1 texts. When validators were read
 // and formed no reading the text says so: "fewer than 2 public nodes answered" alone would leave them out.
-function unknownTextOf(reason, seedCount, validatorsRead) {
+// validatorsWithHeight: how many of the validators read answered as listed with their own height; null when none was
+// read. The text says what they did and no more: validators that gave no height are not said to disagree.
+function unknownTextOf(reason, seedCount, validatorsWithHeight) {
   if (!reason) return "";
-  if (reason === "no_observation" || reason === "stale" || !validatorsRead) return UNKNOWN_TEXT[reason] || "";
-  return seedCount === 1
-    ? "one public seed reported its own block height, and no validator that answered as listed is within 25 blocks of it"
-    : "no public seed reported its own block height, and no majority of the validators that answered as listed is within 25 blocks of their median";
+  if (reason === "no_observation" || reason === "stale" || validatorsWithHeight === null) return UNKNOWN_TEXT[reason] || "";
+  var seeds = (seedCount === 1 ? "one" : "no") + " public seed reported its own block height";
+  if (validatorsWithHeight === 0) return seeds + ", and no validator answered as listed with its own height";
+  if (seedCount === 1) return seeds + ", and no validator that answered as listed is within 25 blocks of it";
+  if (validatorsWithHeight === 1) return seeds + ", and one validator answered as listed with its own height, where a reading needs two";
+  return seeds + ", and no majority of the validators that answered as listed is within 25 blocks of their median";
 }
 const plural = function(n, one, many) { return n === 1 ? one : many; };
 const validatorsWord = function(n) { return n + " " + plural(n, "validator", "validators"); };
@@ -151,7 +155,7 @@ export function assess(input) {
   var reason = i.timeReason || null;
   if (!reason && w.mode === "insufficient") reason = i.seedReason || seedReasonOf(pubReachable, seedHeights.length) || "too_few_heights";
   var sufficient = !reason;
-  var unknownText = unknownTextOf(reason, seedHeights.length, !!v);
+  var unknownText = unknownTextOf(reason, seedHeights.length, v ? sorted(v.heights).length : null);
   var mode = sufficient ? w.mode : "insufficient";
   var n = sufficient && w.validatorsCounted !== null ? w.validatorsCounted : 0;   // validators counted in this reading
 
@@ -197,7 +201,8 @@ export function assess(input) {
     if (stalled) summary += " " + capital(staticText) + ".";
   } else {
     var offCount = pubTotal - pubReachable, parts = [];
-    if (offCount > 0) parts.push(offCount + " of " + pubTotal + " public node" + (offCount === 1 ? "" : "s") + " did not answer");
+    // "1 of 3 public nodes": the noun follows the total. (Up to 1.1 this read "1 of 3 public node did not answer".)
+    if (offCount > 0) parts.push(offCount + " of " + pubTotal + " public node" + (pubTotal === 1 ? "" : "s") + " did not answer");
     if (incidentCount > 0) parts.push(incidentCount + " active incident" + (incidentCount === 1 ? "" : "s"));
     if (standstill) parts.push(staticText);
     parts.push("agreement " + agreement.state);

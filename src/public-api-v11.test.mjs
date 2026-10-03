@@ -291,16 +291,28 @@ try {
   const docs = await get("/docs");
   const docsHtml = typeof docs.body === "string" ? docs.body : "";
   check("S36 /docs prints no full wallet or identity and no /dashboard link", docs.status === 200 && !FULL_ID.test(docsHtml) && !/0x[0-9a-fA-F]{40}\b/.test(docsHtml) && !/href="\/dashboard"/.test(docsHtml));
+  // Every endpoint /docs lists is served: up to 7.1.1 it listed GET /signals, which answered 404.
+  const listed = [...docsHtml.matchAll(/<dt><code>GET (\/[^<\s]*)<\/code><\/dt>/g)].map((m) => m[1].replace(/&amp;/g, "&").replace(/\?key=0x…$/, "?key=0x" + "ab".repeat(32)));
+  const notServed = [];
+  for (const pth of listed) { const r = await fetch(BASE + pth); if (r.status !== 200) notServed.push(pth + " " + r.status); await r.arrayBuffer(); }
+  check("S36b every GET endpoint /docs lists answers 200", listed.length >= 15 && notServed.length === 0, listed.length + " listed; " + notServed.join(", "));
 
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
   const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('id="cards"'));
   const ocH = health.on_chain_validators;
-  check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then the seeds status is made of; no 'nodes aligned'",
+  // The card's second line says what status is made of in this observation (1.2): the seeds; one seed and the validators
+  // standing in; validators alone; or, when validators were read and gave no reading, that status is unknown. The page
+  // and /organism may be a round apart, so any of the endings the two rounds' modes allow is accepted.
+  const hw = (await get("/health")).body.witnesses || {};
+  const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
+    : w.mode === "insufficient" && w.validators ? "Status is unknown" : "Status is those seeds");
+  const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
+  check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then what status is made of in this observation; no 'nodes aligned'",
     !o.observed_at || (/<p class="cycle-lead" id="cycle-lead" data-src="api">([\d,]+ ACTIVE on chain as \w+ public seeds list them\.|ACTIVE on chain: (reading|not reported this cycle[^<]*)\.)<\/p>/.test(cardHtml)
       && (ocH.state !== "agreed" || cardHtml.includes(">" + cycleLead(ocH) + "<"))
-      && /<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ Status is those seeds(, not the [\d,]+)?\.<\/p>/.test(cardHtml)
+      && seedsLineOk(cardHtml)
       && !/nodes aligned/.test(cardHtml)), cardHtml.slice(0, 600));
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());

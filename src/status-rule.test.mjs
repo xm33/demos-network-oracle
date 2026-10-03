@@ -87,7 +87,7 @@ console.log("\n[" + TAG + "] two seeds decide: the 1.1 reading, word for word");
     && JSON.stringify(mod.risk_factors) === JSON.stringify(["agreement is moderate, not strong"]), mod.summary + " | " + JSON.stringify(mod.risk_factors));
   const weak = round(2, [H - 30, H], null);
   check("S6 two seeds 30 blocks apart: weak, unstable, high (the 2 Oct 14:45 record's shape; validators do not arbitrate between two seeds)", weak.status === "unstable" && weak.risk === "high" && weak.status_reason === "Significant disagreement among public node heights"
-    && weak.summary === "Unstable reading of the public seeds: 1 of 3 public node did not answer; agreement weak." && round(2, [H - 30, H], [H, H, H]).status === "unstable", weak.summary);
+    && weak.summary === "Unstable reading of the public seeds: 1 of 3 public nodes did not answer; agreement weak." && round(2, [H - 30, H], [H, H, H]).status === "unstable", weak.summary);
   const gap = round(3, [H - 60, H, H], null);
   check("S7 heights more than 50 blocks apart: confidence uncertain", gap.confidence === "uncertain" && gap.confidence_reason === "Public nodes report block heights more than 50 blocks apart" && round(2, [H - 20, H], null).confidence === "clear");
   const one = round(1, [H], null);
@@ -104,12 +104,15 @@ console.log("\n[" + TAG + "] two seeds decide: the 1.1 reading, word for word");
   check("S12 before the first observation", none.status === "unknown" && none.data_quality_reason === "no_observation" && none.status_reason === "Insufficient data: no public observation has completed yet");
   const warn = round(2, [H, H], null, { maxIncidentSeverity: "warning", publicIncidentCount: 1 });
   const crit = round(2, [H, H], null, { maxIncidentSeverity: "critical", publicIncidentCount: 2 });
-  check("S13 a warning-level public incident: degraded; a critical one: unstable", warn.status === "degraded" && warn.status_reason === "Warning-level incidents active" && warn.summary === "Degraded reading of the public seeds: 1 of 3 public node did not answer; 1 active incident; agreement strong."
+  check("S13 a warning-level public incident: degraded; a critical one: unstable", warn.status === "degraded" && warn.status_reason === "Warning-level incidents active" && warn.summary === "Degraded reading of the public seeds: 1 of 3 public nodes did not answer; 1 active incident; agreement strong."
     && crit.status === "unstable" && crit.risk === "high" && crit.status_reason === "Critical incidents active" && JSON.stringify(crit.risk_factors) === JSON.stringify(["critical incidents active"]), warn.summary + " | " + crit.status_reason);
   const info = round(3, [H, H, H], null, { maxIncidentSeverity: "info", publicIncidentCount: 1 });
   check("S14 an info-level incident does not change status and is said", info.status === "stable" && info.summary === "All 3 public seeds answered and their reported heights agree. 1 info-level incident active.");
   check("S15 the seed-level reason the caller passes is used as given", round(2, [H], null, { seedReason: "too_few_heights" }).data_quality_reason === "too_few_heights");
   check("S16 a reading holds no list of heights or nodes: the clock's readings are the caller's (clockReadings)", !("clock_heights" in a) && Object.keys(a).sort().join() === "agreement,agreement_reason,condition_reason,confidence,confidence_reason,data_quality,data_quality_reason,risk,risk_factors,standstill,status,status_reason,summary,witnesses");
+  check("S17 the summary's noun follows the total: 1 of 3 public nodes, 2 of 3 public nodes; 1 of 1 public node", round(2, [H - 30, H], null).summary === "Unstable reading of the public seeds: 1 of 3 public nodes did not answer; agreement weak."
+    && round(1, [H], [H + 22]).summary.includes(": 2 of 3 public nodes did not answer; ") && round(0, [], [H - 24, H, H], { seedsTotal: 1 }).summary === "Degraded reading of 3 validators, with no public seed: 1 of 1 public node did not answer; agreement moderate."
+    && !round(3, [H - 30, H, H], null).summary.includes("did not answer"));
 }
 
 console.log("\n[" + TAG + "] one seed, confirmed by validators");
@@ -133,7 +136,10 @@ console.log("\n[" + TAG + "] one seed, confirmed by validators");
   check("F11 two answered and one gave its own height: the fallback applies to it too", round(2, [H], [H]).witnesses.mode === "seed_and_validators" && round(2, [H], [H]).data_quality_reason === null && round(2, [H], [H]).witnesses.public_seeds.answered === 2);
   check("F12 the far validators are told in the words when there is no reading: the 1.1 sentence alone would leave them out", far.status_reason === "Insufficient data: one public seed reported its own block height, and no validator that answered as listed is within 25 blocks of it"
     && far.confidence_reason === "No cross-check: one public seed reported its own block height, and no validator that answered as listed is within 25 blocks of it" && far.agreement_reason.indexOf("Not compared: one public seed") === 0
-    && round(1, [H], [null]).status_reason === far.status_reason && round(1, [H], null).status_reason === "Insufficient data: fewer than 2 public nodes answered");
+    && round(1, [H], null).status_reason === "Insufficient data: fewer than 2 public nodes answered");
+  check("F12b validators that gave no height are not said to be far from the seed", round(1, [H], [null]).status_reason === "Insufficient data: one public seed reported its own block height, and no validator answered as listed with its own height"
+    && round(1, [H], [null, null, null]).summary === "Insufficient data: one public seed reported its own block height, and no validator answered as listed with its own height."
+    && round(1, [H], []).status_reason === round(1, [H], [null]).status_reason && round(1, [H], [null, H + 400]).status_reason === far.status_reason);
   check("F13 a validator that gave no height is read and not counted", round(1, [H], [null, H]).witnesses.validators.read === 2 && round(1, [H], [null, H]).witnesses.validators.own_height === 1 && round(1, [H], [null]).status === "unknown");
   check("F14 a stale observation is no reading in the fallback either", round(1, [H], [H, H], { timeReason: "stale" }).status === "unknown" && round(1, [H], [H, H], { timeReason: "stale" }).witnesses.validators.counted === 0);
 }
@@ -152,7 +158,13 @@ console.log("\n[" + TAG + "] no seed: validators alone");
   check("V7 the counted validators within the band but more than 20 apart: moderate, degraded", round(0, [], [H - 24, H, H]).status === "degraded" && round(0, [], [H - 24, H, H]).status_reason === "Agreement reduced among 3 validators, no public seed");
   const split = round(0, [], [H - 900, H - 900, H, H]);
   check("V8 no reading from validators alone is said in the words", split.status_reason === "Insufficient data: no public seed reported its own block height, and no majority of the validators that answered as listed is within 25 blocks of their median"
-    && round(0, [], [H]).status_reason === split.status_reason && round(0, [], []).status_reason === split.status_reason && round(0, [], null).status_reason === "Insufficient data: fewer than 2 public nodes answered" && split.witnesses.counted === 0);
+    && round(0, [], [H, H + 1000]).status_reason === split.status_reason && round(0, [], [H - 60, H, H + 60]).status_reason === split.status_reason
+    && round(0, [], null).status_reason === "Insufficient data: fewer than 2 public nodes answered" && split.witnesses.counted === 0);
+  check("V8b validators that gave no height are not said to disagree; one that did is said to be one", round(0, [], []).status_reason === "Insufficient data: no public seed reported its own block height, and no validator answered as listed with its own height"
+    && round(0, [], [null, null, null, null]).status_reason === round(0, [], []).status_reason
+    && round(0, [], [H]).status_reason === "Insufficient data: no public seed reported its own block height, and one validator answered as listed with its own height, where a reading needs two"
+    && round(0, [], [null, H, null]).confidence_reason === "No cross-check: no public seed reported its own block height, and one validator answered as listed with its own height, where a reading needs two"
+    && round(0, [], [H]).agreement_reason === "Not compared: no public seed reported its own block height, and one validator answered as listed with its own height, where a reading needs two");
   eq("V10 the published agreement is taken around the validators' median", round(0, [], [H - 900, H - 24, H, H + 3]).agreement, { state: "moderate", aligned_nodes: 3, total_nodes: 3, median_block: H, block_spread: 27, max_block: H + 3, min_block: H - 24 });
   check("V11 thirteen validators, twelve counted: moderate, never weak or unstable", (() => { const r = round(0, [], [19, 24, 26, 32, 34, 36, 49, 66, 67, 69, 69, 71, 73].map((x) => H + x)); return r.status === "degraded" && r.agreement.state === "moderate" && r.agreement.aligned_nodes === 12 && r.agreement.median_block === H + 49; })());
   check("V9 a seed that answered without its own height is counted as answered, and validators still give the reading", round(1, [], [H, H]).witnesses.mode === "validators_only" && round(1, [], [H, H]).witnesses.public_seeds.answered === 1 && round(1, [], [H]).data_quality_reason === "too_few_answers" && round(2, [], [H]).data_quality_reason === "too_few_heights");
@@ -174,7 +186,7 @@ console.log("\n[" + TAG + "] standstill: a reading that would be stable reads de
 {
   const before = round(2, [H, H], null, { movement: mv(1799) }), at = round(2, [H, H], null, { movement: mv(1800) }), long = round(2, [H, H], null, { movement: mv(9000) });
   check("T1 1,799 s: stable; 1,800 s: degraded", before.status === "stable" && before.standstill === false && at.status === "degraded" && at.standstill === true && at.risk === "elevated");
-  check("T2 its words", at.status_reason === "Height unchanged for 30 min; public nodes aligned" && at.summary === "Degraded reading of the public seeds: 1 of 3 public node did not answer; height unchanged for 30 min; agreement strong."
+  check("T2 its words", at.status_reason === "Height unchanged for 30 min; public nodes aligned" && at.summary === "Degraded reading of the public seeds: 1 of 3 public nodes did not answer; height unchanged for 30 min; agreement strong."
     && JSON.stringify(at.risk_factors) === JSON.stringify(["no new height for 30 min"]) && at.agreement.state === "strong" && at.confidence === "clear", at.summary + " | " + JSON.stringify(at.risk_factors));
   check("T3 the record's text says when it began, so it stays true while the record is open", at.condition_reason === "No new height since 2026-10-02 11:47 UTC" && long.condition_reason === at.condition_reason && long.status_reason === "Height unchanged for 150 min; public nodes aligned");
   check("T4 when the start is not known the record says the limit, not a duration", round(2, [H, H], null, { movement: { staticSeconds: 4000, advancing: false, stalled: true, staticSince: null } }).condition_reason === "No new height for 30 min or more");

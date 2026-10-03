@@ -13,7 +13,7 @@
     <div class="wrap">
       <div>
         <h1>Sources</h1>
-        <p class="doc-lede">Path A is three public Kynesys /info URLs, one org. Anyone can read the same URLs, and the rules that turn their answers into status are published. That is the independence that matters.</p>
+        <p class="doc-lede">Path A is three public Kynesys /info URLs, one org. Anyone can read the same URLs, and the rules that turn their answers into status are published. That is the independence that matters. When fewer than two of them give their own height, validators that answer as listed stand in for the missing one.</p>
       </div>
     </div>
   </header>
@@ -35,10 +35,11 @@
         <ol>
           <li><strong>Sources.</strong> Each configured seed's <code>/info</code> is fetched every 20 seconds, in parallel.</li>
           <li><strong>Observation.</strong> Whether each seed answered, its own block height (its own peerlist entry), its version and its peerlist. A seed that does not list itself has no height here.</li>
-          <li><strong>Aggregation.</strong> The seeds' own heights are compared with deterministic rules: the median, a ±25-block band, agreement.</li>
+          <li><strong>Stand-ins.</strong> Only when fewer than two seeds gave their own height: up to 8 validators that answered as listed, at the seeds' height, when two seeds last agreed on the validators list are read in the same round. One within ±25 blocks of the one seed confirms it; with no seed, a majority of them within ±25 blocks of their median gives the reading.</li>
+          <li><strong>Aggregation.</strong> The heights are compared with deterministic rules: the median, a ±25-block band, agreement. A reading that would be stable is degraded once no new height has been seen for 30 minutes.</li>
           <li><strong>Public state.</strong> Status and the other six values on <code>/organism</code>. The same inputs, history and observation age always produce the same public state.</li>
         </ol>
-        <p>Status uses only those seeds. The resulting state reflects agreement, disagreement and uncertainty across them.</p>
+        <p>While two seeds give their own height, status uses only those seeds. With fewer, it uses the one seed and the validators that confirm it, or validators alone, and <code>/organism</code> says which in <code>witnesses</code>. The resulting state reflects agreement, disagreement and uncertainty across the heights compared.</p>
       </section>
 
       <section id="layers">
@@ -47,11 +48,11 @@
           <table class="tbl stack">
             <thead><tr><th>Layer</th><th>What DNO reads</th><th>Enters status</th></tr></thead>
             <tbody>
-              <tr><td data-label="Layer">Public seeds</td><td data-label="Reads">Kynesys-operated public endpoints: kyne-node2, kyne-node3, kyne-node3b. One operator: node3b is a second port on the same host as node3, not a fourth org, and a second hostname that points at node3 is an alias, not a fourth seed.</td><td data-label="Enters status">yes, and nothing else does</td></tr>
+              <tr><td data-label="Layer">Public seeds</td><td data-label="Reads">Kynesys-operated public endpoints: kyne-node2, kyne-node3, kyne-node3b. One operator: node3b is a second port on the same host as node3, not a fourth org, and a second hostname that points at node3 is an alias, not a fourth seed.</td><td data-label="Enters status">yes</td></tr>
               <tr><td data-label="Layer">Peer-listed identities</td><td data-label="Reads">Identities copied from the seeds' own peerlists, with what those peerlists reported (online flag, sync status, advertised height). A new identity is kept after two public peerlists have listed it. DNO does not dial them.</td><td data-label="Enters status">no</td></tr>
-              <tr><td data-label="Layer">On-chain validators</td><td data-label="Reads">The validators table and the network parameters as the same three seeds return them (<code>getValidators</code>, <code>getNetworkParameters</code>), once a minute; a count only when two seeds give the same answer. Then one <code>/info</code> a round at the address each ACTIVE validator published on chain, only when it is a public http origin. Counts on <code>/health</code>; no address, key or stake is published.</td><td data-label="Enters status">no</td></tr>
+              <tr><td data-label="Layer">On-chain validators</td><td data-label="Reads">The validators table and the network parameters as the same three seeds return them (<code>getValidators</code>, <code>getNetworkParameters</code>), once a minute; a count only when two seeds give the same answer. Then one <code>/info</code> a round at the address each ACTIVE validator published on chain, only when it is a public http origin. Counts on <code>/health</code>; no address, key or stake is published. The validators that answered as listed, at the seeds' height, are the stand-ins for a seed that gives no height.</td><td data-label="Enters status">only in a seed's place, when fewer than two seeds give their own height</td></tr>
               <tr><td data-label="Layer">Cross-check RPCs</td><td data-label="Reads">Public Demos RPC endpoints, dialed once per fleet cycle: answered or not, and latency. DAHR is attempted there (see below).</td><td data-label="Enters status">no</td></tr>
-              <tr><td data-label="Layer">Fixnet (reference)</td><td data-label="Reads">The peerlists of DNO's operator's own fixnet nodes, and of an anchor node when one is configured. The identities they list are probed for reachability, height and latency only when the address they advertise is a public http origin; other rows are shown as not probed. The operator's own nodes are not rows of the table; a configured anchor is, and heights are shown against it.</td><td data-label="Enters status">no</td></tr>
+              <tr><td data-label="Layer">Fixnet (reference)</td><td data-label="Reads">The peerlists of DNO's operator's own fixnet nodes, and of an anchor node when one is configured. The identities they list are probed for reachability, height and latency only when the address they advertise is a public http origin; other rows are shown as not probed. The operator's own nodes are not rows of the table; a configured anchor is, and heights are shown against it. An identity the public seeds' peerlists list is not kept in it.</td><td data-label="Enters status">no</td></tr>
             </tbody>
           </table>
         </div>
@@ -60,14 +61,15 @@
 
       <section id="separation">
         <h2>Separation rules</h2>
-        <p>Public status, risk, trend, agreement, confidence and data quality are computed from the public seeds only. Fleet data is used internally as a reference layer and does not influence public assessments; fleet views are served on DNO's internal listener only.</p>
+        <p>Public status, risk, trend, agreement, confidence and data quality are computed from the public seeds, and from validators that answer as listed when fewer than two seeds give their own height. Fleet data is used internally as a reference layer and does not influence public assessments; fleet views are served on DNO's internal listener only.</p>
+        <p>DNO does not validate. Its operator, XM33, runs a validator on the public Demos testnet. That validator is not fleet data in the public reading and has no place of its own in it: it can stand in for a seed only as any validator can, by publishing an address on chain and answering there as the listed key.</p>
       </section>
 
       <section id="endpoints">
         <h2>Public endpoints</h2>
         <dl class="kv">
           <div><dt><a href="/organism">/organism</a></dt><dd>The public reading. The contract is <a href="/organism/schema">/organism/schema</a>.</dd></div>
-          <div><dt><a href="/health">/health</a></dt><dd>The same reading with its parts: each seed, <code>validator_growth</code>, attestation state, and the on-chain validator counts (<code>on_chain_validators</code>, <code>validator_watch</code>).</dd></div>
+          <div><dt><a href="/health">/health</a></dt><dd>The same reading with its parts: each seed, <code>witnesses</code> (what the reading rests on), <code>validator_growth</code>, attestation state, and the on-chain validator counts (<code>on_chain_validators</code>, <code>validator_watch</code>).</dd></div>
           <div><dt><a href="/incidents">/incidents</a></dt><dd>Public records; each row is an incident or a condition record.</dd></div>
           <div><dt><a href="/catalog">/catalog</a></dt><dd>Peer-listed identities, sanitized. <code>/catalog/lookup?key=0x…</code> checks one full key against the catalog and the agreed validators list, and never returns a key.</dd></div>
           <div><dt><a href="/peers">/peers</a></dt><dd>The latest crawl only, truncated identities.</dd></div>
