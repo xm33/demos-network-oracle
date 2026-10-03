@@ -81,5 +81,20 @@ console.log("\n[" + TAG + "] chain movement is published only when own-height ro
   check("L10 the other parts of the summary do not change", ["coverage_pct", "typical_set_size", "longest_non_stable_minutes", "active_critical_public_incidents"].every((k) => twoHours[k] === whole[k]));
 }
 
+console.log("\n[" + TAG + "] a dated note beside a stored record (the record itself is never edited)");
+{
+  const a = SRC.indexOf("var INCIDENT_NOTES = ["), b = SRC.indexOf("\n}\n", SRC.indexOf("function incidentNote(id, startedAt) {")) + 3;
+  const note = new Function(SRC.slice(a, b) + "\nreturn { note: incidentNote, all: INCIDENT_NOTES };")();
+  const n = note.note("INC-1349", "2026-10-01T20:07:58.199Z");
+  check("N1 the visibility record of 1 October has a note, dated, and it says the cause was in DNO", n && n.added === "2026-10-03" && /^The cause was in DNO, not in the seeds\./.test(n.text) && /says nothing about the seeds or the network/.test(n.text), JSON.stringify(n));
+  check("N2 the note is keyed by id and start time: a record another store numbered the same, or any other record, has none", note.note("INC-1349", "2026-10-01T20:07:58.198Z") === null && note.note("INC-1349", null) === null && note.note("INC-1350", "2026-10-01T20:07:58.199Z") === null && note.note(undefined, undefined) === null);
+  const BANNED = /\b(approved|certified|trusted|recommended|safe|best|scores?|ranking|ranked|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i;
+  check("N3 no banned word, no host, no key in a note", note.all.every((x) => !BANNED.test(x.text) && !/\d+\.\d+\.\d+\.\d+|0x[0-9a-f]{8}|https?:/i.test(x.text) && /^\d{4}-\d\d-\d\d$/.test(x.added)));
+  const route = SRC.slice(SRC.indexOf('reqPath === "/incidents" || reqPath.indexOf("/incidents/") === 0'), SRC.indexOf('reqPath === "/federate"'));
+  check("N4 /incidents adds it as a field of its own beside the stored description, and only where there is one", route.includes("var incNote = incidentNote(r.id, r.started_at);\n          if (incNote) incRow.note = incNote;") && route.includes("description: r.description,"));
+  check("N5 /timeline shows it under the record, escaped", SRC.includes("return note ? '<div class=\"tl-meta tl-note\">Note added ' + escapeHtmlTL(note.added) + ': ' + escapeHtmlTL(note.text) + '</div>' : '';"));
+  check("N6 nothing writes a note into the store", !/UPDATE incidents SET description/.test(SRC));
+}
+
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
 if (failed) process.exit(1);

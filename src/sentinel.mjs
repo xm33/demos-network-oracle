@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { sentinelStatePath } from "./sentinel-state.mjs";
 
 const HEALTH_URL = process.env.SENTINEL_HEALTH_URL || "http://127.0.0.1:55225";
 // Fleet history is served only on the agent's loopback internal listener (INTERNAL_PORT); the public port answers 404.
@@ -10,7 +11,9 @@ if (!HISTORY_URL) {
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
-const DEDUP_FILE = "/tmp/sentinel-dedup.json";
+// In the agent's log directory, where the agent's /sentinel route reads it (sentinel-state.mjs). Not in /tmp: the agent's
+// service has a private /tmp.
+const DEDUP_FILE = sentinelStatePath(process.env.LOG_DIR);
 const DEDUP_TTL_MS = 60 * 60 * 1000;
 const BLOCK_STALL_CYCLES = 3;
 const LAG_THRESHOLD = 10;
@@ -26,7 +29,12 @@ function loadDedup() {
   return {};
 }
 
-function saveDedup(d) { try { writeFileSync(DEDUP_FILE, JSON.stringify(d)); } catch(e) {} }
+// A write that fails is said once: /sentinel then answers "unknown", and this line is why.
+var saveFailed = false;
+function saveDedup(d) {
+  try { writeFileSync(DEDUP_FILE, JSON.stringify(d)); saveFailed = false; }
+  catch(e) { if (!saveFailed) log("state file not written (" + (e && e.code ? e.code : "error") + "): /sentinel will answer unknown until it is"); saveFailed = true; }
+}
 
 function shouldAlert(key) {
   var dedup = loadDedup();

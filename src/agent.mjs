@@ -38,6 +38,7 @@ import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
 import { RULE, assess, stepConditionRecords, clockReadings } from "./status-rule.mjs";
 import { createCandidateStore, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
+import { sentinelStatePath } from "./sentinel-state.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -210,6 +211,17 @@ var TIMELINE_STORE_DATED_RELEASES = [
   { api: "1.2", type: "contract", text: "API 1.2 and methodology v1.2 served from this day: when fewer than two public seeds give their own height, validators that answer as listed stand in for the missing seed, and /organism says so in witnesses; status reads degraded after 30 minutes without a new height; a seed catching up is no longer counted as a new height." }
 ];
 var apiFirstStarts = {};   // api version -> ms, as kept in the store
+// Dated notes on stored records. A record is never edited: where it is shown, the note is added beside it. A note is
+// keyed by the record's id and its start time, so it attaches to that one record of this store and to no other record
+// that another store numbered the same.
+var INCIDENT_NOTES = [
+  { id: "INC-1349", startedAt: "2026-10-01T20:07:58.199Z", added: "2026-10-03",
+    text: "The cause was in DNO, not in the seeds. After a restart of DNO at about 20:07 UTC its own reads of the public seeds failed inside DNO until it was rolled back; the same reads made outside the agent were answered. This record says nothing about the seeds or the network. The fault was fixed in the release served from 2026-10-02." }
+];
+function incidentNote(id, startedAt) {
+  for (var i = 0; i < INCIDENT_NOTES.length; i++) if (INCIDENT_NOTES[i].id === id && INCIDENT_NOTES[i].startedAt === startedAt) return { added: INCIDENT_NOTES[i].added, text: INCIDENT_NOTES[i].text };
+  return null;
+}
 function loadApiFirstStart(db, nowMs) {
   db.run("CREATE TABLE IF NOT EXISTS dno_meta (key TEXT PRIMARY KEY, value TEXT)");
   var out = {};
@@ -1182,7 +1194,9 @@ function renderTimelinePage() {
       else dur = Math.floor(secs/60) + "m";
       var affectedTL = null; try { affectedTL = JSON.parse(r.affected_nodes); } catch (eTL) { affectedTL = null; }
       var isCond = isPublicConditionMarker({ affectedNodes: affectedTL });
-      items += '<div class="tl-item sev-' + sev + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + (isCond ? "condition record" : sev) + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div></div></div>';
+      items += '<div class="tl-item sev-' + sev + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + (isCond ? "condition record" : sev) + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div>'
+        + (function() { var note = incidentNote(r.id, r.started_at); return note ? '<div class="tl-meta tl-note">Note added ' + escapeHtmlTL(note.added) + ': ' + escapeHtmlTL(note.text) + '</div>' : ''; })()
+        + '</div></div>';
     } else {
       items += '<div class="tl-item sev-release"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + escapeHtmlTL(ev.kind) + '</span><div class="tl-text">' + escapeHtmlTL(ev.text) + '</div></div></div>';
     }
@@ -2441,9 +2455,12 @@ async function probeFixnetNodes() {
 
 // Crawl the anchor's peerlist for unknown fixnet validators.
 // Called each cycle from probeFixnetNodes() after successful anchor probe.
-// Inserts/upserts into fixnet_validator_discoveries table.
+// Inserts/upserts into fixnet_validator_discoveries table. An identity the public seeds' peerlists list is not a
+// fixnet endpoint and is not kept (publicListedIdentities).
 function discoverFixnetValidators(anchorInfoData) {
   if (!anchorInfoData || !anchorInfoData.peerlist || !sharedDb) return 0;
+  var publicListed = publicListedIdentities();
+  if (!publicListed) return 0;   // no public peerlist read yet: nothing is kept
   var added = 0;
   var now = Date.now();
   for (var i = 0; i < anchorInfoData.peerlist.length; i++) {
@@ -2451,9 +2468,10 @@ function discoverFixnetValidators(anchorInfoData) {
     var identity = peer && peer.identity;
     if (!isValidIdentity(identity)) continue;
 
-    // Skip known identities (monitored testnet seeds and the configured fixnet/fleet nodes)
+    // Skip known identities (monitored testnet seeds and the configured fixnet/fleet nodes), and every identity a
+    // public peerlist lists
     identity = identity.toLowerCase();
-    if (isExcludedFromDiscovered(identity) || FIXNET_IDENTITIES[identity]) continue;
+    if (isExcludedFromDiscovered(identity) || FIXNET_IDENTITIES[identity] || publicListed.has(identity)) continue;
 
     var connection = peer.connection && peer.connection.string ? peer.connection.string : null;
     var block = sanitizeHeight(peer.sync && peer.sync.block);
@@ -2500,6 +2518,18 @@ async function probeDiscoveredFixnetNodes() {
     return [];
   }
   if (!rows || rows.length === 0) return [];
+  // Rows a public peerlist lists are public-testnet identities: they are removed, not dialed and not shown. Before this
+  // process has read a public peerlist it cannot tell, so nothing is dialed or shown yet.
+  var publicListed = publicListedIdentities();
+  if (!publicListed) return [];
+  var removed = 0;
+  rows = rows.filter(function(r) {
+    if (!publicListed.has(String(r.identity).toLowerCase())) return true;
+    try { sharedDb.run("DELETE FROM fixnet_validator_discoveries WHERE identity = ?", [r.identity]); removed++; } catch (e) {}
+    return false;
+  });
+  if (removed > 0) log("  [fixnet-discovery] removed " + removed + " row(s) that the public peerlists list");
+  if (rows.length === 0) return [];
 
   // Which ones are due for a probe?
   var due = rows.filter(function(r) {
@@ -2764,6 +2794,23 @@ var catalogCountStarted = null;           // when DNO first counted an identity 
 const CATALOG_SOURCES_MAX = 64;
 var catalogSourceReadAt = new Map();
 var catalogLatest = { completedAt: null, peerlistsRead: 0, listedCount: 0 };
+// Every identity the latest public crawl listed (kept or not), and whether this process has read a public peerlist yet.
+var latestPublicListed = new Set();
+var publicPeerlistRead = false;
+// The identities the public seeds' peerlists list: in the latest crawl, waiting for a second peerlist, or retained in
+// the catalog. They are public-testnet identities. The fixnet probe neither keeps nor dials one, whatever peerlist of
+// the operator's own nodes shows it: a node of the operator's that is on the public testnet has the public peerlist.
+// null until this process has read a public peerlist: before that DNO cannot tell them apart, and the fixnet probe
+// keeps and dials nothing.
+function publicListedIdentities() {
+  if (!publicPeerlistRead) return null;
+  var set = new Set(latestPublicListed);
+  catalogPending.forEach(function(v, k) { set.add(String(k).toLowerCase()); });
+  if (sharedDb) {
+    try { sharedDb.query("SELECT identity FROM validator_discoveries WHERE public_listed_since IS NOT NULL").all().forEach(function(r) { set.add(String(r.identity).toLowerCase()); }); } catch (e) {}
+  }
+  return set;
+}
 
 function catalogBeginCrawl() {
   catalogCrawl = { peerlistsRead: 0, listed: {}, sources: {} };
@@ -2803,6 +2850,8 @@ function catalogFinishCrawl(results, observedAt) {
   catalogCrawl = null;
   if (!crawl) return;
   var ids = Object.keys(crawl.listed);
+  latestPublicListed = new Set(ids);
+  if (crawl.peerlistsRead > 0) publicPeerlistRead = true;
   // known: every stored row. A row is public once public_listed_since is set, and that is its first-counted time (a
   // row this version inserts gets the same time in first_seen). Rows an older agent recorded (public_listed_since
   // NULL) go through the two-peerlist rule like new identities.
@@ -3361,7 +3410,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           if (incScope !== "all" && rowScope !== incScope) continue;
           var alerts;
           try { alerts = JSON.parse(r.alerts || "[]"); } catch (ae) { alerts = []; }
-          incResults.push({
+          var incRow = {
             id: r.id, status: r.status, severity: r.severity, scope: rowScope,
             kind: isPublicConditionMarker({ affectedNodes: nodes }) ? "condition" : "incident",
             startedAt: r.started_at, resolvedAt: r.resolved_at,
@@ -3370,7 +3419,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
             description: r.description,
             detectedBlock: r.detected_block, resolvedBlock: r.resolved_block,
             alerts: alerts
-          });
+          };
+          // A dated note DNO added later, when there is one (additive in 1.2). The stored record is as it was written.
+          var incNote = incidentNote(r.id, r.started_at);
+          if (incNote) incRow.note = incNote;
+          incResults.push(incRow);
         }
         var matched = incResults.length;
         incResults = incResults.slice(0, incLimit);
@@ -3683,9 +3736,10 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(bSvg);
     } else if (reqPath === "/sentinel") {
       // Counts only on the public listener: alert keys name fleet nodes. Unknown when the sentinel file is unreadable.
+      // The file is in the log directory (sentinel-state.mjs): this service's /tmp is private, the sentinel's is not.
       var sentinelData = { status: "unknown", last_check: null, alerts_24h: null };
       try {
-        var dedup = JSON.parse(readFileSync("/tmp/sentinel-dedup.json", "utf8"));
+        var dedup = JSON.parse(readFileSync(sentinelStatePath(LOG_DIR), "utf8"));
         var sNow = Date.now();
         var recentKeys = Object.keys(dedup).filter(function(k) { return k.charAt(0) !== "_" && typeof dedup[k] === "number" && sNow - dedup[k] < 86400000; });
         // "ok" only when the sentinel completed a check in the last 15 minutes (it polls every 5); otherwise unknown.
