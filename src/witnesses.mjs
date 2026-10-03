@@ -75,27 +75,26 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise(function(resolve) { timer = setTimeout(function() { resolve(null); }, ms); })]).finally(function() { clearTimeout(timer); });
 }
 
-// Read the candidates once, all at the same time. Resolves, never throws: one row per candidate read,
-// { key, asListed, height, error }. asListed: the answer named the listed key. height: that key's own height from its
-// own peerlist entry, or null. error: why there was no answer, as a category (never runtime text or a host), else null;
-// "internal error" is a fault in DNO's own read, which the pre-restart check looks for.
+// Read the candidates once, all at the same time. Resolves, never throws: the lookup's failure is caught here, and
+// readSeedInfo turns every failure into a category. One row per candidate read: { key, asListed, height, error }.
+// asListed: the answer named the listed key. height: that key's own height from its own peerlist entry, or null.
+// error: why there was no answer, as a category (never runtime text or a host), else null; "internal error" is a
+// fault in DNO's own read (readSeedInfo's category), which the pre-restart check looks for.
 // opts: { resolveOrigin, fetch, timeoutMs, lookupTimeoutMs, maxBytes }.
 export async function readWitnesses(candidates, opts) {
   var o = Object.assign({ resolveOrigin: resolvePublicProbeOrigin, timeoutMs: SEED_INFO_TIMEOUT_MS, lookupTimeoutMs: WITNESS_LOOKUP_TIMEOUT_MS, maxBytes: SEED_INFO_MAX_BYTES }, opts);
   return Promise.all(cleanCandidates(candidates).map(async function(c) {
     var row = { key: c.key, asListed: false, height: null, error: null };
-    try {
-      // The address is checked again at every read: it must still be a public http origin, and the read goes to the
-      // address that was checked.
-      var origin = await withTimeout(Promise.resolve().then(function() { return o.resolveOrigin(c.url); }).catch(function() { return null; }), o.lookupTimeoutMs);
-      if (!origin) { row.error = "address not resolved to a public http origin"; return row; }
-      var r = await readSeedInfo({ url: origin, identity: "0x" + c.key }, { timeoutMs: o.timeoutMs, maxBytes: o.maxBytes, fetch: o.fetch });
-      if (!r.ok) row.error = r.error;
-      else if (r.identityMatch === true) {
-        row.asListed = true;
-        if (r.height_source === "self") row.height = r.block;
-      }
-    } catch (e) { row.error = "internal error"; }   // readSeedInfo never throws: anything caught here is DNO's own fault
+    // The address is checked again at every read: it must still be a public http origin, and the read goes to the
+    // address that was checked.
+    var origin = await withTimeout(Promise.resolve().then(function() { return o.resolveOrigin(c.url); }).catch(function() { return null; }), o.lookupTimeoutMs);
+    if (!origin) { row.error = "address not resolved to a public http origin"; return row; }
+    var r = await readSeedInfo({ url: origin, identity: "0x" + c.key }, { timeoutMs: o.timeoutMs, maxBytes: o.maxBytes, fetch: o.fetch });
+    if (!r.ok) row.error = r.error;
+    else if (r.identityMatch === true) {
+      row.asListed = true;
+      if (r.height_source === "self") row.height = r.block;
+    }
     return row;
   }));
 }

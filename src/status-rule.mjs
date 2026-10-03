@@ -89,14 +89,13 @@ export function selectWitnesses(input) {
 
 // The readings the standstill clock follows; each is { id, h }. While a seed gives its own height the clock follows
 // the seeds alone, so a validator can neither start it nor stop it. With no seed height it follows the validators
-// counted in the reading, and nothing when they form none.
+// counted in the reading; when they form no reading none is counted, and the clock follows nothing.
 export function clockReadings(seedReadings, validatorReadings) {
   var ok = function(r) { return !!r && isHeight(r.h); };
   var seeds = (Array.isArray(seedReadings) ? seedReadings : []).filter(ok);
   if (seeds.length || !Array.isArray(validatorReadings)) return seeds;
   var vals = validatorReadings.filter(ok);
   var w = selectWitnesses({ seedHeights: [], validatorHeights: vals.map(function(r) { return r.h; }) });
-  if (w.mode !== "validators_only") return [];
   return vals.filter(function(r) { return w.counted.indexOf(r.h) !== -1; });
 }
 

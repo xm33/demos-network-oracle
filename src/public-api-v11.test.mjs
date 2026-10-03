@@ -116,6 +116,15 @@ const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
+// The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.
+const SCHEMA = JSON.parse(readFileSync(join(ROOT, "organism.schema.json"), "utf8"));
+const apiVersion = (SRC.match(/var API_VERSION = "([0-9.]+)";/) || [])[1];
+const changelog = Array.isArray(SCHEMA["x-changelog"]) ? SCHEMA["x-changelog"].map((e) => String(e.version)) : [];
+check("H27 the agent's API version is 1.2, the newest entry of the schema's changelog", apiVersion === "1.2" && changelog.length > 0 && changelog.every((v) => v <= apiVersion) && changelog.includes(apiVersion), apiVersion + " | " + changelog.join(","));
+// Every endpoint /docs lists has a route (up to 7.1.1 it listed GET /signals, which answered 404).
+const docsPaths = [...SRC.matchAll(/docsEntry\('GET (\/[^' ?]*)/g)].map((m) => m[1]);
+const noRoute = docsPaths.filter((p) => !SRC.includes('reqPath === "' + p + '"') && !SRC.includes('reqPath.startsWith("' + p + '")'));
+check("H28 every endpoint /docs lists has a route in the agent", docsPaths.length >= 15 && noRoute.length === 0, docsPaths.length + " listed; no route: " + noRoute.join(", "));
 if (STATIC_ONLY) {
   console.log("\n[" + TAG + "] served checks skipped (--static)");
   console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

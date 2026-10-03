@@ -173,7 +173,7 @@ console.log("\n[" + TAG + "] the sources");
   const imports = [...SRC.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1]).sort().join();
   check("A1 witnesses.mjs reads only through readSeedInfo: no fetch, no capped read of its own", /await readSeedInfo\(\{ url: origin, identity: "0x" \+ c\.key \}/.test(SRC) && !/cappedJson|nativeFetch|readJsonCapped|\bfetch\(/.test(SRC)
     && imports === "./public-safety.mjs,./seed-read.mjs,./status-rule.mjs", imports);
-  check("A2 a witness counts only when the answer named the listed key, and its height only from its own entry", SRC.includes("if (!r.ok) row.error = r.error;\n      else if (r.identityMatch === true) {") && SRC.includes('if (r.height_source === "self") row.height = r.block;') && (SRC.match(/row\.asListed = true;/g) || []).length === 1 && (SRC.match(/row\.height = /g) || []).length === 1);
+  check("A2 a witness counts only when the answer named the listed key, and its height only from its own entry", SRC.includes("if (!r.ok) row.error = r.error;\n    else if (r.identityMatch === true) {") && SRC.includes('if (r.height_source === "self") row.height = r.block;') && (SRC.match(/row\.asListed = true;/g) || []).length === 1 && (SRC.match(/row\.height = /g) || []).length === 1);
   check("A3 nothing from a witness read reaches the catalog or the observation tables", !/catalog|discoveredPeers|node_observations|peerlist:/.test(SRC.replace(/^\/\/.*$/gm, "")));
   const fn = AGENT.slice(AGENT.indexOf("async function readRoundWitnesses("), AGENT.indexOf("\n}\n", AGENT.indexOf("async function readRoundWitnesses(")));
   check("A4 the agent reads witnesses only when the dials are on, fewer than two seeds gave their own height, and candidates are kept",
