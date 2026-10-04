@@ -11,9 +11,13 @@
 //      (seed_and_validators), or such validators alone (validators_only), and the seed rows show the same
 //   3. no seed read ended in an internal error (a fault in DNO's own read: the failure of 2026-10-01 was one)
 // The on-chain validators list is reported on its own line. Two seeds are what agrees a list: while fewer than two
-// answer, a list that is not agreed is expected, the agent keeps its witness candidates for 24 h, and the check does not
-// wait for it. With two seeds answering, a list that is not agreed makes the page say "not reported this cycle", and is
-// no reason to roll back.
+// are asked for it (a seed that answered with another key than the configured one is not asked), a list that is not
+// agreed is expected, the agent keeps a witness candidate for 24 h after its last answer, and the check does not wait
+// for it. With two seeds asked, a list that is not agreed makes the page say "not reported this cycle", and is no
+// reason to roll back.
+// A reading that rests on validators alone, with no seed height, is said apart and is not a pass: the seeds are read
+// by name through the runtime's fetch and the validators at an address literal, so a fault in DNO's own seed read looks
+// exactly like every seed being down. The failure of 2026-10-01 was such a fault.
 // "Roll back" is said of an agent that never read during this check (the failure of 2026-10-01 never read), that never
 // answered for the whole wait, or that did not stay up: after a poll that answered, its port refused a connection or its
 // observation went back to none or to an earlier one. An observation only moves forward within one process, so that is
@@ -24,12 +28,17 @@
 //
 // Run:  bun tools/post-restart-check.mjs [base-url] [--wait seconds]     (default http://127.0.0.1:55225, 180 s)
 //       On the host that runs the agent: the age of an observation is measured on this machine's clock.
-// Exit: 0 "AGENT IS READING", and the validator list is agreed or fewer than two seeds answer
-//       5 "AGENT IS READING", two seeds answer and the validator list is not agreed (not a rollback; run it again)
+// Exit: 0 "AGENT IS READING", a seed's own height is in the reading, and the validator list is agreed or fewer than
+//         two seeds are asked for it
+//       8 "AGENT IS READING WITHOUT A SEED": validators alone; seeds down and a fault in DNO's seed read look the same
+//         (not a pass and not by itself a rollback: see whether the seeds answer another client)
+//       5 "AGENT IS READING", two seeds are asked and the validator list is not agreed (not a rollback; run it again)
 //       7 it read during this check and its latest observation is not enough (not a rollback; run it again)
-//       3 "AGENT IS NOT READING", or it did not stay up (roll back, when the wait was long enough for a start)
+//       3 "AGENT IS NOT READING" (roll back, when the wait was long enough for a start), or it did not stay up
+//         during this check (roll back, whatever the wait: it answered and then stopped or started again)
 //       4 /health was never read (roll back, when the wait was long enough for a start)
 //       6 an older version is answering: this check is for the version that publishes witnesses (API 1.2)
+//       64 the arguments could not be read
 
 import { seedsSufficient } from "../src/seed-read.mjs";
 
@@ -46,7 +55,8 @@ const CLOCK_SLACK_MS = 5000;                    // an observation dated further 
 
 // What /health says. h: the parsed /health body; now: ms.
 // { older, reading, mode, problems, listAgreed, listExpected, listLine, lines, observedAt }: problems are the reasons it is
-// not reading; listExpected is false while fewer than two seeds answer (no list can be agreed then); observedAt is the
+// not reading; listExpected is false while fewer than two seeds are asked for the list (no list can be agreed then: a
+// seed that did not answer, or answered with another key than the configured one, is not asked); observedAt is the
 // observation's time in ms, or null.
 export function healthVerdict(h, now) {
   const nodes = Array.isArray(h && h.publicNodes) ? h.publicNodes : [];
@@ -80,7 +90,7 @@ export function healthVerdict(h, now) {
   lines.push(`  data quality: ${dq || "not reported"}${why ? ` (${why})` : ""} · status: ${(h && h.status) || "not reported"}`);
   if (dq !== "sufficient" && problems.length === 0) problems.push(`data quality is ${dq || "not reported"}`);
   const listAgreed = !!oc && oc.state === "agreed";
-  const listExpected = s.answered >= 2;
+  const listExpected = nodes.filter((n) => n && n.ok && n.identityMatch !== false).length >= 2;
   const listLine = !oc ? "  validators list: not reported by this server"
     : listAgreed ? `  validators list: agreed by ${oc.seeds_agreed} of ${oc.seeds_configured} seeds · ${oc.active} ACTIVE` : `  validators list: ${oc.state}${oc.reason ? ` (${oc.reason})` : ""}`;
   lines.push(listLine);
@@ -144,8 +154,12 @@ export async function run(args, io = {}) {
     log(`AGENT IS NOT READING after ${waited} s: ${why}. Roll back.`);
     return 3;
   }
+  if (last.mode === "validators_only") {
+    log(`AGENT IS READING WITHOUT A SEED: ${readingWords(last)}. This check cannot tell seeds that are down from a fault in DNO's own seed read (the failure of 1 Oct was one). If the seeds answer another client from this host, DNO's read is at fault: roll back. If they do not, this is the outage the validators stand in for.`);
+    return 8;
+  }
   if (last.listAgreed) { log(`AGENT IS READING: ${readingWords(last)}. The validator list is agreed.`); return 0; }
-  if (!last.listExpected) { log(`AGENT IS READING: ${readingWords(last)}. No validator list is agreed while fewer than two seeds answer; the agent keeps its witness candidates for 24 h.`); return 0; }
+  if (!last.listExpected) { log(`AGENT IS READING: ${readingWords(last)}. No validator list is agreed while fewer than two seeds are asked for it; the agent keeps a witness candidate for 24 h after its last answer.`); return 0; }
   log(`AGENT IS READING: ${readingWords(last)}.`);
   log(`THE VALIDATOR LIST IS NOT AGREED after ${waited} s. It is no reason to roll back: the page says "not reported this cycle", and the agent keeps the witness candidates it has. Run this again in a minute; if it stays, send this output.`);
   return 5;

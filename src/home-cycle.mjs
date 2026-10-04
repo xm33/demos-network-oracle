@@ -76,11 +76,12 @@ export function seedsParts(r, active) {
       } else p.heights = "Height agreement is " + st + ".";
     }
   }
-  // A stale observation's figures are as old as the observation: the height is not said to be still.
+  // A stale observation's figures are as old as the observation: nothing is said about new heights then. "No new
+  // height", not "the height has not moved": below the highest height read, a height DNO reads can rise without being new.
   // From the standstill limit on (1.2) a reading that would be stable reads degraded: the line says so.
   if (dq !== "stale" && isNum(r.height_static_seconds) && r.height_static_seconds >= 300) {
     var limit = isNum(r.height_standstill_after_seconds) && r.height_standstill_after_seconds > 0 ? r.height_standstill_after_seconds : null;
-    p.stall = "The height has not moved for " + Math.floor(r.height_static_seconds / 60) + " min"
+    p.stall = "No new height for " + Math.floor(r.height_static_seconds / 60) + " min"
       + (limit !== null && compared && r.height_static_seconds >= limit ? "; from " + Math.floor(limit / 60) + " min on, status does not read stable." : ".");
   }
   if (isNum(r.active_incidents) && r.active_incidents > 0) p.incidents = r.active_incidents + " active public incident" + (r.active_incidents === 1 ? "" : "s") + ".";

@@ -21,8 +21,10 @@
 //
 // Run:  bun tools/pre-restart-check.mjs            (in the agent's checkout: it needs node_modules and src/)
 // Exit: 0 "AGENT READS OK"; 3 or 2 "AGENT READS FAILED" (do not restart; 2: only an unexpected answer shape). FAILED
-//       when the rule gives no reading, when a read ended in an internal error, or when two seeds answered and no
-//       validator list was agreed;
+//       when the rule gives no reading, when a read ended in an internal error, or when two seeds were asked for the
+//       validator list and none was agreed;
+//       4 "AGENT READS GIVE A READING WITHOUT A SEED": validators alone stand in. Seeds that are down and a fault in
+//       DNO's own seed read look the same from here, so this is not a pass and nothing restarts on it by itself;
 //       64 the check could not run: no SDK here, or the seeds configured in src/agent.mjs could not be read from it.
 
 const before = globalThis.fetch;
@@ -40,4 +42,5 @@ if (!seedsGiven) { try { rpcs = (await import("../src/fleet.config.mjs")).FLEET_
 const { dialsEnabled } = await import("../src/validator-watch.mjs");
 const dials = dialsEnabled(process.env.VALIDATOR_WATCH_DIALS);
 // With the seeds given as arguments the agent's store in this folder is not read either: no kept candidates.
-process.exit(await run([...(dials ? ["--dial"] : []), ...process.argv.slice(2)], Object.assign({ agentReads: true, sdkReplaced, rpcs }, seedsGiven ? { kept: null } : {})));
+// --dial given by hand is ignored: the switch decides, as it does in the agent.
+process.exit(await run([...(dials ? ["--dial"] : []), ...process.argv.slice(2).filter((a) => a !== "--dial")], Object.assign({ agentReads: true, sdkReplaced, rpcs }, seedsGiven ? { kept: null } : {})));

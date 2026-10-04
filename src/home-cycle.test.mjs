@@ -38,7 +38,7 @@ const calmR = { publicNodes: seeds(true, true, false), agreement: ag("strong", 2
 eq("C5 the calm reading: the advisor's line exactly", cycleSeeds(calmR, 35), "2 of 3 configured seeds answered. Their heights align. Status is those seeds, not the 35.");
 eq("C6 a height that has not moved for 5 min or more is said, in whole minutes",
   cycleSeeds({ ...calmR, publicNodes: seeds(true, true, true), agreement: ag("strong", 3, 3, 4), height_static_seconds: 12 * 60 + 5 }, 35),
-  "3 of 3 configured seeds answered. Their heights align. The height has not moved for 12 min. Status is those seeds, not the 35.");
+  "3 of 3 configured seeds answered. Their heights align. No new height for 12 min. Status is those seeds, not the 35.");
 eq("C7 three answered, two gave their own height: only those two are said to align",
   cycleSeeds({ ...calmR, publicNodes: seeds(true, true, true), agreement: ag("strong", 2, 2, 0) }, 35),
   "3 of 3 configured seeds answered; 2 gave their own height. Those heights align. Status is those seeds, not the 35.");
@@ -116,9 +116,9 @@ eq("C36 /organism's fields only (no seed rows): the seeds' own count comes from 
   cycleSeeds({ agreement: "strong", witnesses: wit("seed_and_validators", 1, val(2)) }, null), "1 configured seed gave its own height. 2 validators that answer as listed are within 25 blocks of it. Status is that seed and those validators.");
 eq("C37 the same with no seed height", cycleSeeds({ agreement: "strong", witnesses: wit("validators_only", 0, val(2)) }, null), "No configured seed gave its own height. 2 validators that answer as listed report heights that align. Status is those validators alone.");
 const still = { ...calmR, height_static_seconds: 1860, height_standstill_after_seconds: 1800 };
-eq("C38 31 minutes without a new height: the line says that status no longer reads stable", cycleSeeds(still, 35), "2 of 3 configured seeds answered. Their heights align. The height has not moved for 31 min; from 30 min on, status does not read stable. Status is those seeds, not the 35.");
-check("C39 one second under the limit, or no limit published (API 1.1), or nothing compared: the plain sentence", cycleSeeds({ ...still, height_static_seconds: 1799 }, 35).includes("The height has not moved for 29 min. Status")
-  && cycleSeeds({ ...still, height_standstill_after_seconds: undefined }, 35).includes("The height has not moved for 31 min. Status") && cycleSeeds({ ...none1, height_static_seconds: 4000, height_standstill_after_seconds: 1800 }, null).includes("The height has not moved for 66 min. Status"));
+eq("C38 31 minutes without a new height: the line says that status no longer reads stable", cycleSeeds(still, 35), "2 of 3 configured seeds answered. Their heights align. No new height for 31 min; from 30 min on, status does not read stable. Status is those seeds, not the 35.");
+check("C39 one second under the limit, or no limit published (API 1.1), or nothing compared: the plain sentence", cycleSeeds({ ...still, height_static_seconds: 1799 }, 35).includes("No new height for 29 min. Status")
+  && cycleSeeds({ ...still, height_standstill_after_seconds: undefined }, 35).includes("No new height for 31 min. Status") && cycleSeeds({ ...none1, height_static_seconds: 4000, height_standstill_after_seconds: 1800 }, null).includes("No new height for 66 min. Status"));
 eq("C40 the readbar in a reading that rests on validators", readbarText({ ...oneSeed, active_incidents: 1 }), "1 active public incident. 1 of 3 configured seeds answered. 2 validators that answer as listed are within 25 blocks of it.");
 check("C41 a mode named without its validators is not taken on its word: the line stays the seeds'", cycleSeeds({ ...calmR, witnesses: { mode: "validators_only", public_seeds: { own_height: 2 }, validators: null } }, 35) === cycleSeeds(calmR, 35)
   && cycleSeeds({ ...calmR, witnesses: { mode: "seed_and_validators", validators: { counted: 0 } } }, 35) === cycleSeeds(calmR, 35));
@@ -126,7 +126,7 @@ check("C41 a mode named without its validators is not taken on its word: the lin
 console.log("\n[" + TAG + "] the readbar, the door, numbers and words");
 eq("C18 the readbar: what moves status first, never the status clause",
   readbarText({ ...calmR, publicNodes: seeds(true, true, true), agreement: ag("strong", 3, 3, 0), active_incidents: 1, height_static_seconds: 400 }),
-  "1 active public incident. 3 of 3 configured seeds answered. Their heights align. The height has not moved for 6 min.");
+  "1 active public incident. 3 of 3 configured seeds answered. Their heights align. No new height for 6 min.");
 eq("C18b the calm readbar is the card's first two sentences", readbarText(calmR), "2 of 3 configured seeds answered. Their heights align.");
 check("C19 the peer-listed count, or nothing when it is not known", cycleDoor(46) === "46 peer-listed" && cycleDoor(null) === null && cycleDoor(undefined) === null);
 check("C20 numbers are grouped the same way as on the page (en-US)", cycleLead({ state: "agreed", active: 1234, seeds_agreed: 2 }) === "1,234 ACTIVE on chain as two public seeds list them."

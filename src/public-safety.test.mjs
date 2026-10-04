@@ -86,7 +86,9 @@ check("B5 a small gzip body parses", (await readJsonCapped(new Response(gzipSync
 check("B6 a body the runtime already decoded still parses", (await readJsonCapped(new Response(' {"c":3}', { headers: { "content-encoding": "gzip" } }), 1024)).c === 3);
 const deep = await errOf(readJsonCapped(new Response("[".repeat(200000) + "]".repeat(200000)), 1024 * 1024));
 check("B7 a deeply nested body is an invalid response, not a large one", deep === null || probeErrorCategory(deep) === "invalid response", deep && deep.name);
-check("B8 capped fetches ask for identity encoding and no runtime decompression", CAPPED_FETCH_OPTIONS.decompress === false && CAPPED_FETCH_OPTIONS.headers["Accept-Encoding"] === "identity");
+check("B8 capped fetches ask for identity encoding, no runtime decompression and no kept connection (the option and the header), and the options cannot be changed",
+  CAPPED_FETCH_OPTIONS.decompress === false && CAPPED_FETCH_OPTIONS.keepalive === false && CAPPED_FETCH_OPTIONS.headers["Accept-Encoding"] === "identity" && CAPPED_FETCH_OPTIONS.headers["Connection"] === "close"
+  && Object.isFrozen(CAPPED_FETCH_OPTIONS) && Object.isFrozen(CAPPED_FETCH_OPTIONS.headers));
 let inFlight = 0, maxInFlight = 0;
 await mapWithConcurrency([...Array(20).keys()], 4, async () => { inFlight++; maxInFlight = Math.max(maxInFlight, inFlight); await new Promise((r) => setTimeout(r, 5)); inFlight--; });
 check("C1 concurrency is bounded", maxInFlight === 4, "max " + maxInFlight);

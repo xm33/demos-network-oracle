@@ -79,13 +79,23 @@ non2xx.stop(true);
   // What a capped request carries, whatever the caller passes: identity encoding, the caller's own headers, no redirect
   // followed, no automatic decompression.
   const seen = [];
-  const echo = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { seen.push({ ae: req.headers.get("accept-encoding"), ct: req.headers.get("content-type"), method: req.method }); return Response.json({ ok: 1 }); } });
+  const echo = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { seen.push({ ae: req.headers.get("accept-encoding"), ct: req.headers.get("content-type"), conn: req.headers.get("connection"), method: req.method }); return Response.json({ ok: 1 }); } });
   const e = "http://127.0.0.1:" + echo.port + "/";
   await attempt(() => cappedJson(e, { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } }, { timeoutMs: 3000 }));
   await attempt(() => cappedJson(e, { headers: { "Accept-Encoding": "gzip, br" }, redirect: "follow", decompress: true }, { timeoutMs: 3000 }));
-  await attempt(() => cappedJson(e, { headers: { "accept-encoding": "gzip" }, signal: AbortSignal.abort() }, { timeoutMs: 3000 }));
-  check("R5b the caller's headers are sent, and identity encoding is kept even when the caller names another, in any letter case; a caller's signal is not used",
-    seen.length === 3 && seen[0].method === "POST" && seen[0].ct === "application/json" && seen[0].ae === "identity" && seen[1].ae === "identity" && seen[2].ae === "identity", JSON.stringify(seen));
+  await attempt(() => cappedJson(e, { headers: { "accept-encoding": "gzip", "connection": "keep-alive" }, keepalive: true, signal: AbortSignal.abort() }, { timeoutMs: 3000 }));
+  check("R5b the caller's headers are sent, and identity encoding and Connection: close are kept even when the caller names others, in any letter case; a caller's signal is not used",
+    seen.length === 3 && seen[0].method === "POST" && seen[0].ct === "application/json" && seen.every((x) => x.ae === "identity" && x.conn === "close"), JSON.stringify(seen));
+  // What the runtime's fetch is handed, whatever the caller passes (a recording fetch in its place): each fixed option
+  // on its own, since the runtime reads the Connection header before the keepalive option and one hides the other.
+  const handed = [], mine = AbortSignal.abort();
+  const recording = async (u, init) => { handed.push(init); return Response.json({ ok: 1 }); };
+  await attempt(() => cappedJson(e, { keepalive: true, decompress: true, redirect: "follow", signal: mine, headers: { CONNECTION: "keep-alive", "ACCEPT-ENCODING": "br" } }, { timeoutMs: 3000, fetch: recording }));
+  await attempt(() => cappedJson(e, null, { timeoutMs: 3000, fetch: recording }));
+  check("R5e the request handed to the runtime: keepalive false, decompress false, redirect manual, this read's own signal, identity encoding and Connection: close, with or without a caller's init",
+    handed.length === 2 && handed.every((h) => h.keepalive === false && h.decompress === false && h.redirect === "manual" && h.signal instanceof AbortSignal && h.signal !== mine
+      && h.headers.get("accept-encoding") === "identity" && h.headers.get("connection") === "close"),
+    JSON.stringify(handed.map((h) => [h.keepalive, h.decompress, h.redirect, h.signal !== mine, h.headers.get("accept-encoding"), h.headers.get("connection")])));
   const target = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { seen.push("target"); return Response.json({ secret: 1 }); } });
   const hop = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response(null, { status: 301, headers: { Location: "http://127.0.0.1:" + target.port + "/" } }); } });
   const viaHop = await attempt(() => cappedJson("http://127.0.0.1:" + hop.port + "/", { redirect: "follow" }, { timeoutMs: 3000 }));
@@ -103,6 +113,7 @@ console.log("\n[" + TAG + "] a capped read stops receiving");
 // The peer itself stops at FLOOD_LIMIT and marks the run (capped): if a read here ever fails to stop receiving, this
 // suite must fail, not fill the memory of the host it runs on (it runs on the production host before a restart).
 const FLOOD_LIMIT = 64 * 1048576;
+const COMPLETE = JSON.stringify({ identity: KEY(7), peerlist: [{ identity: KEY(7), sync: { block: 7000 } }] });
 const floods = [];
 function flood(mode) {
   const st = { accepted: 0, closedAt: null, openedAt: null, capped: false };
@@ -114,7 +125,9 @@ function flood(mode) {
     c.on("error", over); c.on("close", over); c.on("end", over); c.on("data", () => {});
     c.once("data", () => {
       const chunk = Buffer.alloc(256 * 1024, 0x20);
-      if (mode === "declared") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 107374182400\r\n\r\n");
+      // "complete": a whole small answer (its length declared, the connection left open), and then the peer goes on sending.
+      if (mode === "complete") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + COMPLETE.length + "\r\n\r\n" + COMPLETE);
+      else if (mode === "declared") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 107374182400\r\n\r\n");
       else if (mode === "endless") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
       else if (mode === "chunked") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n");
       else c.write("HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n");
@@ -165,6 +178,26 @@ for (const [mode, want] of [["declared", "ResponseTooLarge"], ["endless", "Respo
   const took = Date.now() - t2;
   for (let i = 0; i < 30 && st.closedAt === null; i++) await sleep(50);
   check("R6d a body that stalls after the headers ends as TimeoutError at the timeout, and the connection is closed", stalled === "TimeoutError" && took >= 480 && took < 2500 && st.closedAt !== null, JSON.stringify({ stalled, took, closed: st.closedAt !== null }));
+}
+// A read that ended well leaves no connection behind either. The runtime keeps a connection for the next request to the
+// same address unless the request says otherwise, and goes on taking what the peer sends on it: a peer that answers a
+// whole small response and then keeps sending would fill DNO's memory after the read had returned its data.
+{
+  const f = await flood("complete"), t0 = Date.now();
+  const res = await attempt(() => cappedJson(f.url + "/info", null, { timeoutMs: 5000, maxBytes: 2 * MB }));
+  const took = Date.now() - t0;
+  for (let i = 0; i < 30 && f.st.closedAt === null; i++) await sleep(50);
+  const closedAfter = f.st.closedAt === null ? null : f.st.closedAt - t0;
+  check("R6f complete: the read returns the answer, and the connection is closed at once though the peer goes on sending (little was received)",
+    res.status === 200 && !!res.data && res.data.identity === KEY(7) && took < 2500 && closedAfter !== null && closedAfter < 1500 && !f.st.capped && f.st.accepted < 48 * MB,
+    JSON.stringify({ got: res.threw || res.status, took_ms: took, closed_after_ms: closedAfter, accepted_MB: Math.round(f.st.accepted / MB), peer_gave_up: f.st.capped }));
+  // And when the caller asks for a kept connection, it is still not kept.
+  const g = await flood("complete"), t1 = Date.now();
+  const res2 = await attempt(() => cappedJson(g.url + "/info", { keepalive: true, headers: { Connection: "keep-alive" } }, { timeoutMs: 5000, maxBytes: 2 * MB }));
+  for (let i = 0; i < 30 && g.st.closedAt === null; i++) await sleep(50);
+  check("R6g a caller that asks for a kept connection does not get one: the same answer, the same close",
+    res2.status === 200 && !!res2.data && g.st.closedAt !== null && g.st.closedAt - t1 < 1500 && !g.st.capped && g.st.accepted < 48 * MB,
+    JSON.stringify({ got: res2.threw || res2.status, closed_after_ms: g.st.closedAt === null ? null : g.st.closedAt - t1, accepted_MB: Math.round(g.st.accepted / MB), peer_gave_up: g.st.capped }));
 }
 // A finished read leaves no timer behind: a process that made one read with a 20 s timeout exits at once.
 {
@@ -262,6 +295,15 @@ else {
   check("R11c tools/pre-restart-check.mjs with VALIDATOR_WATCH_DIALS=0: the list only, no dials; never OK when no list is agreed; and with seeds given it reads no cross-check RPC of this host",
     preCode === 3 && preOut.includes("the Demos SDK was loaded first, as in the agent") && preOut.includes("2 of 2 seeds answered; 2 gave their own height.") && preOut.includes("Watch (one round: the list only, no dials)") && !/cross-check RPCs/.test(preOut)
     && /AGENT READS FAILED: no validator list was agreed by two seeds\. Do not restart on this\.\s*$/.test(preOut), "exit " + preCode + " | " + preOut.split("\n").slice(-4).join(" | "));
+  // --dial given by hand does not turn the dials back on: the switch decides, as it does in the agent.
+  const byHand = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "--dial", "seed-a=" + A.url, "--dial", "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "0" }, stdout: "pipe", stderr: "pipe" });
+  const byHandOut = await new Response(byHand.stdout).text(), byHandCode = await byHand.exited;
+  const withDials = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "1" }, stdout: "pipe", stderr: "pipe" });
+  const withDialsOut = await new Response(withDials.stdout).text(); await withDials.exited;
+  check("R11c2 --dial given by hand is ignored while the switch is off (the list only, no dials, the same verdict); with the switch on the same run dials",
+    byHandCode === 3 && byHandOut.includes("Watch (one round: the list only, no dials)") && !byHandOut.includes("with one dial per published origin") && byHandOut.split("\n").slice(-3).join("\n") === preOut.split("\n").slice(-3).join("\n")
+    && !withDialsOut.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(withDialsOut),
+    "exit " + byHandCode + " | " + byHandOut.split("\n").filter((l) => /^Watch/.test(l)).join(" | ") + " || " + withDialsOut.split("\n").filter((l) => /^Watch/.test(l)).join(" | "));
   // The check as the runbook runs it: no argument. The tool and its modules are copied next to a seed configuration
   // and a fleet config of this test's own, so the seeds come from src/agent.mjs and the cross-check RPC is read.
   const box = mkdtempSync(join(tmpdir(), "dno-pre-restart-"));

@@ -15,6 +15,13 @@ import { gunzipSync, inflateSync, brotliDecompressSync } from "node:zlib";
 // A Demos identity is 0x followed by 64 hex characters. Anything else from a peerlist is not stored.
 export const IDENTITY_RE = /^0x[0-9a-fA-F]{64}$/;
 export function isValidIdentity(id) { return typeof id === "string" && IDENTITY_RE.test(id); }
+// The comparison form of a key: trimmed, lower case, without a leading 0x. Used only to compare, never published. One
+// function for every "is this the listed key" question: the validator watch, the seed read and the witness read.
+export function keyOf(value) {
+  if (typeof value !== "string") return null;
+  var s = value.trim().toLowerCase().replace(/^0x/, "");
+  return /^[0-9a-z]{1,128}$/.test(s) ? s : null;
+}
 
 // Public form used on every surface: first 6 characters, an ellipsis, last 4 ("0xabcd…1234").
 export function truncIdentity(id) {
@@ -178,7 +185,10 @@ export const nativeFetch = typeof Bun !== "undefined" && typeof Bun.fetch === "f
 // applies) and parses with readJsonCapped(): at most maxBytes are read from the wire and at most maxBytes are produced
 // by decompression. Past the cap the error is named ResponseTooLarge; a peer streaming an endless or highly compressed
 // body cannot exhaust memory.
-export const CAPPED_FETCH_OPTIONS = Object.freeze({ decompress: false, headers: Object.freeze({ "Accept-Encoding": "identity" }) });
+// No kept connection: the connection is closed when the read ends. Kept open, it stays in the runtime's pool, and a peer
+// that goes on sending after a complete response is received for as long as it sends. The runtime decides this by the
+// request's Connection header when there is one, and by the keepalive option only when there is none, so both are fixed.
+export const CAPPED_FETCH_OPTIONS = Object.freeze({ decompress: false, keepalive: false, headers: Object.freeze({ "Accept-Encoding": "identity", "Connection": "close" }) });
 function responseTooLarge(maxBytes) { var e = new Error("response larger than " + maxBytes + " bytes"); e.name = "ResponseTooLarge"; return e; }
 // One capped read with the runtime's fetch, and the only way DNO makes one. Resolves to { status, ok, headersMs, data }:
 // data is the parsed JSON body when the status is read (2xx, or opts.read(status)), else undefined. It throws what the
@@ -195,12 +205,13 @@ export async function cappedJson(url, init, opts) {
   var maxBytes = Number.isFinite(o.maxBytes) && o.maxBytes > 0 ? o.maxBytes : CAPPED_DEFAULT_MAX_BYTES;
   var timer = setTimeout(function() { ctl.abort(new DOMException("The operation timed out.", "TimeoutError")); }, o.timeoutMs || 5000);
   try {
-    // The fixed options come last, so a caller's init cannot change them: no automatic decompression, no redirect, this
-    // read's own signal (a caller's signal is not used), and identity encoding whatever case the caller named it in.
+    // The fixed options come last, so a caller's init cannot change them: no automatic decompression, no redirect, no
+    // kept connection, this read's own signal (a caller's signal is not used), and identity encoding and a closed
+    // connection whatever case the caller named those headers in.
     var headers = new Headers((init && init.headers) || {});
     Object.keys(CAPPED_FETCH_OPTIONS.headers).forEach(function(k) { headers.set(k, CAPPED_FETCH_OPTIONS.headers[k]); });
     var resp = await (o.fetch || nativeFetch)(url, Object.assign({}, init || {}, {
-      decompress: CAPPED_FETCH_OPTIONS.decompress, redirect: "manual", signal: ctl.signal, headers: headers }));
+      decompress: CAPPED_FETCH_OPTIONS.decompress, keepalive: CAPPED_FETCH_OPTIONS.keepalive, redirect: "manual", signal: ctl.signal, headers: headers }));
     var out = { status: resp.status, ok: resp.ok, headersMs: Date.now() - started, data: undefined };
     if (o.read ? o.read(resp.status) : resp.ok) out.data = await readJsonCapped(resp, maxBytes);
     return out;

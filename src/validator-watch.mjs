@@ -12,9 +12,10 @@
 // key, answered without a key, or answered as the listed key; for the last, its own height against the seeds' median
 // (±25 blocks, the agreement band). "Every round, last hour" is kept in memory over counted rounds.
 //
-// Neither enters status while two public seeds give their own height. The rows answered as the listed key at the seeds'
-// height are the witness candidates (witnesses.mjs): the agent reads them in a public round where fewer than two seeds
-// gave a height, and status-rule.mjs says what those reads mean.
+// Neither enters status while two public seeds give their own height. A counted round reports which ACTIVE rows
+// answered as the listed key at the seeds' height (witnessFacts); witnesses.mjs keeps the witness candidates from
+// that, the agent reads them in a public round where fewer than two seeds gave a height, and status-rule.mjs says what
+// those reads mean.
 //
 // Published objects carry counts only: never an address, connection URL, host, per-row height, per-row outcome or stake.
 // Version groups are published only in a strict version shape and only when at least two validators share one.
@@ -25,7 +26,8 @@
 // Runtime tests: bun src/validator-watch.test.mjs
 
 import { isIP } from "node:net";
-import { sanitizeHeight, probeErrorCategory, mapWithConcurrency, cappedJson, parseProbeOrigin, nativeFetch } from "./public-safety.mjs";
+import { sanitizeHeight, probeErrorCategory, mapWithConcurrency, cappedJson, parseProbeOrigin, nativeFetch, keyOf } from "./public-safety.mjs";
+export { keyOf };   // the comparison form of a key lives in public-safety.mjs: the seed read uses the same one
 
 export const STATUS_ACTIVE = "2";
 export const STATUS_UNSTAKING = "3";
@@ -86,12 +88,6 @@ async function nodeCall(origin, message, data, o) {
 }
 
 // ---- rows ---------------------------------------------------------------------------------------------------------
-// The comparison form of a key: trimmed, lower case, without a leading 0x. Used only to compare, never published.
-export function keyOf(value) {
-  if (typeof value !== "string") return null;
-  var s = value.trim().toLowerCase().replace(/^0x/, "");
-  return /^[0-9a-z]{1,128}$/.test(s) ? s : null;
-}
 const STATUS_RE = /^[0-9A-Za-z_]{1,8}$/;
 // getValidators rows reduced to what the watch needs. null when the answer is not a list of rows with an address and a
 // status (an unexpected shape): that seed then counts as not having returned a list.
@@ -142,8 +138,10 @@ export function largestGroup(entries) {
 export function listSignature(rows) {
   return JSON.stringify(rows.map(function(x) { return [x.key, x.status]; }).sort(function(a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }));
 }
-// Agreement: the largest group of at least two seeds whose lists hold the same address–status pairs. A connection URL
-// is kept for a row only when every seed in that group lists the same URL for it.
+// Agreement: the largest group of at least two seeds whose lists hold the same address–status pairs. A row's
+// connection URL is the one at least two seeds of that group give and no other group of them as large gives another
+// (largestGroup, the rule for the list itself): two agreeing seeds must give the same URL, and of three one that
+// differs does not take the row's address away. Without such a URL the row is urlsDiffer and is not dialed.
 export function agreeLists(reads) {
   var answered = reads.filter(function(r) { return r.rows; });
   var best = largestGroup(answered.map(function(r) { return { r: r, sig: listSignature(r.rows) }; }));
@@ -154,11 +152,14 @@ export function agreeLists(reads) {
       reason: answered.length < 2 ? "fewer than two public seeds returned a validator list" : "the public seeds returned different validator lists" });
   }
   var group = best.map(function(e) { return e.r; });
-  var urls = new Map();
-  group.forEach(function(r) { r.rows.forEach(function(x) { if (!urls.has(x.key)) urls.set(x.key, new Set()); urls.get(x.key).add(x.noUrl ? "\u0000none" : x.url); }); });
+  var given = new Map();   // key -> what each seed of the group gives for it: { sig, url, noUrl }
+  group.forEach(function(r) { r.rows.forEach(function(x) {
+    if (!given.has(x.key)) given.set(x.key, []);
+    given.get(x.key).push({ sig: x.noUrl ? "\u0000none" : x.url === null ? "\u0000long" : "u:" + x.url, url: x.url, noUrl: x.noUrl });
+  }); });
   var rows = group[0].rows.map(function(x) {
-    var u = urls.get(x.key);
-    return { key: x.key, status: x.status, url: u.size === 1 ? x.url : null, noUrl: u.size === 1 && x.noUrl, urlsDiffer: u.size > 1 };
+    var g = largestGroup(given.get(x.key));
+    return g ? { key: x.key, status: x.status, url: g[0].url, noUrl: g[0].noUrl, urlsDiffer: false } : { key: x.key, status: x.status, url: null, noUrl: false, urlsDiffer: true };
   });
   return Object.assign(base, { agreed: true, seedsAgreed: group.length, rows: rows,
     reason: group.length + " of " + reads.length + " public seeds returned the same validator list" });
@@ -205,7 +206,10 @@ async function lookupNames(names, o) {
   return out;
 }
 
-// Dial the ACTIVE rows, in address order. A row that publishes no address is no_address. A URL that is not a bare http
+// Dial the ACTIVE rows: first those in o.first (keys that answered as listed at the seeds' height before: the kept
+// witness candidates and the keys with a record in the window), then the rest, each group in address order. The lookup
+// budget and the origin cap are spent in that order, so rows that never answer cannot take the dials of rows that do.
+// A row that publishes no address is no_address. A URL that is not a bare http
 // origin is not_public_http; so is an address literal the resolver refuses (decided without a lookup, before the cap, so
 // it takes no slot). Names and public literals take one slot each per distinct origin, at most maxOrigins; rows past
 // that, or names not looked up within the lookup budget, are over_cap. A name that did not resolve to a public address
@@ -217,7 +221,10 @@ async function lookupNames(names, o) {
 // origins dialed, maxRows: the most ACTIVE rows on one of them } }. published: the bare origin a row answered as listed
 // at (kept for the witness candidates; never published).
 export async function dialActive(rows, o) {
-  var active = rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).sort(function(a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+  var first = o.first instanceof Set ? o.first : new Set();
+  var active = rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).sort(function(a, b) {
+    return (first.has(b.key) ? 1 : 0) - (first.has(a.key) ? 1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  });
   // Every key the list shows on a published origin, whatever its status: an answer naming any of them is a key listed there.
   var listedOn = new Map();
   rows.forEach(function(r) {
@@ -308,6 +315,8 @@ export function createWatchHistory(windowMs, intervalMs) {
     },
     // Counted rounds inside the window in which this key answered as listed at the seeds' height.
     okCount: function(key) { var ts = okTimes.get(key); return ts ? ts.length : 0; },
+    // The keys with such a round inside the window: they are dialed first.
+    okKeys: function() { return Array.from(okTimes.keys()); },
     summary: function(now) {
       prune(now);
       var expected = Math.max(1, Math.floor(windowMs / intervalMs));
@@ -389,13 +398,16 @@ export function createFirstAgreedStore(db, opts) {
     },
     // When the first agreed list that showed this key ACTIVE was read (ms), or null: the order of the witness candidates.
     firstAgreedAt: function(key) { var v = keys.get(key); return v ? v.first : null; },
+    // false when the record cannot be read or written: no order can then be given to the candidates.
+    available: function() { return !down && !failed; },
     size: function() { return keys.size; }
   };
 }
 
 // ---- one round ----------------------------------------------------------------------------------------------------
 // o: { seeds: [{name, url, exclude?}], resolveOrigin(url) -> Promise<origin|null>, reference() -> {height, observedAt}|null,
-//      history, now() -> ms, fetch, dials (boolean), and any WATCH_DEFAULTS override }.
+//      history, growth (the first-agreed record), seedKeys (Set), first (Set of keys to dial first: the kept witness
+//      candidates), now() -> ms, fetch, dials (boolean), and any WATCH_DEFAULTS override }.
 export async function runValidatorRound(opts) {
   // The runtime's fetch, not the global one: the Demos SDK replaces the global (see nativeFetch in public-safety.mjs).
   var o = Object.assign({}, WATCH_DEFAULTS, { fetch: nativeFetch, now: Date.now, dials: true }, opts);
@@ -404,7 +416,10 @@ export async function runValidatorRound(opts) {
   var listAt = o.now();
   if (list.agreed && o.growth) o.growth.record(listAt, list.rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).map(function(r) { return r.key; }));
   var growth = o.growth ? o.growth.summary(listAt) : null;
-  var dialed = list.agreed && o.dials ? await dialActive(list.rows, o) : null;
+  // Dialed first: the kept witness candidates (o.first) and the keys with a record in the window.
+  var first = new Set(o.first instanceof Set ? o.first : []);
+  if (typeof o.history.okKeys === "function") o.history.okKeys().forEach(function(k) { first.add(k); });
+  var dialed = list.agreed && o.dials ? await dialActive(list.rows, Object.assign({}, o, { first: first })) : null;
   var results = dialed ? dialed.results : null;
   var reference = results ? o.reference() : null;
   var roundAt = o.now();
@@ -439,23 +454,27 @@ export async function runValidatorRound(opts) {
   o.history.record(roundAt, isCounted, isCounted ? new Set(results.filter(function(r) { return r.place === "at"; }).map(function(r) { return r.key; })) : null);
   var every = o.history.summary(roundAt);
   every.window.counted_this_round = isCounted;
-  // Witness candidates (witnesses.mjs). A candidate is an ACTIVE row of this round's agreed list that publishes a bare
-  // http origin, is not a configured seed's key, and answered as the listed key at the seeds' height in at least one
-  // counted round inside the window, this one included: one round in which it did not answer does not drop it.
-  // Order: the keys DNO has listed longest first (the first agreed list that showed each; a new key cannot be made
-  // older, so it cannot be ground to the front), then the most counted rounds in the window, then key order. The store
-  // keeps the first few. Only a counted round (an agreed list and a known seed median) names candidates: null
-  // otherwise, and the ones already kept stand.
-  var candidates = null;
+  // What this round shows about who can stand in for a seed (witnesses.mjs decides who is kept: nextCandidates). Only a
+  // counted round (an agreed list and a known seed median) says anything: null otherwise, and the kept candidates
+  // stand. One entry per ACTIVE row that is not a configured seed's key:
+  //   addr: "origin" (a bare http origin at least two agreeing seeds give, in origin), "none" (no address published),
+  //         "disputed" (the agreeing seeds give different addresses), "other" (an address DNO does not read);
+  //   confirmed: answered there as the listed key at the seeds' height in this round;
+  //   since: when the first agreed list that showed the key ACTIVE was read (null: not known); rounds: counted rounds in
+  //          the window in which it was confirmed.
+  // seniority: false when the first-agreed record is unavailable; no order can then be given, and nothing is renewed.
+  var witnessFacts = null;
   if (isCounted) {
     var seedKeys = o.seedKeys instanceof Set ? o.seedKeys : new Set();
-    var rounds = function(key) { return typeof o.history.okCount === "function" ? o.history.okCount(key) : 0; };
-    var listedSince = function(key) { var t = o.growth && typeof o.growth.firstAgreedAt === "function" ? o.growth.firstAgreedAt(key) : null; return Number.isFinite(t) ? t : Infinity; };
-    candidates = list.rows.filter(function(r) { return r.status === STATUS_ACTIVE && !r.noUrl && !r.urlsDiffer && r.url && !seedKeys.has(r.key) && rounds(r.key) > 0; })
-      .map(function(r) { var p = parseProbeOrigin(r.url); return p && p.protocol === "http:" ? { key: r.key, url: p.protocol + "//" + p.host, rounds: rounds(r.key), since: listedSince(r.key) } : null; })
-      .filter(Boolean)
-      .sort(function(a, b) { return (a.since === b.since ? 0 : a.since < b.since ? -1 : 1) || b.rounds - a.rounds || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0); })
-      .map(function(c) { return { key: c.key, url: c.url }; });
+    var okNow = new Set(results.filter(function(r) { return r.place === "at"; }).map(function(r) { return r.key; }));
+    var growthOk = !o.growth || typeof o.growth.available !== "function" || o.growth.available();
+    witnessFacts = { at: roundAt, seniority: growthOk, rows: list.rows.filter(function(r) { return r.status === STATUS_ACTIVE && !seedKeys.has(r.key); }).map(function(r) {
+      var p = !r.urlsDiffer && !r.noUrl && r.url ? parseProbeOrigin(r.url) : null;
+      var origin = p && p.protocol === "http:" ? p.protocol + "//" + p.host : null;
+      var since = o.growth && typeof o.growth.firstAgreedAt === "function" ? o.growth.firstAgreedAt(r.key) : null;
+      return { key: r.key, addr: r.urlsDiffer ? "disputed" : r.noUrl ? "none" : origin ? "origin" : "other", origin: origin, confirmed: !!origin && okNow.has(r.key),
+        since: Number.isFinite(since) ? since : null, rounds: typeof o.history.okCount === "function" ? o.history.okCount(r.key) : 0 };
+    }) };
   }
   return {
     listAt: listAt, roundAt: roundAt, seedsConfigured: o.seeds.length, list: list,
@@ -463,7 +482,7 @@ export async function runValidatorRound(opts) {
     outcomes: outcomes, versions: versions, counted: isCounted, growth: growth,
     reference: reference ? { height: reference.height, observedAt: reference.observedAt } : null,
     everyRound: every,
-    witnessCandidates: candidates,   // keys and published origins: for the agent's candidate store, never published
+    witnessFacts: witnessFacts,   // keys and published origins: for the agent's candidate store (witnesses.mjs), never published
     seedErrors: reads.map(function(r) { return { name: r.name, list: r.listError }; })
   };
 }
