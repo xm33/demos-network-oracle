@@ -37,6 +37,7 @@ const health = (o = {}) => {
   if (!("witnesses" in o)) h.witnesses = wit(h.data_quality === "sufficient" && h.publicNodes.filter((n) => n.ok && n.height_source === "self").length >= 2 ? "seeds_only" : "insufficient", h.publicNodes);
   return h;
 };
+// (used below) a document no agent of this version writes: every field good, and the status unknown, or no mode
 const VAL = (counted, read = 3) => ({ read, own_height: Math.max(counted, 1), counted, list_agreed_at: "2026-10-02T11:00:12.000Z" });
 const NOLIST1 = { state: "not_agreed", active: null, seeds_agreed: 0, seeds_configured: 3, reason: "fewer than two public seeds returned a validator list" };
 // One seed answers and validators stand in; no seed answers and validators alone give the reading.
@@ -240,6 +241,23 @@ console.log("\n[" + TAG + "] against a server");
   const cliOld = await cli({ observed_at: iso(Date.now() - 5000), status: "stable", data_quality: "sufficient", publicNodes: [{ name: "kyne-node2", ok: true, block: 5 }, { name: "kyne-node3", ok: true, block: 5 }] });
   check("S4 run as a command against an older agent: exit 6", cliOld.code === 6 && /^AN OLDER VERSION IS ANSWERING/.test(cliOld.last), JSON.stringify(cliOld));
   srv.stop(true);
+}
+
+console.log("\n[" + TAG + "] a document that contradicts itself is not a reading");
+{
+  const good = healthVerdict(health(), NOW);
+  const unknownBesideMode = healthVerdict(health({ status: "unknown" }), NOW);
+  const noStatus = healthVerdict((() => { const h = health(); delete h.status; return h; })(), NOW);
+  const noMode = healthVerdict(health({ witnesses: wit("insufficient", [own("a"), own("b"), no("c")]) }), NOW);
+  check("K1 every field good and the status unknown, or no status at all: not READING, and the reason is said", good.reading === true && unknownBesideMode.reading === false && unknownBesideMode.problems.join() === "the status is unknown beside a reading"
+    && noStatus.reading === false && noStatus.problems.join() === "the status is not reported beside a reading", JSON.stringify([unknownBesideMode.problems, noStatus.problems]));
+  check("K2 data quality sufficient and two seed heights beside the mode insufficient: not READING", noMode.reading === false && noMode.problems.join() === "data quality is sufficient, and the agent says the reading rests on nothing (insufficient)", JSON.stringify(noMode.problems));
+  const asked = [], out = [];
+  const code = await run(["--wait", "0"], { fetch: async (u, init) => { asked.push(u); return Response.json(health({ observed_at: iso(Date.now() - 5000) })); }, sleep: async () => {}, log: (l) => out.push(l) });
+  check("K3 without an address the check asks the agent's own port on this host, 127.0.0.1:55225", code === 0 && asked.length === 1 && asked[0] === "http://127.0.0.1:55225/health", JSON.stringify([code, asked, out.slice(-1)]));
+  const asked2 = [];
+  await run(["http://127.0.0.1:18855/", "--wait", "0"], { fetch: async (u) => { asked2.push(u); return Response.json(health({ observed_at: iso(Date.now() - 5000) })); }, sleep: async () => {}, log: () => {} });
+  check("K4 an address given is the one asked, without its trailing slash", asked2[0] === "http://127.0.0.1:18855/health", asked2.join());
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

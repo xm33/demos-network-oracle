@@ -21,15 +21,24 @@
 //
 // Run:  bun tools/pre-restart-check.mjs            (in the agent's checkout: it needs node_modules and src/)
 // Exit: 0 "AGENT READS OK"; 3 or 2 "AGENT READS FAILED" (do not restart; 2: only an unexpected answer shape). FAILED
-//       when the rule gives no reading, when a read ended in an internal error, or when two seeds were asked for the
-//       validator list and none was agreed;
+//       when the rule gives no reading, when any of the reads above ended in an internal error (a seed's /info, a list
+//       read, a dial, a witness read: a fault in DNO's own read, not an answer of a peer), or when two seeds were asked
+//       for the validator list and none was agreed;
 //       4 "AGENT READS GIVE A READING WITHOUT A SEED": validators alone stand in. Seeds that are down and a fault in
 //       DNO's own seed read look the same from here, so this is not a pass and nothing restarts on it by itself;
 //       64 the check could not run: no SDK here, or the seeds configured in src/agent.mjs could not be read from it.
 
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 const before = globalThis.fetch;
+const noSdk = () => { console.error("The Demos SDK is not installed next to this tool. Run it in the agent's checkout, where node_modules is."); process.exit(64); };
+// The SDK the agent loads is the one in this checkout's node_modules. Looked for on disk first: in a folder without
+// node_modules the runtime would try to fetch a package by itself, and that would not be the agent's SDK.
+if (!existsSync(join(dirname(fileURLToPath(import.meta.url)), "..", "node_modules", "@kynesyslabs", "demosdk"))) noSdk();
 try { await import("@kynesyslabs/demosdk/websdk"); }
-catch (e) { console.error("The Demos SDK is not installed next to this tool. Run it in the agent's checkout, where node_modules is."); process.exit(64); }
+catch (e) { noSdk(); }
 const sdkReplaced = globalThis.fetch !== before;
 const { run } = await import("./validator-set-probe.mjs");
 // The cross-check RPCs, when the fleet config is here (it is not in the repository). Their names are never printed.

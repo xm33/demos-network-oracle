@@ -89,6 +89,11 @@ export function healthVerdict(h, now) {
   const dq = h && h.data_quality, why = h && h.data_quality_reason;
   lines.push(`  data quality: ${dq || "not reported"}${why ? ` (${why})` : ""} · status: ${(h && h.status) || "not reported"}`);
   if (dq !== "sufficient" && problems.length === 0) problems.push(`data quality is ${dq || "not reported"}`);
+  // A document that contradicts itself is not a reading: no agent of this version says "sufficient" beside no mode, or
+  // gives a mode beside the status unknown.
+  const st = h && h.status;
+  if (problems.length === 0 && wit && mode === "insufficient") problems.push("data quality is sufficient, and the agent says the reading rests on nothing (insufficient)");
+  if (problems.length === 0 && (typeof st !== "string" || st === "unknown")) problems.push(`the status is ${typeof st === "string" ? st : "not reported"} beside a reading`);
   const listAgreed = !!oc && oc.state === "agreed";
   const listExpected = nodes.filter((n) => n && n.ok && n.identityMatch !== false).length >= 2;
   const listLine = !oc ? "  validators list: not reported by this server"

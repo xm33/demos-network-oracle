@@ -9,7 +9,7 @@ Built by [XM33](https://demos-oracle.com). Not an official Demos or KyneSys prod
 ## What it is, and what it is not
 
 - **Watch-only.** DNO reads. It does not validate, vote, or take part in consensus.
-- **Its operator takes part.** XM33 runs a validator on the public Demos testnet. DNO gives that validator no special place: it is read like any other validator, and only if it publishes an address on chain and answers there as the key the validator list holds. DNO does not publish which validator it is.
+- **Its operator takes part.** XM33 runs a validator on the public Demos testnet. In the public reading that validator has no special place: it counts like any other validator, and only if it publishes an address on chain and answers there as the key the validator list holds. DNO does not publish which validator it is.
 - **Public sources only.** The public reading is made from the configured public seeds. When fewer than two of them report their own block height, validators that answer as listed stand in for the missing seed, and the reading says so. The operator's private nodes never enter it.
 - **Every label has a reason.** Each categorical value is published with the reason for it. `unknown` and `insufficient` are states of the reading, not errors.
 - **Observation is not endorsement.** A node that DNO reads or lists is not endorsed by Demos or by XM33.
@@ -21,7 +21,7 @@ Built by [XM33](https://demos-oracle.com). Not an official Demos or KyneSys prod
 | [/](https://demos-oracle.com/) | The reading, the public seeds, incidents |
 | [/organism](https://demos-oracle.com/organism) | The public reading as JSON (the default for software) |
 | [/organism/schema](https://demos-oracle.com/organism/schema) | The JSON Schema contract: stability policy, enums, changelog |
-| [/health](https://demos-oracle.com/health) | The same reading with its parts: each seed, validator counts, signals |
+| [/health](https://demos-oracle.com/health) | The same labels and reasons without the summary sentence, and their parts: each seed, validator counts, signals |
 | [/incidents](https://demos-oracle.com/incidents) | Public incidents and DNO's condition records |
 | [/catalog](https://demos-oracle.com/catalog) | Identities listed on the public seeds' peerlists |
 | [/methodology](https://demos-oracle.com/methodology) | How each value is derived, and where the observation stops |

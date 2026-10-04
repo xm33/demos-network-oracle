@@ -60,13 +60,15 @@ export function seedsParts(r, active) {
     } else if (stoodIn) {
       p.heights = listed(n) + " report heights " + (st === "strong" ? "that align." : isNum(ag.block_spread) ? "up to " + fmt(ag.block_spread) + " blocks apart." : "with " + st + " agreement.");
     } else if (!compared) {
-      // No reading. When validators were read and did not stand in, what they did is said before "not compared":
-      // none gave a height, none is near the one seed, one alone gave a height, or they give no majority.
+      // No reading. When validators were read and did not stand in, the line says what they did: none gave a height,
+      // none is near the one seed, one alone gave a height, or they give no majority. That is a comparison, so "not
+      // compared" is said only where no validator was read.
       var vh = wv && isNum(wv.own_height) ? wv.own_height : null;
-      p.heights = (mode !== "insufficient" || !wv ? "" : vh === 0 ? "No validator answered as listed with its own height. "
-        : m === 1 ? "No validator that answers as listed is within 25 blocks of it. "
-        : vh === 1 ? "1 validator answered as listed with its own height; a reading needs two. "
-        : "The validators that answer as listed give no majority within 25 blocks. ") + "Heights were not compared.";
+      p.heights = mode !== "insufficient" || !wv ? "Heights were not compared."
+        : vh === 0 ? "No validator answered as listed with its own height."
+        : m === 1 ? "No validator that answers as listed is within 25 blocks of it."
+        : vh === 1 ? "1 validator answered as listed with its own height; a reading needs two."
+        : "The validators that answer as listed give no majority within 25 blocks.";
     } else {
       var subject = fewer ? "Those heights" : nodes || m !== null ? "Their heights" : "The seeds' heights";
       if (st === "strong") p.heights = subject + " align.";
@@ -85,7 +87,8 @@ export function seedsParts(r, active) {
       + (limit !== null && compared && r.height_static_seconds >= limit ? "; from " + Math.floor(limit / 60) + " min on, status does not read stable." : ".");
   }
   if (isNum(r.active_incidents) && r.active_incidents > 0) p.incidents = r.active_incidents + " active public incident" + (r.active_incidents === 1 ? "" : "s") + ".";
-  if (dq !== "stale" && dq !== "no_observation" && mode === "insufficient" && wv) p.status = "Status is unknown.";
+  // Without a reading the status is unknown, and the line says so: what status would be made of is said only of a reading.
+  if (!compared) p.status = "Status is unknown.";
   else p.status = (stoodIn && mode === "seed_and_validators" ? "Status is that seed and " + (n === 1 ? "that validator" : "those validators")
     : stoodIn ? "Status is those validators alone" : "Status is those seeds") + (isNum(active) ? ", not the " + fmt(active) : "") + ".";
   return p;

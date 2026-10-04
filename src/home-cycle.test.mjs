@@ -66,21 +66,21 @@ eq("C12 /organism's fields only (another observation than /health): the own-heig
 console.log("\n[" + TAG + "] the seeds: not compared");
 eq("C13 one answered: not compared, and the count says why",
   cycleSeeds({ publicNodes: seeds(true, false, false), agreement: ag("unknown", 1, null, null), data_quality_reason: "too_few_answers", height_static_seconds: 0, active_incidents: 1 }, null),
-  "1 of 3 configured seeds answered. Heights were not compared. 1 active public incident. Status is those seeds.");
+  "1 of 3 configured seeds answered. Heights were not compared. 1 active public incident. Status is unknown.");
 eq("C14 two answered, one gave its own height: not compared, and why",
   cycleSeeds({ publicNodes: seeds(true, true, false), agreement: ag("unknown", 1, null, null), data_quality_reason: "too_few_heights" }, 35),
-  "2 of 3 configured seeds answered; 1 gave its own height. Heights were not compared. Status is those seeds, not the 35.");
+  "2 of 3 configured seeds answered; 1 gave its own height. Heights were not compared. Status is unknown.");
 eq("C14b two answered, none gave its own height",
   cycleSeeds({ publicNodes: seeds(true, true, false), agreement: ag("unknown", 0, null, null), data_quality_reason: "too_few_heights" }, 35),
-  "2 of 3 configured seeds answered; none gave its own height. Heights were not compared. Status is those seeds, not the 35.");
+  "2 of 3 configured seeds answered; none gave its own height. Heights were not compared. Status is unknown.");
 eq("C15 a stale observation says its age, no answered count, and no 'not moved' from the old figures",
   cycleSeeds({ publicNodes: seeds(true, true, false), agreement: ag("unknown", 2, null, null), data_quality_reason: "stale", staleness_seconds: 7 * 60 + 30, height_static_seconds: 900, active_incidents: 0 }, 35),
-  "The last observation of the configured seeds is 7 min old. Heights were not compared. Status is those seeds, not the 35.");
+  "The last observation of the configured seeds is 7 min old. Heights were not compared. Status is unknown.");
 eq("C16 no observation yet", cycleSeeds({ publicNodes: [], agreement: ag("unknown", 0, null, null), data_quality_reason: "no_observation" }, null),
-  "No observation of the configured seeds has completed yet. Status is those seeds.");
+  "No observation of the configured seeds has completed yet. Status is unknown.");
 check("C17 /organism's fields only, not compared: fewer than two, said without a count",
-  cycleSeeds({ agreement: "unknown", data_quality_reason: "too_few_answers" }, null) === "Fewer than two configured seeds answered. Heights were not compared. Status is those seeds."
-  && cycleSeeds({ agreement: "unknown", data_quality_reason: "too_few_heights" }, null) === "Fewer than two configured seeds gave their own height. Heights were not compared. Status is those seeds."
+  cycleSeeds({ agreement: "unknown", data_quality_reason: "too_few_answers" }, null) === "Fewer than two configured seeds answered. Heights were not compared. Status is unknown."
+  && cycleSeeds({ agreement: "unknown", data_quality_reason: "too_few_heights" }, null) === "Fewer than two configured seeds gave their own height. Heights were not compared. Status is unknown."
   && cycleSeeds({ agreement: "weak" }, 35) === "Seeds: not reported in this reading. Height agreement is weak. Status is those seeds, not the 35.");
 
 console.log("\n[" + TAG + "] 1.2: validators that answer as listed stand in for a seed that gave no height");
@@ -104,14 +104,14 @@ eq("C29 no seed answered, three validators agree", cycleSeeds(noSeed, null), "0 
 eq("C30 the validators are up to 38 blocks apart (moderate)", cycleSeeds({ ...noSeed, agreement: ag("moderate", 3, 3, 38) }, null), "0 of 3 configured seeds answered. 3 validators that answer as listed report heights up to 38 blocks apart. Status is those validators alone.");
 eq("C31 a seed answered without its own height, and validators give the reading", cycleSeeds({ ...noSeed, publicNodes: seeds(true, false, false), witnesses: wit("validators_only", 0, val(3), 1) }, null), "1 of 3 configured seeds answered; none gave its own height. 3 validators that answer as listed report heights that align. Status is those validators alone.");
 const none1 = { publicNodes: seeds(true, false, false), agreement: ag("unknown", 1, null, null), data_quality_reason: "too_few_answers", height_static_seconds: 0, active_incidents: 0 };
-eq("C32 validators were read and none is within 25 blocks of the one seed: no reading, and it says why", cycleSeeds({ ...none1, witnesses: wit("insufficient", 1, val(0)) }, null), "1 of 3 configured seeds answered. No validator that answers as listed is within 25 blocks of it. Heights were not compared. Status is unknown.");
+eq("C32 validators were read and none is within 25 blocks of the one seed: no reading, and it says why", cycleSeeds({ ...none1, witnesses: wit("insufficient", 1, val(0)) }, null), "1 of 3 configured seeds answered. No validator that answers as listed is within 25 blocks of it. Status is unknown.");
 const none0 = { ...none1, publicNodes: seeds(false, false, false), agreement: ag("unknown", 0, null, null) };
-eq("C33 no seed, and the validators read give no majority", cycleSeeds({ ...none0, witnesses: wit("insufficient", 0, val(0, 4, 4)) }, null), "0 of 3 configured seeds answered. The validators that answer as listed give no majority within 25 blocks. Heights were not compared. Status is unknown.");
-eq("C33b no seed, and one validator alone gave a height: it is said to be one, not a disagreement", cycleSeeds({ ...none0, witnesses: wit("insufficient", 0, val(0, 4, 1)) }, null), "0 of 3 configured seeds answered. 1 validator answered as listed with its own height; a reading needs two. Heights were not compared. Status is unknown.");
-eq("C33c no seed, and no validator gave a height: nothing is said about where validators stand", cycleSeeds({ ...none0, witnesses: wit("insufficient", 0, val(0, 4, 0)) }, null), "0 of 3 configured seeds answered. No validator answered as listed with its own height. Heights were not compared. Status is unknown.");
-eq("C33d one seed, and no validator gave a height: they are not said to be far from it", cycleSeeds({ ...none1, witnesses: wit("insufficient", 1, val(0, 4, 0)) }, null), "1 of 3 configured seeds answered. No validator answered as listed with its own height. Heights were not compared. Status is unknown.");
-eq("C34 no validator was read (none kept, or the dials are off): the 1.1 line", cycleSeeds({ ...none1, witnesses: wit("insufficient", 1, null) }, null), "1 of 3 configured seeds answered. Heights were not compared. Status is those seeds.");
-eq("C35 a stale observation is stale whatever it held", cycleSeeds({ ...oneSeed, agreement: ag("unknown", 1, null, null), data_quality_reason: "stale", staleness_seconds: 400, witnesses: wit("insufficient", 1, val(0)) }, null), "The last observation of the configured seeds is 6 min old. Heights were not compared. Status is those seeds.");
+eq("C33 no seed, and the validators read give no majority", cycleSeeds({ ...none0, witnesses: wit("insufficient", 0, val(0, 4, 4)) }, null), "0 of 3 configured seeds answered. The validators that answer as listed give no majority within 25 blocks. Status is unknown.");
+eq("C33b no seed, and one validator alone gave a height: it is said to be one, not a disagreement", cycleSeeds({ ...none0, witnesses: wit("insufficient", 0, val(0, 4, 1)) }, null), "0 of 3 configured seeds answered. 1 validator answered as listed with its own height; a reading needs two. Status is unknown.");
+eq("C33c no seed, and no validator gave a height: nothing is said about where validators stand", cycleSeeds({ ...none0, witnesses: wit("insufficient", 0, val(0, 4, 0)) }, null), "0 of 3 configured seeds answered. No validator answered as listed with its own height. Status is unknown.");
+eq("C33d one seed, and no validator gave a height: they are not said to be far from it", cycleSeeds({ ...none1, witnesses: wit("insufficient", 1, val(0, 4, 0)) }, null), "1 of 3 configured seeds answered. No validator answered as listed with its own height. Status is unknown.");
+eq("C34 no validator was read (none kept, or the dials are off): nothing was compared, and the status is unknown", cycleSeeds({ ...none1, witnesses: wit("insufficient", 1, null) }, null), "1 of 3 configured seeds answered. Heights were not compared. Status is unknown.");
+eq("C35 a stale observation is stale whatever it held", cycleSeeds({ ...oneSeed, agreement: ag("unknown", 1, null, null), data_quality_reason: "stale", staleness_seconds: 400, witnesses: wit("insufficient", 1, val(0)) }, null), "The last observation of the configured seeds is 6 min old. Heights were not compared. Status is unknown.");
 eq("C36 /organism's fields only (no seed rows): the seeds' own count comes from witnesses, not from what agreement compared",
   cycleSeeds({ agreement: "strong", witnesses: wit("seed_and_validators", 1, val(2)) }, null), "1 configured seed gave its own height. 2 validators that answer as listed are within 25 blocks of it. Status is that seed and those validators.");
 eq("C37 the same with no seed height", cycleSeeds({ agreement: "strong", witnesses: wit("validators_only", 0, val(2)) }, null), "No configured seed gave its own height. 2 validators that answer as listed report heights that align. Status is those validators alone.");

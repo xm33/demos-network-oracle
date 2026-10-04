@@ -733,7 +733,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         <h2 id="val-title">Validators on chain</h2>
         <p class="meta">GET /health</p>
       </div>
-      <p class="note">The on-chain validators table as the public seeds list it, and what DNO saw when it dialed the address each ACTIVE validator published on chain. Four counts, each inside the one above. Never added to the seed or peer-listed counts. In status only when fewer than two seeds give their own height: the validators that answer as listed then stand in for the missing seed.</p>
+      <p class="note">The on-chain validators table as the public seeds list it, and what DNO saw when it dialed the address each ACTIVE validator published on chain. Four counts, each inside the one above. Never added to the seed or peer-listed counts. In status only when fewer than two seeds give their own height: up to 8 of them, kept as candidates, are then read in a seed's place.</p>
       <ol class="ladder" id="ladder" data-mode="pending" aria-label="Validators on chain, each count inside the one above">
         <li class="rung" data-rung="active">
           <p class="rung-k">ACTIVE on chain<span class="tag" id="vt-active" hidden>one read</span></p>
@@ -835,7 +835,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       <p class="note">Agreement among the heights DNO compared this cycle: the seeds' own; when validators stand in, one seed's and its closest validator's, or the validators' alone. Not a count of the network.</p>
       <div class="strip agree-strip" id="agree-strip">
         <div data-card="agreement"><p class="k">agreement</p><p class="v"><span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span></p><button type="button" class="linkbtn xbtn" data-x="agreement" aria-expanded="false" aria-controls="x-agree">Explain<span class="sr"> agreement</span></button></div>
-        <div><p class="k">aligned nodes</p><p class="v none" id="ag-aligned">reading</p></div>
+        <div><p class="k">aligned / compared heights</p><p class="v none" id="ag-aligned">reading</p></div>
         <div><p class="k">block spread</p><p class="v none" id="ag-spread">reading</p></div>
         <div><p class="k">median block</p><p class="v odo" id="odo" role="img" aria-label="Median block not read yet"><span class="odo-none">reading</span></p><p class="s" id="ag-height" data-src="api" hidden></p></div>
       </div>
@@ -885,7 +885,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <div class="overlap-bars" id="overlap-bars"></div>
           <p class="fine">A count of lists, not a count of the network.</p>
         </div>
-        <p class="fine seen-drop" id="seen-drop" hidden>After the 1.1 update this count dropped once: rows DNO recorded from its own node stay hidden until a public seed lists them. That is not nodes leaving.</p>
+        <p class="fine seen-drop" id="seen-drop" hidden>After the 1.1 update this count dropped once: rows DNO recorded from its own node stay hidden until two public peerlists have listed them. That is not nodes leaving.</p>
         <div class="finder" role="search">
           <p class="finder-label"><label for="find">Find a node</label> <span class="dim wide" aria-hidden="true">· <kbd>Ctrl</kbd> <kbd>K</kbd> or <kbd>⌘</kbd> <kbd>K</kbd> from anywhere on the page</span></p>
           <div class="finder-row">
@@ -914,7 +914,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         <div class="pop-notes"><p class="fine">The endpoints status is made of. When fewer than two give their own height, validators that answer as listed stand in for the missing one. Status does not use the catalog. Names are the Kynesys URLs DNO dials.</p></div>
         <div class="strip scards" id="scards">
           <div><p class="k">seeds answered</p><p class="v none" id="gc-answered">reading</p></div>
-          <div><p class="k">at head</p><p class="v none" id="gc-head">reading</p></div>
+          <div><p class="k">within 100 blocks of the highest seed</p><p class="v none" id="gc-head">reading</p></div>
           <div><p class="k">configured seeds</p><p class="v none" id="gc-seeds">reading</p></div>
         </div>
         <table class="nodes">
@@ -926,12 +926,11 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
               <th scope="col">Probe</th>
               <th scope="col">Identity</th>
               <th scope="col" class="num">Block</th>
-              <th scope="col" class="num">Sync</th>
               <th scope="col" class="num">Latency</th>
               <th scope="col" class="num">Uptime (obs.)</th>
             </tr>
           </thead>
-          <tbody id="seeds-body"><tr class="empty"><td colspan="8">Awaiting first reading of /health.</td></tr></tbody>
+          <tbody id="seeds-body"><tr class="empty"><td colspan="7">Awaiting first reading of /health.</td></tr></tbody>
         </table>
         <p class="versions" id="versions" hidden></p>
         <p class="fine" style="margin-top:10px">Uptime (obs.) is DNO's own observation over seven days, not a promise. Latency is this cycle's probe. Identity compares the key a seed reports about itself with the key DNO has configured for that URL.</p>
@@ -1007,7 +1006,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <li>Why a validator did not answer DNO. No answer from here does not change its row on chain.</li>
           <li>What stands behind a published address that several keys share. Its answer names one key.</li>
           <li>Whether the chain stopped, or only the nodes DNO reads did. The three seeds are public URLs of one organization.</li>
-          <li>Who runs a validator that stands in for a seed: DNO does not check. One within 25 blocks of the seed's height is enough for a reading; with no seed, two validators that agree are.</li>
+          <li>Who runs a validator that stands in for a seed: DNO does not check. One within 25 blocks of the seed's height is enough for a reading; with no seed, two that agree are, when they are more than half of those that gave a height.</li>
           <li>Whether two nodes at the same height hold the same block. Heights are compared; block hashes are not.</li>
           <li>Blocks and transactions are on the chain explorer. This page is the public reading from named seeds, and from validators that stand in for them.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
@@ -1062,7 +1061,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     <p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>
     <p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>
     <p class="fine">Built by XM33 · not an official Demos product.</p>
-    <p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet; DNO reads it like any other, and only if it publishes an address on chain.</p>
+    <p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet. In the public reading it counts like any other validator, and only if it publishes an address on chain.</p>
   </div>
 </footer>
 
@@ -1134,7 +1133,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     const h = Math.floor(m / 60); if (h < 48) return `${h} h ago`;
     return `${Math.floor(h / 24)} d ago`;
   }
-  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const plural = (n, one, many) => `${fmtInt(n)} ${n === 1 ? one : many}`;   // n is a number: a formatted string would never be singular
 
   // ---------- Reading ----------
   class ReadError extends Error {}
@@ -1205,8 +1204,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       ['elevated', 'Status degraded or unknown, a warning-level public incident, uncertain confidence, moderate agreement, more than one seed not answering, or validators standing in for a seed.'],
       ['high', 'Status unstable, a critical public incident, or weak agreement.']] },
     confidence: { note: '', values: [
-      ['clear', 'The heights compared are within 50 blocks of each other, at least one of them is a seed\'s own, beside one seed most validators read are within 25 blocks of it, and DNO is not following lower heights.'],
-      ['uncertain', 'Heights more than 50 blocks apart, a reading that rests on validators alone, half or more of the validators read more than 25 blocks from the one seed, heights below the highest DNO read in the last 24 hours, or data quality insufficient.']] },
+      ['clear', 'The heights compared are within 50 blocks of each other, at least one of them is a seed\'s own, beside one seed most validators that gave a height are within 25 blocks of it, and DNO is not following lower heights.'],
+      ['uncertain', 'Heights more than 50 blocks apart, a reading that rests on validators alone, half or more of the validators that gave a height more than 25 blocks from the one seed, DNO following heights below one it read earlier, or data quality insufficient.']] },
     data_quality: { note: 'When insufficient, status is unknown and risk elevated, by design.', values: [
       ['sufficient', 'At least two seeds reported their own block height, or validators that answer as listed stood in for the missing one, and the observation is at most 300 s old.'],
       ['insufficient', 'Fewer than two probed seeds reported their own block height and no validator stood in, or the observation is stale.']] },
@@ -1365,13 +1364,15 @@ function seedsParts(r, active) {
     } else if (stoodIn) {
       p.heights = listed(n) + " report heights " + (st === "strong" ? "that align." : isNum(ag.block_spread) ? "up to " + fmt(ag.block_spread) + " blocks apart." : "with " + st + " agreement.");
     } else if (!compared) {
-      // No reading. When validators were read and did not stand in, what they did is said before "not compared":
-      // none gave a height, none is near the one seed, one alone gave a height, or they give no majority.
+      // No reading. When validators were read and did not stand in, the line says what they did: none gave a height,
+      // none is near the one seed, one alone gave a height, or they give no majority. That is a comparison, so "not
+      // compared" is said only where no validator was read.
       var vh = wv && isNum(wv.own_height) ? wv.own_height : null;
-      p.heights = (mode !== "insufficient" || !wv ? "" : vh === 0 ? "No validator answered as listed with its own height. "
-        : m === 1 ? "No validator that answers as listed is within 25 blocks of it. "
-        : vh === 1 ? "1 validator answered as listed with its own height; a reading needs two. "
-        : "The validators that answer as listed give no majority within 25 blocks. ") + "Heights were not compared.";
+      p.heights = mode !== "insufficient" || !wv ? "Heights were not compared."
+        : vh === 0 ? "No validator answered as listed with its own height."
+        : m === 1 ? "No validator that answers as listed is within 25 blocks of it."
+        : vh === 1 ? "1 validator answered as listed with its own height; a reading needs two."
+        : "The validators that answer as listed give no majority within 25 blocks.";
     } else {
       var subject = fewer ? "Those heights" : nodes || m !== null ? "Their heights" : "The seeds' heights";
       if (st === "strong") p.heights = subject + " align.";
@@ -1390,7 +1391,8 @@ function seedsParts(r, active) {
       + (limit !== null && compared && r.height_static_seconds >= limit ? "; from " + Math.floor(limit / 60) + " min on, status does not read stable." : ".");
   }
   if (isNum(r.active_incidents) && r.active_incidents > 0) p.incidents = r.active_incidents + " active public incident" + (r.active_incidents === 1 ? "" : "s") + ".";
-  if (dq !== "stale" && dq !== "no_observation" && mode === "insufficient" && wv) p.status = "Status is unknown.";
+  // Without a reading the status is unknown, and the line says so: what status would be made of is said only of a reading.
+  if (!compared) p.status = "Status is unknown.";
   else p.status = (stoodIn && mode === "seed_and_validators" ? "Status is that seed and " + (n === 1 ? "that validator" : "those validators")
     : stoodIn ? "Status is those validators alone" : "Status is those seeds") + (isNum(active) ? ", not the " + fmt(active) : "") + ".";
   return p;
@@ -1700,8 +1702,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       // configured-seed count and block_spread a placeholder 0. Neither is printed as an observation.
       const compared = s != null && s !== 'unknown';
       setVal($('ag-aligned'), !compared ? 'not computed' : isNum(a.aligned_nodes) && isNum(a.total_nodes) ? `${a.aligned_nodes} / ${a.total_nodes}` : 'not reported');
-      setVal($('ag-spread'), !compared ? 'not computed' : isNum(a.block_spread) ? `${fmtInt(a.block_spread)} blocks` : 'not reported');
-      setOdometer(isNum(a.median_block) ? a.median_block : null);
+      setVal($('ag-spread'), !compared ? 'not computed' : isNum(a.block_spread) ? plural(a.block_spread, 'block', 'blocks') : 'not reported');
+      setOdometer(compared && isNum(a.median_block) ? a.median_block : null, compared ? undefined : 'not computed');   // one seed's height is not a median
       renderHeightLine();
       const reason = pick('agreement_reason');
       setText($('ag-reason'), typeof reason === 'string' ? reason : '');
@@ -2111,7 +2113,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     renderVersions(h, nodes);
     if (!h) {
       const msg = reads.health.error ? `Seeds not read: ${reads.health.error}. Their state is unknown from here, not down.` : 'Awaiting first reading of /health.';
-      if (body.dataset.sig !== msg) { body.dataset.sig = msg; body.replaceChildren(el('tr', { class: 'empty' }, el('td', { colspan: '8', text: msg }))); }
+      if (body.dataset.sig !== msg) { body.dataset.sig = msg; body.replaceChildren(el('tr', { class: 'empty' }, el('td', { colspan: '7', text: msg }))); }
       return;
     }
     const model = rows.map((r) => {
@@ -2127,7 +2129,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
         identity: pn && pn.ok === true && typeof pn.identityMatch === 'boolean' ? (pn.identityMatch ? 'matches the configured key' : 'does not match the configured key') : null,
         idNote: pn && pn.ok === true && pn.identityMatch === null ? 'no key reported' : 'not observed',   // answered without a key, or not read
         block: own ? r.block : peerBlock, fromPeer: !own && peerBlock != null,
-        sync: own && isNum(r.sync_pct) ? r.sync_pct : null,
         latency: pn && pn.ok === true && isNum(pn.latencyMs) ? pn.latencyMs : null,
         uptime: isNum(r.uptime_7d) ? r.uptime_7d : null,
       };
@@ -2135,7 +2136,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     const sig = JSON.stringify(model);
     if (body.dataset.sig === sig) return;
     body.dataset.sig = sig;
-    if (!model.length) { body.replaceChildren(el('tr', { class: 'empty' }, el('td', { colspan: '8', text: 'No rows with monitored true in this reading.' }))); return; }
+    if (!model.length) { body.replaceChildren(el('tr', { class: 'empty' }, el('td', { colspan: '7', text: 'No rows with monitored true in this reading.' }))); return; }
     body.replaceChildren(...model.map((x) => el('tr', null,
       el('td', { class: 'first', 'data-label': 'Seed' }, el('span', { class: 'name', text: x.display })),
       el('td', { 'data-label': 'Source' }, x.source),
@@ -2143,9 +2144,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       el('td', { 'data-label': 'Identity' }, x.identity ? x.identity : dim(x.idNote)),
       el('td', { class: 'num', 'data-label': 'Block' }, el('span', null, x.block != null ? fmtInt(x.block) : dim('not observed'),
         x.fromPeer ? el('span', { class: 'src-note', text: 'height of its first listed peer · not counted' }) : null)),
-      el('td', { class: 'num', 'data-label': 'Sync' }, x.sync != null ? `${x.sync}%` : dim(x.fromPeer ? 'not counted' : 'not observed')),
       el('td', { class: 'num', 'data-label': 'Latency' },
-        x.latency != null ? `${fmtInt(x.latency)} ms` : el('span', null, el('span', { 'aria-hidden': 'true', text: '—' }), el('span', { class: 'sr', text: 'no latency this cycle' }))),
+        x.latency != null ? `${fmtInt(x.latency)} ms` : dim('not observed')),
       el('td', { class: 'num', 'data-label': 'Uptime (obs.)' }, x.uptime != null ? `${x.uptime}%` : dim('not reported')))));
   }
 
@@ -2265,7 +2265,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       else {
         const d = r.diff;
         const rel = d == null ? 'no seed height this cycle to compare' : d === 0 ? 'same as the highest seed height'
-          : `${plural(fmtInt(Math.abs(d)), 'block', 'blocks')} ${d < 0 ? 'below' : 'above'} the highest seed height`;
+          : `${plural(Math.abs(d), 'block', 'blocks')} ${d < 0 ? 'below' : 'above'} the highest seed height`;
         height = [fmtInt(r.height), el('span', { class: 'dim', text: ` · ${rel}` })];
       }
     }
@@ -2427,7 +2427,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     const t = parseTime(i.startedAt);
     const since = t != null ? `${new Date(t).toISOString().slice(0, 10)} ${new Date(t).toISOString().slice(11, 16)} UTC` : null;
     return el('li', null, el('span', { 'data-src': 'api', text: typeof i.description === 'string' && i.description ? i.description : 'Description not reported.' }),
-      since ? el('span', { class: 'since', text: ` (observed since ${since})` }) : null);
+      since ? el('span', { class: 'since', text: ` (record opened ${since})` }) : null);
   }
   function activeRows() {
     const d = reads.incidents.data;
@@ -2474,8 +2474,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   const EPS = {
     organism: { path: '/organism', what: 'The public reading: the 17 required fields plus the 1.1 and 1.2 additions (witnesses says what the reading rests on), with ETag and 304 between observations. The contract is /organism/schema.',
       what10: 'The public reading: the 17 required fields. The contract is /organism/schema.' },
-    health: { path: '/health', what: 'The same reading with its parts: publicNodes (each seed, with height_source), validator_growth (seed counts and peer-listed identities), attestation, on_chain_publication, on_chain_validators and validator_watch (counts only), and witnesses (what the reading rests on).',
-      what10: 'The same reading with its parts: publicNodes (each seed), validator_growth (seed counts and recorded identities), attestation and on_chain_publication.' },
+    health: { path: '/health', what: 'The same labels and reasons without the summary sentence, and their parts: publicNodes (each seed, with height_source), validator_growth (seed counts and peer-listed identities), attestation, on_chain_publication, on_chain_validators and validator_watch (counts only), and witnesses (what the reading rests on).',
+      what10: 'The same labels and reasons without the summary sentence, and their parts: publicNodes (each seed), validator_growth (seed counts and recorded identities), attestation and on_chain_publication.' },
     catalog: { path: '/catalog?listed=not', what: 'Peer-listed identities the latest crawl did not list, sanitized: display name, truncated key, first and last listing. ?q= filters. /catalog/lookup?key=0x… checks one full key against the catalog and, while two seeds agree on a list read in the last 300 s, the validators list; it never returns a key.' },
     incidents: { path: '/incidents?scope=public&status=active', what: 'Active public records. Each row has kind: incident, or condition for the records DNO opens about its own reading. /organism\'s active_incidents leaves the condition records out; this endpoint\'s own active count includes them.',
       what10: 'Active public incident rows. Takes status, scope and limit.' },

@@ -245,14 +245,15 @@ console.log("\n[" + TAG + "] the sentence for readers without JavaScript");
     other_key_shared: 18, other_key_shared_origins: 1, not_dialed_reasons: { no_address: 9 } };
   const s1 = validatorsSentence(oc, w);
   check("N1 the 29 Sep reading: the ladder's counts, the advisor's sentence, the rows with no address",
-    s1 === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Of these, 7 answered DNO as the listed key at the address each published, 7 at the seeds' height; every round in the last hour: insufficient observation (23 of 60 min). 18 listed keys share one published origin with a key that answered. That is not 18 nodes down. 9 ACTIVE rows publish no address on chain. In status only when fewer than two seeds give their own height.", s1);
+    s1 === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Of these, 7 answered DNO as the listed key at the address each published, 7 at the seeds' height; every round in the last hour: insufficient observation (23 of 60 min). 18 listed keys share one published origin with a key that answered. That is not 18 nodes down. 9 ACTIVE rows publish no address on chain. In status only when fewer than two seeds give their own height, and then at most 8 of them.", s1);
   const s2 = validatorsSentence(oc, Object.assign({}, w, { other_key_shared: 1, other_key_shared_origins: 1, not_dialed_reasons: { no_address: 1 } }));
   const s3 = validatorsSentence(oc, Object.assign({}, w, { other_key_shared: 5, other_key_shared_origins: 2, not_dialed_reasons: { no_address: 0 } }));
   check("N2 one key, one row: singular forms; several origins: each with a key that answered",
     s2.includes(" 1 listed key shares one published origin with a key that answered. That is not a node down. 1 ACTIVE row publishes no address on chain.")
-    && s3.includes(" 5 listed keys share 2 published origins, each with a key that answered. That is not 5 nodes down. In status only when fewer than two seeds give their own height.") && !/no address/.test(s3), s2 + " | " + s3);
+    && s3.includes(" 5 listed keys share 2 published origins, each with a key that answered. That is not 5 nodes down. In status only when fewer than two seeds give their own height, and then at most 8 of them.") && !/no address/.test(s3), s2 + " | " + s3);
   check("N3 no agreed list: no sentence; dials off: the list only", validatorsSentence(Object.assign({}, oc, { state: "not_agreed" }), w) === null
-    && validatorsSentence(oc, { state: "disabled" }) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. In status only when fewer than two seeds give their own height.");
+    && validatorsSentence(oc, { state: "disabled" }) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. Not in status: dialing validators is turned off on this server."
+    && validatorsSentence(oc, { state: "stale" }, 5) === "35 ACTIVE on chain, as 2 of 3 public seeds listed them at 11:31:45 UTC. In status only when fewer than two seeds give their own height, and then at most 5 of them.");
 }
 
 console.log("\n[" + TAG + "] find a node: one key against the agreed list");
@@ -318,6 +319,41 @@ console.log("\n[" + TAG + "] states and what is published");
   const w = publicValidatorWatch(r, r.roundAt, {});
   check("P5 no per-row field in what is published", !/"(key|address|url|connectionUrl|height|outcome|rows|stakedAmount)"/.test(text) && Array.isArray(w.versions));
   check("P6 key comparison ignores case and a leading 0x only", keyOf("0xAB12") === "ab12" && keyOf("AB12") === "ab12" && keyOf("0xab 12") === null && keyOf(12) === null);
+}
+
+console.log("\n[" + TAG + "] a fault in DNO's own read is not a peer's answer");
+{
+  // A transport that throws a TypeError for chosen requests, as a broken read path does (on 1 Oct every capped read
+  // threw one). The peers answer as always.
+  const real = Bun.fetch.bind(Bun);
+  const faulty = (pick) => async (url, init) => { if (pick(new URL(url), (init && init.method) || "GET")) throw new TypeError("resp.body.getReader is not a function"); return real(url, init); };
+  const dialsOf = (u, m) => m === "GET" && u.pathname === "/info";
+  const hist = createWatchHistory(3600000, 60000), okRound = await round({ history: hist });
+  const rd = await round({ fetch: faulty(dialsOf), history: hist });
+  const w = publicValidatorWatch(rd, rd.roundAt, {}), oc = publicOnChainValidators(rd, rd.listAt, { seedsConfigured: 3 });
+  check("X1 every dial ends in an internal error: the round keeps the count of such dials and no outcome; it does not count for the hour's figure, and it says nothing about who could stand in for a seed",
+    okRound.faults.dials === 0 && okRound.faults.list === 0 && okRound.counted === true && rd.faults.list === 0 && rd.faults.dials === okRound.outcomes.origins_dialed && rd.faults.dials > 5 && rd.outcomes === null && rd.versions === null && rd.counted === false && rd.witnessFacts === null
+    && rd.everyRound.window.counted_rounds === 1 && rd.everyRound.window.counted_this_round === false, JSON.stringify([rd.faults, rd.counted, rd.everyRound.window]));
+  check("X2 what is published of it: the state read_fault with the reason, and no count at all: such a dial is not 'no answer'. The list itself is still published",
+    w.state === "read_fault" && w.reason === "a fault in DNO's own read: " + rd.faults.dials + " dials of this round ended in an internal error, so no counts are given for it" && w.no_answer === null && w.answered_as_listed === null && w.watched === null
+    && w.not_dialed === null && w.at_seed_height === null && w.every_round_last_hour === null && w.versions === null && w.round_at !== null && oc.state === "agreed" && oc.active === 19 && FORBIDDEN(JSON.stringify(w)).length === 0, JSON.stringify(w));
+  const line = roundLogLine(rd);
+  check("X3 the round's log line says it in the words the operator's check counts, and gives no dial counts", /; \d+ dials ended in an internal error \(a fault in DNO's own read\): no counts for this round$/.test(line) && !/no answer|as listed|dialed \d/.test(line) && FORBIDDEN(line).length === 0, line);
+  const one = await round({ fetch: faulty((u, m) => dialsOf(u, m) && u.port === String(V.b.srv.port)) });
+  check("X4 one such dial among the others is enough: no count is given for the round", one.faults.dials === 1 && one.outcomes === null && publicValidatorWatch(one, one.roundAt, {}).state === "read_fault"
+    && publicValidatorWatch(one, one.roundAt, {}).reason === "a fault in DNO's own read: 1 dial of this round ended in an internal error, so no counts are given for it", JSON.stringify(one.faults));
+  check("X5 the sentence for readers without JavaScript then gives the list only", validatorsSentence(oc, w) === "19 ACTIVE on chain, as 2 of 3 public seeds listed them at " + oc.observed_at.slice(11, 19) + " UTC. In status only when fewer than two seeds give their own height, and then at most 8 of them.", validatorsSentence(oc, w));
+  // The list read. Seed c's list differs from a's and b's, so with b's read failing no two lists agree.
+  const listOf = (name) => (u, m) => m === "POST" && u.port === String(new URL(S[name].url).port);
+  const lb = await round({ fetch: faulty(listOf("b")) }), ocb = publicOnChainValidators(lb, lb.listAt, { seedsConfigured: 3 });
+  check("X6 a list read that ends in an internal error is kept as that: the seed is not said to have returned no list, the round counts the fault, and its log line names it",
+    lb.faults.list === 1 && lb.seedErrors.find((e) => e.name === "seed-b").list === "internal error" && /; no list from seed-b internal error$/.test(roundLogLine(lb)) && ocb.state === "not_agreed" && /different validator lists/.test(ocb.reason), JSON.stringify([lb.faults, ocb.reason, roundLogLine(lb)]));
+  const lbc = await round({ fetch: faulty((u, m) => listOf("b")(u, m) || listOf("c")(u, m)) }), ocbc = publicOnChainValidators(lbc, lbc.listAt, { seedsConfigured: 3 });
+  check("X7 when DNO's own reads leave fewer than two lists, the reason says whose fault it is: not 'fewer than two public seeds returned a validator list'",
+    lbc.faults.list === 2 && ocbc.state === "not_agreed" && ocbc.seeds_answered === 1 && ocbc.reason === "DNO's own read of the validator list ended in an internal error for 2 of 3 public seeds"
+    && publicValidatorWatch(lbc, lbc.roundAt, {}).state === "no_agreed_list", JSON.stringify([lbc.faults, ocbc.reason]));
+  const lc = await round({ fetch: faulty(listOf("c")) });
+  check("X8 with two lists that agree, a third read's fault does not change what is published; the round still counts it", lc.faults.list === 1 && lc.list.agreed === true && publicValidatorWatch(lc, lc.roundAt, {}).state === "observed" && lc.counted === true, JSON.stringify(lc.faults));
 }
 
 console.log("\n[" + TAG + "] hardening");
@@ -438,6 +474,24 @@ console.log("\n[" + TAG + "] hardening");
   const zw = publicValidatorWatch(zr, zr.roundAt, {});
   check("H11 an agreed empty list: zero ACTIVE, zero watched, nothing dialed", publicOnChainValidators(zr, zr.listAt, {}).active === 0 && zw.watched === 0 && zw.answered_as_listed === 0);
   stopAll(zs);
+}
+
+console.log("\n[" + TAG + "] a seed's answer is a list only with result 200, and a seed's address is looked up in bounded time");
+{
+  const rowsOk = [row(0x11, "2", V.a.url)];
+  const answering = (result) => Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { const m = (await req.json()).params[0].message; return Response.json({ result, response: m === "getValidators" ? rowsOk : { minValidatorStake: "5" } }); } });
+  const s200 = answering(200), s500 = answering(500), sNone = answering(undefined);
+  const seedsOf = (...srvs) => srvs.map((x, i) => ({ name: "seed-" + i, url: "http://127.0.0.1:" + x.port }));
+  const good = await round({ seeds: seedsOf(s200, s200) }), bad = await round({ seeds: seedsOf(s200, s500) }), none = await round({ seeds: seedsOf(s200, sNone) });
+  check("J1 a seed that answers rows beside result 500, or beside no result, has returned no list: it is not counted towards agreement, and its error names the result",
+    good.list.agreed === true && bad.list.agreed === false && bad.list.seedsAnswered === 1 && bad.seedErrors[1].list === "result 500" && none.list.agreed === false && none.seedErrors[1].list === "result missing", JSON.stringify([bad.seedErrors, none.seedErrors]));
+  s200.stop(true); s500.stop(true); sNone.stop(true);
+  // A lookup of a seed's own address that never settles ends with the read's own time limit.
+  const never = (u) => (u === SEEDS[1].url ? new Promise(() => {}) : loopResolver(u));
+  const started = Date.now();
+  const hung = await Promise.race([round({ resolveOrigin: never, timeoutMs: 300, dials: false }), new Promise((res) => setTimeout(() => res("still waiting after 5 s"), 5000))]);
+  check("J2 a seed whose address lookup never settles is given the read's time limit and no more: the round ends, and that seed has no list", hung !== "still waiting after 5 s" && Date.now() - started < 4000
+    && hung.seedErrors[1].list === "address not resolved to a public http origin" && hung.seedErrors[0].list === null, typeof hung === "string" ? hung : JSON.stringify(hung.seedErrors));
 }
 
 console.log("\n[" + TAG + "] the first-agreed clock (DNO's clock)");
@@ -662,15 +716,34 @@ console.log("\n[" + TAG + "] the rows that answered before are dialed first");
   // The origin cap at 3: in address order the first three origins are a, b and c.
   let r = await round({ maxOrigins: 3 });
   const outcome = (x, n) => x.witnessFacts.rows.find((y) => y.key === k(n));
-  check("D1 in address order the cap is spent on the first rows: later rows are over the cap", outcome(r, 0x11).confirmed && outcome(r, 0x12).confirmed && !outcome(r, 0x1c).confirmed && !outcome(r, 0x1d).confirmed && r.outcomes.not_dialed_reasons.over_cap > 0);
+  check("Y1 in address order the cap is spent on the first rows: later rows are over the cap", outcome(r, 0x11).confirmed && outcome(r, 0x12).confirmed && !outcome(r, 0x1c).confirmed && !outcome(r, 0x1d).confirmed && r.outcomes.not_dialed_reasons.over_cap > 0);
   r = await round({ maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) });
-  check("D2 the kept candidates are dialed before the rest: the cap cannot take their dial", outcome(r, 0x1c).confirmed && outcome(r, 0x1d).confirmed && outcome(r, 0x11).confirmed && !outcome(r, 0x12).confirmed, JSON.stringify(r.outcomes.not_dialed_reasons));
+  check("Y2 the kept candidates are dialed before the rest: the cap cannot take their dial", outcome(r, 0x1c).confirmed && outcome(r, 0x1d).confirmed && outcome(r, 0x11).confirmed && !outcome(r, 0x12).confirmed, JSON.stringify(r.outcomes.not_dialed_reasons));
   const hist = createWatchHistory(3600000, 60000);
   hist.record(Date.now() - 60000, true, new Set([k(0x1d)]));
   r = await round({ maxOrigins: 2, history: hist });
-  check("D3 and so are the keys with a record in the window", outcome(r, 0x1d).confirmed && outcome(r, 0x11).confirmed && !outcome(r, 0x12).confirmed);
+  check("Y3 and so are the keys with a record in the window", outcome(r, 0x1d).confirmed && outcome(r, 0x11).confirmed && !outcome(r, 0x12).confirmed);
   const all = await round();
-  check("D4 without a cap in the way the order changes nothing that is counted", JSON.stringify((await round({ first: new Set([k(0x1c), k(0x1d)]) })).outcomes) === JSON.stringify(all.outcomes));
+  check("Y4 without a cap in the way the order changes nothing that is counted", JSON.stringify((await round({ first: new Set([k(0x1c), k(0x1d)]) })).outcomes) === JSON.stringify(all.outcomes)
+    && JSON.stringify((await round({ rotate: 7 })).outcomes) === JSON.stringify(all.outcomes));
+  // The rows not known to answer are dialed starting at another row each round (rotate: the round's number).
+  const dialedAt = async (rotate, extra) => { const x = await round(Object.assign({ maxOrigins: 2, rotate }, extra)); return x.witnessFacts.rows.filter((y) => y.confirmed).map((y) => y.key.slice(0, 2)).join(" "); };
+  check("Y5 with the cap at two origins, round 0 dials the first two rows in address order, round 1 starts one row later, and the start comes round again",
+    (await dialedAt(0)) === "11 12" && (await dialedAt(1)) === "12" && (await dialedAt(undefined)) === "11 12" && (await dialedAt(-3)) === "11 12" && (await dialedAt(19 * 5)) === (await dialedAt(0)), [await dialedAt(0), await dialedAt(1), await dialedAt(2)].join(" | "));
+  check("Y6 the rows that answered before keep their place whatever the round's number: only the others start elsewhere", (await dialedAt(1, { maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) })) === "12 1c 1d"
+    && (await dialedAt(0, { maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) })) === "11 1c 1d", await dialedAt(1, { maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) }));
+  // Names that never resolve hold the lookup budget. Two such rows come before one that resolves and answers.
+  const save = { a: SEED.a, b: SEED.b };
+  const named = [row(0x01, "2", "http://dead1.test:1"), row(0x02, "2", "http://dead2.test:1"), row(0x11, "2", "http://good.test:1")];
+  SEED.a = { list: named, stake: "1" }; SEED.b = { list: named, stake: "1" };
+  const slowNames = async (u) => { const p = parseProbeOrigin(u); if (p && p.hostname === "good.test") return V.a.url; if (p && /^dead/.test(p.hostname)) return new Promise(() => {}); return loopResolver(u); };
+  const budget = { resolveOrigin: slowNames, concurrency: 1, lookupTimeoutMs: 300, lookupBudgetMs: 500 }, hist2 = createWatchHistory(3600000, 60000);
+  const r0 = await round(Object.assign({ rotate: 0, history: hist2 }, budget)), r1 = await round(Object.assign({ rotate: 1, history: hist2 }, budget)), r2 = await round(Object.assign({ rotate: 0, history: hist2 }, budget));
+  check("Y7 two rows whose names never resolve use up the lookup budget before a third is looked up; the next round starts one row later, and the third is looked up, answers, and is dialed first from then on",
+    r0.outcomes.answered_as_listed === 0 && r0.outcomes.not_dialed_reasons.name_unresolved === 2 && r0.outcomes.not_dialed_reasons.over_cap === 1
+    && r1.outcomes.answered_as_listed === 1 && r1.outcomes.not_dialed_reasons.name_unresolved === 2 && r1.outcomes.not_dialed_reasons.over_cap === 0
+    && r2.outcomes.answered_as_listed === 1 && r2.outcomes.not_dialed_reasons.over_cap === 0, JSON.stringify([r0.outcomes.not_dialed_reasons, r0.outcomes.answered_as_listed, r1.outcomes.not_dialed_reasons, r1.outcomes.answered_as_listed, r2.outcomes.answered_as_listed]));
+  SEED.a = save.a; SEED.b = save.b;
 }
 
 Object.values(V).concat([trap]).forEach((v) => v.srv.stop(true));

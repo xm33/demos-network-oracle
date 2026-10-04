@@ -40,6 +40,14 @@ console.log("\n[" + TAG + "] what an answer says");
     r.ok === true && r.block === 5000 && r.height_source === "self" && r.identityMatch === true && r.version === "0.9.9 RC" && r.peers === 2 && Number.isFinite(r.latencyMs), JSON.stringify(r).slice(0, 240));
   check("A2 the peerlist and the answering identity are returned for the catalog intake", Array.isArray(r.peerlist) && r.peerlist.length === 2 && r.answeredId === SEED);
 
+  const versions = [];
+  for (const v of ["0.9.8", "v1.2", "1.0.0-beta.2", "203.0.113.9:53550", "node7.example:53550", "10.0.0.8", "<b>x</b>", "testnet build of Tuesday", "", 7, null]) {
+    const srv = s(info({ identity: SEED, version: v, peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+    versions.push((await readSeedInfo(srv.node)).version);
+  }
+  check("A1b a seed's version is published only when it reads as a release version, by the validators' rule: an address, a host name, markup or free text is '?'",
+    JSON.stringify(versions) === JSON.stringify(["0.9.8", "v1.2", "1.0.0-beta.2", "?", "?", "?", "?", "?", "?", "?", "?"]), JSON.stringify(versions));
+
   const first = s(info({ identity: SEED, peerlist: [{ identity: PEER, sync: { block: 4960 } }] }));
   const f = await readSeedInfo(first.node);
   check("A3 a seed that does not list itself: its first listed peer's height, marked first_peer (counted nowhere)", f.ok === true && f.block === 4960 && f.height_source === "first_peer" && f.identityMatch === true, JSON.stringify(f).slice(0, 200));

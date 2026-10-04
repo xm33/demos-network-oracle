@@ -165,7 +165,33 @@ console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
     && /odd: getValidators: a row without a usable address or status/.test(t3.text), t3.text.split("\n").filter((l) => /lists, address|identities|odd:/.test(l)).join(" | "));
   T.forEach((x) => x.stop(true));
   other.stop(true);
+  // The tool's own one read of a seed follows no redirect: an answer may not send it to another address.
+  let trapped = 0;
+  const trapSrv = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { trapped++; return Response.json(INFO); } });
+  const redir = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { return new Response(null, { status: 302, headers: { location: url(trapSrv) + new URL(req.url).pathname } }); } });
+  const sent = await probeSeed({ name: "redir", url: url(redir) });
+  check("X9 a seed that answers with a redirect is not followed: no request reaches the address it names, and the seed has not answered", trapped === 0 && !(sent.info && sent.info.answered), JSON.stringify([trapped, sent.info]));
+  trapSrv.stop(true); redir.stop(true);
   const { spawnSync } = await import("node:child_process");
+  {
+    // tools/pre-restart-check.mjs in a folder without the agent's node_modules: it must not pass, and must not go on.
+    // The runtime fetches a package it does not find when no node_modules is near (and whether that takes long depends
+    // on its cache), so the child gets a package cache of its own and a registry that is this suite's: a request there
+    // is counted. Asked 0 times is the proof that the check looked on disk first.
+    const { mkdtempSync, mkdirSync, copyFileSync, rmSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+    const box = mkdtempSync(join(tmpdir(), "dno-nosdk-")); mkdirSync(join(box, "tools"));
+    copyFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "pre-restart-check.mjs"), join(box, "tools", "pre-restart-check.mjs"));
+    let asked = 0;
+    const registry = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { asked++; return new Response("{}", { status: 404, headers: { "content-type": "application/json" } }); } });
+    const env = { ...process.env, BUN_INSTALL_CACHE_DIR: join(box, "cache"), BUN_CONFIG_REGISTRY: url(registry) + "/", NPM_CONFIG_REGISTRY: url(registry) + "/", npm_config_registry: url(registry) + "/", NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost" };
+    for (const k of ["HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"]) delete env[k];
+    const kid = Bun.spawn([process.execPath, join(box, "tools", "pre-restart-check.mjs")], { cwd: box, env, stdout: "pipe", stderr: "pipe" });
+    const lone = { status: await kid.exited, stderr: await new Response(kid.stderr).text(), stdout: await new Response(kid.stdout).text() };
+    registry.stop(true);
+    check("X10 the pre-restart check without the Demos SDK beside it: exit 64, it says so, reads nothing and asks no registry for a package (it looks on disk first)", lone.status === 64 && /^The Demos SDK is not installed next to this tool\./.test(lone.stderr) && lone.stdout === "" && asked === 0,
+      JSON.stringify([lone.status, lone.stderr.slice(0, 90), asked]));
+    rmSync(box, { recursive: true, force: true });
+  }
   const bad = spawnSync("bun", [join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "validator-set-probe.mjs"), "--dail"], { encoding: "utf8" });
   check("X5 an argument that is not name=url (a mistyped flag) stops the tool with usage, exit 64", bad.status === 64 && /^1 argument is not a name=url pair\./.test(bad.stderr) && !/dail/.test(bad.stderr + bad.stdout), JSON.stringify([bad.status, bad.stderr.slice(0, 80)]));
   const prod = await dialReport(seeds, results);
@@ -188,6 +214,9 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     const msg = (await req.json()).params[0].message;
     return Response.json({ result: 200, response: msg === "getValidators" ? vrows(o.rows ? o.rows() : o.extraRow ? [{ address: K("d9"), status: "2", connectionUrl: null, stakedAmount: "1", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }] : []) : { minValidatorStake: "1000" } });
   } });
+  // A seed that takes the connection and never answers: started here, awaited at the end of this block.
+  const HANG = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Promise(() => {}) });
+  const hangRead = (async () => { const t = Date.now(); const r = await agentSeedReads([{ name: "seed-hang", url: "http://127.0.0.1:" + HANG.port, identity: K("b1") }]); return { ms: Date.now() - t, r: r[0] }; })();
   const G1 = agentSeed(K("a1")), G2 = agentSeed(K("a2")), NOSELF = agentSeed(K("a3"), { noSelf: true }), OTHERKEY = agentSeed(K("a4"), { names: K("a9") }), DOWN = agentSeed(K("a5"), { status: 503 }), DIFF = agentSeed(K("a6"), { extraRow: true });
   const cfg = (name, srv, key) => ({ name, url: url(srv), identity: key });
   // The global fetch is replaced the way the Demos SDK's import replaces it: the agent's read must not use it.
@@ -246,6 +275,11 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     && vw([own, fp, no], "not_agreed", wit("seed_and_validators", { counted: 2 })) === "3 AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this.");
   check("V14 a reading with a fault beside it is still FAILED", /^3 AGENT READS FAILED: 1 read ended in an internal error/.test(vw([own, no, no], "not_agreed", wit("seed_and_validators", { counted: 2, internalErrors: 1 }))));
 
+  check("V15 a list read or a dial of the check's validator round that ended in an internal error fails it too, whatever else holds: such a round's 'no answer' is DNO's own fault",
+    (() => { const x = agentVerdict([own, own, no], "agreed", 0, wit("seeds_only"), 3); return x.code + " " + x.text; })() === "3 AGENT READS FAILED: 3 reads ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."
+    && agentVerdict([own, own, fault], "agreed", 0, wit("seeds_only", { internalErrors: 1 }), 2).text === "AGENT READS FAILED: 4 reads ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."
+    && agentVerdict([own, own, no], "agreed", 0, wit("seeds_only"), 0).code === 0 && agentVerdict([own, own, no], "agreed", 0, wit("seeds_only"), undefined).code === 0);
+
   // run(): the whole check, as tools/pre-restart-check.mjs calls it. Loopback seeds need a resolver that admits them.
   const loop = async (u) => { const p = parseProbeOrigin(u); return p && p.hostname === "127.0.0.1" ? "http://127.0.0.1:" + p.port : null; };
   // kept: null by default. A suite must not read this host's store: run in the agent's checkout it would find the agent's
@@ -287,6 +321,34 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
   dialHits.n = 0;
   const offSwitch = await runOut(pair(G1, DOWN), { kept: KEPT([cand(K("c7"), val)]) });
   check("W13 the dials are off: the kept validators are not read, and one seed is not enough, exit 3", offSwitch.code === 3 && dialHits.n === 0 && offSwitch.text.trim().endsWith("AGENT READS FAILED: 1 of 2 seeds answered /info, and the agent needs two, or validators that stand in (the dials are off). Do not restart on this."), offSwitch.text.split("\n").slice(-1));
+  // A fault in DNO's own read: the transport throws a TypeError for chosen requests, and the peers answer as always.
+  {
+    const real = Bun.fetch.bind(Bun), port = (srv) => String(srv.port);
+    const faulty = (pick) => async (u, init) => { if (pick(new URL(u), (init && init.method) || "GET")) throw new TypeError("resp.body.getReader is not a function"); return real(u, init); };
+    const control = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty(() => false) });
+    const dialFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty((u, m) => m === "GET" && u.port === port(val)) });
+    check("W30 the dial of a validator ends in an internal error while both seeds and the validator answer: FAILED, exit 3. The check does not print 'no answer' for it, and names no candidate from that round (without the fault: exit 0)",
+      control.code === 0 && dialFault.code === 3 && dialFault.text.includes("  dials: none (a fault in DNO's own read: 1 dial of this round ended in an internal error, so no counts are given for it)") && !/no answer \d/.test(dialFault.text)
+      && dialFault.text.includes("  candidates: none (") && dialFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this.") && leaks(dialFault.text).length === 0,
+      dialFault.code + " | " + dialFault.text.split("\n").filter((l) => /dials:|candidates|AGENT/.test(l)).join(" | "));
+    // The dial works and the witness read of the same address does not (the second GET to it).
+    const seen = {}; const second = (u, m) => { if (m !== "GET" || u.port !== port(val)) return false; seen[u.port] = (seen[u.port] || 0) + 1; return seen[u.port] >= 2; };
+    const witFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty(second) });
+    check("W31 a witness read ends in an internal error: FAILED, exit 3, though two seeds gave their height and the watch round counted",
+      witFault.code === 3 && witFault.text.includes("  read as the agent reads them: 0 of 1 answered as the listed key with their own height · 1 ended in an internal error")
+      && witFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."), witFault.code + " | " + witFault.text.split("\n").slice(-4).join(" | "));
+    const listFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty((u, m) => m === "POST" && u.port === port(G2)) });
+    check("W32 one seed's list read ends in an internal error: FAILED, and the fault is named before the list that was not agreed",
+      listFault.code === 3 && listFault.text.includes("  list: no figure: DNO's own read of the validator list ended in an internal error for 1 of 2 public seeds")
+      && listFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's; no validator list was agreed by two seeds. Do not restart on this."), listFault.code + " | " + listFault.text.split("\n").slice(-1));
+    // One seed is asked for the list (the other is down), a kept validator stands in, and the list read of the one seed faults.
+    const lone = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([cand(K("c7"), val)]), fetch: faulty((u, m) => m === "POST" && u.port === port(G1)) });
+    check("W33 with one seed asked for the list, its faulty list read is not passed over as 'no list is agreed while fewer than two seeds are asked': FAILED, exit 3 (it was: exit 0)",
+      lone.code === 3 && /^AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's\. Do not restart on this\.$/.test(lone.text.trim().split("\n").pop()), lone.code + " | " + lone.text.split("\n").slice(-1));
+    const seedFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty((u, m) => m === "GET" && u.port === port(G2)) });
+    check("W34 a seed's /info read that ends in an internal error is said as that on the seed's line, and fails the check", seedFault.code === 3 && seedFault.text.includes("seed-b  no answer (internal error)") && /1 read ended in an internal error/.test(seedFault.text.trim().split("\n").pop()),
+      seedFault.code + " | " + seedFault.text.split("\n").filter((l) => /seed-b|AGENT/.test(l)).join(" | "));
+  }
   const stale = await runOut(["--dial", ...pair(G1, DOWN)], { kept: { agreedAt: null, candidates: [] } });
   check("W14 candidates older than 24 h are none (the store gives none): exit 3", stale.code === 3 && /the agent keeps no candidates here/.test(stale.text.trim().split("\n").pop()));
   const gone = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([{ key: K("c7").slice(2), url: "http://127.0.0.1:1" }]) });
@@ -298,6 +360,18 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     const dir = mkdtempSync(pj(tmpdir(), "dno-kept-")), file = pj(dir, "marketplace.db");
     const db = new Database(file); createCandidateStore(db).save([cand(K("c7"), val)], Date.now() - 60000); db.close();
     const before = rf(file).toString("hex"), got = keptCandidates(file, Date.now());
+    {
+      // The same on a store in WAL mode that another connection holds open and writes to, as a running agent does.
+      const wfile = pj(dir, "wal.db"), agentDb = new Database(wfile);
+      agentDb.run("PRAGMA journal_mode = WAL"); createCandidateStore(agentDb).save([cand(K("c7"), val)], Date.now() - 60000);
+      agentDb.run("CREATE TABLE t (x INTEGER)"); agentDb.run("INSERT INTO t VALUES (1)");
+      const mainBefore = rf(wfile).toString("hex"), walGot = keptCandidates(wfile, Date.now());
+      agentDb.run("INSERT INTO t VALUES (2)");                                   // the agent goes on writing
+      const stillWrites = agentDb.query("SELECT COUNT(*) AS n FROM t").get().n === 2, keptAfter = createCandidateStore(agentDb).load(Date.now()).candidates.length;
+      check("W16b beside a store in WAL mode that the agent holds open: the kept candidates are read, the store's main file is byte for byte as it was, and the agent goes on writing and still holds what it kept",
+        agentDb.query("PRAGMA journal_mode").get().journal_mode === "wal" && walGot && walGot.candidates.length === 1 && rf(wfile).toString("hex") === mainBefore && stillWrites && keptAfter === 1, JSON.stringify([walGot, stillWrites, keptAfter]));
+      agentDb.close();
+    }
     check("W16 the agent's kept candidates are read from its store without writing to it; no store here is none", got && got.candidates.length === 1 && got.candidates[0].key === K("c7").slice(2) && rf(file).toString("hex") === before
       && keptCandidates(pj(dir, "absent.db"), Date.now()) === null && keptCandidates(file, Date.now() + 25 * 3600000).candidates.length === 0);
     rmSync(dir, { recursive: true, force: true });
@@ -329,6 +403,13 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
   const otherKeyKept = await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]), kept: KEPT([cand(K("c7"), val)]) });
   check("W18 one seed with its height, one that answers as another key (so it is not asked for the list), and a kept validator within 25 blocks: the agent reads, and so does this check (it was: FAILED for a list no two seeds could agree)", otherKeyKept.code === 0
     && otherKeyKept.text.trim().split("\n").pop().startsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator that answers as listed is within 25 blocks of it."), otherKeyKept.code + " | " + otherKeyKept.text.split("\n").slice(-1));
+  // A kept candidate whose key is the one a seed URL answered with (not that seed's configured key): the agent reads it.
+  const val9 = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: K("a9"), peerlist: [{ identity: K("a9"), sync: { block: 7003 } }] }); } });
+  const aliasKept = await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]), kept: KEPT([cand(K("a9"), val9)]) });
+  check("W18b a seed's key is its configured key, as in the agent: a kept candidate with the key some seed URL answered with is still read, and stands in (it was: dropped, FAILED 'the agent keeps no candidates here')", aliasKept.code === 0
+    && aliasKept.text.includes("  candidates: 1, kept by the agent from the list two seeds agreed on at ") && aliasKept.text.trim().split("\n").pop().startsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator that answers as listed is within 25 blocks of it."),
+    aliasKept.code + " | " + aliasKept.text.split("\n").slice(-4).join(" | "));
+  val9.stop(true);
   const unreadable = await runOut(["--dial", ...pair(G1, DOWN)], { kept: { unreadable: true } });
   check("W19 a store that is there and cannot be read is said as that, not as an agent that keeps none", unreadable.code === 3 && unreadable.text.includes("  the agent's store is here and could not be read: the candidates it keeps are not known to this check")
     && unreadable.text.includes("  candidates: none (this run's validator round did not count, and the kept ones could not be read)") && unreadable.text.trim().endsWith("validators that stand in (the agent's store could not be read). Do not restart on this."), unreadable.text.split("\n").slice(-4).join(" | "));
@@ -373,6 +454,16 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     const db = new Database(file); db.run("CREATE TABLE incidents (id TEXT)"); db.close();
     const before = rf(file).toString("hex"), got = keptCandidates(file, Date.now());
     const after = new Database(file, { readonly: true }), tables = after.query("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name); after.close();
+    {
+      // The same on a WAL store nothing else holds: the read may leave the store's side files, never a change in the store.
+      const wfile = pj(dir, "wal-alone.db"), w0 = new Database(wfile); w0.run("PRAGMA journal_mode = WAL"); w0.run("CREATE TABLE incidents (id TEXT)"); w0.run("INSERT INTO incidents VALUES ('INC-1')"); w0.close();
+      const mainBefore = rf(wfile).toString("hex"), gotW = keptCandidates(wfile, Date.now()), mainAfterRead = rf(wfile).toString("hex");
+      const again = new Database(wfile), rowsAfter = again.query("SELECT id FROM incidents").all().map((r) => r.id).join(), tablesAfter = again.query("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name).join();
+      again.run("INSERT INTO incidents VALUES ('INC-2')"); const writable = again.query("SELECT COUNT(*) AS n FROM incidents").get().n === 2; again.close();
+      check("W24b on a store in WAL mode that nothing else holds: no candidates table appears, the main file's bytes are the same after the read, and the store opens and takes writes afterwards as before",
+        !!gotW && gotW.candidates.length === 0 && mainAfterRead === mainBefore && tablesAfter === "incidents", JSON.stringify([gotW, tablesAfter, mainAfterRead === mainBefore]));
+      check("W24c and its content is what it was", rowsAfter === "INC-1" && tablesAfter === "incidents" && writable, JSON.stringify([rowsAfter, tablesAfter, writable]));
+    }
     check("W24 the check writes nothing into the agent's store: one without the candidates table has none afterwards, and its bytes are the same", got && got.candidates.length === 0 && tables.join() === "incidents" && rf(file).toString("hex") === before, JSON.stringify([got, tables]));
     rmSync(dir, { recursive: true, force: true });
   }
@@ -382,7 +473,7 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
   // height as a second seed height, named candidates from its own round and said OK.
   const ALIAS = agentSeed(K("b9"));
   const mixed = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-alias", ALIAS, K("a4")], ["seed-noself", NOSELF, K("a3")]]) }), mixedDial = Object.assign(await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-alias", ALIAS, K("a4")], ["seed-noself", NOSELF, K("a3")]]) }));
-  check("W9 a height from a seed that answers as another key is not a seed height here either: the round does not count, no candidate is named, exit 3",
+  check("W9x a height from a seed that answers as another key is not a seed height here either: the round does not count, no candidate is named, exit 3",
     mixedDial.code === 3 && mixedDial.text.includes("  seeds' median: not known (fewer than two own heights): heights not compared") && mixedDial.text.includes("  candidates: none (this run's validator round did not count, and the agent keeps none here)")
     && mixedDial.text.trim().endsWith("AGENT READS FAILED: 1 of the 3 seeds that answered gave its own height, and the agent needs two, or validators that stand in (the agent keeps no candidates here). Do not restart on this.") && mixed.code === 3,
     mixedDial.code + " | " + mixedDial.text.split("\n").filter((l) => /median|candidates|AGENT/.test(l)).join(" | "));
@@ -394,7 +485,7 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     return Response.json(msg === "getValidators" ? { result: 200, response: [{ address: K("c7"), status: "http://10.9.8.7:53550", connectionUrl: null, "url 10.9.8.7:53550": 1 }] } : { result: "see 10.9.8.7", response: null });
   } });
   const hostile = await runOut(["seed-x=" + url(HOSTILE)], { agentReads: false });
-  check("W10 a field name, a status or a result that is not a plain name, a status or a number is counted, not printed", !/10\.9\.8\.7/.test(hostile.text) && hostile.text.includes("keys: identity, peerlist, version, (1 other name not printed)")
+  check("W10x a field name, a status or a result that is not a plain name, a status or a number is counted, not printed", !/10\.9\.8\.7/.test(hostile.text) && hostile.text.includes("keys: identity, peerlist, version, (1 other name not printed)")
     && hostile.text.includes("peerlist entry keys: identity, sync{block}, (1 other name not printed)") && hostile.text.includes('status "(not a status code)": 1') && hostile.text.includes("no answer (result not a status code)")
     && hostile.text.includes("row keys: status, address, connectionUrl, (1 other name not printed)"), hostile.text.split("\n").slice(0, 8).join(" | "));
   check("W10b of a peer's field names only those DNO itself reads are printed; any other is counted, however plain it looks", JSON.stringify(keysOf({ version_name: 1, identity: 2, peerlist: [] })) === JSON.stringify(["identity", "peerlist", "(1 other name not printed)"])
@@ -421,7 +512,21 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
   check("W8b a source with no seed configuration: exit 64, said plainly", noBlock.code === 64 && noBlock.err === "The seeds could not be read from src/agent.mjs: it has no PUBLIC_NODES block.", JSON.stringify(noBlock));
   const plain = await runOut(pair(G1, G2), { agentReads: false });
   check("W6 the plain probe (no agent reads) prints no verdict and keeps its exit codes", plain.code === 0 && !/AGENT READS/.test(plain.text) && !/Watch \(/.test(plain.text));
-  [G1, G2, NOSELF, OTHERKEY, DOWN, DIFF, val].forEach((x) => x.stop(true));
+  // The store the check reads by default: marketplace.db in the agent's log folder (LOG_DIR, as the agent reads it).
+  {
+    const { mkdtempSync, rmSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+    const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs");
+    const dir = mkdtempSync(join(tmpdir(), "dno-logdir-")), db = new Database(join(dir, "marketplace.db"));
+    createCandidateStore(db).save([cand(K("c7"), val)], Date.now() - 60000); db.close();
+    const was = process.env.LOG_DIR; process.env.LOG_DIR = dir;
+    let byDefault; try { byDefault = await runOut(["--dial", ...pair(G1, DOWN)], { kept: undefined }); } finally { if (was === undefined) delete process.env.LOG_DIR; else process.env.LOG_DIR = was; }
+    check("W35 by default the check reads the candidates the agent keeps from marketplace.db in its log folder: one seed down, the kept validator stands in, exit 0", byDefault.code === 0
+      && byDefault.text.includes("  candidates: 1, kept by the agent from the list two seeds agreed on at ") && byDefault.text.trim().split("\n").pop().startsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator"), byDefault.code + " | " + byDefault.text.split("\n").slice(-4).join(" | "));
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const hung = await hangRead;
+  check("G6 a seed that never answers is given the agent's own five seconds, and is then 'no answer (timeout)'", hung.r.ok === false && hung.r.error === "timeout" && hung.ms >= 4500 && hung.ms < 9000 && agentSeedLine(hung.r) === "seed-hang  no answer (timeout)", JSON.stringify(hung));
+  [G1, G2, NOSELF, OTHERKEY, DOWN, DIFF, val, HANG].forEach((x) => x.stop(true));
 }
 
 [A, B, C, E].forEach((s) => s.stop(true));

@@ -38,6 +38,10 @@ export function sanitizeHeight(value) {
 }
 
 // Short peer-reported labels (sync status, version). Printable, conservative charset, bounded length.
+// A version as releases name them (0.9.9, v1.2, 0.9.9 RC, 1.0.0-beta.2). Anything else is "no version": a node's free
+// text never reaches a public surface as its version (four numbers and a port would pass sanitizeLabel).
+const VERSION_RE = /^v?\d{1,2}\.\d{1,3}(\.\d{1,3})?([ -]?(rc|beta|alpha)[ .]?\d{0,2})?$/i;
+export function versionOf(value) { return typeof value === "string" && VERSION_RE.test(value.trim()) ? value.trim() : null; }
 export function sanitizeLabel(value, maxLen) {
   if (typeof value !== "string") return null;
   var s = value.trim();

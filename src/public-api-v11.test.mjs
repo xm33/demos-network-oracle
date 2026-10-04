@@ -120,11 +120,35 @@ check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycl
 const SCHEMA = JSON.parse(readFileSync(join(ROOT, "organism.schema.json"), "utf8"));
 const apiVersion = (SRC.match(/var API_VERSION = "([0-9.]+)";/) || [])[1];
 const changelog = Array.isArray(SCHEMA["x-changelog"]) ? SCHEMA["x-changelog"].map((e) => String(e.version)) : [];
-check("H27 the agent's API version is 1.2, the newest entry of the schema's changelog", apiVersion === "1.2" && changelog.length > 0 && changelog.every((v) => v <= apiVersion) && changelog.includes(apiVersion), apiVersion + " | " + changelog.join(","));
+check("H27x the agent's API version is 1.2, the newest entry of the schema's changelog", apiVersion === "1.2" && changelog.length > 0 && changelog.every((v) => v <= apiVersion) && changelog.includes(apiVersion), apiVersion + " | " + changelog.join(","));
 // Every endpoint /docs lists has a route (up to 7.1.1 it listed GET /signals, which answered 404).
 const docsPaths = [...SRC.matchAll(/docsEntry\('GET (\/[^' ?]*)/g)].map((m) => m[1]);
 const noRoute = docsPaths.filter((p) => !SRC.includes('reqPath === "' + p + '"') && !SRC.includes('reqPath.startsWith("' + p + '")'));
 check("H28 every endpoint /docs lists has a route in the agent", docsPaths.length >= 15 && noRoute.length === 0, docsPaths.length + " listed; no route: " + noRoute.join(", "));
+// And the other way: every route the public handler serves is on /docs. Not listed, by their nature: /docs itself, /home
+// (a redirect to /), and the routes the public listener answers 404 or 401 for (the internal views and the private one).
+const NOT_PUBLIC = ["/docs", "/home", "/history", "/history/export", "/dashboard", "/private/commerce/status"];
+const served = [...new Set([...SRC.matchAll(/reqPath === "(\/[^"]*)"/g)].map((m) => m[1].replace(/(.)\/$/, "$1")))];
+const unlisted = served.filter((p) => !NOT_PUBLIC.includes(p) && !docsPaths.includes(p));
+check("H28b every route the public site serves is listed on /docs, which says 'every route'", served.length >= 28 && unlisted.length === 0 && NOT_PUBLIC.every((p) => served.includes(p)) && /Every route the public site serves/.test(SRC), served.length + " routes; not listed: " + unlisted.join(", "));
+check("H28c /docs says which of them are not JSON", /docsEntry\('GET \/federate', 'Prometheus text, not JSON/.test(SRC) && /docsEntry\('GET \/badge', 'An SVG image, not JSON/.test(SRC) && /JSON unless noted, and the pages are HTML/.test(SRC));
+check("H29 the height signal on /health says what was read, not 'the public network'", SRC.includes('message: "Highest own height among the seeds that answered: " + pubBlock + " (" + pubOnline.length + " answered)"') && !/Public network at block/.test(SRC) && !/nodes online\)"/.test(SRC));
+check("H30 a record without a block publishes none: null, not block 0", SRC.includes("detectedBlock: r.detected_block || null, resolvedBlock: r.resolved_block || null,"));
+// The disclosure: DNO reads its operator's nodes as fleet data, so "DNO reads it like any other" said too much. What is
+// true is said the same way wherever it is said: in the public reading that validator counts like any other.
+{
+  const core = "counts like any other validator, and only if it publishes an address on chain";
+  const places = { "the site footer (src/agent.mjs)": SRC, "homepage.html": HOME };
+  for (const f of ["about-demos.html", "criteria.html", "methodology.html", "README.md"]) places[f] = readFileSync(join(ROOT, f), "utf8");
+  const without = Object.keys(places).filter((k) => places[k].split(core).length !== 2);
+  const old = Object.keys(places).filter((k) => /reads? (it|that validator) like any other|read like any other|which DNO reads like any other/.test(places[k]));
+  check("H31 the disclosure says the same in six places: in the public reading the operator's validator counts like any other, and none says DNO reads it like any other", without.length === 0 && old.length === 0, "without: " + without.join(", ") + " | old wording: " + old.join(", "));
+}
+// The seed table shows what DNO read: no percentage of a seed's height against the highest seed's, and the count beside
+// it is named for what it counts.
+check("H34 the agent's own version label is this release's (it read 6.9 through three releases): /version, /docs and /federate say 7.2", /^const AGENT_VERSION = "7\.2";/m.test(SRC));
+check("H32 the homepage has no 'Sync' column and no 'at head' label; the count is 'within 100 blocks of the highest seed'", !/>Sync<\/th>/.test(HOME) && !/sync_pct/.test(HOME) && !/>at head</.test(HOME) && HOME.includes('<p class="k">within 100 blocks of the highest seed</p>'));
+check("H33 the homepage shows no median when nothing was compared (one seed's height is not a median), and no dash for a latency that was not observed", HOME.includes("setOdometer(compared && isNum(a.median_block) ? a.median_block : null, compared ? undefined : 'not computed');") && !HOME.includes("no latency this cycle"));
 if (STATIC_ONLY) {
   console.log("\n[" + TAG + "] served checks skipped (--static)");
   console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
@@ -247,7 +271,7 @@ try {
   const VW_KEYS = "answered_as_listed,answered_as_listed_seeds,answered_no_key,answered_other_key,at_seed_height,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,max_rows_per_origin,no_answer,not_dialed,not_dialed_reasons,off_seed_height,origins_dialed,other_key_shared,other_key_shared_origins,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
   check("V1 /health on_chain_validators: exactly the published keys", ocv && Object.keys(ocv).sort().join(",") === OC_KEYS, ocv && Object.keys(ocv).sort().join(","));
   check("V2 /health validator_watch: exactly the published keys", vwt && Object.keys(vwt).sort().join(",") === VW_KEYS, vwt && Object.keys(vwt).sort().join(","));
-  check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
+  check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "read_fault", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
   const ocCounts = ["listed", "active", "unstaking", "other_status", "first_agreed_today", "first_agreed_week", "first_agreed_month", "first_agreed_as_of"];
   const vwCounts = ["watched", "not_dialed", "no_answer", "answered_other_key", "answered_no_key", "answered_as_listed", "every_round_last_hour",
     "origins_dialed", "max_rows_per_origin", "other_key_shared", "other_key_shared_origins", "answered_as_listed_seeds"];

@@ -8,7 +8,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Database } from "bun:sqlite";
-import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot, WITNESS_MAX, CANDIDATE_MAX_AGE_MS, WITNESS_LOOKUP_TIMEOUT_MS } from "./witnesses.mjs";
+import { createCandidateStore, createHeightStore, nextCandidates, readWitnesses, witnessSnapshot, WITNESS_MAX, CANDIDATE_MAX_AGE_MS, WITNESS_LOOKUP_TIMEOUT_MS } from "./witnesses.mjs";
+import { RULE } from "./status-rule.mjs";
 import { parseProbeOrigin } from "./public-safety.mjs";
 import { keyOf } from "./validator-watch.mjs";
 
@@ -187,6 +188,53 @@ console.log("\n[" + TAG + "] the candidates, kept");
   roEmpty.close(); rmSync(dir, { recursive: true, force: true });
   const broken = { run() { throw new Error("disk"); }, query() { throw new Error("disk"); } };
   check("C15 a store that cannot be read at start: none, nothing thrown", createCandidateStore(broken).load(T).candidates.length === 0);
+  // A time is a number a date can hold. What is stored is not trusted to be one.
+  const notTimes = [9e15, 8.64e15 + 1, 0, -5, Infinity, NaN, "1790000000000", null];
+  const d2 = new Database(":memory:"), s2 = createCandidateStore(d2);
+  check("C18 a list time that no date can hold saves nothing (" + notTimes.length + " such values), and 8.64e15, the last one a date holds, does", notTimes.every((t) => s2.save(list, t) === false) && s2.load(T).candidates.length === 0
+    && d2.query("SELECT COUNT(*) AS n FROM dno_meta").get().n === 0 && createCandidateStore(null).save(list, 8.64e15) === true);
+  const refused = notTimes.filter((t) => typeof t !== "number" || Number.isFinite(t)).map((t) => { const d = new Database(":memory:"); d.run("CREATE TABLE dno_meta (key TEXT PRIMARY KEY, value TEXT)");
+    d.run("INSERT INTO dno_meta (key, value) VALUES ('witness_candidates', ?)", [JSON.stringify({ agreed_at: t, candidates: kept })]); const st = createCandidateStore(d); return [st.readable, st.load(T + 1).candidates.length, st.load(T + 1).agreedAt]; });
+  check("C19 a stored list whose time no date can hold is not used: none kept, nothing thrown, and the store still counts as read", refused.length === 6 && refused.every((r) => r[0] === true && r[1] === 0 && r[2] === null), JSON.stringify(refused));
+  const d3 = new Database(":memory:"); d3.run("CREATE TABLE dno_meta (key TEXT PRIMARY KEY, value TEXT)");
+  d3.run("INSERT INTO dno_meta (key, value) VALUES ('witness_candidates', ?)", [JSON.stringify({ agreed_at: T, candidates: [{ key: K(0x51), url: "http://203.0.113.9:1", at: 9e15 }, { key: K(0x52), url: "http://203.0.113.9:2", at: -1 }, { key: K(0x53), url: "http://203.0.113.9:3", at: T - 5 }] })]);
+  eq("C20 a stored candidate whose own time no date can hold takes the list's time; one with a time keeps it", createCandidateStore(d3).load(T + 1).candidates.map((c) => c.at), [T, T, T - 5]);
+}
+
+console.log("\n[" + TAG + "] each validator's last answer, kept for the height clock (createHeightStore)");
+{
+  const T = 1_790_000_000_000, DAY = RULE.clockRememberSeconds * 1000;
+  const db = new Database(":memory:");
+  db.run("CREATE TABLE dno_meta (key TEXT PRIMARY KEY, value TEXT)");
+  db.run("INSERT INTO dno_meta (key, value) VALUES ('catalog_count_started', '1780000000000')");
+  createCandidateStore(db).save([{ key: K(0x51), url: "http://203.0.113.9:53550" }], T);
+  const candidatesBefore = db.query("SELECT value FROM dno_meta WHERE key = 'witness_candidates'").get().value;
+  const hs = createHeightStore(db), two = { [K(0x51)]: { h: 1000, at: T }, [K(0x52)]: { h: 1002, at: T - 20000 } };
+  eq("H1 a new store holds none, and counts as read", [hs.load(T), hs.readable], [{}, true]);
+  check("H2 saved and loaded as they were given: a key, its own height and when it gave it", hs.save(two) === true && JSON.stringify(hs.load(T)) === JSON.stringify(two));
+  eq("H3 a restart keeps them: another store on the same database", createHeightStore(db).load(T + 60000), two);
+  eq("H4 an answer is kept 24 hours: one millisecond more and it is not loaded; loading without a time drops none", [Object.keys(hs.load(T - 20000 + DAY)).length, Object.keys(hs.load(T - 20000 + DAY + 1)), Object.keys(hs.load(T + DAY + 1)).length, Object.keys(hs.load()).length], [2, [K(0x51)], 0, 2]);
+  check("H5 they are one row of dno_meta, and the other rows are left as they were", db.query("SELECT COUNT(*) AS n FROM dno_meta").get().n === 3 && db.query("SELECT value FROM dno_meta WHERE key = 'catalog_count_started'").get().value === "1780000000000"
+    && db.query("SELECT value FROM dno_meta WHERE key = 'witness_candidates'").get().value === candidatesBefore && JSON.stringify(JSON.parse(db.query("SELECT value FROM dno_meta WHERE key = 'witness_heights'").get().value)) === JSON.stringify(two));
+  check("H6 the stored value holds keys, heights and times, and no address", !/http|:\/\/|url|\./.test(db.query("SELECT value FROM dno_meta WHERE key = 'witness_heights'").get().value));
+  const messy = { [K(0x61)]: { h: 5, at: T }, ["0x" + K(0x62)]: { h: 5, at: T }, [K(0xac).toUpperCase()]: { h: 5, at: T }, abc: { h: 5, at: T }, [K(0x64)]: { h: -1, at: T }, [K(0x65)]: { h: 1.5, at: T }, [K(0x66)]: { h: "7", at: T },
+    [K(0x67)]: { h: 2 ** 53, at: T }, [K(0x68)]: { h: 5, at: 9e15 }, [K(0x69)]: { h: 5, at: 0 }, [K(0x6a)]: { h: 5 }, [K(0x6b)]: null, [K(0x6c)]: "x", [K(0x6d)]: { h: 0, at: T } };
+  hs.save(messy);
+  eq("H7 what is not a 64-hex key with a height and a time is dropped, when saved and when a stored value is read", [Object.keys(hs.load(T)).sort(), Object.keys(createHeightStore(db).load(T)).sort()], [[K(0x61), K(0x6d)], [K(0x61), K(0x6d)]]);
+  for (const v of ["{not json", JSON.stringify([1, 2]), JSON.stringify("x"), "null"]) db.run("UPDATE dno_meta SET value = ? WHERE key = 'witness_heights'", [v]), messy[v] = createHeightStore(db);
+  check("H8 a stored value that is not a map of answers: none, nothing thrown; one that is not JSON says the store was not read", ["{not json", JSON.stringify([1, 2]), JSON.stringify("x"), "null"].every((v) => Object.keys(messy[v].load(T)).length === 0)
+    && messy["{not json"].readable === false && messy["null"].readable === true);
+  const many = {}; for (let i = 0; i < 80; i++) many[K(i + 1)] = { h: 1000 + i, at: T + i };
+  hs.save(many);
+  const loaded = Object.keys(hs.load(T + 100));
+  check("H9 at most 64 are kept: the 64 newest answers", loaded.length === 64 && !loaded.includes(K(16)) && loaded.includes(K(17)) && loaded.includes(K(80)) && Object.keys(createHeightStore(db).load(T + 100)).length === 64, loaded.length);
+  const mem = createHeightStore(null);
+  check("H10 without a store they are kept in memory", mem.save(two) === true && Object.keys(mem.load(T)).length === 2 && Object.keys(createHeightStore(null).load(T)).length === 0 && mem.readable === true);
+  const closed = new Database(":memory:"); const cs = createHeightStore(closed); closed.close();
+  check("H11 a store that cannot be written: save says so, and this process still has them", cs.save(two) === false && Object.keys(cs.load(T)).length === 2);
+  const broken = { run() { throw new Error("disk"); }, query() { throw new Error("disk"); } };
+  check("H12 a store that cannot be read at start: none, nothing thrown, and it says so", Object.keys(createHeightStore(broken).load(T)).length === 0 && createHeightStore(broken).readable === false);
+  check("H13 what is given back is a copy: changing it does not change what is kept", (() => { const st = createHeightStore(null); st.save(two); const got = st.load(T); got[K(0x51)].h = 1; delete got[K(0x52)]; return JSON.stringify(st.load(T)) === JSON.stringify(two); })());
 }
 
 console.log("\n[" + TAG + "] who is kept after a counted round (nextCandidates)");
@@ -219,6 +267,9 @@ console.log("\n[" + TAG + "] who is kept after a counted round (nextCandidates)"
   check("M12 when an older key leaves, the next in order takes its place", keys(nextCandidates(senior, facts(senior.slice(1).map((c) => row(parseInt(c.key.slice(0, 2), 16), { since: 100 })).concat(newer)))) === "51 52 53 54 55 56 57 10");
   check("M13 no order can be given (the first-agreed record is unavailable): nothing is renewed, the kept ones stand", nextCandidates(kept, Object.assign(facts([row(0x33, { confirmed: true })]), { seniority: false })) === null
     && nextCandidates(kept, null) === null && nextCandidates(kept, { rows: [] }) === null);
+  const unkeepable = ["0x" + K(0x01), K(0xab).toUpperCase(), "abc", "", K(0x03) + "00", "<script>", K(0x04).slice(1), "g".repeat(64)].map((key, i) => ({ key, addr: "origin", origin: U(i + 1), confirmed: true, since: 1, rounds: 60 }));
+  check("M13b a row whose key cannot be kept (not 64 lower-case hex digits) takes none of the " + WITNESS_MAX + " places: eight such rows, listed longest and answering, leave all eight to the keys that can be kept",
+    keys(nextCandidates([], facts(unkeepable.concat(newer)))) === "10 11 12 13 14 15 16 17" && nextCandidates([], facts(unkeepable)).length === 0, keys(nextCandidates([], facts(unkeepable.concat(newer)))));
   check("M14 with no first list known for any key the order is counted rounds, then key", keys(nextCandidates([], facts([row(0x41, { confirmed: true, since: null, rounds: 1 }), row(0x42, { confirmed: true, since: null, rounds: 3 }), row(0x40, { confirmed: true, since: null, rounds: 1 })]))) === "42 40 41");
   // A week of rounds: one bad round in the middle, a restart, and a dead validator.
   let list = [], t = T;

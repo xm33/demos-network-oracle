@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { RULE, MODES, VALIDATORS_SOURCE, agreementOf, upperMedian, seedReasonOf, selectWitnesses, clockSources, newHeightClock, stepHeightClock, heightMovementOf, assess, stepConditionRecords } from "./status-rule.mjs";
+import { RULE, MODES, VALIDATORS_SOURCE, agreementOf, upperMedian, seedReasonOf, selectWitnesses, clockSources, stepValidators, clockRound, newHeightClock, stepHeightClock, heightMovementOf, assess, stepConditionRecords } from "./status-rule.mjs";
 
 const TAG = "STATUS_RULE";
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -106,8 +106,13 @@ console.log("\n[" + TAG + "] two seeds decide: the 1.1 reading, word for word");
   const crit = round(2, [H, H], null, { maxIncidentSeverity: "critical", publicIncidentCount: 2 });
   check("S13 a warning-level public incident: degraded; a critical one: unstable", warn.status === "degraded" && warn.status_reason === "Warning-level incidents active" && warn.summary === "Degraded reading of the public seeds: 1 of 3 public nodes did not answer; 1 active incident; agreement strong."
     && crit.status === "unstable" && crit.risk === "high" && crit.status_reason === "Critical incidents active" && JSON.stringify(crit.risk_factors) === JSON.stringify(["critical incidents active"]), warn.summary + " | " + crit.status_reason);
+  const warnWeak = round(2, [H - 30, H], null, { maxIncidentSeverity: "warning", publicIncidentCount: 1 }), warnMod = round(3, [H - 30, H, H], null, { maxIncidentSeverity: "warning", publicIncidentCount: 3 });
+  check("S13b weak agreement is unstable also beside a warning-level incident (the stronger word wins), and a warning beside moderate agreement is degraded for the incident; several incidents are 'incidents'",
+    warnWeak.status === "unstable" && warnWeak.status_reason === "Significant disagreement among public node heights" && warnMod.status === "degraded" && warnMod.status_reason === "Warning-level incidents active"
+    && warnMod.summary === "Degraded reading of the public seeds: 3 active incidents; agreement moderate." && crit.summary.includes("; 2 active incidents; "), JSON.stringify([warnWeak.status, warnWeak.status_reason, warnMod.summary, crit.summary]));
   const info = round(3, [H, H, H], null, { maxIncidentSeverity: "info", publicIncidentCount: 1 });
-  check("S14 an info-level incident does not change status and is said", info.status === "stable" && info.summary === "All 3 public seeds answered and their reported heights agree. 1 info-level incident active.");
+  check("S14 an info-level incident does not change status and is said", info.status === "stable" && info.summary === "All 3 public seeds answered and their reported heights agree. 1 info-level incident active."
+    && round(3, [H, H, H], null, { maxIncidentSeverity: "info", publicIncidentCount: 2 }).summary === "All 3 public seeds answered and their reported heights agree. 2 info-level incidents active.");
   check("S15 the seed-level reason the caller passes is used as given", round(2, [H], null, { seedReason: "too_few_heights" }).data_quality_reason === "too_few_heights");
   check("S16 a reading holds no list of heights or nodes: the clock is stepped by the caller (clockHeight, stepHeightClock)", !("clock_heights" in a) && Object.keys(a).sort().join() === "agreement,agreement_reason,condition_reason,confidence,confidence_reason,data_quality,data_quality_reason,risk,risk_factors,standstill,status,status_reason,summary,witnesses");
   check("S17 the summary's noun follows the total: 1 of 3 public nodes, 2 of 3 public nodes; 1 of 1 public node", round(2, [H - 30, H], null).summary === "Unstable reading of the public seeds: 1 of 3 public nodes did not answer; agreement weak."
@@ -193,10 +198,13 @@ console.log("\n[" + TAG + "] the height clock: what each source shows about itse
   check("C1 two seed heights: each seed is a source, by its name; validators are not", ids(clockSources([{ id: "a", h: H }, { id: "b", h: H - 2 }], null)) === `a:${H} b:${H - 2}`
     && ids(clockSources([{ id: "a", h: H }, { id: "b", h: H - 2 }], [H + 9, H + 9, H + 9])) === `a:${H} b:${H - 2}`);
   check("C2 beside one seed the only source is the seed: no validator moves the clock", ids(clockSources([{ id: "a", h: H }], [H + 20, H + 20, H - 25])) === `a:${H}`);
-  check("C3 no seed height: the validators' median is one source; one validator of three cannot move it", ids(clockSources([], [H, H, H + 1])) === `${VALIDATORS_SOURCE}:${H}` && ids(clockSources([], [H, H, H + 24])) === `${VALIDATORS_SOURCE}:${H}`
-    && ids(clockSources([], [H, H + 1])) === `${VALIDATORS_SOURCE}:${H + 1}`);
-  check("C4 a round without a reading has no source: one seed far from every validator read, validators that form no reading, nothing read", clockSources([{ id: "a", h: H }], [H + 5000]).length === 0 && clockSources([{ id: "a", h: H }], null).length === 0
-    && clockSources([], [H, H + 900]).length === 0 && clockSources([], [H]).length === 0 && clockSources([], null).length === 0 && clockSources(null, null).length === 0);
+  check("C3 no seed height and a reading from validators alone: their median is one source, with the step it is given; a step that is not known is 'first', which claims nothing",
+    ids(clockSources([], [H, H, H + 1], "rose")) === `${VALIDATORS_SOURCE}:${H}` && ids(clockSources([], [H, H, H + 24], "same")) === `${VALIDATORS_SOURCE}:${H}` && ids(clockSources([], [H, H + 1], "rose")) === `${VALIDATORS_SOURCE}:${H + 1}`
+    && clockSources([], [H, H, H + 1], "rose")[0].step === "rose" && clockSources([], [H, H, H + 1], "same")[0].step === "same" && clockSources([], [H, H, H + 1])[0].step === "first" && clockSources([], [H, H, H + 1], "up")[0].step === "first"
+    && clockSources([], [H, H, H + 1], "constructor")[0].step === "first");
+  check("C4 a seed that gave its own height is a source in every round, with or without a reading: its heights are kept. Validators that form no reading are no source; nothing read is none",
+    ids(clockSources([{ id: "a", h: H }], [H + 5000])) === `a:${H}` && ids(clockSources([{ id: "a", h: H }], null)) === `a:${H}` && clockSources([{ id: "a", h: H }], [H + 5000])[0].step === undefined
+    && clockSources([], [H, H + 900], "rose").length === 0 && clockSources([], [H], "rose").length === 0 && clockSources([], null).length === 0 && clockSources(null, null).length === 0);
   check("C4b and a round without a source leaves the clock as it is", (() => { const s = run([[{ a: H }, 0], [{ a: H + 1 }, 20]]); return stepHeightClock(s, [], T0 + 40 * S) === s && stepHeightClock(s, null, T0 + 40 * S) === s && stepHeightClock(s, src({ a: H + 2 }), NaN) === s; })());
   check("C4c what is not a height, or has no name, is not a source's answer", stepHeightClock(newHeightClock(), [{ id: "a", h: "431000" }, { id: "b", h: -1 }, { id: "c", h: 1.5 }, { id: 7, h: H }, null], T0).top === null);
   const s = run([[{ a: H, b: H - 2 }, 0], [{ a: H + 1, b: H - 2 }, 20], [{ a: H + 1, b: H - 1 }, 40]]);
@@ -216,9 +224,15 @@ console.log("\n[" + TAG + "] the height clock: what each source shows about itse
     && lower.gave && lower.gave.top === H + 1 && lower.gave.since === T0 + 20 * S && lower.gave.seen === true && lower.gave.at === T0 + 700 * S && heightMovementOf(lower, T0 + 700 * S, true, cfg).staticSeconds === null);
   check("C9b a pause longer than 600 s starts the run of rises again", (() => { const x = run([[{ b: H - 7 }, 80], [{ b: H - 6 }, 681]], q); return x.gave === null && x.lowSince === T0 + 681 * S && run([[{ b: H - 5 }, 1000], [{ b: H - 4 }, 1281]], x).gave === null && run([[{ b: H - 5 }, 1000], [{ b: H - 4 }, 1282]], x).gave !== null; })());
   check("C9c a source at the top in that round keeps the clock there", run([[{ b: H - 7 }, 80], [{ b: H - 6 }, 400], [{ a: H + 1, b: H - 5 }, 700]], q).gave === null);
-  check("C9d a source that only goes back and forth between two heights is rising at each step up: one start-over, and the clock then stands on the higher of the two", (() => {
-    let x = q; for (let k = 0; k < 40; k++) x = run([[{ b: k % 2 ? H - 6 : H - 7 }, 80 + k * 20]], x);
-    return x.gave !== null && x.top === H - 6 && x.seen === false && heightMovementOf(x, T0 + 860 * S, true, cfg).staticSeconds >= 100; })());
+  check("C9d a source that only goes back and forth between two heights rises once in a run: no start-over, however long it goes on, and the count runs on from the top", (() => {
+    let x = q; for (let k = 0; k < 400; k++) x = run([[{ b: k % 2 ? H - 6 : H - 7 }, 80 + k * 20]], x);
+    return x.gave === null && x.top === H + 1 && x.topSince === T0 + 20 * S && heightMovementOf(x, T0 + 8060 * S, true, cfg).staticSeconds === 8040; })());
+  check("C9e the run keeps each source's highest answer: a step back and up again to a height it gave in the run is no rise, a step above it is; a pause longer than 600 s forgets the run", (() => {
+    const a1 = run([[{ b: H - 7 }, 80], [{ b: H - 6 }, 100], [{ b: H - 7 }, 120], [{ b: H - 6 }, 140]], q);
+    const a2 = run([[{ b: H - 5 }, 160]], a1), a3 = run([[{ b: H - 7 }, 180], [{ b: H - 6 }, 800]], a2);
+    return a1.lowSince === T0 + 80 * S && a1.lowLast === T0 + 100 * S && a1.runHi.b === H - 6 && a2.lowLast === T0 + 160 * S && a2.runHi.b === H - 5
+      && a3.lowSince === T0 + 800 * S && a3.lowLast === T0 + 800 * S && a3.runHi.b === H - 6 && a3.gave === null; })());
+  check("C9f a new height at the top ends the run and its memory", (() => { const x = run([[{ b: H - 7 }, 80], [{ a: H + 2, b: H - 6 }, 100]], q); return x.lowSince === null && x.lowLast === null && Object.keys(x.runHi).length === 0 && x.top === H + 2; })());
   const followed = run([[{ b: H - 4 }, 720], [{ b: H - 4 }, 740]], lower);
   check("C10 while the old top is remembered the count runs from each rise of the followed heights, and no arrival is claimed", followed.top === H - 4 && followed.topSince === T0 + 720 * S && followed.seen === false && followed.compared === true
     && heightMovementOf(followed, T0 + 740 * S, true, cfg).staticSeconds === 20 && heightMovementOf(followed, T0 + 740 * S, true, cfg).advancedAt === null && heightMovementOf(followed, T0 + 740 * S, true, cfg).advancing === false);
@@ -232,11 +246,173 @@ console.log("\n[" + TAG + "] the height clock: what each source shows about itse
   const m = heightMovementOf(s, T0 + 40 * S, true, cfg);
   check("C14 what is published: seconds since the new height, when it arrived, 'advancing' within two rounds of it", m.staticSeconds === 20 && m.advancedAt === T0 + 20 * S && m.since === T0 + 20 * S && m.advancing === true && m.stalled === false
     && heightMovementOf(s, T0 + 60 * S, true, cfg).advancing === true && heightMovementOf(s, T0 + 61 * S, true, cfg).advancing === false && heightMovementOf(s, T0 + 320 * S, true, cfg).stalled === true && heightMovementOf(s, T0 + 319 * S, true, cfg).stalled === false);
-  check("C15 nothing is published without a source in the latest round, or before any comparison", heightMovementOf(s, T0 + 40 * S, false, cfg).staticSeconds === null && heightMovementOf(s, T0 + 40 * S, false, cfg).since === null
+  check("C15 nothing is published without a reading in the latest round (not the count, not the time of the last new height, not that DNO follows lower heights), or before any comparison", heightMovementOf(s, T0 + 40 * S, false, cfg).staticSeconds === null && heightMovementOf(s, T0 + 40 * S, false, cfg).since === null
+    && heightMovementOf(s, T0 + 40 * S, true, cfg).advancedAt === T0 + 20 * S && heightMovementOf(s, T0 + 40 * S, false, cfg).advancedAt === null && heightMovementOf(s, T0 + 40 * S, false, cfg).advancing === false
+    && heightMovementOf(Object.assign({}, s, { gave: { top: 9, since: 0, seen: false, at: 0 } }), T0 + 40 * S, true, cfg).following === true && heightMovementOf(Object.assign({}, s, { gave: { top: 9, since: 0, seen: false, at: 0 } }), T0 + 40 * S, false, cfg).following === false
     && heightMovementOf(run([[{ a: H }, 0]]), T0, true, cfg).staticSeconds === null && heightMovementOf(newHeightClock(), T0, true, cfg).staticSeconds === null && heightMovementOf(null, T0, true, cfg).advancedAt === null);
   check("C16 a host clock set back behind the count's start: nothing is said until it has passed it again, and never a negative time", heightMovementOf(s, T0 + 19 * S, true, cfg).staticSeconds === null && heightMovementOf(s, T0 + 19 * S, true, cfg).advancedAt === null
     && heightMovementOf(s, T0 + 19 * S, true, cfg).advancing === false && heightMovementOf(s, T0 + 20 * S, true, cfg).staticSeconds === 0);
   check("C17 the numbers the methodology states", RULE.clockForgetSeconds === 600 && RULE.clockRememberSeconds === 86400 && RULE.standstillSeconds === 1800);
+}
+
+console.log("\n[" + TAG + "] with no seed: what the validators show about themselves, each against its own last answer");
+{
+  const T0 = 1_800_000_000_000, S = 1000, cfg = { roundSeconds: 20, stalledSeconds: 300 };
+  const K = (n) => n.toString(16).padStart(2, "0").repeat(32), A = K(0xa1), B = K(0xa2), C = K(0xa3), D = K(0xa4);
+  const ent = (o) => Object.entries(o).map(([key, h]) => ({ key, h }));
+  const last = (o, at) => Object.fromEntries(Object.entries(o).map(([k, h]) => [k, { h, at: at === undefined ? T0 : at }]));
+  const sv = (was, now, ref, at) => stepValidators(was, ent(now), ref, at === undefined ? T0 + 20 * S : at);
+  check("K1 more than half of the counted above their own last answers: rose. Two of three, three of four, and both of two", sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H + 1, [B]: H + 1, [C]: H }, H + 1).step === "rose"
+    && sv(last({ [A]: H, [B]: H, [C]: H, [D]: H }), { [A]: H + 1, [B]: H + 1, [C]: H + 1, [D]: H }, H + 1).step === "rose" && sv(last({ [A]: H, [B]: H }), { [A]: H + 1, [B]: H + 2 }, H + 2).step === "rose");
+  check("K2 exactly half is not more than half: one of two, two of four. One validator alone never moves the clock", sv(last({ [A]: H, [B]: H }), { [A]: H, [B]: H + 1 }, H + 1).step === "same"
+    && sv(last({ [A]: H, [B]: H, [C]: H, [D]: H }), { [A]: H + 1, [B]: H + 1, [C]: H, [D]: H }, H + 1).step === "same" && sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H, [B]: H, [C]: H + 20 }, H).step === "same");
+  check("K3 who answers is not a height: the same validators on the same heights, some silent, are 'same' whatever their median is now", sv(last({ [A]: H, [B]: H, [C]: H + 3 }), { [A]: H, [C]: H + 3 }, H + 3).step === "same"
+    && sv(last({ [A]: H, [B]: H, [C]: H + 3 }), { [A]: H, [B]: H }, H).step === "same" && sv(last({ [A]: H, [B]: H, [C]: H + 3 }), { [B]: H, [C]: H + 3 }, H + 3).step === "same");
+  check("K4 a step back, or back up to a height short of nothing new, is no rise: a validator below its last answer does not count as risen", sv(last({ [A]: H + 1, [B]: H + 1, [C]: H + 1 }), { [A]: H, [B]: H, [C]: H }, H).step === "same"
+    && sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H, [B]: H, [C]: H }, H).step === "same");
+  check("K5 not more than half risen, and more than half risen or heard for the first time: first. Something may be new, and DNO did not see it arrive", sv({}, { [A]: H, [B]: H, [C]: H }, H).step === "first" && sv(last({ [A]: H }), { [A]: H + 1, [B]: H + 1, [C]: H + 1 }, H + 1).step === "first"
+    && sv(last({ [A]: H, [B]: H }), { [A]: H + 1, [B]: H + 1, [C]: H + 1, [D]: H + 1 }, H + 1).step === "first" && sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H + 1, [B]: H, [C]: H, [D]: H }, H).step === "same"
+    && sv(last({ [A]: H, [B]: H }), { [A]: H, [B]: H, [C]: H, [D]: H }, H).step === "same" && sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H + 1, [B]: H + 1, [C]: H, [D]: H }, H + 1).step === "first");
+  check("K6 only the validators within 25 blocks of the reading's median are counted: a riser outside it does not make a majority, and one outside it does not dilute one", sv(last({ [A]: H, [B]: H, [C]: H - 900 }), { [A]: H + 1, [B]: H, [C]: H - 800 }, H + 1).step === "same"
+    && sv(last({ [A]: H, [B]: H, [C]: H - 900, [D]: H - 900 }), { [A]: H + 1, [B]: H + 1, [C]: H - 900, [D]: H - 900 }, H + 1).step === "rose" && sv(last({ [A]: H, [B]: H }), { [A]: H + 27, [B]: H + 1 }, H + 1).step === "rose"
+    && sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H + 27, [B]: H + 1, [C]: H }, H + 1).step === "same" && sv(last({ [A]: H, [B]: H, [C]: H }), { [A]: H + 26, [B]: H + 1, [C]: H }, H + 1).step === "rose");
+  check("K7 without a reading from validators alone there is no step, and the last answers are still kept (beside a seed, or with no reading)", (() => { const r = sv(last({ [A]: H }), { [A]: H + 4, [B]: H + 5 }, null);
+    return r.step === null && r.next[A].h === H + 4 && r.next[B].h === H + 5 && r.next[A].at === T0 + 20 * S; })());
+  check("K8 the last answers after a round: those who answered are renewed with the round's time, a silent one keeps its own, and one not renewed for 24 h is dropped", (() => {
+    const r = sv(last({ [A]: H, [B]: H, [C]: H }, T0), { [A]: H + 1 }, H + 1, T0 + 86400 * S), late = sv(last({ [A]: H, [B]: H }, T0), { [A]: H + 1 }, H + 1, T0 + 86401 * S);
+    return r.next[A].h === H + 1 && r.next[A].at === T0 + 86400 * S && r.next[B].h === H && r.next[B].at === T0 && Object.keys(r.next).length === 3 && Object.keys(late.next).join() === A && late.step === "first"; })());
+  check("K9 what is not a key or a height is not an answer; a key given twice counts once; the input is not changed", (() => {
+    const was = last({ [A]: H }), frozen = JSON.stringify(was);
+    const r = stepValidators(was, [{ key: A, h: H + 1 }, { key: A, h: H + 9 }, { key: "0x" + B, h: H + 1 }, { key: B, h: "5" }, { key: C, h: -1 }, null, { key: 7, h: H }, { key: D, h: H + 1.5 }], H + 1, T0 + 20 * S);
+    return r.step === "rose" && Object.keys(r.next).join() === A && r.next[A].h === H + 1 && JSON.stringify(was) === frozen && stepValidators(null, null, H, T0).step === "same" && Object.keys(stepValidators({ ["x".repeat(8)]: { h: 1, at: T0 }, [A]: { h: "1", at: T0 }, [B]: { h: 1, at: "t" } }, [], null, T0).next).length === 0; })());
+
+  // One round, as the agent, the replay's tests and the searches take it.
+  const seeds = (o) => Object.entries(o).map(([id, h]) => ({ id, h }));
+  const two = clockRound({}, seeds({ a: H, b: H - 1, c: null }), null, T0);
+  check("R1 two seed heights: the seeds are the sources, the round has a reading, the row keeps nothing of validators", two.reading === true && two.row === null && two.sources.map((x) => x.id + ":" + x.h).join() === `a:${H},b:${H - 1}` && Object.keys(two.validators).length === 0);
+  const beside = clockRound(last({ [A]: H }), seeds({ a: H }), ent({ [A]: H + 3, [B]: H + 3 }), T0 + 20 * S);
+  check("R2 one seed and validators within 25 blocks: the seed alone is the source; the validators' answers are kept for later, no step is made of them, and the highest of those counted is handed on and kept in the row",
+    beside.reading === true && JSON.stringify(beside.row) === JSON.stringify({ max: H + 3 }) && beside.counted === H + 3 && beside.sources.length === 1 && beside.sources[0].id === "a" && beside.sources[0].step === undefined
+    && beside.validators[A].h === H + 3 && beside.validators[B].h === H + 3 && clockRound({}, seeds({ a: H }), ent({ [A]: H + 3, [B]: H + 300 }), T0).counted === H + 3 && two.counted === null);
+  const far = clockRound({}, seeds({ a: H }), ent({ [A]: H + 300 }), T0 + 20 * S), lone = clockRound({}, seeds({ a: H }), null, T0 + 20 * S);
+  const none = clockRound(last({ [A]: H }), seeds({ a: null }), ent({ [A]: H + 1, [B]: H + 900 }), T0 + 20 * S), blank = clockRound(last({ [A]: H }), [], null, T0 + 20 * S);
+  check("R3 one seed and no reading (validators far from it, or none read): the seed is still a source, and the round is marked as having no reading", far.reading === false && far.sources.length === 1 && far.sources[0].h === H && far.validators[A].h === H + 300
+    && lone.reading === false && lone.sources.length === 1 && lone.row === null);
+  const only = clockRound(last({ [A]: H, [B]: H, [C]: H }), seeds({ a: null, b: null }), ent({ [A]: H + 1, [B]: H + 1, [C]: H }), T0 + 20 * S);
+  check("R4 no seed and a reading from validators alone: one source at their median with its step, and the row keeps both, and the highest counted height, for the replay", only.reading === true && JSON.stringify(only.row) === JSON.stringify({ h: H + 1, step: "rose", max: H + 1 }) && only.counted === H + 1
+    && clockRound({}, [], ent({ [A]: H, [B]: H + 2, [C]: H + 2, [D]: H + 900 }), T0).counted === H + 2 && far.counted === null && none.counted === null
+    && JSON.stringify(only.sources) === JSON.stringify([{ id: VALIDATORS_SOURCE, h: H + 1, step: "rose" }]) && only.validators[C].at === T0 + 20 * S);
+  check("R5 no seed and no reading: no source, no row; the validators read are still kept, and with none read the last answers are handed back as they were", none.reading === false && none.sources.length === 0 && none.row === null && none.validators[A].h === H + 1
+    && blank.sources.length === 0 && blank.reading === false && blank.validators[A].h === H && clockRound(null, null, null, T0).sources.length === 0);
+
+  // The fold with the validators' step.
+  const vs = (h, step) => [{ id: VALIDATORS_SOURCE, h, step }], fold = (steps, from) => steps.reduce((s, [src, at]) => stepHeightClock(s, src, T0 + at * S), from || newHeightClock());
+  const base = fold([[seeds({ a: H, b: H }), 0], [seeds({ a: H, b: H }), 20]]);
+  const same = fold([[vs(H + 3, "same"), 40]], base);
+  check("Q1 validators that showed nothing new, with a median above the top: nothing moves. The count runs on, and no new height is said", same.top === H && same.topSince === T0 && same.seen === false && same.compared === true
+    && heightMovementOf(same, T0 + 40 * S, true, cfg).staticSeconds === 40 && heightMovementOf(fold([[vs(H + 3, "same"), 2000]], base), T0 + 2000 * S, true, cfg).staticSeconds === 2000);
+  const first = fold([[vs(H + 3, "first"), 40]], base);
+  check("Q2 validators heard for the first time above the top: the top moves there, the count starts again, nothing is claimed", first.top === H + 3 && first.topSince === T0 + 40 * S && first.seen === false && first.compared === false
+    && heightMovementOf(first, T0 + 40 * S, true, cfg).staticSeconds === null && fold([[vs(H, "first"), 40]], base).topSince === T0 && fold([[vs(H - 4, "first"), 40]], base).top === H);
+  const rose = fold([[vs(H + 1, "rose"), 40]], base);
+  check("Q3 validators that rose, to a median above the top: a new height, seen arriving", rose.top === H + 1 && rose.topSince === T0 + 40 * S && rose.seen === true && heightMovementOf(rose, T0 + 40 * S, true, cfg).advancing === true
+    && heightMovementOf(rose, T0 + 40 * S, true, cfg).advancedAt === T0 + 40 * S);
+  check("Q4 validators that rose to the top itself, or below it, show no new height; below it is a rise of a run, and ten minutes of such rises are a start-over", fold([[vs(H, "rose"), 40]], base).topSince === T0
+    && fold([[vs(H - 9, "rose"), 40]], base).lowSince === T0 + 40 * S && fold([[vs(H - 9, "rose"), 40], [vs(H - 8, "rose"), 400], [vs(H - 7, "rose"), 700]], base).gave.top === H
+    && fold([[vs(H - 9, "rose"), 40], [vs(H - 9, "rose"), 400], [vs(H - 9, "rose"), 700]], base).gave === null && fold([[vs(H - 9, "same"), 40], [vs(H - 8, "same"), 400], [vs(H - 7, "first"), 700]], base).lowSince === null);
+  const gone = fold([[seeds({ a: H - 500, b: H - 500 }), 40], [seeds({ a: H - 499, b: H - 499 }), 60], [seeds({ a: H - 498, b: H - 498 }), 400], [seeds({ a: H - 498, b: H - 498 }), 680], [seeds({ a: H - 497, b: H - 497 }), 700]], base);
+  check("Q5 after a start-over: validators standing on the old top restore the old count, whatever their step; above it they end the following, and 'same' still moves nothing", gone.gave !== null && fold([[vs(H, "same"), 720]], gone).hold === true && fold([[vs(H, "same"), 720]], gone).topSince === T0
+    && fold([[vs(H + 2, "same"), 720]], gone).gave === null && fold([[vs(H + 2, "same"), 720]], gone).top === H - 497 && fold([[vs(H + 2, "same"), 720]], gone).topSince === T0 + 700 * S
+    && fold([[vs(H - 400, "same"), 720]], gone).gave.top === H && fold([[vs(H - 400, "same"), 720]], gone).top === H - 497, JSON.stringify(gone));
+  const fc = (steps, from) => steps.reduce((s, [src, at, counted]) => stepHeightClock(s, src, T0 + at * S, counted), from || newHeightClock());
+  const led = fc([[seeds({ a: H }), 0, H + 2], [seeds({ a: H }), 20, H + 2]]);
+  check("H1 beside a seed the highest counted validator height is read, not counted: the top is the seed's. A seed's step up to a height a validator had shown is followed, and it is no new height: the count runs from when that height was first read, and no arrival is claimed", led.top === H && led.read === H + 2 && led.readSince === T0
+    && (() => { const x = fc([[seeds({ a: H + 1 }), 40, H + 2]], led); return x.top === H + 1 && x.topSince === T0 && x.seen === false && x.compared === true && heightMovementOf(x, T0 + 40 * S, true, cfg).advancing === false && heightMovementOf(x, T0 + 40 * S, true, cfg).staticSeconds === 40
+      && heightMovementOf(x, T0 + 40 * S, true, cfg).advancedAt === null; })()
+    && fc([[seeds({ a: H + 2 }), 40, H + 2]], led).seen === false && fc([[seeds({ a: H + 2 }), 40, H + 2]], led).topSince === T0);
+  check("H1b the same for a seed heard for the first time at such a height: the count does not start again", (() => { const x = fc([[seeds({ a: H, b: H + 2 }), 40, null]], led); return x.top === H + 2 && x.topSince === T0 && x.compared === true && x.seen === false; })()
+    && (() => { const x = fc([[seeds({ a: H, b: H + 3 }), 40, null]], led); return x.top === H + 3 && x.topSince === T0 + 40 * S && x.compared === false && x.readSince === T0 + 40 * S; })());
+  check("H1c a validator cannot make the count younger: while the seed stands, a higher counted height read later changes neither the top nor the count", (() => { const x = fc([[seeds({ a: H }), 40, H + 9], [seeds({ a: H }), 60, H + 12]], led); return x.top === H && x.topSince === T0 && x.read === H + 12 && x.readSince === T0 + 60 * S
+      && heightMovementOf(x, T0 + 60 * S, true, cfg).staticSeconds === 60; })());
+  check("H2 a step above everything read is an arrival, also when a validator shows the same height in that same round: what was read before this round is what counts", fc([[seeds({ a: H + 3 }), 40, H + 3]], led).seen === true && fc([[seeds({ a: H + 3 }), 40, H + 9]], led).seen === true
+    && fc([[seeds({ a: H + 3 }), 40, H + 9]], led).read === H + 9 && fc([[seeds({ a: H + 3 }), 40, null]], led).read === H + 3);
+  check("H3 with no seed the same holds for the validators' median: a rise to a height one counted validator had shown is followed and is no new height; above it, a new height seen arriving", fc([[vs(H + 2, "rose"), 40, H + 2]], led).seen === false && fc([[vs(H + 2, "rose"), 40, H + 2]], led).top === H + 2
+    && fc([[vs(H + 2, "rose"), 40, H + 2]], led).topSince === T0 && fc([[vs(H + 3, "rose"), 40, H + 4]], led).seen === true && fc([[vs(H + 3, "rose"), 40, H + 4]], led).topSince === T0 + 40 * S);
+  check("H4 what is not a height is not read; a counted height below the round's sources changes nothing", fc([[seeds({ a: H }), 0, "x"], [seeds({ a: H }), 20, -4]]).read === H && fc([[seeds({ a: H }), 0, H - 9]]).read === H && newHeightClock().read === null);
+  const g0 = fc([[seeds({ a: H, b: H }), 0, null], [seeds({ a: H }), 20, H + 5]]);
+  const gUp = fc([[seeds({ a: H - 500 }), 40, null], [seeds({ a: H - 499 }), 60, null], [seeds({ a: H - 498 }), 400, null], [seeds({ a: H - 497 }), 700, H - 490]], g0);
+  check("H5 a start-over sets aside what was read on the heights given up and keeps it with them; a source back on the old top brings it back", gUp.gave.top === H && gUp.gave.read === H + 5 && gUp.gave.readSince === T0 + 20 * S && gUp.read === H - 490 && gUp.readSince === T0 + 700 * S
+    && fc([[seeds({ a: H }), 720, null]], gUp).read === H + 5 && fc([[seeds({ a: H }), 720, null]], gUp).readSince === T0 + 20 * S && fc([[seeds({ a: H }), 720, null]], gUp).hold === true && fc([[seeds({ a: H + 1 }), 720, null]], gUp).gave === null);
+  check("H5b a source back above the old top ends the following, and is set against everything read before the start-over: up to a height a counted validator had shown then, no new height, and the count runs from that first reading; above it, a new height seen arriving", (() => {
+    const mid = fc([[seeds({ a: H + 3 }), 720, null]], gUp), up = fc([[seeds({ a: H + 6 }), 720, null]], gUp), at5 = fc([[seeds({ a: H + 5 }), 720, null]], gUp);
+    return mid.gave === null && mid.top === H + 3 && mid.topSince === T0 + 20 * S && mid.seen === false && mid.compared === true && mid.read === H + 5 && mid.readSince === T0 + 20 * S && heightMovementOf(mid, T0 + 720 * S, true, cfg).staticSeconds === 700
+      && heightMovementOf(mid, T0 + 720 * S, true, cfg).advancedAt === null && heightMovementOf(mid, T0 + 720 * S, true, cfg).following === false
+      && at5.top === H + 5 && at5.seen === false && at5.topSince === T0 + 20 * S
+      && up.gave === null && up.top === H + 6 && up.topSince === T0 + 720 * S && up.seen === true && up.read === H + 6 && up.readSince === T0 + 720 * S; })(), JSON.stringify(fc([[seeds({ a: H + 3 }), 720, null]], gUp)));
+  check("H5c a height read before the start-over and read again since is as old as its first reading: when the returning round itself reads it (a counted validator beside the seed), and when a counted validator showed it while lower heights were followed. The seed that then reaches it does not restart the count", (() => {
+    const back = fc([[seeds({ a: H + 3 }), 720, H + 5]], gUp), then = fc([[seeds({ a: H + 5 }), 740, H + 5]], back);
+    const low = fc([[seeds({ a: H - 496 }), 710, H + 5]], gUp), lowBack = fc([[seeds({ a: H + 3 }), 720, null]], low), lowThen = fc([[seeds({ a: H + 5 }), 740, null]], lowBack);
+    return back.gave === null && back.read === H + 5 && back.readSince === T0 + 20 * S && back.top === H + 3 && back.topSince === T0 + 20 * S && back.seen === false
+      && then.top === H + 5 && then.topSince === T0 + 20 * S && then.seen === false && heightMovementOf(then, T0 + 1820 * S, true, cfg).staticSeconds === 1800
+      && low.gave !== null && low.read === H + 5 && low.readSince === T0 + 710 * S
+      && lowBack.gave === null && lowBack.read === H + 5 && lowBack.readSince === T0 + 20 * S && lowBack.top === H + 3 && lowBack.topSince === T0 + 20 * S
+      && lowThen.top === H + 5 && lowThen.topSince === T0 + 20 * S && lowThen.seen === false; })(),
+    JSON.stringify([fc([[seeds({ a: H + 3 }), 720, H + 5]], gUp).readSince - T0, fc([[seeds({ a: H + 3 }), 720, null]], fc([[seeds({ a: H - 496 }), 710, H + 5]], gUp)).readSince - T0]));
+  const top0 = fc([[seeds({ a: H, b: H }), 0, null]]);
+  const below = (counted) => fc([[seeds({ b: H - 20 }), 20, counted], [seeds({ b: H - 19 }), 40, counted], [seeds({ b: H - 18 }), 400, counted], [seeds({ b: H - 17 }), 700, counted]], top0);
+  check("H6 a counted validator at or above the top in this round keeps the top: a seed rising below it for more than ten minutes makes no start-over, and the count runs on. With the validator below the top, or none read, it does", below(H).gave === null && below(H).top === H
+    && below(H).topSince === T0 && below(H).compared === true && below(H + 3).gave === null && below(H + 3).top === H && below(H + 3).read === H + 3 && below(H - 1).gave !== null && below(H - 1).gave.top === H && below(H - 1).top === H - 17 && below(null).gave !== null
+    && heightMovementOf(below(H), T0 + 1800 * S, true, cfg).staticSeconds === 1800 && heightMovementOf(below(H), T0 + 1800 * S, true, cfg).following === false, JSON.stringify(below(H)));
+  // The top rising under a height DNO read: validators far above the one seed that answers were counted once (they
+  // agree among themselves), then the seeds answer again and rise, round after round, far below that height.
+  const far0 = fc([[seeds({ a: H }), 0, null], [seeds({ a: H + 1 }), 20, null], [seeds({ a: H + 2 }), 40, H + 500]]);
+  const climb = (from, to, counted) => { const steps = []; for (let t = from, k = 0; t <= to; t += 20, k++) steps.push([seeds({ a: H + 3 + k }), t, typeof counted === "function" ? counted(t) : counted]); return steps; };
+  const under = fc(climb(60, 660, null), far0), given = fc([[seeds({ a: H + 40 }), 680, null]], under), after = fc([[seeds({ a: H + 41 }), 700, null]], given);
+  check("H7 a seed that rises under a height DNO read is followed, and the count runs from when that height was first read: no height it reaches is new", far0.read === H + 500 && far0.readSince === T0 + 40 * S && far0.top === H + 2 && far0.seen === true
+    && under.gave === null && under.top === H + 33 && under.topSince === T0 + 40 * S && under.seen === false && heightMovementOf(under, T0 + 660 * S, true, cfg).staticSeconds === 620 && heightMovementOf(under, T0 + 660 * S, true, cfg).following === false, JSON.stringify(under));
+  check("H7b after more than ten minutes of such rises, with nothing read at that height in this round, the height is given up and remembered: DNO follows the lower heights, says so, claims nothing in that round, and then counts from each rise without claiming an arrival", given.gave !== null && given.gave.top === H + 500 && given.gave.since === T0 + 40 * S && given.gave.seen === false && given.gave.read === H + 500
+    && given.top === H + 40 && given.topSince === T0 + 680 * S && given.compared === false && given.read === H + 40 && given.readSince === T0 + 680 * S
+    && heightMovementOf(given, T0 + 680 * S, true, cfg).staticSeconds === null && heightMovementOf(given, T0 + 680 * S, true, cfg).following === true
+    && after.top === H + 41 && after.topSince === T0 + 700 * S && after.seen === false && heightMovementOf(after, T0 + 700 * S, true, cfg).staticSeconds === 0 && heightMovementOf(after, T0 + 700 * S, true, cfg).advancing === false
+    && heightMovementOf(after, T0 + 700 * S, true, cfg).advancedAt === null && heightMovementOf(fc([[seeds({ a: H + 41 }), 2600, null]], after), T0 + 2600 * S, true, cfg).staticSeconds === 1900, JSON.stringify(given));
+  check("H7c it is not given up while it is read: with the validators counted at that height in the round, or the seed itself reaching it, the count runs on from its first reading", (() => {
+    const read = fc([[seeds({ a: H + 40 }), 680, H + 500]], under), reach = fc([[seeds({ a: H + 500 }), 680, null]], under), above = fc([[seeds({ a: H + 501 }), 680, null]], under);
+    return read.gave === null && read.top === H + 40 && read.topSince === T0 + 40 * S && heightMovementOf(read, T0 + 680 * S, true, cfg).staticSeconds === 640
+      && reach.gave === null && reach.top === H + 500 && reach.topSince === T0 + 40 * S && reach.seen === false
+      && above.gave === null && above.top === H + 501 && above.topSince === T0 + 680 * S && above.seen === true; })());
+  check("H7d ten minutes: at 600 s of such rises it is kept, at more it is given up; a pause of more than ten minutes between two rises starts the run again; a seed that goes back and forth under it rises once", (() => {
+    const short = fc(climb(60, 100, null), far0), again = fc([[seeds({ a: H + 9 }), 1300, null]], short);                 // a pause of 1,200 s: the run starts again at 1,300
+    const at600 = fc([[seeds({ a: H + 10 }), 1900, null]], again), over = fc([[seeds({ a: H + 11 }), 1920, null]], at600);   // a pause of 600 s keeps the run: 600 s old, then 620
+    const paused = fc([[seeds({ a: H + 10 }), 1901, null]], again), p599 = fc([[seeds({ a: H + 11 }), 2500, null]], paused), p601 = fc([[seeds({ a: H + 12 }), 2502, null]], p599);   // a pause of 601 s: the run starts again at 1,901
+    let x = fc([[seeds({ a: H + 4 }), 60, null]], far0); for (let t = 80; t <= 2000; t += 20) x = fc([[seeds({ a: t % 40 === 0 ? H + 3 : H + 4 }), t, null]], x);
+    return fc([[seeds({ a: H + 40 }), 660, null]], fc(climb(60, 640, null), far0)).gave === null && again.gave === null && again.lowSince === T0 + 1300 * S && at600.gave === null && over.gave !== null
+      && paused.gave === null && paused.lowSince === T0 + 1901 * S && p599.gave === null && p601.gave !== null && p601.gave.top === H + 500
+      && x.gave === null && x.top === H + 4 && x.topSince === T0 + 40 * S; })());
+  check("H7e the height given up is remembered like a top: a seed back exactly on it restores its count, from when it was first read, and that round says nothing; a seed above it is an ordinary new height", (() => {
+    const back = fc([[seeds({ a: H + 500 }), 720, null]], after), up = fc([[seeds({ a: H + 501 }), 720, null]], after);
+    return back.gave === null && back.hold === true && back.top === H + 500 && back.topSince === T0 + 40 * S && back.seen === false && back.read === H + 500 && back.readSince === T0 + 40 * S && heightMovementOf(back, T0 + 720 * S, true, cfg).staticSeconds === null
+      && heightMovementOf(fc([[seeds({ a: H + 500 }), 740, null]], back), T0 + 740 * S, true, cfg).staticSeconds === 700
+      && up.gave === null && up.top === H + 501 && up.seen === true && up.topSince === T0 + 720 * S; })());
+  check("H7f while lower heights are already followed, a height read above them (validators that stand elsewhere) is given up at the next rise under it that reads nothing there, and the first height remembered stays the one remembered; read again in that round, it is kept", (() => {
+    const x1 = fc([[seeds({ a: H + 42 }), 720, H + 200]], after), x2 = fc([[seeds({ a: H + 43 }), 740, null]], x1), x3 = fc([[seeds({ a: H + 44 }), 760, null]], x2), kept = fc([[seeds({ a: H + 43 }), 740, H + 200]], x1);
+    return x1.gave.top === H + 500 && x1.read === H + 200 && x1.readSince === T0 + 720 * S && x1.top === H + 42 && x1.topSince === T0 + 720 * S
+      && x2.gave.top === H + 500 && x2.top === H + 43 && x2.topSince === T0 + 740 * S && x2.compared === false && x2.read === H + 43 && heightMovementOf(x2, T0 + 740 * S, true, cfg).staticSeconds === null
+      && x3.top === H + 44 && x3.topSince === T0 + 760 * S && x3.seen === false && heightMovementOf(x3, T0 + 760 * S, true, cfg).staticSeconds === 0
+      && kept.gave.top === H + 500 && kept.top === H + 43 && kept.topSince === T0 + 720 * S && kept.read === H + 200 && heightMovementOf(kept, T0 + 740 * S, true, cfg).staticSeconds === 20; })());
+  check("H7h while lower heights are followed, a height that counted validators show at or above the remembered one is kept with it when it is given up in turn: back on the old top, a seed that then reaches that height shows nothing new, and the count runs from its first reading", (() => {
+    const shown = fc([[seeds({ a: H - 496 }), 720, H + 9]], gUp), dropped = fc([[seeds({ a: H - 495 }), 740, null]], shown), back = fc([[seeds({ a: H }), 760, null]], dropped), reach = fc([[seeds({ a: H + 9 }), 780, null]], back);
+    return shown.gave.top === H && shown.read === H + 9 && shown.readSince === T0 + 720 * S && shown.top === H - 496
+      && dropped.gave.top === H && dropped.gave.read === H + 9 && dropped.gave.readSince === T0 + 720 * S && dropped.read === H - 495 && dropped.compared === false
+      && back.hold === true && back.top === H && back.topSince === T0 && back.read === H + 9 && back.readSince === T0 + 720 * S
+      && reach.top === H + 9 && reach.seen === false && reach.topSince === T0 + 720 * S && heightMovementOf(reach, T0 + 780 * S, true, cfg).advancedAt === null
+      && fc([[seeds({ a: H + 10 }), 780, null]], back).seen === true; })(), JSON.stringify(fc([[seeds({ a: H - 495 }), 740, null]], fc([[seeds({ a: H - 496 }), 720, H + 9]], gUp)).gave));
+  check("H7g the reading says it for as long as it lasts: confidence uncertain, risk elevated, and the sentence", (() => {
+    const mvg = heightMovementOf(after, T0 + 700 * S, true, cfg), r = round(2, [H + 41, H + 41], null, { movement: { staticSeconds: mvg.staticSeconds, advancing: mvg.advancing, stalled: mvg.stalled, following: mvg.following, staticSince: null } });
+    return r.status === "stable" && r.confidence === "uncertain" && r.risk === "elevated" && r.summary.endsWith(" DNO has been following heights below a height it read earlier.") && r.risk_factors.includes("following heights below a height read earlier"); })());
+  check("Q6 on a clock that has read nothing, any step only starts the count", ["rose", "first", "same"].every((st) => { const x = fold([[vs(H, st), 0]]); return x.top === H && x.seen === false && x.compared === false; }));
+  const vo = assess({ timeReason: null, seedsTotal: 3, seedsAnswered: 0, seedHeights: [], validators: { read: 3, heights: [H, H, H + 300], listAgreedAt: null }, maxIncidentSeverity: "none", publicIncidentCount: 0, movement: {} });
+  check("Q7 the agreement sentence of a reading from validators alone counts those within the band among those that gave a height, not among themselves", vo.agreement_reason === "2 of 3 validators with a height within ±25 blocks of the median (spread: 0 blocks)"
+    && vo.witnesses.validators.own_height === 3 && vo.witnesses.validators.counted === 2 && round(0, [], [H, H + 1, H + 2]).agreement_reason === "3 of 3 validators with a height within ±25 blocks of the median (spread: 2 blocks)", vo.agreement_reason);
 }
 
 console.log("\n[" + TAG + "] standstill: a reading that would be stable reads degraded after 30 minutes without a new height");
@@ -310,21 +486,21 @@ console.log("\n[" + TAG + "] words");
 console.log("\n[" + TAG + "] fields of one reading do not contradict each other");
 {
   const mod = round(2, [H, H + 22]), weak = round(2, [H, H + 26]), far = round(2, [H, H + 51]), ok = round(2, [H, H + 1]);
-  check("X1 'signals agree' is said only of strong agreement", ok.confidence === "clear" && ok.confidence_reason === "Observed public signals agree"
+  check("Y1 'signals agree' is said only of strong agreement", ok.confidence === "clear" && ok.confidence_reason === "Observed public signals agree"
     && mod.status === "degraded" && mod.confidence === "clear" && mod.confidence_reason === "Compared heights are within 50 blocks of each other"
     && weak.status === "unstable" && weak.confidence === "clear" && weak.confidence_reason === "Compared heights are within 50 blocks of each other" && far.confidence_reason === "Public nodes report block heights more than 50 blocks apart",
     JSON.stringify([mod.confidence_reason, weak.confidence_reason]));
   const at50 = round(2, [H, H + 50]), at51 = round(2, [H, H + 51]);
-  check("X1b the limit is more than 50 blocks: exactly 50 apart is still clear, 51 is uncertain", at50.confidence === "clear" && at50.confidence_reason === "Compared heights are within 50 blocks of each other"
+  check("Y1b the limit is more than 50 blocks: exactly 50 apart is still clear, 51 is uncertain", at50.confidence === "clear" && at50.confidence_reason === "Compared heights are within 50 blocks of each other"
     && at51.confidence === "uncertain" && at51.confidence_reason === "Public nodes report block heights more than 50 blocks apart", JSON.stringify([at50.confidence_reason, at51.confidence_reason]));
-  check("X1c when a new height arrived within two rounds and the count has also passed the 5 minutes (a round longer than 150 s), 'Heights advancing' is what is said",
+  check("Y1c when a new height arrived within two rounds and the count has also passed the 5 minutes (a round longer than 150 s), 'Heights advancing' is what is said",
     round(2, [H, H], null, { movement: { staticSeconds: 400, advancing: true, stalled: true, staticSince: null } }).status_reason === "Heights advancing; public nodes aligned");
-  check("X2 a high risk from weak agreement names it", weak.risk === "high" && weak.risk_factors.includes("agreement is weak") && !mod.risk_factors.includes("agreement is weak") && mod.risk_factors.includes("agreement is moderate, not strong")
+  check("Y2 a high risk from weak agreement names it", weak.risk === "high" && weak.risk_factors.includes("agreement is weak") && !mod.risk_factors.includes("agreement is weak") && mod.risk_factors.includes("agreement is moderate, not strong")
     && !ok.risk_factors.includes("agreement is weak"), JSON.stringify(weak.risk_factors));
   const partial = round(3, [H, H]), all = round(3, [H, H, H]), two = round(2, [H, H]);
-  check("X3 the summary does not say the heights of all agree when not all gave one", partial.summary === "All 3 public seeds answered; 2 reported their own height, and those heights agree."
+  check("Y3 the summary does not say the heights of all agree when not all gave one", partial.summary === "All 3 public seeds answered; 2 reported their own height, and those heights agree."
     && all.summary === "All 3 public seeds answered and their reported heights agree." && two.summary === "2 of 3 public seeds answered and their reported heights agree.", partial.summary);
-  check("X4 one block is one block", round(2, [H, H + 1]).agreement_reason === "2 of 2 public nodes with a height within ±25 blocks of the median (spread: 1 block)" && round(2, [H, H + 2]).agreement_reason.endsWith("(spread: 2 blocks)")
+  check("Y4 one block is one block", round(2, [H, H + 1]).agreement_reason === "2 of 2 public nodes with a height within ±25 blocks of the median (spread: 1 block)" && round(2, [H, H + 2]).agreement_reason.endsWith("(spread: 2 blocks)")
     && round(1, [H], [H + 1]).agreement_reason === "One public seed and 1 validator within ±25 blocks of it (spread: 1 block)");
   // Over a grid of readings: the words agree with the values beside them.
   let bad = null, n = 0;
@@ -342,28 +518,28 @@ console.log("\n[" + TAG + "] fields of one reading do not contradict each other"
       : r.status === "stable" && sec !== null && sec >= 1800 ? "stable in a standstill" : null;
     if (why && !bad) bad = { why, seeds, v, sec, text, risk_factors: r.risk_factors };
   }
-  check("X5 " + n + " readings: no 'signals agree' beside reduced agreement, no high risk without a factor, no plural of one, no standstill unsaid", !bad && n > 3000, JSON.stringify(bad));
+  check("Y5 " + n + " readings: no 'signals agree' beside reduced agreement, no high risk without a factor, no plural of one, no standstill unsaid", !bad && n > 3000, JSON.stringify(bad));
 }
 
 console.log("\n[" + TAG + "] after a start-over the reading says that DNO follows lower heights");
 {
-  const FOLLOW = "DNO has been following heights below the highest height it read in the last 24 hours", FACTOR = "following heights below the highest height read in the last 24 hours";
+  const FOLLOW = "DNO has been following heights below a height it read earlier", FACTOR = "following heights below a height read earlier";
   const fl = (on, sec) => ({ movement: { staticSeconds: sec === undefined ? 0 : sec, advancing: false, stalled: false, following: on, staticSince: null } });
   const r = round(3, [H, H, H], null, fl(true)), plain = round(3, [H, H, H], null, fl(false));
-  check("F1 a reading of the seeds made while DNO follows lower heights: stable, confidence uncertain with the reason, risk elevated with the factor, and the summary says it",
+  check("L1 a reading of the seeds made while DNO follows lower heights: stable, confidence uncertain with the reason, risk elevated with the factor, and the summary says it",
     r.status === "stable" && r.status_reason === "Public nodes aligned" && r.confidence === "uncertain" && r.confidence_reason === FOLLOW + ": a chain restarted lower and nodes catching up look the same from here"
     && r.risk === "elevated" && r.risk_factors.join("|") === FACTOR && r.summary === "All 3 public seeds answered and their reported heights agree. " + FOLLOW + ".", JSON.stringify([r.confidence_reason, r.risk, r.risk_factors, r.summary]));
-  check("F2 without it the same heights read clear and low, and none of those words is said", plain.confidence === "clear" && plain.risk === "low" && !/following/i.test(JSON.stringify(plain)), JSON.stringify(plain.risk_factors));
+  check("L2 without it the same heights read clear and low, and none of those words is said", plain.confidence === "clear" && plain.risk === "low" && !/following/i.test(JSON.stringify(plain)), JSON.stringify(plain.risk_factors));
   const none = round(1, [H], null, fl(true));
-  check("F3 without a reading nothing is said of it: unknown keeps its own words", none.status === "unknown" && none.confidence_reason === "No cross-check: fewer than 2 public nodes answered" && !/following/i.test(JSON.stringify(none)), JSON.stringify([none.confidence_reason, none.summary]));
+  check("L3 without a reading nothing is said of it: unknown keeps its own words", none.status === "unknown" && none.confidence_reason === "No cross-check: fewer than 2 public nodes answered" && !/following/i.test(JSON.stringify(none)), JSON.stringify([none.confidence_reason, none.summary]));
   const far = round(2, [H, H + 60], null, fl(true)), alone = round(0, [], [H, H, H], fl(true)), deg = round(2, [H, H + 22], null, fl(true)), still = round(2, [H, H], null, fl(true, 2400));
-  check("F4 another cause of uncertainty keeps its own reason, and the factor and the summary still say this one; a degraded reading and a standstill say it too",
+  check("L4 another cause of uncertainty keeps its own reason, and the factor and the summary still say this one; a degraded reading and a standstill say it too",
     far.confidence_reason === "Public nodes report block heights more than 50 blocks apart" && far.risk_factors.includes(FACTOR) && far.summary.endsWith(" " + FOLLOW + ".")
     && alone.confidence_reason === "No public seed reported its own height: the reading rests on validators alone" && alone.risk_factors.includes(FACTOR)
     && deg.status === "degraded" && deg.confidence === "uncertain" && deg.confidence_reason.startsWith(FOLLOW) && deg.summary === "Degraded reading of the public seeds: 1 of 3 public nodes did not answer; agreement moderate. " + FOLLOW + "."
     && still.status === "degraded" && still.risk_factors.join("|") === "no new height for 40 min|" + FACTOR, JSON.stringify([far.summary, alone.risk_factors, deg.summary, still.risk_factors]));
   const BANNED = /\b(approved|certified|trusted|recommended|safe|best|scores?|ranking|ranked|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i;
-  check("F5 no banned word in these words", !BANNED.test(r.confidence_reason + r.summary + r.risk_factors.join(" ")));
+  check("L5 no banned word in these words", !BANNED.test(r.confidence_reason + r.summary + r.risk_factors.join(" ")));
 }
 
 console.log("\n[" + TAG + "] the agent takes its reading from this module");

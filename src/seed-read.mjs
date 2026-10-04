@@ -6,7 +6,7 @@
 // when the read ends.
 // Runtime tests: bun src/seed-read.test.mjs
 
-import { cappedJson, isValidIdentity, keyOf, sanitizeHeight, sanitizeLabel, probeErrorCategory } from "./public-safety.mjs";
+import { cappedJson, isValidIdentity, keyOf, sanitizeHeight, versionOf, probeErrorCategory } from "./public-safety.mjs";
 import { seedReasonOf } from "./status-rule.mjs";
 
 export const SEED_INFO_TIMEOUT_MS = 5000;
@@ -39,7 +39,7 @@ export async function readSeedInfo(node, opts) {
       if (selfEntry && selfEntry.sync) { block = sanitizeHeight(selfEntry.sync.block); if (block !== null) heightSource = "self"; }
       if (block === null && peerlist[0] && peerlist[0].sync) { block = sanitizeHeight(peerlist[0].sync.block); if (block !== null) heightSource = "first_peer"; }
     }
-    return { ok: true, latencyMs: res.headersMs, block: block, height_source: heightSource, version: sanitizeLabel(data && data.version, 32) || "?",
+    return { ok: true, latencyMs: res.headersMs, block: block, height_source: heightSource, version: versionOf(data && data.version) || "?",   // a release version, or none: a seed's free text is not published
       peers: peerlist.length, identityMatch: identityMatch, peerlist: peerlist, answeredId: answeredId };
   } catch (err) {
     return { ok: false, error: probeErrorCategory(err) };

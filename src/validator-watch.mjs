@@ -26,7 +26,7 @@
 // Runtime tests: bun src/validator-watch.test.mjs
 
 import { isIP } from "node:net";
-import { sanitizeHeight, probeErrorCategory, mapWithConcurrency, cappedJson, parseProbeOrigin, nativeFetch, keyOf } from "./public-safety.mjs";
+import { sanitizeHeight, probeErrorCategory, mapWithConcurrency, cappedJson, parseProbeOrigin, nativeFetch, keyOf, versionOf } from "./public-safety.mjs";
 export { keyOf };   // the comparison form of a key lives in public-safety.mjs: the seed read uses the same one
 
 export const STATUS_ACTIVE = "2";
@@ -45,10 +45,8 @@ export const WATCH_DEFAULTS = Object.freeze({
   versionGroups: 6,             // version groups published; the rest are counted in versions_other
   versionMinCount: 2,           // a version is named only when at least this many validators answered with it
 });
-// A version as releases name them (0.9.9, v1.2, 0.9.9 RC, 1.0.0-beta.2). Anything else is "no version": a validator's
-// free text never reaches a public surface.
-const VERSION_RE = /^v?\d{1,2}\.\d{1,3}(\.\d{1,3})?([ -]?(rc|beta|alpha)[ .]?\d{0,2})?$/i;
-export function versionOf(value) { return typeof value === "string" && VERSION_RE.test(value.trim()) ? value.trim() : null; }
+// A version as releases name them; anything else is "no version" (versionOf in public-safety.mjs, the rule for seeds too).
+export { versionOf };
 
 // The dial switch, VALIDATOR_WATCH_DIALS, as it may be written in .env or a service unit. Off: 0, false, off, no, in any
 // case, in quotes (", ' or `) or with a trailing # comment, with or without a space before it. On: anything else, or
@@ -148,8 +146,12 @@ export function agreeLists(reads) {
   var stakeGroup = largestGroup(reads.filter(function(r) { return r.stake !== null; }).map(function(r) { return { sig: r.stake }; }));
   var base = { seedsAnswered: answered.length, stake: stakeGroup ? stakeGroup[0].sig : null };
   if (!best) {
+    // A read that ended in an internal error is a fault in DNO's own read: it says nothing about that seed.
+    var faults = reads.filter(function(r) { return r.listError === "internal error"; }).length;
     return Object.assign(base, { agreed: false, seedsAgreed: 0, rows: null,
-      reason: answered.length < 2 ? "fewer than two public seeds returned a validator list" : "the public seeds returned different validator lists" });
+      reason: answered.length >= 2 ? "the public seeds returned different validator lists"
+        : faults > 0 ? "DNO's own read of the validator list ended in an internal error for " + faults + " of " + reads.length + " public seeds"
+        : "fewer than two public seeds returned a validator list" });
   }
   var group = best.map(function(e) { return e.r; });
   var given = new Map();   // key -> what each seed of the group gives for it: { sig, url, noUrl }
@@ -207,8 +209,10 @@ async function lookupNames(names, o) {
 }
 
 // Dial the ACTIVE rows: first those in o.first (keys that answered as listed at the seeds' height before: the kept
-// witness candidates and the keys with a record in the window), then the rest, each group in address order. The lookup
-// budget and the origin cap are spent in that order, so rows that never answer cannot take the dials of rows that do.
+// witness candidates and the keys with a record in the window), in address order; then the rest, in address order
+// starting at another row each round (o.rotate, the round's number). The lookup budget and the origin cap are spent in
+// that order, so rows that never answer cannot take the dials of rows that do, and rows whose names never resolve
+// cannot keep the same other rows from ever being looked up.
 // A row that publishes no address is no_address. A URL that is not a bare http
 // origin is not_public_http; so is an address literal the resolver refuses (decided without a lookup, before the cap, so
 // it takes no slot). Names and public literals take one slot each per distinct origin, at most maxOrigins; rows past
@@ -218,13 +222,16 @@ async function lookupNames(names, o) {
 // answer names at most one of the keys listed there; the others are answered_other_key, with shared set only when the
 // answer named one of the keys listed on that same published origin. Returns { results: one per ACTIVE row
 // { key, outcome, notDialed?, shared?, origin?, seed?, height?, version?, published? }, origins: { dialed: published
-// origins dialed, maxRows: the most ACTIVE rows on one of them } }. published: the bare origin a row answered as listed
-// at (kept for the witness candidates; never published).
+// origins dialed, maxRows: the most ACTIVE rows on one of them }, faults: dials that ended in an internal error (a fault
+// in DNO's own read: the round then says nothing about the rows it dialed) }. published: the bare origin a row answered
+// as listed at (kept for the witness candidates; never published).
 export async function dialActive(rows, o) {
   var first = o.first instanceof Set ? o.first : new Set();
-  var active = rows.filter(function(r) { return r.status === STATUS_ACTIVE; }).sort(function(a, b) {
-    return (first.has(b.key) ? 1 : 0) - (first.has(a.key) ? 1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-  });
+  var byKey = function(a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; };
+  var listedActive = rows.filter(function(r) { return r.status === STATUS_ACTIVE; });
+  var known = listedActive.filter(function(r) { return first.has(r.key); }).sort(byKey), rest = listedActive.filter(function(r) { return !first.has(r.key); }).sort(byKey);
+  var start = rest.length && Number.isInteger(o.rotate) && o.rotate > 0 ? o.rotate % rest.length : 0;
+  var active = known.concat(rest.slice(start), rest.slice(0, start));
   // Every key the list shows on a published origin, whatever its status: an answer naming any of them is a key listed there.
   var listedOn = new Map();
   rows.forEach(function(r) {
@@ -283,7 +290,8 @@ export async function dialActive(rows, o) {
       else results.push({ key: r.key, outcome: "answered_as_listed", seed: seedKeys.has(r.key), height: a.height, version: a.version, published: published });
     });
   });
-  return { results: results, origins: { dialed: order.length, maxRows: maxRows } };
+  return { results: results, origins: { dialed: order.length, maxRows: maxRows },
+    faults: answers.filter(function(a) { return !a.answered && a.error === "internal error"; }).length };
 }
 
 // Where an answer's own height sits against the seeds' median: "at", "off", "not_reported" (no own height in the
@@ -407,7 +415,8 @@ export function createFirstAgreedStore(db, opts) {
 // ---- one round ----------------------------------------------------------------------------------------------------
 // o: { seeds: [{name, url, exclude?}], resolveOrigin(url) -> Promise<origin|null>, reference() -> {height, observedAt}|null,
 //      history, growth (the first-agreed record), seedKeys (Set), first (Set of keys to dial first: the kept witness
-//      candidates), now() -> ms, fetch, dials (boolean), and any WATCH_DEFAULTS override }.
+//      candidates), rotate (the round's number: the row the other dials start at; 0 or absent: address order),
+//      now() -> ms, fetch, dials (boolean), and any WATCH_DEFAULTS override }.
 export async function runValidatorRound(opts) {
   // The runtime's fetch, not the global one: the Demos SDK replaces the global (see nativeFetch in public-safety.mjs).
   var o = Object.assign({}, WATCH_DEFAULTS, { fetch: nativeFetch, now: Date.now, dials: true }, opts);
@@ -420,7 +429,11 @@ export async function runValidatorRound(opts) {
   var first = new Set(o.first instanceof Set ? o.first : []);
   if (typeof o.history.okKeys === "function") o.history.okKeys().forEach(function(k) { first.add(k); });
   var dialed = list.agreed && o.dials ? await dialActive(list.rows, Object.assign({}, o, { first: first })) : null;
-  var results = dialed ? dialed.results : null;
+  // Reads that ended in an internal error: a fault in DNO's own read, not an answer of a peer. A dial that ended so
+  // makes "no answer" untrue for the rows behind it, so such a round has no outcomes at all: nothing is published of its
+  // dials, it does not count for the hour's figure, and it renews no candidate.
+  var faults = { list: reads.filter(function(r) { return r.listError === "internal error"; }).length, dials: dialed ? dialed.faults : 0 };
+  var results = dialed && faults.dials === 0 ? dialed.results : null;
   var reference = results ? o.reference() : null;
   var roundAt = o.now();
   var outcomes = null, versions = null;
@@ -483,6 +496,7 @@ export async function runValidatorRound(opts) {
     reference: reference ? { height: reference.height, observedAt: reference.observedAt } : null,
     everyRound: every,
     witnessFacts: witnessFacts,   // keys and published origins: for the agent's candidate store (witnesses.mjs), never published
+    faults: faults,               // reads of this round that ended in an internal error: { list, dials }
     seedErrors: reads.map(function(r) { return { name: r.name, list: r.listError }; })
   };
 }
@@ -527,6 +541,7 @@ export function publicValidatorWatch(round, nowMs, cfg) {
   out.round_at = iso(round.roundAt);
   if (nowMs - round.roundAt > c.staleMs) { out.state = "stale"; out.reason = "the last round is older than " + Math.round(c.staleMs / 1000) + " s"; return out; }
   out.window = Object.assign({}, round.everyRound.window);
+  if (round.faults && round.faults.dials > 0) { out.state = "read_fault"; out.reason = "a fault in DNO's own read: " + round.faults.dials + " dial" + (round.faults.dials === 1 ? "" : "s") + " of this round ended in an internal error, so no counts are given for it"; return out; }
   if (!round.outcomes) { out.state = "no_agreed_list"; out.reason = "no agreed validator list this round: " + round.list.reason; return out; }
   out.state = "observed";
   out.watched = round.counts.active;
@@ -558,7 +573,8 @@ export function listedStatus(round, key, nowMs, cfg) {
 
 // The sentence the agent writes into the homepage for readers without JavaScript, from the two published objects:
 // counts only, and the rows the ladder does not show accounted for as the page does. null outside the agreed state.
-export function validatorsSentence(oc, w) {
+// witnessMax: how many validators can be read in a seed's place (RULE.witnessMax; 8 when not given).
+export function validatorsSentence(oc, w, witnessMax) {
   if (!oc || oc.state !== "agreed") return null;
   var s = oc.active + " ACTIVE on chain, as " + oc.seeds_agreed + " of " + oc.seeds_configured + " public seeds listed them at " + oc.observed_at.slice(11, 19) + " UTC.";
   if (w && w.state === "observed") {
@@ -577,7 +593,10 @@ export function validatorsSentence(oc, w) {
       + ". That is not " + (shared === 1 ? "a node" : shared + " nodes") + " down.";
     if (none > 0) s += " " + none + (none === 1 ? " ACTIVE row publishes" : " ACTIVE rows publish") + " no address on chain.";
   }
-  return s + " In status only when fewer than two seeds give their own height.";
+  // With the dials switched off no validator is read at all, for the watch or for status.
+  if (w && w.state === "disabled") return s + " Not in status: dialing validators is turned off on this server.";
+  // Not every validator that answers is read for status: the candidates DNO keeps, at most witnessMax of them.
+  return s + " In status only when fewer than two seeds give their own height, and then at most " + (Number.isInteger(witnessMax) && witnessMax > 0 ? witnessMax : 8) + " of them.";
 }
 
 // One log line per round. Counts only.
@@ -589,6 +608,7 @@ export function roundLogLine(round) {
     s += "; dialed " + (round.counts.active - x.not_dialed) + " of " + round.counts.active + ": " + x.answered_as_listed + " as listed (" + (x.at_seed_height === null ? "heights not compared" : x.at_seed_height + " at the seeds' height") + "), " + x.no_answer + " no answer, " + x.answered_other_key + " other key, " + x.answered_no_key + " no key";
     s += "; every round last hour: " + (!round.counted ? "not counted this round" : round.everyRound.count === null ? "window incomplete (" + round.everyRound.window.counted_rounds + "/" + round.everyRound.window.expected_rounds + ")" : round.everyRound.count);
   }
+  if (round.faults && round.faults.dials > 0) s += "; " + round.faults.dials + " dial" + (round.faults.dials === 1 ? "" : "s") + " ended in an internal error (a fault in DNO's own read): no counts for this round";
   var bad = round.seedErrors.filter(function(e) { return e.list; }).map(function(e) { return e.name + " " + e.list; });
   if (bad.length) s += "; no list from " + bad.join(", ");
   return s;

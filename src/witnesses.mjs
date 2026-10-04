@@ -30,6 +30,9 @@ export const CANDIDATE_MAX_AGE_MS = RULE.candidateMaxAgeMs;
 export const WITNESS_LOOKUP_TIMEOUT_MS = 3000;   // one name lookup; a name that does not resolve in time is not read
 const STORE_KEY = "witness_candidates";
 const KEY_RE = /^[0-9a-f]{64}$/;                 // a Demos identity without its 0x, as the watch compares keys
+const HEIGHTS_KEY = "witness_heights", HEIGHTS_MAX = 64;
+// A time in ms that a Date can hold: a stored number outside that range is not one (new Date(9e15) cannot be printed).
+const isTime = function(t) { return typeof t === "number" && Number.isFinite(t) && t > 0 && t <= 8.64e15; };
 
 // A candidate as kept: { key, url, at }. key: the listed key, lower case, without 0x. url: the bare http origin the row
 // published. at: when it last answered there as listed at the seeds' height in a counted round (ms). Anything else is
@@ -40,7 +43,7 @@ function cleanCandidates(list, fallbackAt) {
     if (out.length >= WITNESS_MAX || !c || typeof c.key !== "string" || !KEY_RE.test(c.key) || seen.has(c.key)) return;
     var p = parseProbeOrigin(c.url);
     if (!p || p.protocol !== "http:") return;
-    var at = Number.isFinite(c.at) ? c.at : fallbackAt;   // every caller gives a time
+    var at = isTime(c.at) ? c.at : fallbackAt;   // every caller gives a time
     seen.add(c.key);
     out.push({ key: c.key, url: p.protocol + "//" + p.host, at: at });
   });
@@ -52,7 +55,7 @@ function cleanCandidates(list, fallbackAt) {
 export function nextCandidates(kept, facts) {
   if (!facts || !Array.isArray(facts.rows) || !Number.isFinite(facts.at) || facts.seniority === false) return null;
   var rows = new Map(), out = new Map();
-  facts.rows.forEach(function(r) { if (r && typeof r.key === "string") rows.set(r.key, r); });
+  facts.rows.forEach(function(r) { if (r && typeof r.key === "string" && KEY_RE.test(r.key)) rows.set(r.key, r); });   // a key that cannot be kept takes none of the places
   (Array.isArray(kept) ? kept : []).forEach(function(c) {
     var r = c && rows.get(c.key);
     if (!r) return;                                               // no longer ACTIVE on the agreed list, or a configured seed's key
@@ -61,7 +64,7 @@ export function nextCandidates(kept, facts) {
     if (r.addr === "origin" && r.origin !== c.url) return;        // it publishes another address: it joins again when it answers there
     out.set(c.key, { key: c.key, url: c.url, at: c.at });         // "disputed": the seeds give different addresses, which is no evidence against it
   });
-  facts.rows.forEach(function(r) { if (r && r.confirmed && r.addr === "origin" && typeof r.origin === "string") out.set(r.key, { key: r.key, url: r.origin, at: facts.at }); });
+  rows.forEach(function(r) { if (r.confirmed && r.addr === "origin" && typeof r.origin === "string") out.set(r.key, { key: r.key, url: r.origin, at: facts.at }); });
   var order = function(key) { var r = rows.get(key); return { since: Number.isFinite(r.since) ? r.since : Infinity, rounds: Number.isInteger(r.rounds) ? r.rounds : 0 }; };
   return Array.from(out.values()).sort(function(a, b) {
     var x = order(a.key), y = order(b.key);
@@ -85,13 +88,13 @@ export function createCandidateStore(db) {
       var has = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dno_meta'").get();
       var row = has ? db.query("SELECT value FROM dno_meta WHERE key = ?").get(STORE_KEY) : null;
       var kept = row ? JSON.parse(row.value) : null;
-      if (kept && Number.isFinite(kept.agreed_at)) mem = { agreedAt: kept.agreed_at, candidates: cleanCandidates(kept.candidates, kept.agreed_at) };
+      if (kept && isTime(kept.agreed_at)) mem = { agreedAt: kept.agreed_at, candidates: cleanCandidates(kept.candidates, kept.agreed_at) };
     } catch (e) { mem = { agreedAt: null, candidates: [] }; readable = false; }
   }
   return {
     readable: readable,
     save: function(list, agreedAt) {
-      if (!Number.isFinite(agreedAt)) return false;
+      if (!isTime(agreedAt)) return false;
       mem = { agreedAt: agreedAt, candidates: cleanCandidates(list, agreedAt) };
       if (!db) return true;
       try { db.run("INSERT OR REPLACE INTO dno_meta (key, value) VALUES (?, ?)", [STORE_KEY, JSON.stringify({ agreed_at: mem.agreedAt, candidates: mem.candidates })]); return true; }
@@ -101,6 +104,48 @@ export function createCandidateStore(db) {
       var live = mem.candidates.filter(function(c) { var age = now - c.at; return age >= 0 && age <= CANDIDATE_MAX_AGE_MS; });
       return live.length ? { agreedAt: mem.agreedAt, candidates: live.map(function(c) { return { key: c.key, url: c.url, at: c.at }; }) } : { agreedAt: null, candidates: [] };
     }
+  };
+}
+
+// What each validator read as a witness last answered, for the height clock (stepValidators in status-rule.mjs):
+// { key: { h, at } }. It is stored so that a restart knows what each validator had shown before it: otherwise the first
+// round that rests on validators alone would take every one of them for a node heard for the first time. Never published.
+//   load(now): the stored answers given at most RULE.clockRememberSeconds before now; 64-hex keys, whole heights, at
+//     most HEIGHTS_MAX of them (the latest).
+//   save(map): false when the store could not be written (memory is still updated).
+//   readable: false when a store was given and could not be read.
+function cleanHeights(map, now) {
+  var out = [];
+  Object.keys(map && typeof map === "object" && !Array.isArray(map) ? map : {}).forEach(function(k) {
+    var e = map[k];
+    if (!KEY_RE.test(k) || !e || typeof e !== "object" || !Number.isSafeInteger(e.h) || e.h < 0 || !isTime(e.at)) return;
+    if (now !== null && now - e.at > RULE.clockRememberSeconds * 1000) return;
+    out.push([k, { h: e.h, at: e.at }]);
+  });
+  out.sort(function(a, b) { return b[1].at - a[1].at || (a[0] < b[0] ? -1 : 1); });
+  var kept = {};
+  out.slice(0, HEIGHTS_MAX).forEach(function(x) { kept[x[0]] = x[1]; });
+  return kept;
+}
+export function createHeightStore(db) {
+  var mem = {}, readable = true;
+  if (db) {
+    try { db.run("CREATE TABLE IF NOT EXISTS dno_meta (key TEXT PRIMARY KEY, value TEXT)"); } catch (e) {}
+    try {
+      var has = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dno_meta'").get();
+      var row = has ? db.query("SELECT value FROM dno_meta WHERE key = ?").get(HEIGHTS_KEY) : null;
+      mem = cleanHeights(row ? JSON.parse(row.value) : {}, null);
+    } catch (e) { mem = {}; readable = false; }
+  }
+  return {
+    readable: readable,
+    save: function(map) {
+      mem = cleanHeights(map, null);
+      if (!db) return true;
+      try { db.run("INSERT OR REPLACE INTO dno_meta (key, value) VALUES (?, ?)", [HEIGHTS_KEY, JSON.stringify(mem)]); return true; }
+      catch (e) { return false; }
+    },
+    load: function(now) { return cleanHeights(mem, typeof now === "number" ? now : null); }
   };
 }
 

@@ -85,7 +85,15 @@ check("B4 a compressed bomb stops at the cap after decompression", bombErr && bo
 check("B5 a small gzip body parses", (await readJsonCapped(new Response(gzipSync(Buffer.from('{"b":2}')), { headers: { "content-encoding": "gzip" } }), 1024)).b === 2);
 check("B6 a body the runtime already decoded still parses", (await readJsonCapped(new Response(' {"c":3}', { headers: { "content-encoding": "gzip" } }), 1024)).c === 3);
 const deep = await errOf(readJsonCapped(new Response("[".repeat(200000) + "]".repeat(200000)), 1024 * 1024));
-check("B7 a deeply nested body is an invalid response, not a large one", deep === null || probeErrorCategory(deep) === "invalid response", deep && deep.name);
+check("B7 a deeply nested body is parsed or is an invalid response: never a large one, a failed connection or an internal error", deep === null || probeErrorCategory(deep) === "invalid response", deep && deep.name);
+check("B7b a RangeError (nesting too deep for the runtime, a number out of range) is an invalid response, like a SyntaxError; an Error of no known kind is a failed connection", probeErrorCategory(new RangeError("Maximum call stack size exceeded")) === "invalid response"
+  && probeErrorCategory(new SyntaxError("x")) === "invalid response" && probeErrorCategory(new Error("x")) === "connection failed" && probeErrorCategory(new TypeError("x")) === "internal error");
+{
+  // A body sent without a length, in pieces: read up to the cap and not past it.
+  const streamed = (bytes) => new Response(new ReadableStream({ start(c) { const text = Buffer.from(JSON.stringify({ pad: "" }).replace('""', '"' + " ".repeat(bytes - 10) + '"')); for (let i = 0; i < text.length; i += 4096) c.enqueue(new Uint8Array(text.subarray(i, i + 4096))); c.close(); } }));
+  const atCap = await errOf(readJsonCapped(streamed(64 * 1024), 64 * 1024)), over = await errOf(readJsonCapped(streamed(64 * 1024 + 1), 64 * 1024)), half = await errOf(readJsonCapped(streamed(96 * 1024), 64 * 1024));
+  check("B1b a streamed body of exactly the cap parses; one byte more, or one and a half times the cap, is too large", atCap === null && over && over.name === "ResponseTooLarge" && half && half.name === "ResponseTooLarge", [atCap && atCap.name, over && over.name, half && half.name].join(" "));
+}
 check("B8 capped fetches ask for identity encoding, no runtime decompression and no kept connection (the option and the header), and the options cannot be changed",
   CAPPED_FETCH_OPTIONS.decompress === false && CAPPED_FETCH_OPTIONS.keepalive === false && CAPPED_FETCH_OPTIONS.headers["Accept-Encoding"] === "identity" && CAPPED_FETCH_OPTIONS.headers["Connection"] === "close"
   && Object.isFrozen(CAPPED_FETCH_OPTIONS) && Object.isFrozen(CAPPED_FETCH_OPTIONS.headers));

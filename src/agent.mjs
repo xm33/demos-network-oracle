@@ -31,13 +31,13 @@ import { Demos } from "@kynesyslabs/demosdk/websdk";
 
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
-import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson } from "./public-safety.mjs";
+import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, versionOf, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
-import { RULE, assess, stepConditionRecords, clockSources, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
-import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
+import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
+import { createCandidateStore, createHeightStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { sentinelStatePath } from "./sentinel-state.mjs";
 
 // --- Logging setup ---
@@ -118,7 +118,7 @@ const MNEMONIC = process.env.DEMOS_MNEMONIC;
 const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
 const FALLBACK_RPCS = Object.freeze([RPC_URL, ...FLEET_RPC_FALLBACKS]);
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
-const AGENT_VERSION = "6.9";  // single source of truth for the Oracle build/release version (NOT api_version, NOT node version)
+const AGENT_VERSION = "7.2";  // single source of truth for the Oracle build/release version (NOT api_version, NOT node version). It read "6.9" through 7.0, 7.1 and 7.1.1.
 const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
 const STALE_MULTIPLIER = 3; // public-RPC freshness multiplier
 const STALE_BOUND = STALE_MULTIPLIER * MONITOR_INTERVAL_MS; // derived from cycle cadence; passed explicitly to buildPublicMetrics
@@ -251,7 +251,7 @@ function docsEntry(path, text) { return '<div><dt><code>' + path + '</code></dt>
 var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>API · Demos Network Oracle</title><!--dno:head-->' +
 '<style>.docs-kv dt code{white-space:nowrap}.docs-kv{grid-template-columns:minmax(0,19rem) minmax(0,1fr)}@media(max-width:719px){.docs-kv{grid-template-columns:minmax(0,1fr)}}</style></head><body>' +
 '<!--dno:header:docs--><main id="main"><header class="doc-head"><div class="wrap"><div><h1>API</h1>' +
-'<p class="doc-lede">Every public endpoint, read-only, JSON unless noted, served with CORS for any origin. DNO reads three public Demos seeds and publishes whether their reported heights agree. When fewer than two give their own height, validators that answer as listed stand in for the missing one.</p>' +
+'<p class="doc-lede">Every route the public site serves, read-only, served with CORS for any origin: JSON unless noted, and the pages are HTML. DNO reads three public Demos seeds and publishes whether their reported heights agree. When fewer than two give their own height, validators that answer as listed stand in for the missing one.</p>' +
 '<div class="doc-intro"><p>Oracle wallet: <code>__AGENT_WALLET__</code> · v' + AGENT_VERSION + ' · API ' + API_VERSION + '. ' + (SUPERCOLONY_ENABLED ? 'On-chain publication of DNO\'s own posts is enabled' : 'On-chain publication of DNO\'s own posts is currently disabled') + '; the public reading is never posted. Observation continues independently, and that says nothing by itself about the Demos network.</p></div>' +
 '</div></div></header><div class="wrap doc-grid"><details class="toc" open><summary>On this page</summary><ol>' +
 '<li><a href="#reading">The reading</a></li><li><a href="#identities">Peer-listed identities</a></li><li><a href="#pages">Pages</a></li><li><a href="#integration">Integration</a></li><li><a href="#internal">Internal only</a></li></ol></details>' +
@@ -259,7 +259,7 @@ var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><tit
 '<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
 docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail, last_24h.critical_public_incidents_in_window, last_24h.chain_movement.blocks_advanced) and the additive 1.2 fields (witnesses: what the reading rests on, as counts; height_standstill_after_seconds: after this long without a new height a reading that would be stable is degraded). No fleet data. ETag / 304 between observations.') +
 docsEntry('GET /organism/schema', 'The JSON Schema contract: stability policy, enums, changelog.') +
-docsEntry('GET /health', 'The same reading with its parts: publicNodes (each seed, with height_source), witnesses, signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields; first_counted has the identities first counted in the last 24 h, 7 days and 30 days, null for a window the count does not cover or that a gap in the count crosses), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). While two seeds give their own height neither of the last two enters status; when fewer do, validators that answered as listed stand in, and witnesses says so. Neither object is in /organism.') +
+docsEntry('GET /health', 'The same labels and reasons without the summary sentence, and their parts: publicNodes (each seed, with height_source), witnesses, signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields; first_counted has the identities first counted in the last 24 h, 7 days and 30 days, null for a window the count does not cover or that a gap in the count crosses), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). While two seeds give their own height neither of the last two enters status; when fewer do, validators that answered as listed stand in, and witnesses says so. Neither object is in /organism.') +
 docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them. A record may carry note, a dated note DNO added later; the stored record is never edited.') +
 '</dl></section>' +
 '<section id="identities"><h2>Peer-listed identities</h2><dl class="kv docs-kv">' +
@@ -268,18 +268,26 @@ docsEntry('GET /catalog/lookup?key=0x…', 'Exact check of one full key against 
 docsEntry('GET /peers', 'The latest crawl only: truncated identities with the peer-reported height, online flag, sync status and how many public peerlists listed them. Connections are never exposed.') +
 '</dl></section>' +
 '<section id="pages"><h2>Pages</h2><dl class="kv docs-kv">' +
+docsEntry('GET /', 'The homepage: the reading, the seeds, the on-chain validators and the peer-listed identities. HTML; the reading is also written into the page for readers without JavaScript.') +
 docsEntry('GET /methodology', 'How each value is derived, and where the observation stops.') +
 docsEntry('GET /about-demos', 'Validators, shards, node health and DAHR, as the Demos docs describe them, and what DNO sees of each.') +
 docsEntry('GET /sources', 'What DNO reads, and which of it enters status.') +
 docsEntry('GET /agent', 'How software agents consume the API: fields, polling, examples.') +
 docsEntry('GET /reference', 'The fixnet probe and the peer-listed identities, in two tables.') +
 docsEntry('GET /timeline', 'Public incidents, condition records and release events.') +
+docsEntry('GET /criteria', 'The definitions of DNO\'s observation criteria, published as definitions only: applied to no named participant.') +
+docsEntry('GET /commerce', 'Whether the public endpoints of the attestation authorities named by the Demos agent commerce protocol answered DNO\'s probe.') +
+docsEntry('GET /commerce/methodology', 'How those endpoints are probed, and what the result says and does not say.') +
 '</dl></section>' +
 '<section id="integration"><h2>Integration</h2><dl class="kv docs-kv">' +
-docsEntry('GET /federate', 'Prometheus text: the oracle version, plus cross-check RPC reachability and probe latency observed from this vantage, under neutral names.') +
-docsEntry('GET /badge', 'An SVG of the current status word.') +
+docsEntry('GET /criteria.json', 'The criteria definitions of /criteria, as JSON.') +
+docsEntry('GET /commerce/observations', 'The observations of /commerce, as JSON.') +
+docsEntry('GET /federate', 'Prometheus text, not JSON: the oracle version, plus cross-check RPC reachability and probe latency observed from this vantage, under neutral names.') +
+docsEntry('GET /metrics', 'The same text as /federate.') +
+docsEntry('GET /badge', 'An SVG image, not JSON, of the current status word.') +
 docsEntry('GET /version', 'Running agent version and the version most seeds report.') +
 docsEntry('GET /sentinel', 'Whether DNO\'s own alert process completed a check in the last 15 minutes: status ok or unknown, and last_check. No counts.') +
+docsEntry('GET /consensus', CONSENSUS_ENABLED ? 'An experiment that collects other observers\' reports. Not part of the reading.' : 'An experiment that would collect other observers\' reports. It is switched off on this server and answers {"error":"Consensus not initialized"}. Not part of the reading.') +
 '</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s.</p></section>' +
 '<section id="internal"><h2>Internal only</h2><p>Fleet views, <code>/dashboard</code>, <code>/history</code> and <code>/history/export</code>, are served on DNO\'s internal listener only (INTERNAL_PORT). The public site answers 404 for them.</p></section>' +
 '</article></div></main><!--dno:footer--></body></html>';
@@ -430,7 +438,7 @@ function siteFooter(active) {
     + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>'
     + '<p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'
     + '<p class="fine">Built by XM33 · not an official Demos product.</p>'
-    + '<p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet; DNO reads it like any other, and only if it publishes an address on chain.</p>'
+    + '<p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet. In the public reading it counts like any other validator, and only if it publishes an address on chain.</p>'
     + '</div></footer>'
     + (SITE_JS ? '<script src="' + SITE_JS.path + '" defer></script>' : '');
 }
@@ -702,15 +710,22 @@ function evaluatePublicIncidents() {
         if (existing) {
           log("  [public-incidents] Active DB incident " + existing.id + " exists but not in memory; relying on restart rehydration");
         } else {
-          var minTs = null;
+          // minTs: the start of the stored run of rounds without a reading that reaches this round, when the store
+          // shows one. sinceEarliest: that run begins with the earliest row the store retains; only then may the text
+          // say so (with readings retained before it, the run began where the store shows it began).
+          var minTs = null, sinceEarliest = false;
           try {
             var row = sharedDb.query("SELECT MIN(ts) t FROM public_node_history WHERE status = 'unknown'").get();
             if (row && row.t) {
               var brk = sharedDb.query("SELECT COUNT(*) c FROM public_node_history WHERE status != 'unknown' AND ts >= ?").get(row.t);
-              if (brk.c === 0) minTs = new Date(row.t).toISOString();
+              if (brk.c === 0) {
+                minTs = new Date(row.t).toISOString();
+                var earliest = sharedDb.query("SELECT MIN(ts) t FROM public_node_history").get();
+                sinceEarliest = !!earliest && earliest.t === row.t;
+              }
             }
           } catch (e) {}
-          var desc = visibilityText + (minTs ? " Continuous since earliest retained public observation; actual start may be earlier." : "");
+          var desc = visibilityText + (minTs && sinceEarliest ? " Continuous since earliest retained public observation; actual start may be earlier." : "");
           var inc = openIncident("warning", [PUBLIC_VISIBILITY_MARKER], desc, null);
           if (inc && minTs) {
             inc.startedAt = minTs; // in-memory too, so eventual resolve duration is honest
@@ -749,10 +764,10 @@ var FLEET_NODE_NAMES = NODE_NAMES;
 // Heights in server-built HTML: only a sanitized integer is ever formatted into a cell.
 function heightCell(value) {
   var h = sanitizeHeight(value);
-  return h === null ? "\u2014" : h.toLocaleString("en-US");
+  return h === null ? "not reported" : h.toLocaleString("en-US");   // words, not a dash: a value that is not known is said to be so
 }
 function truncId(id) {
-  if (!id || id.length < 12) return id || "\u2014";
+  if (!id || id.length < 12) return id || "not reported";
   return id.substring(0, 6) + "\u2026" + id.substring(id.length - 4);
 }
 function resolveNodeDisplay(opts) {
@@ -1108,11 +1123,11 @@ function computeCanonicalState() {
     else if (sev === "info" && max_incident_severity === "none") max_incident_severity = "info";
   }
 
-  // Height movement as observed: seconds since the last round in which a source rose above the highest height read
+  // Height movement as observed: seconds since the last round in which a source rose above the highest height counted
   // (the height clock in status-rule.mjs). Null when the latest round had no reading, and before anything was
   // compared. Without a new height DNO saw arrive, the duration is counted from the round the highest height was
   // first read: a lower bound. Why no new height arrives is not known from here.
-  var hm = heightMovementOf(heightClock, observedAtMs, heightClockHadHeight, { roundSeconds: Math.round(MONITOR_INTERVAL_MS / 1000), stalledSeconds: CHAIN_STATIC_RUN_MIN_24H * 60 });
+  var hm = heightMovementOf(heightClock, observedAtMs, heightClockHadReading, { roundSeconds: Math.round(MONITOR_INTERVAL_MS / 1000), stalledSeconds: CHAIN_STATIC_RUN_MIN_24H * 60 });
   // When the last new height arrived (if DNO saw it arrive), and since when none was seen, to the second (UTC): a
   // condition record opens with it, and a time cut to the minute would lie before the height it counts from.
   var advancedAtIso = hm.advancedAt === null ? null : new Date(hm.advancedAt).toISOString();
@@ -1284,8 +1299,9 @@ function computeChainMovement_24h(rows) {
   var totalBuckets = advancing + nonAdvancing;
   var pctAdvancing = totalBuckets > 0 ? advancing / totalBuckets : 0;
   var longestStaticMin = maxStaticRun * CHAIN_BUCKET_MIN_24H;
-  // Blocks advanced in the window, as observed: newest median minus oldest median, over rounds with a reading (data
-  // quality sufficient: two seeds reported their own height, or validators stood in for a missing seed). Null when there is no pair to compare, or when the
+  // Blocks advanced in the window, as observed: newest median minus oldest median, over rounds with a reading whose
+  // median is a seed's own height (two seeds, or one seed with validators beside it; a round that rested on validators
+  // alone stores no median, so it is not part of this figure). Null when there is no pair to compare, or when the
   // median went down by more than the ±25 agreement band between two such rounds (a reset, or seeds far apart):
   // one difference would not describe the chain then. No target rate is implied.
   var medians = rows.filter(function(r) { return r.median_block !== null && r.median_block !== undefined && (r.data_quality === undefined || r.data_quality === "sufficient"); });
@@ -1478,7 +1494,7 @@ function recordPublicNodeHistory() {
       return { name: n.name, identity: n.identity || null, ok: n.ok || false, block: ownHeight(n), latency: n.latencyMs || null };
     });
     sharedDb.run(
-      "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states, own_height) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+      "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states, own_height, witness_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
       [
         lastPublicObservedAt,   // the observation's own time, the time the height clock stepped on: a restart replays these rows as they were lived
         canonical.status,
@@ -1486,11 +1502,15 @@ function recordPublicNodeHistory() {
         canonical.confidence,
         canonical.data_quality,
         canonical.agreement.state,
-        canonical.agreement.median_block,
+        // median_block is a seed's height in every row that has one. A reading from validators alone keeps its median
+        // in witness_step: figures made from the seeds' medians (24 h chain movement; 7.1.1's own clock after a
+        // rollback) then never take a validators' median for a seed's.
+        heightClockRow && heightClockRow.step !== undefined ? null : canonical.agreement.median_block,
         canonical.agreement.block_spread,
         canonical.seed_heights,   // seeds that reported their own height, in every mode: a row that is sufficient with fewer than two was read with validators
         nodes.filter(function(n) { return n.ok; }).length,
-        JSON.stringify(nodes)
+        JSON.stringify(nodes),
+        heightClockRow ? JSON.stringify(heightClockRow) : null   // what the clock took from the validators of this round: { max } beside a seed, { h, step, max } from validators alone
       ]
     );
     var cutoff = Date.now() - PUBLIC_NODE_HISTORY_RETENTION_DAYS * 86400000;
@@ -1611,7 +1631,8 @@ function generateSignals(data, stalenessSeconds) {
     if (pubOnline.length > 0) {
       var pubBlocks = pubOnline.map(ownHeight).filter(Boolean);
       var pubBlock = pubBlocks.length > 0 ? Math.max.apply(null, pubBlocks) : null;
-      if (pubBlock) signals.push({ type: "public_network_block", severity: "info", nodes: pubOnline.map(function(n) { return n.name; }), value: pubBlock, message: "Public network at block " + pubBlock + " (" + pubOnline.length + " nodes online)" });
+      // What was read, and no more: one seed's height is not "the public network's block", least of all beside a reading that is unknown.
+      if (pubBlock) signals.push({ type: "public_network_block", severity: "info", nodes: pubOnline.map(function(n) { return n.name; }), value: pubBlock, message: "Highest own height among the seeds that answered: " + pubBlock + " (" + pubOnline.length + " answered)" });
     }
   }
 
@@ -1659,12 +1680,19 @@ let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
 // observed_at and Last-Modified are measured from here, never from the start of the fleet cycle.
 let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
-// The height clock (status-rule.mjs): one step per public round that has a reading, on that round's sources (each seed's
-// own height; with no seed height, the validators' median). heightClock holds each source's last answer, the highest
-// height read and when the count began; heightClockHadHeight says whether the latest round had a source;
-// heightClockRestored whether the stored rounds have been replayed after this start.
+// The height clock (status-rule.mjs): one step per public round, on that round's sources (each seed's own height, in
+// every round; with no seed height and a reading from validators alone, their median with its step). heightClock holds
+// each source's last answer, the highest height counted and when the count began; heightClockHadReading says whether
+// the latest round had a reading (without one nothing is published about heights); heightClockRow is what the round's
+// history row keeps of a reading from validators alone, for the replay; heightClockRestored whether the stored rounds
+// have been replayed after this start.
 var heightClock = newHeightClock();
-var heightClockHadHeight = false, heightClockRestored = false, heightClockReplaySaid = false;
+var heightClockHadReading = false, heightClockRestored = false, heightClockReplaySaid = false;
+var heightClockRow = null;
+// What each validator read as a witness last answered, by key: { key: { h, at } } (stepValidators in status-rule.mjs).
+// Kept in the store (witnessHeights, witnesses.mjs), so a restart knows it. Never published.
+var validatorLast = {};
+var witnessHeights = null;
 const CLOCK_REPLAY_MAX_ROWS = 20000;   // a day of rounds at a 5 s cadence; a day at the default 20 s is 4,320
 // Public history rows older than this were not written under the own-height rule (1.0 read a seed's first listed peer),
 // or are older than a row that was not. Median-based figures (the height clock at start-up, 24 h chain movement) do not
@@ -1675,6 +1703,9 @@ var OWN_HEIGHT_SINCE = 0;
 // just after the newest row without the mark, or 0 when every row has it. (A stored stamp goes stale across a rollback.)
 function ownHeightSince(db) {
   try { db.run("ALTER TABLE public_node_history ADD COLUMN own_height INTEGER"); } catch (e) { /* column exists */ }
+  // 1.2: what a round that rested on validators alone gave the height clock (recordPublicNodeHistory). Empty in every
+  // other row, and in rows an older agent writes.
+  try { db.run("ALTER TABLE public_node_history ADD COLUMN witness_step TEXT"); } catch (e) { /* column exists */ }
   var row = db.query("SELECT ts FROM public_node_history WHERE own_height IS NULL ORDER BY ts DESC LIMIT 1").get();
   return row ? row.ts + 1 : 0;
 }
@@ -2209,31 +2240,38 @@ async function probePublicNodes() {
   return results;
 }
 
-// The sources of a stored round, as clockSources gave them live: none for a round without a reading; each seed that
-// gave its own height (node_states holds it by name); with no seed height, the validators' median the row stored.
-function clockSourcesOfRow(row) {
-  if (!row || row.data_quality !== "sufficient") return [];
-  var seeds = [];
+// What a stored round gave the clock, as clockRound gave it live: { sources, counted }. Each seed that gave its own
+// height (node_states holds it by name), in every row, with or without a reading; with no seed height, what a row with
+// a reading kept of its validators (witness_step: their median and step). counted: the highest height among the
+// validators counted in that reading (witness_step.max), or null. A row that cannot be read gives nothing.
+function clockInputOfRow(row) {
+  var none = { sources: [], counted: null };
+  if (!row) return none;
+  var seeds = [], v = null;
   try {
     JSON.parse(row.node_states || "[]").forEach(function(n) {
       var h = n ? sanitizeHeight(n.block) : null;
       if (n && typeof n.name === "string" && h !== null) seeds.push({ id: n.name, h: h });
     });
-  } catch (e) { return []; }
-  if (seeds.length) return seeds;
-  var m = sanitizeHeight(row.median_block);
-  return m === null ? [] : [{ id: VALIDATORS_SOURCE, h: m }];
+    if (typeof row.witness_step === "string") v = JSON.parse(row.witness_step);
+  } catch (e) { return none; }
+  var counted = v && typeof v === "object" ? sanitizeHeight(v.max) : null;
+  if (seeds.length) return { sources: seeds, counted: counted };
+  var m = v && typeof v === "object" && row.data_quality === "sufficient" ? sanitizeHeight(v.h) : null;   // the validators are a source only in a round that had a reading
+  return m === null ? none : { sources: [{ id: VALIDATORS_SOURCE, h: m, step: v.step === "rose" || v.step === "same" ? v.step : "first" }], counted: counted };
 }
 // The stored rounds of the last day, replayed through the clock's own fold: a restart during a standstill keeps it, and
 // nothing is said that the stored rounds do not show. Rows written under the older height rule are not replayed
-// (OWN_HEIGHT_SINCE). false when the store could not be read: the caller steps nothing and tries again next round.
+// (OWN_HEIGHT_SINCE). They are taken in the order they were written, not by their time: after the host clock was set
+// back, time order is not the order the rounds were lived in. false when the store could not be read: the caller steps
+// nothing and tries again next round.
 function replayHeightClock(before) {
   if (!sharedDb) return true;
   try {
     var from = Math.max(OWN_HEIGHT_SINCE, before - RULE.clockRememberSeconds * 1000);
-    var rows = sharedDb.query("SELECT ts, data_quality, median_block, node_states FROM public_node_history WHERE ts < ? AND ts >= ? ORDER BY ts DESC LIMIT ?").all(before, from, CLOCK_REPLAY_MAX_ROWS);
+    var rows = sharedDb.query("SELECT ts, data_quality, node_states, witness_step FROM public_node_history WHERE ts >= ? ORDER BY id DESC LIMIT ?").all(from, CLOCK_REPLAY_MAX_ROWS);
     var clock = newHeightClock();
-    for (var i = rows.length - 1; i >= 0; i--) clock = stepHeightClock(clock, clockSourcesOfRow(rows[i]), rows[i].ts);
+    for (var i = rows.length - 1; i >= 0; i--) { var x = clockInputOfRow(rows[i]); clock = stepHeightClock(clock, x.sources, rows[i].ts, x.counted); }
     heightClock = clock;
     return true;
   } catch (e) {
@@ -2242,16 +2280,20 @@ function replayHeightClock(before) {
     return false;
   }
 }
-// One step of the height clock per public round. Before the first step after a start the stored rounds are replayed;
-// until that has worked no round is stepped and nothing is claimed.
+// One step of the height clock per public round. What the validators read this round show about themselves is taken
+// first (their last answers are kept, also beside a seed, and stored). Before the first step after a start the stored
+// rounds are replayed; until that has worked no round is stepped and nothing is claimed.
 function stepPublicHeightClock(publicNodeResults, witnesses, observedAt) {
+  var r = clockRound(validatorLast, publicNodeResults.map(function(n) { return { id: n.name, h: ownHeight(n) }; }),
+    witnesses ? witnesses.rows.map(function(x) { return { key: x.key, h: x.height }; }) : null, observedAt);
+  if (witnesses) { validatorLast = r.validators; if (witnessHeights) witnessHeights.save(validatorLast); }
+  heightClockRow = r.row;
   if (!heightClockRestored) {
-    if (!replayHeightClock(observedAt)) { heightClockHadHeight = false; return; }
+    if (!replayHeightClock(observedAt)) { heightClockHadReading = false; return; }
     heightClockRestored = true;
   }
-  var sources = clockSources(publicNodeResults.map(function(n) { return { id: n.name, h: ownHeight(n) }; }), witnesses ? witnesses.rows.map(function(r) { return r.height; }) : null);
-  heightClock = stepHeightClock(heightClock, sources, observedAt);
-  heightClockHadHeight = sources.length > 0;
+  heightClock = stepHeightClock(heightClock, r.sources, observedAt, r.counted);
+  heightClockHadReading = r.reading;
 }
 
 // Public observation round: Path A seeds, catalog crawl, public history and public incidents. Runs on its own
@@ -2266,7 +2308,9 @@ async function publicObservationCycle() {
   latestPublicNodes = publicNodeResults;
   latestWitnesses = roundWitnesses;
   lastPublicObservedAt = Date.now();
-  catalogFinishCrawl(publicNodeResults, lastPublicObservedAt);
+  // The catalog is not part of the reading: if it fails, the clock, the history row and the condition records still run.
+  try { catalogFinishCrawl(publicNodeResults, lastPublicObservedAt); }
+  catch (eCat) { logError("[catalog] the crawl could not be finished: " + (eCat && eCat.message ? eCat.message : String(eCat))); }
   stepPublicHeightClock(publicNodeResults, roundWitnesses, lastPublicObservedAt);
   recordPublicNodeHistory();
   recordObservationHistory();
@@ -2294,6 +2338,7 @@ const VALIDATOR_WATCH_INTERVAL_MS = envMs("VALIDATOR_WATCH_INTERVAL_MS", 60000, 
 const VALIDATOR_WATCH_WINDOW_MS = envMs("VALIDATOR_WATCH_WINDOW_MS", 3600000, 60000);
 const VALIDATOR_WATCH_DIALS = dialsEnabled(process.env.VALIDATOR_WATCH_DIALS);   // 0, false, off or no stop the dials (validator-watch.mjs)
 var VALIDATOR_ORIGIN_RESOLVER = resolvePublicProbeOrigin;
+var validatorRoundNumber = 0;   // rounds of this process: the rows that never answered are dialed starting at another row each round
 var validatorHistory = createWatchHistory(VALIDATOR_WATCH_WINDOW_MS, VALIDATOR_WATCH_INTERVAL_MS);
 // First agreed ACTIVE keys, on the host's UTC clock, in the shared observation database (opened in main()).
 var validatorFirstAgreed = null;
@@ -2313,7 +2358,15 @@ async function readRoundWitnesses(publicNodeResults) {
   // A configured seed's key is never read as a witness, also when the candidates were kept before that seed was configured.
   var candidates = kept.candidates.filter(function(c) { return !SEED_KEYS.has(c.key); });
   if (!candidates.length) return null;
-  var snap = witnessSnapshot(await readWitnesses(candidates, { resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, maxBytes: INFO_BODY_MAX_BYTES }), kept.agreedAt);
+  var reads = await readWitnesses(candidates, { resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, maxBytes: INFO_BODY_MAX_BYTES });
+  // A read that ended in an internal error is a fault in DNO's own read, not an answer of a validator: "no validator
+  // answered as listed" would be untrue of it. No validator is counted in such a round; the reading is the seeds' alone.
+  var faults = reads.filter(function(r) { return r.error === "internal error"; }).length;
+  if (faults > 0) {
+    logError("[witnesses] " + faults + " of " + reads.length + " validator reads ended in an internal error (a fault in DNO's own read): no validator is counted in this round");
+    return null;
+  }
+  var snap = witnessSnapshot(reads, kept.agreedAt);
   log("  Witnesses: " + snap.read + " validator" + (snap.read === 1 ? "" : "s") + " read, " + snap.rows.length + " answered as listed with a height");
   return snap;
 }
@@ -2342,9 +2395,12 @@ async function validatorWatchRound() {
   // The kept candidates are dialed first: the lookup budget and the origin cap are not spent on other rows before them.
   var kept = witnessCandidates ? witnessCandidates.load(Date.now()).candidates : [];
   latestValidatorRound = await runValidatorRound({ seeds: seeds, resolveOrigin: VALIDATOR_ORIGIN_RESOLVER, reference: seedMedianReference,
-    history: validatorHistory, growth: validatorFirstAgreed, seedKeys: SEED_KEYS, first: new Set(kept.map(function(c) { return c.key; })),
+    history: validatorHistory, growth: validatorFirstAgreed, seedKeys: SEED_KEYS, first: new Set(kept.map(function(c) { return c.key; })), rotate: validatorRoundNumber++,
     dials: VALIDATOR_WATCH_DIALS, intervalMs: VALIDATOR_WATCH_INTERVAL_MS, windowMs: VALIDATOR_WATCH_WINDOW_MS });
   log("  " + roundLogLine(latestValidatorRound));
+  // A read that ended in an internal error is DNO's own fault: it goes to the error log, with those words.
+  var roundFaults = latestValidatorRound.faults ? latestValidatorRound.faults.list + latestValidatorRound.faults.dials : 0;
+  if (roundFaults > 0) logError("[validators] " + roundFaults + " read" + (roundFaults === 1 ? "" : "s") + " of this round ended in an internal error (a fault in DNO's own read)");
   // A counted round (an agreed list and a known seed median) renews the witness candidates by what it showed
   // (nextCandidates); any other round, or one without the first-agreed record, leaves them as they are.
   var next = witnessCandidates ? nextCandidates(kept, latestValidatorRound.witnessFacts) : null;
@@ -2365,7 +2421,7 @@ function startValidatorWatchLoop() {
 // One sentence for readers without JavaScript. null keeps the page's own text.
 function validatorsNoJsLine() {
   var cfg = validatorPublishConfig(), now = Date.now();
-  return validatorsSentence(publicOnChainValidators(latestValidatorRound, now, cfg), publicValidatorWatch(latestValidatorRound, now, cfg));
+  return validatorsSentence(publicOnChainValidators(latestValidatorRound, now, cfg), publicValidatorWatch(latestValidatorRound, now, cfg), RULE.witnessMax);
 }
 
 // Rejects when an SDK call does not settle in time; the underlying call is left to finish on its own.
@@ -2407,7 +2463,7 @@ async function probeFixnetNodes() {
           ok: true,
           latencyMs: latencyMs,
           block: block,
-          version: sanitizeLabel(data.version, 32) || "?",
+          version: versionOf(data.version) || "?",
           peers: data.peerlist ? data.peerlist.length : 0,
           identityMatch: identityMatch,
           source_type: node.source_type,
@@ -3408,7 +3464,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
             durationSeconds: r.duration_seconds,
             affectedNodes: nodes,
             description: r.description,
-            detectedBlock: r.detected_block, resolvedBlock: r.resolved_block,
+            detectedBlock: r.detected_block || null, resolvedBlock: r.resolved_block || null,   // no block is attached to a condition record: null, not 0
             alerts: alerts
           };
           // A dated note DNO added later, when there is one (additive in 1.2). The stored record is as it was written.
@@ -3595,7 +3651,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
           // Latency (only meaningful for monitored; discovered has no current-cycle latency)
           // v7.3: show latency for discovered too (populated by probeDiscoveredFixnetNodes)
-          var latencyStr = (fn.latencyMs != null) ? (fn.latencyMs + "ms") : "\u2014";
+          var latencyStr = (fn.latencyMs != null) ? (fn.latencyMs + "ms") : (isDisc && fn.probed === false) ? "not probed" : "no answer";
 
           // Validator cell: public observation names only (no operator-fleet join).
           //  - Anchor: "Kynesys Anchor"
@@ -4564,7 +4620,9 @@ async function main() {
   // The witness candidates kept by the last counted validator round, before the first public round: a restart while
   // seeds are not answering then still has a reading, and opens no visibility record of its own making.
   witnessCandidates = createCandidateStore(sharedDb);
-  log("  Witness candidates kept: " + witnessCandidates.load(Date.now()).candidates.length);
+  log("  Witness candidates kept: " + (witnessCandidates.readable ? witnessCandidates.load(Date.now()).candidates.length : "not readable (none is read until a validator round has counted)"));
+  witnessHeights = createHeightStore(sharedDb);
+  validatorLast = witnessHeights.load(Date.now());
   try { apiFirstStarts = loadApiFirstStart(sharedDb, Date.now()); }
   catch (eApi) { logError("  [timeline] the first start of API " + API_VERSION + " was not kept: " + eApi.message); }
 

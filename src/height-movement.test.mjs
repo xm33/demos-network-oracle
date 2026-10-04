@@ -1,12 +1,13 @@
 // height-movement.test.mjs — HEIGHT_MOVEMENT guard: when DNO may say a new height was seen, and for how long none was.
-// The height clock keeps what each source showed about itself (clockSources, stepHeightClock, heightMovementOf in
+// The height clock keeps what each node showed about itself (clockRound, stepHeightClock, heightMovementOf in
 // status-rule.mjs). The cases run those functions on synthetic rounds. Then four searches, because a rule about what
 // "new" means is easy to state and easy to get wrong:
-//   - a world in which no height ever changes, every sequence of who answers: nothing may be claimed;
+//   - a world in which no height ever changes, every sequence of which seeds and validators answer: nothing may be
+//     claimed, and the count may begin again only in a round that hears a node for the first time;
 //   - the fold against a second, plain reading of its text, on random rounds;
-//   - worlds with a ground truth (a chain that produces, halts and restarts lower; nodes that lag, stick and catch up):
-//     what must never be said is never said;
-//   - the same worlds replayed from their stored rounds: a restart publishes what the running process publishes.
+//   - worlds with a ground truth taken from what DNO read (every node's every answer, in rounds with and without a
+//     reading): what must never be said is never said;
+//   - the same worlds replayed from what a round's stored row keeps: a restart publishes what the running process does.
 // The agent's own use of the clock (its step, its stored row, its replay at start) is run in round-wiring.test.mjs.
 // Run: bun src/height-movement.test.mjs   (executable harness, not `bun test`)
 
@@ -14,7 +15,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Database } from "bun:sqlite";
-import { RULE, VALIDATORS_SOURCE, assess, clockSources, newHeightClock, stepHeightClock, heightMovementOf } from "./status-rule.mjs";
+import { RULE, VALIDATORS_SOURCE, assess, clockSources, clockRound, newHeightClock, stepHeightClock, heightMovementOf } from "./status-rule.mjs";
+import { sanitizeHeight } from "./public-safety.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(__dir, "agent.mjs"), "utf8");
@@ -31,20 +33,24 @@ const CHAIN_STATIC_RUN_MIN_24H = Number(SRC.match(/var CHAIN_STATIC_RUN_MIN_24H 
 const CFG = { roundSeconds: MONITOR_INTERVAL_MS / 1000, stalledSeconds: CHAIN_STATIC_RUN_MIN_24H * 60 };
 const T0 = 1_800_000_000_000, S = 1000, MIN = 60 * S;
 
-// A clock driven by rounds. seeds: { name: own height } (undefined: the seed gave none); validators: the heights of the
-// validators read this round, or null when none was read.
+// A clock driven by rounds, through clockRound as the agent drives it. seeds: { name: own height } (undefined: the seed
+// gave none); validators: the validators read this round, each at its own place in the list (undefined: that one did
+// not answer), or null when none was read.
+const VK = (i) => (0xc0 + i).toString(16).repeat(32);
+const entriesOf = (validators) => (validators ? validators.map((h, i) => (h === undefined || h === null ? null : { key: VK(i), h })).filter(Boolean) : null);
 function clock() {
-  let state = newHeightClock(), had = false;
+  let state = newHeightClock(), last = {}, had = false;
   const api = {
     round(seeds, at, validators = null) {
-      const src = clockSources(Object.entries(seeds).filter(([, h]) => h !== undefined).map(([id, h]) => ({ id, h })), validators);
-      state = stepHeightClock(state, src, at); had = src.length > 0; return api;
+      const r = clockRound(last, Object.entries(seeds).map(([id, h]) => ({ id, h: h === undefined ? null : h })), entriesOf(validators), at);
+      last = r.validators; state = stepHeightClock(state, r.sources, at, r.counted); had = r.reading; return api;
     },
     at(now) {
       const m = heightMovementOf(state, now, had, CFG);
       return { staticS: m.staticSeconds, advancedAt: m.advancedAt, reason: m.advancing ? "advancing" : m.stalled ? "no new height" : "aligned", since: m.since, following: m.following };
     },
-    get state() { return state; }
+    get state() { return state; },
+    get reading() { return had; }
   };
   return api;
 }
@@ -65,7 +71,7 @@ console.log("\n[" + TAG + "] start, a new height, no new height");
     && c.at(t(319)).reason === "aligned" && c.at(t(320)).reason === "no new height", JSON.stringify([c.at(t(60)).reason, c.at(t(61)).reason, c.at(t(319)).reason, c.at(t(320)).reason]));
   check("A4 six minutes without a new height: said, and counted from the round that showed it", p.staticS === 380 && p.reason === "no new height" && p.since === t(20), JSON.stringify(p));
   c.round({ a: undefined, b: undefined }, t(420));
-  check("A5 nothing when the latest round had no source; the clock itself is not moved", c.at(t(420)).since === null && c.at(t(420)).staticS === null && c.state.top === 101 && c.state.topSince === t(20));
+  check("A5 nothing when the latest round read no height at all; the clock itself is not moved", c.at(t(420)).since === null && c.at(t(420)).staticS === null && c.state.top === 101 && c.state.topSince === t(20));
   p = c.round({ a: 101, b: 101 }, t(440)).at(t(440));
   check("A6 the next round with a reading carries on from where the clock stood", p.staticS === 420 && p.advancedAt === t(20), JSON.stringify(p));
 }
@@ -128,7 +134,45 @@ console.log("\n[" + TAG + "] validators");
   check("V2 with no seed, one validator of four alternating between two heights never produces a new height", p.staticS === at - 20 && c.state.top === H + 1 && c.state.last[VALIDATORS_SOURCE] === H + 1, JSON.stringify(p));
   for (let k = 0; k < 6; k++) { at += 20; c.round({}, t(at), [H + 1, H + 1 + (k % 2)]); }
   p = c.at(t(at));
-  check("V3 of two validators the higher is their median: its first step up is a new height (a stated limit), and going back and forth after that is none", c.state.top === H + 2 && p.staticS === 80 && p.advancedAt === t(at - 80), JSON.stringify([p, c.state.top]));
+  check("V3 of two validators the higher is their median, and one of two is not more than half: it alone moves nothing, at its first step up or after", c.state.top === H + 1 && p.staticS === at - 20 && p.advancedAt === t(20) && c.state.last[VALIDATORS_SOURCE] === H + 2, JSON.stringify([p, c.state.top]));
+  at += 20; p = c.round({}, t(at), [H + 3, H + 3]).at(t(at));
+  check("V3b when both rise, to a height below one a counted validator showed before (V1: " + (H + 20) + " beside the seed, first read at second 40): they are followed, and nothing is new; the count runs from that first reading", c.state.top === H + 3 && p.staticS === at - 40 && p.advancedAt === null
+    && p.reason === "no new height" && c.state.read === H + 20 && c.state.readSince === t(40), JSON.stringify([p, c.state.read]));
+  at += 20; p = c.round({}, t(at), [H + 30, H + 30]).at(t(at));
+  check("V3c above everything DNO has read it is seen arriving", c.state.top === H + 30 && p.staticS === 0 && p.advancedAt === t(at) && p.reason === "advancing", JSON.stringify(p));
+}
+{
+  // Three validators stand on 1000, 1000 and 1003 and never move. Which of them answer changes their median.
+  const c = clock().round({ a: 1000, b: 1000 }, t(0)).round({ a: 1000, b: 1000 }, t(20)).round({}, t(40), [1000, 1000, 1003]);
+  let at = 40, said = 0;
+  for (let k = 0; k < 100; k++) {
+    at += 20; c.round({}, t(at), k % 3 === 0 ? [1000, 1000, undefined] : k % 3 === 1 ? [1000, undefined, 1003] : [undefined, 1000, 1003]);
+    const p = c.at(t(at)); if (p.staticS !== at || p.advancedAt !== null || p.reason === "advancing") said++;
+  }
+  check("V7 validators that stop answering in turn, each on its own standing height: the median moves between 1000 and 1003 and nothing is claimed; the count runs on from the start", said === 0 && c.state.top === 1000 && c.state.topSince === t(0) && c.state.seen === false
+    && c.state.gave === null && c.state.lowSince === null && c.at(t(at)).staticS === at && at > 1800, JSON.stringify([said, c.state]));
+}
+{
+  // One seed stands on 1000 and three validators on 1002, read together for 40 minutes. Then the seed stops answering.
+  const c = clock().round({ a: 999 }, t(0), [1002, 1002, 1002]).round({ a: 1000 }, t(20), [1002, 1002, 1002]);
+  let at = 20;
+  for (let k = 0; k < 120; k++) { at += 20; c.round({ a: 1000 }, t(at), [1002, 1002, 1002]); }
+  const before = c.at(t(at)); at += 20;
+  const p = c.round({}, t(at), [1002, 1002, 1002]).at(t(at));
+  check("V8 the one seed stops answering and validators it was read beside stand two blocks above it: no new height, and the standstill is as old as it was. (The seed's own step to 1000 was no new height either: the validators had shown 1002 since second 0, and the count runs from there.)", before.staticS === at - 20 && before.advancedAt === null
+    && p.staticS === at && p.advancedAt === null && p.reason === "no new height" && c.state.top === 1000 && c.state.read === 1002 && c.reading === true, JSON.stringify([before, p]));
+  for (let k = 0; k < 5; k++) { at += 20; c.round({}, t(at), [1002, 1002, 1002]); }
+  const up = c.round({}, t(at + 20), [1003, 1003, 1002]).at(t(at + 20));
+  check("V8b and when more than half of them rise, that is the new height", up.staticS === 0 && up.advancedAt === t(at + 20) && c.state.top === 1003, JSON.stringify(up));
+}
+{
+  // Validators on 1000, 1001 and 1002, below a top of 1003, one of them answering every other round: their median
+  // goes up and down, and no validator rises.
+  const c = clock().round({ a: 1003, b: 1003 }, t(0)).round({ a: 1003, b: 1003 }, t(20));
+  let at = 20;
+  for (let k = 0; k < 200; k++) { at += 20; c.round({}, t(at), [k % 2 ? undefined : 1000, 1001, 1002]); }
+  const p = c.at(t(at));
+  check("V9 a median that goes up and down below the top as a validator comes and goes is no run of rises: no start-over, and the count runs on", c.state.gave === null && c.state.lowSince === null && c.state.top === 1003 && p.staticS === at && p.following === false, JSON.stringify([p, c.state]));
 }
 {
   const H = 431000, c = clock();
@@ -143,27 +187,57 @@ console.log("\n[" + TAG + "] validators");
     && one.state.last.a === H + 1 && one.state.last[VALIDATORS_SOURCE] === undefined, JSON.stringify([one.at(t(20)), one.state.last]));
   const ids = (list) => list.map((x) => x.id + ":" + x.h).join(" ");
   check("V6 with no seed the source is the upper median of every validator height read (102 here), which is what the reading publishes; not the median of those counted (101)",
-    ids(clockSources([], [100, 101, 102, 200, 200])) === VALIDATORS_SOURCE + ":102" && assess({ timeReason: null, seedsTotal: 3, seedsAnswered: 0, seedHeights: [], validators: { read: 5, heights: [100, 101, 102, 200, 200], listAgreedAt: null }, maxIncidentSeverity: "none", publicIncidentCount: 0, movement: {} }).agreement.median_block === 102,
-    ids(clockSources([], [100, 101, 102, 200, 200])));
+    ids(clockSources([], [100, 101, 102, 200, 200], "same")) === VALIDATORS_SOURCE + ":102" && assess({ timeReason: null, seedsTotal: 3, seedsAnswered: 0, seedHeights: [], validators: { read: 5, heights: [100, 101, 102, 200, 200], listAgreedAt: null }, maxIncidentSeverity: "none", publicIncidentCount: 0, movement: {} }).agreement.median_block === 102,
+    ids(clockSources([], [100, 101, 102, 200, 200], "same")));
   check("V4c validators whose median equals the seeds' top restart nothing either", clock().round({ a: H, b: H }, t(0)).round({ a: H, b: H }, t(20)).round({}, t(40), [H, H, H]).at(t(40)).staticS === 40);
 }
 
-console.log("\n[" + TAG + "] a round without a reading does not move the clock");
+console.log("\n[" + TAG + "] a round without a reading says nothing, and what a seed showed in it is kept");
+{
+  // Two seeds rise to 1008. One goes silent and no validator is read: the other alone is no reading. It reaches 1018
+  // and shows it for 40 minutes. Then the second seed answers on 1018.
+  const c = clock(); let at = 0, h = 1000, said = 0;
+  for (let k = 0; k < 5; k++) { c.round({ a: h, b: h }, t(at)); at += 20; h += 2; }
+  h -= 2;                                                     // both on 1008 at second 80
+  for (let k = 0; k < 5; k++) { h += 2; c.round({ a: h }, t(at)); const p = c.at(t(at)); if (c.reading || p.staticS !== null || p.advancedAt !== null || p.following || p.reason !== "aligned") said++; at += 20; }
+  const arrived = at - 20;                                    // 1018, first shown at second 180
+  for (let k = 0; k < 120; k++) { c.round({ a: h }, t(at)); const p = c.at(t(at)); if (c.reading || p.staticS !== null || p.advancedAt !== null) said++; at += 20; }
+  check("L1 one seed alone is no reading: nothing is said in any such round, and the clock keeps each height it showed and when the last one arrived", said === 0 && c.state.top === 1018 && c.state.topSince === t(arrived) && c.state.seen === true && c.state.last.a === 1018 && c.state.last.b === 1008, JSON.stringify(c.state));
+  const p = c.round({ a: h, b: h }, t(at)).at(t(at));
+  check("L2 when the reading is back on that height it is not a new height: DNO read it " + Math.round((at - arrived) / 60) + " minutes before, and the count and the time of its arrival say so", c.reading === true && p.staticS === at - arrived && p.advancedAt === t(arrived) && p.reason === "no new height"
+    && c.state.top === 1018, JSON.stringify(p));
+  const r = assess({ timeReason: null, seedsTotal: 3, seedsAnswered: 2, seedHeights: [h, h], validators: null, maxIncidentSeverity: "none", publicIncidentCount: 0,
+    movement: { staticSeconds: p.staticS, advancing: p.reason === "advancing", stalled: true, staticSince: "2026-10-04 12:03:00" } });
+  check("L3 so the reading is degraded at once, where a count that began at its return would have read stable for another 30 minutes", r.status === "degraded" && r.standstill === true && r.status_reason.startsWith("No new height for " + Math.floor((at - arrived) / 60) + " min"), r.status_reason);
+}
 {
   // The chain stands at 429825. The head seed goes silent; the other returns 2,000 behind and gains 40 a round, with
-  // three validators on the head. One seed far from every validator read is no reading.
+  // three validators on the head. One seed far from every validator read is no reading. The validators agree among
+  // themselves, so the top is still read in every round: the seed's rises below it are a node catching up.
   const H = 429825, c = clock();
   for (let k = 0; k <= 170; k++) c.round({ head: H, other: H }, t(k * 20));
-  let at = 170 * 20, h = H - 2000, claimed = 0, readings = 0;
-  while (h + 40 < H - 25) { at += 20; h += 40; c.round({ other: h }, t(at), [H, H, H]); const p = c.at(t(at)); if (p.staticS !== null) readings++; if (p.advancedAt !== null) claimed++; }
-  check("L1 a lone seed catching up from far behind is no reading: nothing is said, and the clock keeps the standstill", readings === 0 && claimed === 0 && c.state.top === H && c.state.topSince === t(0) && c.state.gave === null && c.state.lowSince === null, JSON.stringify(c.state));
+  let at = 170 * 20, h = H - 2000, said = 0;
+  while (h + 40 < H - 25) { at += 20; h += 40; c.round({ other: h }, t(at), [H, H, H]); const p = c.at(t(at)); if (c.reading || p.staticS !== null || p.advancedAt !== null || p.following || p.reason !== "aligned") said++; }
+  check("L4 a lone seed catching up from far behind is no reading: nothing is said, and the clock keeps the standstill, because validators that agree among themselves still show the top", said === 0 && c.state.top === H && c.state.topSince === t(0) && c.state.gave === null && c.state.last.other === h && at - 170 * 20 > 900, JSON.stringify(c.state));
   at += 20; let p = c.round({ other: H - 20 }, t(at), [H, H, H]).at(t(at));
-  check("L2 when it comes within 25 blocks the reading is back, and it is the standstill that began before", p.staticS === at && p.advancedAt === null && p.reason === "no new height", JSON.stringify(p));
+  check("L5 when it comes within 25 blocks the reading is back, and it is the standstill that began before", c.reading === true && p.staticS === at && p.advancedAt === null && p.reason === "no new height" && p.following === false, JSON.stringify(p));
   at += 20; p = c.round({ other: H }, t(at), [H, H, H]).at(t(at));
-  check("L3 and arriving on the head changes nothing: the standstill is " + Math.floor(at / 60) + " minutes old, not zero", p.staticS === at && c.state.top === H && c.state.gave === null, JSON.stringify(p));
+  check("L6 and arriving on the head changes nothing: the standstill is " + Math.floor(at / 60) + " minutes old, not zero", p.staticS === at && c.state.top === H && c.state.gave === null, JSON.stringify(p));
   const r = assess({ timeReason: null, seedsTotal: 3, seedsAnswered: 1, seedHeights: [H], validators: { read: 3, heights: [H, H, H], listAgreedAt: null }, maxIncidentSeverity: "none", publicIncidentCount: 0,
-    movement: { staticSeconds: p.staticS, advancing: false, stalled: true, staticSince: "2026-10-02 10:50:00" } });
-  check("L4 so the reading is degraded at once, where a restarted count would have read stable for another 30 minutes", r.status === "degraded" && r.standstill === true && r.status_reason.startsWith("No new height for " + Math.floor(at / 60) + " min"), r.status_reason);
+    movement: { staticSeconds: p.staticS, advancing: false, stalled: true, following: p.following, staticSince: "2026-10-02 10:50:00" } });
+  check("L7 so the reading is degraded at once, where a count that began again would have read stable for another 30 minutes", r.status === "degraded" && r.standstill === true && r.status_reason.startsWith("No new height for " + Math.floor(at / 60) + " min"), r.status_reason);
+}
+{
+  // The same lone seed with no validator read at all (none kept, or the dials off): nothing shows the top any more, so
+  // after ten minutes of its rising DNO follows it, as it would follow two seeds. Nothing is said without a reading.
+  const H = 429825, c = clock();
+  for (let k = 0; k <= 170; k++) c.round({ head: H, other: H }, t(k * 20));
+  let at = 170 * 20, h = H - 2000, said = 0, over = null;
+  while (h + 40 < H) { at += 20; h += 40; c.round({ other: h }, t(at)); const p = c.at(t(at)); if (c.reading || p.staticS !== null || p.advancedAt !== null || p.following) said++; if (over === null && c.state.gave) over = at; }
+  check("L8 with no validator read, a lone seed rising below the top for more than ten minutes is followed and the top is remembered; nothing is said in a round without a reading", said === 0 && over === 170 * 20 + 40 + 620 && c.state.gave.top === H && c.state.gave.since === t(0), JSON.stringify({ said, over, state: c.state }));
+  at += 20; c.round({ other: H }, t(at));
+  at += 20; const p = c.round({ head: H, other: H }, t(at)).at(t(at));
+  check("L9 it lands on the old top (the old count is back), and when a second seed makes it a reading the standstill is the one that began before", c.state.gave === null && p.staticS === at && p.following === false && p.reason === "no new height", JSON.stringify(p));
 }
 
 console.log("\n[" + TAG + "] a chain on a lower base, or nodes catching up: DNO cannot tell which");
@@ -229,7 +303,22 @@ console.log("\n[" + TAG + "] a chain on a lower base, or nodes catching up: DNO 
     if (k % 7 !== 3 && p.staticS !== null && p.staticS >= RULE.standstillSeconds) falseStandstill++;
     if (k > 40 && k % 7 !== 3 && p.staticS !== null) saidAfter++;
   }
-  check("R8 a seed left on the old chain that still answers does not hold the clock there: the producing chain is never read as standing", falseStandstill === 0 && saidAfter > 200, JSON.stringify({ falseStandstill, saidAfter }));
+  check("R8 a seed left on the old chain that answers now and then does not hold the clock there: in the rounds it is silent the producing chain is never read as standing", falseStandstill === 0 && saidAfter > 200, JSON.stringify({ falseStandstill, saidAfter }));
+}
+{
+  // The same with the seed on the old chain answering in every round: the top is read in every round, so nothing below
+  // it is followed. DNO cannot tell that seed from the head of a chain that stands still (a stated limit).
+  const c = clock().round({ a: 395000, b: 395000, stale: 395000 }, t(0)).round({ a: 395001, b: 395001, stale: 395001 }, t(20));
+  let at = 20, h = 5;
+  for (let k = 0; k < 400; k++) { at += 20; h += 2; c.round({ a: h, b: h, stale: 395001 }, t(at)); }
+  check("R8b a node that gives the old top in every round holds the count there: no start-over, and 'no new height' for as long as it answers", c.state.gave === null && c.state.top === 395001 && c.at(t(at)).staticS === at - 20 && c.at(t(at)).following === false, JSON.stringify(c.at(t(at))));
+}
+{
+  // A seed going back and forth between two heights below the top, while the seed that gave the top is silent.
+  const c = clock().round({ a: 1000, b: 990 }, t(0)).round({ a: 1000, b: 990 }, t(20));
+  let at = 20;
+  for (let k = 0; k < 4400; k++) { at += 20; c.round({ b: k % 2 ? 981 : 980, c: 985 }, t(at)); }
+  check("R8c a seed that only goes back and forth below the top never makes a run of rises: no start-over in 24 hours of it, and the count runs on from the top", c.state.gave === null && c.state.top === 1000 && c.at(t(at)).staticS === at && at > 86400, JSON.stringify(c.state));
 }
 {
   // A rollback of a few blocks while blocks are produced: the heights pass the old top again.
@@ -265,87 +354,141 @@ console.log("\n[" + TAG + "] gaps and the host clock");
 
 console.log("\n[" + TAG + "] a world in which no height ever changes");
 {
-  // Four sources on fixed heights; every sequence of four rounds over which of them answer, after 20 s or after 620 s.
+  // Three seeds and three validators on fixed heights. Every sequence of rounds over which of them answer, read as
+  // the agent reads: validators only when fewer than two seeds gave a height. Nothing may ever be claimed, no run of
+  // rises may begin, and the count may begin again only in a round that hears a node for the first time.
+  const SEEDS = ["a", "b", "c"];
   let sequences = 0, bad = null;
-  for (const heights of [{ a: 500, b: 497, c: 495, [VALIDATORS_SOURCE]: 499 }, { a: 500, b: 500, c: 495, [VALIDATORS_SOURCE]: 503 }, { a: 500, b: 500, c: 500, [VALIDATORS_SOURCE]: 500 }]) {
-    const ids = Object.keys(heights);
-    const walk = (state, at, depth, path) => {
-      if (bad) return;
-      for (let mask = 1; mask < 16; mask++) for (const dt of [20, 620]) {
-        const src = ids.filter((_, i) => mask & (1 << i)).map((id) => ({ id, h: heights[id] }));
-        const s = stepHeightClock(state, src, at + dt * S), m = heightMovementOf(s, at + dt * S, true, CFG);
-        if (s.seen || s.gave !== null || s.lowSince !== null || m.advancedAt !== null || m.advancing) { bad = { heights, path: path.concat([[mask, dt]]), state: s }; return; }
-        if (depth > 1) walk(s, at + dt * S, depth - 1, path.concat([[mask, dt]])); else sequences++;
+  const walk = (heights, vals, state, last, heard, at, depth, dts, path) => {
+    if (bad) return;
+    for (let sm = 0; sm < 8; sm++) {
+      const seeds = SEEDS.map((id, i) => ({ id, h: sm & (1 << i) ? heights[i] : null })), own = seeds.filter((x) => x.h !== null).length;
+      for (let vm = 0; vm < (own >= 2 ? 1 : 8); vm++) for (const dt of dts) {
+        const entries = own >= 2 ? null : vals.map((h, i) => (vm & (1 << i) ? { key: VK(i), h } : null)).filter(Boolean);
+        const now = at + dt * S, r = clockRound(last, seeds, entries, now), s = stepHeightClock(state, r.sources, now, r.counted), m = heightMovementOf(s, now, r.reading, CFG);
+        const mask = sm | ((own >= 2 ? 0 : vm) << 3), fresh = (mask & ~heard) !== 0, step = [sm, own >= 2 ? "-" : vm, dt];
+        if (s.seen || s.gave !== null || s.lowSince !== null || m.advancedAt !== null || m.advancing || m.following) { bad = { why: "something was claimed", heights, vals, path: path.concat([step]), state: s }; return; }
+        if (state.top !== null && s.topSince !== state.topSince && !fresh) { bad = { why: "the count began again in a round that heard no node for the first time", heights, vals, path: path.concat([step]), state: s }; return; }
+        if (depth > 1) walk(heights, vals, s, r.validators, heard | mask, now, depth - 1, dts, path.concat([step])); else sequences++;
+        if (bad) return;
       }
-    };
-    walk(newHeightClock(), T0, 4, []);
+    }
+  };
+  for (const [heights, vals] of [[[500, 497, 495], [499, 499, 502]], [[500, 500, 495], [503, 503, 480]], [[500, 500, 500], [500, 500, 500]], [[500, 497, 495], [1000, 1000, 1003]]]) {
+    walk(heights, vals, newHeightClock(), {}, 0, T0, 3, [20, 620], []);
+    walk(heights, vals, newHeightClock(), {}, 0, T0, 4, [20], []);
   }
-  check("W1 " + sequences.toLocaleString("en-US") + " sequences: never a new height, never 'advancing', never a start-over", !bad && sequences === 3 * Math.pow(30, 4), JSON.stringify(bad));
+  check("W1 " + sequences.toLocaleString("en-US") + " sequences of who answers, seeds and validators: never a new height, never 'advancing', never a start-over, and the count begins again only when a node is heard for the first time",
+    !bad && sequences === 4 * (Math.pow(72, 3) + Math.pow(36, 4)), JSON.stringify(bad));
 }
 
 console.log("\n[" + TAG + "] the fold against a plain reading of its text");
 {
   // The same rule, written once more from the words in status-rule.mjs, scanning the whole history each time.
   function plain(rounds) {
-    const lastAnswer = new Map(); let highest = null, countFrom = null, sawArrive = false, comparedYet = false, remembered = null, runFirst = null, runLatest = null, silent = false;
+    const lastAnswer = new Map(); let highest = null, countFrom = null, sawArrive = false, comparedYet = false, remembered = null, runFirst = null, runLatest = null, runBest = new Map(), silent = false, everRead = null, everReadAt = null;
     for (const r of rounds) {
       silent = false;
-      const ceiling = remembered ? remembered.highest : highest, roundTop = Math.max(...r.src.map((x) => x.h));
-      const rises = r.src.filter((x) => lastAnswer.has(x.id) && x.h > lastAnswer.get(x.id)), bestRise = rises.length ? Math.max(...rises.map((x) => x.h)) : null;
-      const roseBelow = ceiling !== null && rises.some((x) => x.h < ceiling);
+      // the highest height read before this round, from a seed or a counted validator, and when it was first read; and this round's
+      let readBefore = everRead, readBeforeAt = everReadAt; const roundRead = Math.max(...r.src.map((x) => x.h), r.counted === null ? -1 : r.counted);
+      if (readBefore === null || roundRead > readBefore) { everRead = roundRead; everReadAt = r.at; }
+      // rises below the highest height DNO holds are the run a start-over rests on: the remembered height, or the highest height read
+      const ceiling = remembered ? remembered.highest : readBefore !== null ? readBefore : highest, roundTop = Math.max(...r.src.map((x) => x.h));
+      // a seed rose when it is above its own last answer; the validators rose when their step says so
+      const rose = (x) => (x.step !== undefined ? x.step === "rose" : lastAnswer.has(x.id) && x.h > lastAnswer.get(x.id));
+      const rises = r.src.filter(rose), bestRise = rises.length ? Math.max(...rises.map((x) => x.h)) : null;
+      const nothingNew = r.src.some((x) => x.step === "same");
+      const below = ceiling === null ? [] : rises.filter((x) => x.h < ceiling);
       r.src.forEach((x) => lastAnswer.set(x.id, x.h));
-      if (roseBelow) { if (runFirst === null || r.at - runLatest > 600000) runFirst = r.at; runLatest = r.at; }
+      let roseBelow = false;
+      if (below.length) {
+        if (runFirst === null || r.at - runLatest > 600000) { runFirst = r.at; runBest = new Map(); }
+        for (const x of below) if (!runBest.has(x.id) || x.h > runBest.get(x.id)) { runBest.set(x.id, x.h); roseBelow = true; }   // above its highest answer of the run
+        if (roseBelow) runLatest = r.at;
+      }
       const startCount = () => { highest = roundTop; countFrom = r.at; comparedYet = false; sawArrive = false; };
+      // the height given up is remembered; while one is remembered already, a height read since above what was read with it is kept with it
+      const giveUp = (height, from, arrived, read, readAt) => {
+        if (!remembered) remembered = { highest: height, countFrom: from, sawArrive: arrived, at: r.at, read, readAt };
+        else if (read !== null && (remembered.read === null || read > remembered.read)) { remembered.read = read; remembered.readAt = readAt; }
+      };
       if (highest === null) { startCount(); continue; }
       if (remembered) {
-        if (r.at - remembered.at > 86400000 || roundTop > remembered.highest) remembered = null;
-        else if (roundTop === remembered.highest) { highest = remembered.highest; countFrom = remembered.countFrom; sawArrive = remembered.sawArrive; comparedYet = true; remembered = null; silent = true; continue; }
+        if (r.at - remembered.at > 86400000) remembered = null;
+        else if (roundTop >= remembered.highest) {
+          // back on the heights given up, or above them: what was read on them is "read before" again
+          // (a height read again since is as old as its first reading)
+          if (remembered.read !== null && (readBefore === null || remembered.read >= readBefore)) { readBefore = remembered.read; readBeforeAt = remembered.readAt; if (remembered.read >= everRead) { everRead = remembered.read; everReadAt = remembered.readAt; } }
+          if (roundTop === remembered.highest) { highest = remembered.highest; countFrom = remembered.countFrom; sawArrive = remembered.sawArrive; comparedYet = true; remembered = null; silent = true; continue; }
+          remembered = null;
+        }
       }
       if (roundTop > highest) {
-        if (bestRise === roundTop) { highest = roundTop; countFrom = r.at; comparedYet = true; sawArrive = remembered === null; if (remembered === null) { runFirst = null; runLatest = null; } }
+        if (nothingNew) comparedYet = true;
+        else if (readBefore !== null && roundTop <= readBefore) {
+          // rising under a height read, for more than ten minutes, with nothing read at that height in this round: it is given up
+          if (roseBelow && r.at - runFirst > 600000 && roundRead < readBefore) { giveUp(readBefore, readBeforeAt, false, readBefore, readBeforeAt); startCount(); everRead = roundRead; everReadAt = r.at; }
+          else { highest = roundTop; countFrom = readBeforeAt; comparedYet = true; sawArrive = false; }   // a height read before: as old as its first reading
+        }
+        else if (bestRise === roundTop) { highest = roundTop; countFrom = r.at; comparedYet = true; sawArrive = remembered === null; if (remembered === null) { runFirst = null; runLatest = null; runBest = new Map(); } }
         else startCount();
         continue;
       }
-      if (roundTop === highest) { comparedYet = true; continue; }
-      if (roseBelow && r.at - runFirst > 600000) { if (!remembered) remembered = { highest, countFrom, sawArrive, at: r.at }; startCount(); continue; }
+      if (roundTop === highest || roundRead >= highest) { comparedYet = true; continue; }   // the highest height is read in this round, by a seed or by a counted validator: nothing is followed below it
+      if (roseBelow && r.at - runFirst > 600000) { giveUp(highest, countFrom, sawArrive, readBefore, readBeforeAt); startCount(); everRead = roundRead; everReadAt = r.at; continue; }
       comparedYet = true;
     }
-    return { top: highest, topSince: countFrom, seen: sawArrive, compared: comparedYet, gave: remembered ? remembered.highest : null, hold: silent };
+    return { top: highest, topSince: countFrom, seen: sawArrive, compared: comparedYet, gave: remembered ? remembered.highest : null, gaveRead: remembered ? remembered.read : null, hold: silent, lowSince: runFirst, lowLast: runLatest, read: everRead, readSince: everReadAt };
   }
-  let seed = 4242, differ = null, steps = 0; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  let seed = 4242, differ = null, steps = 0, vsteps = { rose: 0, first: 0, same: 0 }, gaveUp = { top: 0, read: 0 }; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   for (let run = 0; run < 1500 && !differ; run++) {
     const rounds = []; let state = newHeightClock(), at = T0; const hs = { a: 1000, b: 1000 - Math.floor(rnd() * 4), c: 990, [VALIDATORS_SOURCE]: 1000 }, ids = Object.keys(hs);
     for (let k = 0; k < 90 && !differ; k++) {
       at += [20, 20, 20, 599, 600, 601, 900, 86400, 86401][Math.floor(rnd() * 9)] * S * (rnd() < 0.85 ? 1 : 0) + 20 * S * (rnd() < 0.85 ? 0 : 1) + (rnd() < 0.02 ? -3600 * S : 0);
-      ids.forEach((id) => { const p = rnd(); if (p < 0.35) hs[id] += 1; else if (p < 0.4) hs[id] += Math.floor(rnd() * 40); else if (p < 0.45) hs[id] = Math.max(0, hs[id] - Math.floor(rnd() * 30)); else if (p < 0.46) hs[id] = Math.floor(rnd() * 60); });
-      const src = ids.filter(() => rnd() < 0.6).map((id) => ({ id, h: hs[id] }));
-      if (!src.length) continue;
-      rounds.push({ at, src }); state = stepHeightClock(state, src, at); steps++;
-      const want = plain(rounds), got = { top: state.top, topSince: state.topSince, seen: state.seen, compared: state.compared, gave: state.gave ? state.gave.top : null, hold: state.hold };
+      ids.forEach((id) => { const p = rnd(); if (p < 0.35) hs[id] += 1; else if (p < 0.4) hs[id] += Math.floor(rnd() * 40); else if (p < 0.45) hs[id] = Math.max(0, hs[id] - Math.floor(rnd() * 30)); else if (p < 0.46) hs[id] = Math.floor(rnd() * 60); else if (p < 0.5) hs[id] = Math.max(0, hs[id] - 1); });
+      // as clockSources gives them: the seeds that answered, or with none of them the validators with a step
+      let src = ["a", "b", "c"].filter(() => rnd() < 0.5).map((id) => ({ id, h: hs[id] }));
+      if (!src.length) { if (rnd() < 0.3) continue; const step = ["rose", "first", "same"][Math.floor(rnd() * 3)]; vsteps[step]++; src = [{ id: VALIDATORS_SOURCE, h: hs[VALIDATORS_SOURCE], step }]; }
+      // beside a seed, or with no seed, the reading may have counted validators: the highest of them, sometimes above the sources
+      // (now and then far above them: validators that stand elsewhere than the seed that answers)
+      const counted = src.length < 2 && rnd() < 0.5 ? Math.max(...src.map((x) => x.h)) + (rnd() < 0.2 ? 30 + Math.floor(rnd() * 60) : Math.floor(rnd() * 6) - 2) : null;
+      const was = state;
+      rounds.push({ at, src, counted }); state = stepHeightClock(state, src, at, counted); steps++;
+      if (!was.gave && state.gave) gaveUp[state.gave.top === was.top ? "top" : "read"]++;   // which height was given up: the top, or a height read above it
+      const want = plain(rounds), got = { top: state.top, topSince: state.topSince, seen: state.seen, compared: state.compared, gave: state.gave ? state.gave.top : null, gaveRead: state.gave ? state.gave.read : null, hold: state.hold, lowSince: state.lowSince, lowLast: state.lowLast, read: state.read, readSince: state.readSince };
       if (JSON.stringify(want) !== JSON.stringify(got)) differ = { run, k, want, got };
     }
   }
-  check("P1 " + steps.toLocaleString("en-US") + " random rounds (rises, drops, resets, pauses at 599, 600 and 601 s, a day, a clock set back): the fold says what its text says", !differ && steps > 60000, JSON.stringify(differ));
+  check("P1 " + steps.toLocaleString("en-US") + " random rounds (rises, drops, steps back and up again, resets, pauses at 599, 600 and 601 s, a day, a clock set back, validators with each step; both shapes of the start-over): the fold says what its text says",
+    !differ && steps > 60000 && Math.min(vsteps.rose, vsteps.first, vsteps.same) > 1000 && gaveUp.top > 100 && gaveUp.read > 100, JSON.stringify(differ || [vsteps, gaveUp]));
 }
 
-console.log("\n[" + TAG + "] worlds with a ground truth");
+console.log("\n[" + TAG + "] worlds with a ground truth: what DNO read, from every node, in every round");
 {
   // A chain produces blocks, halts, resumes and (rarely) restarts lower. Three seeds and six validators follow it, lag,
-  // stick and catch up; DNO reads them every 20 s, is sometimes blind, and restarts.
-  //   A1 a new height claimed at a height DNO had already read, outside a start-over
-  //   B1 a stable reading although DNO read the standing head 1,840 s or more ago (outside a start-over, not a hold round)
-  //   C1 a standstill while a seed that follows the chain answered in every round of the last 700 s and blocks were produced
-  //   B2 a stable reading with clear confidence in that situation at any time, a start-over and its hold round included
+  // stick, fall back and catch up. DNO reads the seeds every 20 s, and the validators it keeps as candidates when fewer
+  // than two seeds gave a height; sometimes it keeps none, is blind, or restarts. The ground truth is every (node,
+  // height) pair DNO read, whether or not the rule calls the round a reading.
+  //   A0 a new height claimed in a world where no node ever changes its height
+  //   A1 a new height claimed in a round in which no node read rose above its own previous answer
+  //   A2 a new height claimed at or below a height a seed had shown DNO before, outside a start-over
+  //   A3 a new height claimed at or below a height DNO had read before from a seed or from a validator counted in a reading
+  //   B1 a stable reading although for 1,840 s or more no node DNO read has risen to a height new for itself and none
+  //      was heard for the first time, and DNO had a reading 1,800 s before
+  //   C1 degraded by standstill although a seed showed a height above everything DNO had read from anybody, in the last 1,800 s
   //   D1 a restart (the stored rounds replayed) publishing something else than the process that never restarted
+  //   E1 something said about heights in a round without a reading
   let seed = 20261004, seed2 = 777; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff, rnd2 = () => (seed2 = (seed2 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const n = { A1: 0, B1: 0, B2: 0, C1: 0, D1: 0, rounds: 0, readings: 0, newHeights: 0, standstills: 0, startOvers: 0, restores: 0, replays: 0 }; let first = null;
+  const n = { A0: 0, A1: 0, A2: 0, A3: 0, B1: 0, C1: 0, D1: 0, E1: 0, rounds: 0, readings: 0, noReading: 0, loneSeed: 0, validatorsOnly: 0, newHeights: 0, newByValidators: 0, standstills: 0, startOvers: 0, restores: 0, replays: 0, following: 0, steps: { rose: 0, first: 0, same: 0 } }; let first = null;
   for (let wi = 0; wi < 420; wi++) {
     const profile = wi % 7;   // 0 calm, 1 halts, 2 flaky seeds, 3 halts with seeds stuck apart, 4 restarts lower, 5 halts with nodes resyncing, 6 nothing ever changes
-    let head = 400000 + Math.floor(rnd() * 1000), halted = profile === 6, haltLeft = profile === 6 ? 1e9 : 0, lastMove = T0, resetAt = null;
-    const mk = (isSeed, i) => ({ id: (isSeed ? "seed" : "val") + i, isSeed, mode: "follow", lag: Math.floor(rnd() * (profile === 3 || profile === 6 ? 6 : 2)), h: 0, up: rnd() < 0.9, left: 0, sync: 0 });
+    let head = 400000 + Math.floor(rnd() * 1000), halted = profile === 6, haltLeft = profile === 6 ? 1e9 : 0;
+    const mk = (isSeed, i) => ({ id: isSeed ? "seed" + i : VK(i), isSeed, mode: "follow", lag: Math.floor(rnd() * (profile === 3 || profile === 6 ? 6 : 2)), h: 0, up: rnd() < 0.9, left: 0, sync: 0 });
     const nodes = [mk(true, 1), mk(true, 2), mk(true, 3), mk(false, 1), mk(false, 2), mk(false, 3), mk(false, 4), mk(false, 5), mk(false, 6)];
     nodes.forEach((x) => { x.h = head - x.lag; if (profile === 6) x.mode = "stuck"; });
-    let state = newHeightClock(), at = T0, blind = 0, dnoMax = null, headReadAt = null; const rows = [], producedAt = [], followerAt = [];
+    if (profile === 2 || profile === 5) nodes.filter((x) => x.isSeed).forEach((x, i) => { x.flaky = i === 0 ? 0.01 : 0.12; });   // often one seed alone, or none
+    let state = newHeightClock(), last = {}, at = T0, blind = 0, candidates = rnd() < 0.8;
+    const rows = [], shown = new Map(), readingAt = []; let seedTop = null, allTop = null, countedTop = null, lastSeedAboveAllAt = null, lastNews = null, firstReadingAt = null;
     for (let r = 0; r < 300; r++) {
       at += 20 * S;
       let produced = 0;
@@ -355,17 +498,17 @@ console.log("\n[" + TAG + "] worlds with a ground truth");
         const p = rnd();
         if ((profile === 1 || profile === 3 || profile === 5) && p < 0.012) { halted = true; haltLeft = 60 + Math.floor(rnd() * 220); produced = 0; }
         else if (profile === 4 && p < 0.004) {
-          head = 5 + Math.floor(rnd() * 50); produced = 0; resetAt = at; dnoMax = null; headReadAt = null;
+          head = 5 + Math.floor(rnd() * 50); produced = 0;
           nodes.forEach((x) => { if (x.mode !== "stuck" && rnd() < 0.93) { x.h = Math.max(0, head - x.lag); x.mode = "follow"; } else x.mode = "stuck"; });
           if (rnd() < 0.4) { halted = true; haltLeft = 30 + Math.floor(rnd() * 150); }
         }
       }
-      if (produced) { head += produced; lastMove = at; headReadAt = null; }
+      head += produced;
       nodes.forEach((x) => {
         if (profile === 6) { if (x.left > 0) x.left--; else if (rnd() < 0.2) { x.up = !x.up; x.left = rnd() < 0.2 ? 35 : Math.floor(rnd() * 3); } return; }
         if (x.left > 0) x.left--;
         else {
-          const flaky = profile === 2 ? 0.06 : profile === 5 && halted ? 0.05 : 0.015;
+          const flaky = x.flaky || (profile === 5 && halted ? 0.05 : 0.015);
           if (x.up && rnd() < flaky) { x.up = false; x.left = rnd() < 0.3 ? 30 + Math.floor(rnd() * 120) : Math.floor(rnd() * 4); if (profile === 5 && halted && rnd() < 0.6) { x.h = Math.max(0, x.h - 200 - Math.floor(rnd() * 3000)); x.mode = "sync"; x.sync = 15 + Math.floor(rnd() * 60); } }
           else if (!x.up) { x.up = true; if (x.h < head - 30 && x.mode === "follow") { x.mode = "sync"; x.sync = 20 + Math.floor(rnd() * 60); } }
         }
@@ -373,45 +516,68 @@ console.log("\n[" + TAG + "] worlds with a ground truth");
         else if (x.mode === "sync" && x.up) { if (x.h <= head) { x.h = Math.min(head - (halted ? 0 : x.lag), x.h + x.sync); if (x.h >= head - x.lag) x.mode = "follow"; } }
         else if (x.mode === "stuck" && x.h <= head && rnd() < 0.01) { x.mode = "sync"; x.sync = 20 + Math.floor(rnd() * 60); }
       });
-      if (blind > 0) { blind--; producedAt.push(produced > 0); followerAt.push(false); continue; }
-      if (profile !== 6 && rnd() < 0.002) { blind = 5 + Math.floor(rnd() * 150); producedAt.push(produced > 0); followerAt.push(false); continue; }
-      const seeds = nodes.filter((x) => x.isSeed && x.up).map((x) => ({ id: x.id, h: x.h }));
-      const vals = seeds.length >= 2 ? null : nodes.filter((x) => !x.isSeed && x.up).map((x) => x.h);
-      const before = state, src = clockSources(seeds, vals), had = src.length > 0;
-      state = stepHeightClock(state, src, at);
-      const mv = heightMovementOf(state, at, had, CFG);
-      const reading = assess({ timeReason: null, seedsTotal: 3, seedsAnswered: seeds.length, seedHeights: seeds.map((x) => x.h), validators: vals ? { read: vals.length, heights: vals, listAgreedAt: null } : null,
+      if (rnd() < 0.004) candidates = !candidates;
+      if (blind > 0) { blind--; continue; }
+      if (profile !== 6 && rnd() < 0.002) { blind = 5 + Math.floor(rnd() * 150); continue; }
+      const seeds = nodes.filter((x) => x.isSeed).map((x) => ({ id: x.id, h: x.up ? x.h : null })), own = seeds.filter((x) => x.h !== null);
+      const entries = own.length >= 2 || !candidates ? null : nodes.filter((x) => !x.isSeed && x.up).map((x) => ({ key: x.id, h: x.h }));
+      const before = state, rd = clockRound(last, seeds, entries, at);
+      last = rd.validators; state = stepHeightClock(state, rd.sources, at, rd.counted);
+      const had = rd.reading, mv = heightMovementOf(state, at, had, CFG);
+      const reading = assess({ timeReason: null, seedsTotal: 3, seedsAnswered: own.length, seedHeights: own.map((x) => x.h), validators: entries ? { read: entries.length, heights: entries.map((x) => x.h), listAgreedAt: null } : null,
         maxIncidentSeverity: "none", publicIncidentCount: 0, movement: { staticSeconds: mv.staticSeconds, advancing: mv.advancing, stalled: mv.stalled, following: mv.following, staticSince: null } });
-      rows.push({ src, at }); n.rounds++; if (had) n.readings++;
-      producedAt.push(produced > 0); followerAt.push(had && nodes.some((x) => x.isSeed && x.up && x.mode === "follow" && x.h >= head - 2 && x.h <= head));
-      const srcMax = had && seeds.length ? Math.max(...seeds.map((x) => x.h)) : null;
+      rows.push({ seeds: own, row: rd.row, reading: had, at }); n.rounds++;
+      // the validators this reading counted, by this test's own arithmetic: within 25 blocks of the one seed, or of their upper median
+      const vh = entries ? entries.map((x) => x.h).sort((x, y) => x - y) : [], ref = own.length === 1 ? own[0].h : vh.length ? vh[Math.floor(vh.length / 2)] : null;
+      const countedNow = had && entries && own.length < 2 ? vh.filter((h) => Math.abs(h - ref) <= 25) : [];
+      if (had) { n.readings++; if (firstReadingAt === null) firstReadingAt = at; } else n.noReading++;
+      if (!had && own.length === 1) n.loneSeed++;
+      if (rd.row) { n.validatorsOnly++; n.steps[rd.row.step]++; }
       const note = (k, o) => { n[k]++; if (!first) first = Object.assign({ kind: k, world: wi, round: r, profile }, o); };
+      // the ground truth: what every node read this round shows against what that node, and any seed, showed before
+      const read = own.map((x) => ({ id: x.id, h: x.h, seed: true })).concat((entries || []).map((x) => ({ id: x.key, h: x.h, seed: false })));
+      const rose = read.some((x) => shown.has(x.id) && x.h > shown.get(x.id).prev && !shown.get(x.id).heights.has(x.h));
+      const heardFirst = read.some((x) => !shown.has(x.id));
+      const seedMax = own.length ? Math.max(...own.map((x) => x.h)) : null, seedAboveAll = seedMax !== null && allTop !== null && seedMax > allTop;
+      const claim = mv.advancedAt !== null && mv.advancedAt === at;
       if (before.gave === null && state.gave !== null) n.startOvers++;
       if (before.gave !== null && state.gave === null && state.hold) n.restores++;
-      if (state.seen && state.compared && state.topSince === at) {
-        n.newHeights++;
-        if (at - lastMove >= 40 * S && dnoMax !== null && state.top <= dnoMax && before.gave === null && state.gave === null) note("A1", { top: state.top, dnoMax, head });
+      if (claim) {
+        n.newHeights++; if (rd.row) n.newByValidators++;
+        if (profile === 6) note("A0", { top: state.top });
+        if (!rose) note("A1", { top: state.top, sources: rd.sources });
+        if (seedTop !== null && state.top <= seedTop && before.gave === null && state.gave === null) note("A2", { top: state.top, seedTop });
+        if (countedTop !== null && state.top <= countedTop && before.gave === null && state.gave === null) note("A3", { top: state.top, countedTop, mode: reading.witnesses.mode });
       }
-      if (srcMax !== null) dnoMax = dnoMax === null ? srcMax : Math.max(dnoMax, srcMax);
-      if (srcMax !== null && srcMax === head && headReadAt === null) headReadAt = at;
-      if (had && reading.status === "stable" && at - lastMove >= 1840 * S && headReadAt !== null && at - headReadAt >= 1840 * S && state.gave === null && !state.hold) note("B1", { head, state, staticSeconds: mv.staticSeconds });
-      if (had && reading.status === "stable" && reading.confidence === "clear" && at - lastMove >= 1840 * S && headReadAt !== null && at - headReadAt >= 1840 * S) note("B2", { head, state, staticSeconds: mv.staticSeconds });
-      if (had && (state.gave !== null || state.hold)) n.following = (n.following || 0) + 1;
+      if (had && (state.gave !== null || state.hold)) n.following++;
+      const since = lastNews === null ? firstReadingAt : lastNews;
+      if (had && reading.status === "stable" && !rose && !heardFirst && since !== null && at - since >= 1840 * S && readingAt.some(([t0, h0]) => h0 && t0 <= at - 1800 * S && t0 >= since)) note("B1", { state, staticSeconds: mv.staticSeconds, mode: reading.witnesses.mode });
       if (reading.standstill) {
         n.standstills++;
-        let all = r >= 35; for (let j = r - 34; all && j <= r; j++) if (!producedAt[j] || !followerAt[j]) all = false;
-        if (all && (resetAt === null || at - resetAt > 700 * S)) note("C1", { head, state });
+        if (seedAboveAll || (lastSeedAboveAllAt !== null && at - lastSeedAboveAllAt < 1800 * S)) note("C1", { state, allTop, lastSeedAboveAllAt, at });
       }
+      if (!had && (mv.staticSeconds !== null || mv.advancedAt !== null || mv.advancing || mv.stalled || mv.following || reading.standstill)) note("E1", { mv });
       if (rnd2() < 0.03) {
         n.replays++;
-        let s2 = newHeightClock(), had2 = false; rows.forEach((x) => { s2 = stepHeightClock(s2, x.src, x.at); had2 = x.src.length > 0; });
-        if (JSON.stringify(heightMovementOf(s2, at, had2, CFG)) !== JSON.stringify(mv)) note("D1", { live: mv });
+        let s2 = newHeightClock(), had2 = false;
+        rows.forEach((x) => { s2 = stepHeightClock(s2, x.seeds.length ? x.seeds : x.row && x.row.h !== undefined ? [{ id: VALIDATORS_SOURCE, h: x.row.h, step: x.row.step }] : [], x.at, x.row ? x.row.max : null); had2 = x.reading; });
+        if (JSON.stringify(heightMovementOf(s2, at, had2, CFG)) !== JSON.stringify(mv)) note("D1", { live: mv, replayed: heightMovementOf(s2, at, had2, CFG) });
       }
+      read.forEach((x) => { const e = shown.get(x.id) || { prev: null, heights: new Set() }; e.prev = x.h; e.heights.add(x.h); shown.set(x.id, e); });
+      if (rose || heardFirst) lastNews = at;
+      if (seedAboveAll) lastSeedAboveAllAt = at;
+      if (seedMax !== null && (seedTop === null || seedMax > seedTop)) seedTop = seedMax;
+      own.map((x) => x.h).concat(countedNow).forEach((h) => { if (countedTop === null || h > countedTop) countedTop = h; });
+      if (before.gave === null && state.gave !== null) countedTop = Math.max(...own.map((x) => x.h).concat(countedNow));   // a start-over: what was read on the heights given up is set aside, as the rule says
+      read.forEach((x) => { if (allTop === null || x.h > allTop) allTop = x.h; });
+      readingAt.push([at, had]);
     }
   }
-  check("X1 " + n.rounds.toLocaleString("en-US") + " rounds in 420 worlds: no new height at a height already read, no stable reading of a standstill DNO has known for 30 minutes (and none that reads clear while DNO follows lower heights), no standstill on a producing chain a seed follows, no restart that says something else",
-    n.A1 + n.B1 + n.B2 + n.C1 + n.D1 === 0, JSON.stringify({ A1: n.A1, B1: n.B1, B2: n.B2, C1: n.C1, D1: n.D1, first }).slice(0, 900));
-  check("X2 and the worlds did exercise the rule: new heights, standstills, start-overs, restores and replays all occurred", n.readings > 80000 && n.newHeights > 20000 && n.standstills > 10000 && n.startOvers > 20 && n.restores > 0 && n.replays > 1000 && n.following > 200, JSON.stringify(n));
+  check("X1 " + n.rounds.toLocaleString("en-US") + " rounds in 420 worlds: no new height where nothing changes, none without a node that rose, none at a height a seed or a counted validator had shown; no stable reading while no node has risen for 30 minutes; no standstill within 30 minutes of a seed's new height; no restart that says something else; nothing said without a reading",
+    n.A0 + n.A1 + n.A2 + n.A3 + n.B1 + n.C1 + n.D1 + n.E1 === 0, JSON.stringify({ A0: n.A0, A1: n.A1, A2: n.A2, A3: n.A3, B1: n.B1, C1: n.C1, D1: n.D1, E1: n.E1, first }).slice(0, 1200));
+  check("X2 and the worlds did exercise the rule: rounds without a reading and with one seed alone, readings from validators alone with each step, new heights from seeds and from validators, standstills, start-overs, restores and replays all occurred",
+    n.readings > 60000 && n.noReading > 3000 && n.loneSeed > 1000 && n.validatorsOnly > 2000 && n.steps.rose > 500 && n.steps.same > 500 && n.steps.first > 10 && n.newHeights > 20000 && n.newByValidators > 200 && n.standstills > 5000
+    && n.startOvers > 10 && n.restores > 0 && n.replays > 1000 && n.following > 100, JSON.stringify(n));
 }
 
 console.log("\n[" + TAG + "] blocks advanced in the last 24 hours (as observed)");
@@ -440,28 +606,96 @@ console.log("\n[" + TAG + "] which rule wrote a history row is on the row");
   const create = "CREATE TABLE public_node_history (" + SRC.match(/CREATE TABLE IF NOT EXISTS public_node_history \(([\s\S]*?)\)`/)[1] + ")";
   const OLDER = "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   const THIS = SRC.match(/"(INSERT INTO public_node_history \([^)]*\) VALUES \([^)]*\))"/)[1];
-  const args = (ts, h) => [ts, "stable", "low", "clear", "sufficient", "strong", h, 0, 3, 3, "[]"];
+  const args = (ts, h) => [ts, "stable", "low", "clear", "sufficient", "strong", h, 0, 3, 3, JSON.stringify([{ name: "a", block: h }, { name: "b", block: h }])];
+  const mine = (ts, h, o) => { const x = Object.assign({ dq: "sufficient", states: JSON.stringify([{ name: "a", block: h }, { name: "b", block: h }]), median: h, step: null }, o); return [ts, "stable", "low", "clear", x.dq, "strong", x.median, 0, 3, 3, x.states, x.step]; };
   const since = new Function(extract("function ownHeightSince(") + "\nreturn ownHeightSince;")();
+  // The agent's own replay and its reading of a stored row, on a table of this test.
+  const replayOn = (db, start, maxRows) => new Function("sharedDb", "OWN_HEIGHT_SINCE", "RULE", "CLOCK_REPLAY_MAX_ROWS", "newHeightClock", "stepHeightClock", "sanitizeHeight", "VALIDATORS_SOURCE", "logError",
+    "var heightClock = null, heightClockReplaySaid = false;\n" + extract("function clockInputOfRow(") + extract("function replayHeightClock(") + "\nreturn function(before) { var ok = replayHeightClock(before); return { ok: ok, clock: heightClock }; };")(
+    db, start, RULE, maxRows || 20000, newHeightClock, stepHeightClock, sanitizeHeight, VALIDATORS_SOURCE, () => {});
   const db = new Database(":memory:");
   db.run(create);
-  check("O1 a new store: every row will carry the mark, so no row is excluded", since(db) === 0 && db.query("SELECT name FROM pragma_table_info('public_node_history')").all().some((c) => c.name === "own_height"));
+  check("O1 a new store: every row will carry the mark, so no row is excluded; the column for the validators' step is there too", since(db) === 0 && ["own_height", "witness_step"].every((c) => db.query("SELECT name FROM pragma_table_info('public_node_history')").all().some((x) => x.name === c)));
   for (let k = 0; k < 5; k++) db.run(OLDER, args(T0 + k * 20 * S, 900 + k));
   check("O2 rows the older agent wrote: the start is just after the newest of them", since(db) === T0 + 4 * 20 * S + 1, since(db));
-  for (let k = 5; k < 10; k++) db.run(THIS, args(T0 + k * 20 * S, 500 + k));
+  for (let k = 5; k < 10; k++) db.run(THIS, mine(T0 + k * 20 * S, 500 + k));
   check("O3 then this version's rows: the start stays at the end of the older rows, and all of this version's rows are after it",
     since(db) === T0 + 4 * 20 * S + 1 && db.query("SELECT COUNT(*) AS n FROM public_node_history WHERE own_height = 1 AND ts >= ?").get(since(db)).n === 5, since(db));
   for (let k = 10; k < 13; k++) db.run(OLDER, args(T0 + k * 20 * S, 900 + k));              // a rollback: the older agent runs on the same store
   check("O4 after a rollback the older agent's INSERT still works, and the start moves past its rows (this version's earlier rows are no longer used)",
     since(db) === T0 + 12 * 20 * S + 1, since(db));
-  for (let k = 13; k < 15; k++) db.run(THIS, args(T0 + k * 20 * S, 513 + k));
-  const REPLAY = SRC.match(/"(SELECT ts, data_quality, median_block, node_states FROM public_node_history WHERE ts < \? AND ts >= \? ORDER BY ts DESC LIMIT \?)"/)[1];
-  const used = db.query(REPLAY).all(T0 + 99 * 20 * S, since(db), 20000);
-  check("O5 the start-up query then reads only rows written after the rollback, all under the own-height rule", used.length === 2 && used.every((r) => r.median_block >= 526), JSON.stringify(used));
-  check("O6 this version's INSERT sets the mark", /node_states, own_height\) VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?, \?, 1\)/.test(THIS), THIS);
+  for (let k = 13; k < 15; k++) db.run(THIS, mine(T0 + k * 20 * S, 513 + k));
+  const used = replayOn(db, since(db))(T0 + 99 * 20 * S);
+  check("O5 the replay at start then steps only the rows written after the rollback, all under the own-height rule: the clock knows their heights and nothing older", used.ok === true && used.clock.top === 527 && used.clock.topSince === T0 + 14 * 20 * S && used.clock.seen === true
+    && JSON.stringify(used.clock.last) === JSON.stringify({ a: 527, b: 527 }), JSON.stringify(used.clock));
+  check("O6 this version's INSERT sets the mark, and names the column a reading from validators alone is kept in", /node_states, own_height, witness_step\) VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?, \?, 1, \?\)/.test(THIS), THIS);
   check("O7 no stored stamp for it: the agent neither reads nor writes own_height_since", !/own_height_since/.test(SRC));
-  check("O8 every read of median, spread or agreement from stored rows is bounded by the start: the start-up clock, 24 h chain movement, the trend",
-    /\.all\(since, OWN_HEIGHT_SINCE\)/.test(SRC) && SRC.includes("var from = Math.max(OWN_HEIGHT_SINCE, before - RULE.clockRememberSeconds * 1000);") && SRC.includes(".all(before, from, CLOCK_REPLAY_MAX_ROWS)")
-    && /WHERE ts > \? AND ts >= \? ORDER BY ts DESC LIMIT 15 OFFSET 1"\)\.all\(trendSince, OWN_HEIGHT_SINCE\)/.test(SRC));
+  check("O8 every read of median, spread or agreement from stored rows is bounded by the start: 24 h chain movement and the trend (the replay's bound is run in O5)",
+    /\.all\(since, OWN_HEIGHT_SINCE\)/.test(SRC) && /WHERE ts > \? AND ts >= \? ORDER BY ts DESC LIMIT 15 OFFSET 1"\)\.all\(trendSince, OWN_HEIGHT_SINCE\)/.test(SRC));
+
+  // The replay itself, on rows as this version writes them.
+  const fresh = () => { const d = new Database(":memory:"); d.run(create); since(d); return d; };
+  const liveOf = (rounds) => rounds.reduce((s, [src, at, counted]) => stepHeightClock(s, src, at, counted === undefined ? null : counted), newHeightClock());
+  const two = (h) => [{ id: "a", h }, { id: "b", h }];
+  {
+    // The host clock was set back 30 minutes after the fourth row: time order is not the order the rounds were lived in.
+    const d = fresh(), times = [0, 20, 40, 60, 80 - 1800, 100 - 1800, 120 - 1800], hs = [5200, 5220, 5240, 5240, 5240, 5240, 5240];
+    times.forEach((sec, k) => d.run(THIS, mine(T0 + sec * S, hs[k])));
+    const got = replayOn(d, 0)(T0 + (140 - 1800) * S), want = liveOf(times.map((sec, k) => [two(hs[k]), T0 + sec * S]));
+    check("O9 rows are replayed in the order they were written, also after the host clock was set back: the clock is the one the running process had (the last new height at second 40, not at the row with the latest time)",
+      JSON.stringify(got.clock) === JSON.stringify(want) && got.clock.topSince === T0 + 40 * S && got.clock.seen === true, JSON.stringify(got.clock));
+  }
+  {
+    const d = fresh();
+    d.run(THIS, mine(T0, 700)); d.run(THIS, mine(T0 + 20 * S, 701));
+    d.run(THIS, mine(T0 + 40 * S, 0, { states: "{not json" }));                                              // a row that cannot be read
+    d.run(THIS, mine(T0 + 60 * S, 0, { states: JSON.stringify([{ name: "a", block: "x" }, null, { block: 5 }]), median: null }));   // nothing usable in it
+    d.run(THIS, mine(T0 + 80 * S, 701));
+    const got = replayOn(d, 0)(T0 + 100 * S);
+    check("O10 a stored row that cannot be read is skipped, and the rows after it are still replayed", got.ok === true && got.clock.top === 701 && got.clock.topSince === T0 + 20 * S && got.clock.compared === true, JSON.stringify(got));
+  }
+  {
+    // A lone seed's rows have no reading (data_quality insufficient) and are replayed all the same: the heights it showed are kept.
+    const d = fresh(), lone = (h) => JSON.stringify([{ name: "a", block: h }, { name: "b", block: null }]);
+    d.run(THIS, mine(T0, 1008)); d.run(THIS, mine(T0 + 20 * S, 1010, { dq: "insufficient", states: lone(1010) })); d.run(THIS, mine(T0 + 40 * S, 1018, { dq: "insufficient", states: lone(1018) }));
+    for (let k = 3; k < 10; k++) d.run(THIS, mine(T0 + k * 20 * S, 1018, { dq: "insufficient", states: lone(1018) }));
+    const got = replayOn(d, 0)(T0 + 200 * S);
+    check("O11 rows without a reading are replayed for what each seed showed in them: a lone seed's heights move the clock as they did live", got.clock.top === 1018 && got.clock.topSince === T0 + 40 * S && got.clock.seen === true && got.clock.last.a === 1018 && got.clock.last.b === 1008, JSON.stringify(got.clock));
+  }
+  {
+    // Rounds that rested on validators alone: no seed height in node_states, no median_block, and their median and step in witness_step.
+    const d = fresh(), none = JSON.stringify([{ name: "a", block: null }, { name: "b", block: null }]), vrow = (ts, h, step, o) => mine(ts, h, Object.assign({ states: none, median: null, step: JSON.stringify({ h, step, max: h + 1 }) }, o));
+    d.run(THIS, mine(T0, 1000)); d.run(THIS, mine(T0 + 20 * S, 1000));
+    d.run(THIS, vrow(T0 + 40 * S, 1003, "same")); d.run(THIS, vrow(T0 + 60 * S, 1004, "rose")); d.run(THIS, vrow(T0 + 80 * S, 1009, "same"));
+    d.run(THIS, vrow(T0 + 100 * S, 1010, "rose", { dq: "insufficient" }));                                   // not a reading: not a source
+    d.run(THIS, vrow(T0 + 120 * S, 1011, "sideways"));                                                       // a step that is not known claims nothing
+    d.run(THIS, mine(T0 + 140 * S, 0, { states: none, median: 2000, step: null }));                          // a median without the step column is not the validators'
+    const got = replayOn(d, 0)(T0 + 160 * S);
+    const want = liveOf([[two(1000), T0], [two(1000), T0 + 20 * S], [[{ id: VALIDATORS_SOURCE, h: 1003, step: "same" }], T0 + 40 * S, 1004], [[{ id: VALIDATORS_SOURCE, h: 1004, step: "rose" }], T0 + 60 * S, 1005],
+      [[{ id: VALIDATORS_SOURCE, h: 1009, step: "same" }], T0 + 80 * S, 1010], [[{ id: VALIDATORS_SOURCE, h: 1011, step: "first" }], T0 + 120 * S, 1012]]);
+    check("O12 a row that rested on validators alone is replayed from its stored median, step and highest counted height: 'same' moves nothing, 'rose' is the new height, a row without a reading is no source, an unknown step claims nothing",
+      JSON.stringify(got.clock) === JSON.stringify(want) && got.clock.top === 1011 && got.clock.seen === false && want.topSince === T0 + 120 * S && got.clock.read === 1012, JSON.stringify(got.clock));
+    // Beside one seed the row keeps the highest counted validator height, and the seed's own height stays its median.
+    const e = fresh(), one = (h) => JSON.stringify([{ name: "a", block: h }, { name: "b", block: null }]);
+    e.run(THIS, mine(T0, 1000, { states: one(1000), step: JSON.stringify({ max: 1002 }) })); e.run(THIS, mine(T0 + 20 * S, 1001, { states: one(1001), step: JSON.stringify({ max: 1002 }) }));
+    e.run(THIS, mine(T0 + 40 * S, 1003, { states: one(1003), step: JSON.stringify({ max: 1003 }) }));
+    const g2 = replayOn(e, 0)(T0 + 60 * S);
+    check("O12b beside one seed the stored row gives the clock the seed and the highest counted validator height: the seed's step to a height a validator had shown is no new height (the count runs from that validator's first reading); its step above it is one, seen arriving",
+      JSON.stringify(g2.clock) === JSON.stringify(liveOf([[[{ id: "a", h: 1000 }], T0, 1002], [[{ id: "a", h: 1001 }], T0 + 20 * S, 1002], [[{ id: "a", h: 1003 }], T0 + 40 * S, 1003]])) && g2.clock.top === 1003 && g2.clock.seen === true && g2.clock.read === 1003
+      && liveOf([[[{ id: "a", h: 1000 }], T0, 1002], [[{ id: "a", h: 1001 }], T0 + 20 * S, 1002]]).seen === false && liveOf([[[{ id: "a", h: 1000 }], T0, 1002], [[{ id: "a", h: 1001 }], T0 + 20 * S, 1002]]).topSince === T0 && g2.clock.topSince === T0 + 40 * S, JSON.stringify(g2.clock));
+  }
+  {
+    const d = fresh();
+    for (let k = 0; k < 10; k++) d.run(THIS, mine(T0 + k * 20 * S, 800 + k));
+    const got = replayOn(d, 0, 3)(T0 + 200 * S);
+    check("O13 with more rows than the replay takes, it takes the newest: the clock knows the last three rounds", got.clock.top === 809 && got.clock.topSince === T0 + 9 * 20 * S && got.clock.seen === true, JSON.stringify(got.clock));
+    const old = replayOn(d, 0)(T0 + 9 * 20 * S + 86400 * S + 1);
+    check("O14 rows older than 24 hours are not replayed; one exactly 24 hours old is", old.clock.top === null && replayOn(d, 0)(T0 + 9 * 20 * S + 86400 * S).clock.top === 809, JSON.stringify(old.clock));
+    const broken = new Function("sharedDb", "OWN_HEIGHT_SINCE", "RULE", "CLOCK_REPLAY_MAX_ROWS", "newHeightClock", "stepHeightClock", "sanitizeHeight", "VALIDATORS_SOURCE", "logError",
+      "var heightClock = 'untouched', heightClockReplaySaid = false;\n" + extract("function clockInputOfRow(") + extract("function replayHeightClock(") + "\nreturn function(before) { var ok = replayHeightClock(before); return { ok: ok, clock: heightClock }; };")(
+      { query() { throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }); } }, 0, RULE, 20000, newHeightClock, stepHeightClock, sanitizeHeight, VALIDATORS_SOURCE, () => {})(T0);
+    check("O15 a store that cannot be read: the replay says it failed and leaves the clock as it was", broken.ok === false && broken.clock === "untouched");
+  }
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

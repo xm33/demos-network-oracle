@@ -281,7 +281,7 @@ else {
     okRun.out.includes("SDK-IMPORT fetch replaced · others changed: none"), (okRun.out.split("\n").find((l) => l.startsWith("SDK-IMPORT")) || "no SDK-IMPORT line"));
   const brief = (r) => "exit " + r.code + " | " + r.out.split("\n").filter((l) => /AGENT|seeds answered|list:|global fetch/.test(l)).join(" | ");
   check("R11 with the real SDK loaded before DNO's modules, the agent's own seed read and a validator round work (AGENT READS OK, exit 0)",
-    okRun.code === 0 && /it replaced the global fetch|it did not replace the global fetch/.test(okRun.out) && okRun.out.includes("2 of 2 seeds answered; 2 gave their own height. Two give a status from the seeds alone; with fewer, validators stand in (Witnesses, below).")
+    okRun.code === 0 && okRun.out.includes("the Demos SDK was loaded first, as in the agent; it replaced the global fetch") && okRun.out.includes("2 of 2 seeds answered; 2 gave their own height. Two give a status from the seeds alone; with fewer, validators stand in (Witnesses, below).")
     && okRun.out.includes("Witnesses (validators the agent reads when fewer than two seeds give their own height)") && okRun.out.includes("(seeds_only)")
     && okRun.out.trim().endsWith("AGENT READS OK: 2 of 2 seeds gave their own height, and two seeds agree on the validator list."), brief(okRun));
   // The same, against one seed that answers and one address where nothing listens: the verdict must be FAILED, exit 3.
