@@ -125,7 +125,8 @@ export async function run(args, io = {}) {
   if (!/^https?:\/\/\S+$/.test(base) || !Number.isFinite(waitS) || waitS < 0) { console.error("Usage: bun tools/post-restart-check.mjs [base-url] [--wait seconds]"); return 64; }
   const started = now();
   // answered: a poll got a /health body. newest: the latest observation time seen. wentAway: why the agent is known
-  // not to have stayed up during this check. readingSince: the first poll that showed a reading (ms).
+  // not to have stayed up during this check. readingSince: the first poll that showed a reading (ms); a later poll
+  // without one, or a failed read, does not start it again: the process is the same one unless wentAway says otherwise.
   let last = null, readError = null, sawReading = false, answered = false, newest = null, wentAway = null, ownFault = null, readingSince = null;
   for (;;) {
     try {
@@ -164,7 +165,7 @@ export async function run(args, io = {}) {
   last.lines.forEach((l) => log(l));
   if (last.older) { log("AN OLDER VERSION IS ANSWERING: its /health has no witnesses object (API 1.2). This check is for the new version; nothing is concluded. If the service was restarted on the new code, the restart did not take effect."); return 6; }
   if (wentAway) {
-    log(`THE AGENT DID NOT STAY UP DURING THIS CHECK (after ${waited} s): ${wentAway}. An agent that stops or starts again by itself is failing: roll back. systemd knows which: a start time later than your own restart, or a restart count above 0, is the proof; with the start time of your restart and a count of 0 the process did not start again, and this check is run once more instead.`);
+    log(`THE AGENT DID NOT STAY UP DURING THIS CHECK (after ${waited} s): ${wentAway}. An agent that stops or starts again by itself is failing: roll back. systemd knows which: a start time later than your own restart, or a restart count above 0, is the proof; with the start time of your restart and a count of 0 the process did not start again, and this check is run once more instead.` + (ownFault ? ` After that, this check's own code failed on what /health returned (${ownFault.name || "error"}): send this output.` : ""));
     return 3;
   }
   // The verdict is not the last poll alone: an agent that read during this check is not the 1 Oct failure, whatever the last poll says.
@@ -189,7 +190,7 @@ export async function run(args, io = {}) {
     // start of this check: a slow start is not a round that never completes. A round that fails inside DNO never
     // completes, and says so in the agent's log only.
     const readingFor = readingSince === null ? 0 : Math.round((now() - readingSince) / 1000);
-    if (readingFor < ROLLBACK_MIN_WAIT_SECONDS) { log(`THE VALIDATOR LIST HAS NOT BEEN READ YET after ${waited} s (the agent has shown a reading for ${readingFor} s). A first read needs about a minute: run this again with the default wait.`); return 5; }
+    if (readingFor < ROLLBACK_MIN_WAIT_SECONDS) { log(`THE VALIDATOR LIST HAS NOT BEEN READ YET after ${waited} s (the agent has shown a reading for ${readingFor} s). A first read needs about a minute: run this again${waitS < DEFAULT_WAIT_SECONDS ? " with the default wait" : ""}.`); return 5; }
     log(`THE VALIDATOR ROUND HAS NOT COMPLETED after ${waited} s: the agent has shown a reading for ${readingFor} s and no read of the validator list has finished since it started, though a round runs once a minute. This is not what a list that is not agreed looks like. The agent's log says whether a round failed inside DNO ("round failed"): send this output with that count. It is no reason to roll back by itself: the seeds are read. Until a round completes the witness candidates are not renewed: those kept before this start stand in for up to 24 h after their last answer.`);
     return 9;
   }

@@ -25,7 +25,7 @@ export const RULE = Object.freeze({
   moderateShare: 0.6,        // moderate: at least this share of the compared heights aligned
   confidenceGapBlocks: 50,   // confidence is uncertain when the compared heights are further apart than this
   standstillSeconds: 1800,   // a reading that would be stable reads degraded after this long without a new height
-  clockForgetSeconds: 600,   // a height is given up when nothing has been read at it for longer than this while the highest height read kept rising below it
+  clockForgetSeconds: 600,   // a height is given up when nothing has been read at it for longer than this while the highest seed read kept rising below it
   clockRememberSeconds: 86400,   // a height given up is remembered this long after the last start-over: no arrival is claimed meanwhile; also the stored rounds replayed at start
   witnessMax: 8,             // validators read in one round, at most (witnesses.mjs)
   candidateMaxAgeMs: 24 * 3600 * 1000   // a validator stays a candidate this long after its last answer as listed at the seeds' height

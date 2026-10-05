@@ -1682,7 +1682,7 @@ let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
 // The height clock (status-rule.mjs): one step per public round, on that round's sources (each seed's own height, in
 // every round; with no seed height and a reading from validators alone, the height more than half of the counted
-// validators have reached). heightClock holds each source's last answer, the height the count stands on and since
+// validators have reached). heightClock holds each seed's last answer, the height the count stands on and since
 // when, and the highest height read; heightClockHadReading says whether the latest round had a reading (without one
 // nothing is published about heights); heightClockRow is what the round's history row keeps of its validators, for the
 // replay; heightClockRestored whether the stored rounds have been replayed after this start.

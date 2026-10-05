@@ -90,11 +90,11 @@ console.log("\n[" + TAG + "] who answers changes; no height does");
 }
 {
   // 2 October 2026: node2 at the head, node3 ten behind; node2 goes silent, node3 catches up, node2 returns.
-  const c = clock().round({ n2: 429825, n3: 429815 }, t(0)).round({ n2: 429825, n3: 429815 }, t(20));
+  const c = clock().round({ node2: 429825, node3: 429815 }, t(0)).round({ node2: 429825, node3: 429815 }, t(20));
   let at = 20; const said = [];
-  for (const h of [429817, 429820, 429823, 429825]) { at += 20; c.round({ n3: h }, t(at), [429825, 429825, 429825]); said.push(c.at(t(at))); }
+  for (const h of [429817, 429820, 429823, 429825]) { at += 20; c.round({ node3: h }, t(at), [429825, 429825, 429825]); said.push(c.at(t(at))); }
   check("B3 the 2 October sequence: a seed that fell behind and catches up while the other is silent shows no new height", said.every((p, i) => p.staticS === 20 * (i + 2) && p.advancedAt === null && p.reason !== "advancing") && c.state.top === 429825 && c.state.gave === null, JSON.stringify(said));
-  const p = c.round({ n2: 429825, n3: 429825 }, t(at + 20)).at(t(at + 20));
+  const p = c.round({ node2: 429825, node3: 429825 }, t(at + 20)).at(t(at + 20));
   check("B3b and the count runs on from the first round that showed that height", p.staticS === at + 20 && p.since === t(0), JSON.stringify(p));
 }
 {

@@ -217,10 +217,18 @@ console.log("\n[" + TAG + "] the wait and the verdict");
   // 90 s are counted from the first poll that showed a reading, not from the start of the check.
   const lateBy = (polls) => sim([...Array(polls).fill(refused), at({ on_chain_validators: PENDING })], []);
   const slowStart = await lateBy(30), at90 = await lateBy(18), at85 = await lateBy(19);
-  check("R17b a slow start is not a round that never completes: reading for 30 s of a 180 s wait with the list not read yet is exit 5 and 'run this again'; reading for 90 s is exit 9, for 85 s exit 5",
-    slowStart.code === 5 && slowStart.out[slowStart.out.length - 1] === "THE VALIDATOR LIST HAS NOT BEEN READ YET after 180 s (the agent has shown a reading for 30 s). A first read needs about a minute: run this again with the default wait."
+  check("R17b a slow start is not a round that never completes: reading for 30 s of a 180 s wait with the list not read yet is exit 5 and 'run this again' (not 'with the default wait': this was one); reading for 90 s is exit 9, for 85 s exit 5",
+    slowStart.code === 5 && slowStart.out[slowStart.out.length - 1] === "THE VALIDATOR LIST HAS NOT BEEN READ YET after 180 s (the agent has shown a reading for 30 s). A first read needs about a minute: run this again."
     && at90.code === 9 && at90.out[at90.out.length - 1].startsWith("THE VALIDATOR ROUND HAS NOT COMPLETED after 180 s: the agent has shown a reading for 90 s and ")
     && at85.code === 5 && /shown a reading for 85 s/.test(at85.out[at85.out.length - 1]), JSON.stringify([slowStart.out.slice(-1), at90.out.slice(-1), at85.out.slice(-1)]));
+  // Review 7: what the 90 s are counted from, and what does not start them again.
+  const lateReading = await sim([...Array(21).fill(starting), at({ on_chain_validators: PENDING })], []);
+  check("R17f the 90 s run from the first poll that showed a reading, not from the first that answered: 100 s of answers without an observation, then a reading for 75 s with the list not read yet, is exit 5",
+    lateReading.code === 5 && lateReading.out[lateReading.out.length - 1] === "THE VALIDATOR LIST HAS NOT BEEN READ YET after 180 s (the agent has shown a reading for 75 s). A first read needs about a minute: run this again.", JSON.stringify(lateReading.out.slice(-1)));
+  const dipped = await sim([...Array(10).fill(at({ on_chain_validators: PENDING })), (t) => Object.assign(health({ status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_answers", publicNodes: [own("kyne-node2"), no("kyne-node3", "timeout"), no("kyne-node3b")], on_chain_validators: PENDING }), { observed_at: iso(t - 8000) }), at({ on_chain_validators: PENDING })]);
+  const blipped = await sim([at({ on_chain_validators: PENDING }), 500, at({ on_chain_validators: PENDING })]);
+  check("R17g a poll without a reading in between, or a read of /health that failed, does not start the 90 s again: the reading was first shown 90 s before the end, and the round is said not to have completed (exit 9)",
+    dipped.code === 9 && /shown a reading for 90 s and /.test(dipped.out[dipped.out.length - 1]) && blipped.code === 9 && /shown a reading for 90 s and /.test(blipped.out[blipped.out.length - 1]), JSON.stringify([dipped.out.slice(-1), blipped.out.slice(-1)]));
   const oneAsked = await sim([at(Object.assign({}, FALLBACK, { on_chain_validators: PENDING }))], []);
   check("R17c with fewer than two seeds asked no list can be agreed, read or not: one seed, validators beside it and a list not read yet is exit 0 at the first poll, not a round that has not completed",
     oneAsked.code === 0 && oneAsked.polls === 1 && /^AGENT IS READING: one seed gave its own height, 2 validators .* No validator list is agreed while fewer than two seeds are asked for it/.test(oneAsked.out[oneAsked.out.length - 1])
@@ -244,7 +252,8 @@ console.log("\n[" + TAG + "] the wait and the verdict");
   const goneThenOdd = await sim([at({ on_chain_validators: PENDING }), refused, oddDoc]), refusedThenOdd = await sim([refused, oddDoc]);
   check("R18c an agent already seen not to stay up is said so though the check's own code fails afterwards (exit 3: that was concluded before the fault); a refused connection before any answer concludes nothing, and the fault is exit 70",
     goneThenOdd.code === 3 && goneThenOdd.polls === 3 && /^THE AGENT DID NOT STAY UP DURING THIS CHECK \(after 10 s\): its port stopped answering after it had answered\./.test(goneThenOdd.out[goneThenOdd.out.length - 1])
-    && !/THIS CHECK FAILED/.test(goneThenOdd.out.join("\n")) && refusedThenOdd.code === 70 && refusedThenOdd.polls === 2, JSON.stringify([goneThenOdd.out, refusedThenOdd.out]));
+    && !/THIS CHECK FAILED/.test(goneThenOdd.out.join("\n")) && goneThenOdd.out[goneThenOdd.out.length - 1].endsWith(" After that, this check's own code failed on what /health returned (TypeError): send this output.")
+    && !stopped.out[stopped.out.length - 1].includes("this check's own code") && refusedThenOdd.code === 70 && refusedThenOdd.polls === 2, JSON.stringify([goneThenOdd.out, refusedThenOdd.out]));
   const three = await sim([at({ publicNodes: [own("kyne-node2"), own("kyne-node3"), own("kyne-node3b")] })]);
   check("R19 with three seeds giving their own height the line says three, not two", three.code === 0 && three.out[three.out.length - 1] === "AGENT IS READING: three seeds gave their own height and the status comes from them. The validator list is agreed.", JSON.stringify(three.out));
   const four = await sim([at({ publicNodes: [own("kyne-node2"), own("kyne-node3"), own("kyne-node3b"), own("kyne-node4")] })]);
