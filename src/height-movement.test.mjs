@@ -131,10 +131,10 @@ console.log("\n[" + TAG + "] validators");
   check("V1 beside one seed no validator moves the clock, whatever heights it gives", p.staticS === at - 20 && p.advancedAt === t(20) && c.state.top === H + 1, JSON.stringify(p));
   for (let k = 0; k < 100; k++) { at += 20; c.round({}, t(at), [H + 1, H + 1, H + 1, H + 1 + (k % 2)]); }
   p = c.at(t(at));
-  check("V2 with no seed, one validator of four alternating between two heights never produces a new height", p.staticS === at - 20 && c.state.top === H + 1 && c.state.last[VALIDATORS_SOURCE] === H + 1, JSON.stringify(p));
+  check("V2 with no seed, one validator of four alternating between two heights never produces a new height", p.staticS === at - 20 && c.state.top === H + 1 && !(VALIDATORS_SOURCE in c.state.last), JSON.stringify(p));
   for (let k = 0; k < 6; k++) { at += 20; c.round({}, t(at), [H + 1, H + 1 + (k % 2)]); }
   p = c.at(t(at));
-  check("V3 of two validators the count stands on the lower: one of two is not more than half, so it alone moves nothing, at its first step up or after", c.state.top === H + 1 && p.staticS === at - 20 && p.advancedAt === t(20) && c.state.last[VALIDATORS_SOURCE] === H + 1, JSON.stringify([p, c.state.top]));
+  check("V3 of two validators the count stands on the lower: one of two is not more than half, so it alone moves nothing, at its first step up or after", c.state.top === H + 1 && p.staticS === at - 20 && p.advancedAt === t(20) && !(VALIDATORS_SOURCE in c.state.last), JSON.stringify([p, c.state.top]));
   at += 20; p = c.round({}, t(at), [H + 3, H + 3]).at(t(at));
   check("V3b when both rise, to a height below one a counted validator showed before (V1: " + (H + 20) + " beside the seed, first read at second 40): the count moves there and nothing is new; it runs from that first reading", c.state.top === H + 3 && p.staticS === at - 40 && p.advancedAt === null
     && p.reason === "no new height" && c.state.read === H + 20 && c.state.readSince === t(40), JSON.stringify([p, c.state.read]));
@@ -428,14 +428,15 @@ console.log("\n[" + TAG + "] the fold against a plain reading of its text");
     const lastAnswer = new Map(); let highest = null, countFrom = null, sawArrive = false, everRead = null, everReadAt = null, remembered = null, run = null;
     for (const r of rounds) {
       const roundTop = Math.max(...r.src.map((x) => x.h)), roundRead = Math.max(roundTop, r.counted === null ? -1 : r.counted);
-      // of the sources at the round's highest height: who is above its own last answer; and has any source fallen back by more than 25 blocks
-      const tops = r.src.filter((x) => x.h === roundTop);
-      // only a seed is said to fall back: the validators' height can drop because other validators answered
-      const up = tops.filter((x) => lastAnswer.has(x.id) && x.h > lastAnswer.get(x.id)), fellBack = r.src.some((x) => x.id !== VALIDATORS_SOURCE && lastAnswer.has(x.id) && lastAnswer.get(x.id) - x.h > 25);
-      const seedUp = up.some((x) => x.id !== VALIDATORS_SOURCE);
-      r.src.forEach((x) => lastAnswer.set(x.id, x.h));
+      // Only a seed is a node: it has a last answer, it can rise, it can fall back. The validators' height changes with
+      // which validators answer: it is what the count stands on when no seed gives a height, and nothing else.
+      const seedsOf = r.src.filter((x) => x.id !== VALIDATORS_SOURCE), withSeed = seedsOf.length > 0;
+      // of the seeds at the round's highest height: who is above its own last answer; and has any seed fallen back by more than 25 blocks
+      const tops = seedsOf.filter((x) => x.h === roundTop);
+      const up = tops.filter((x) => lastAnswer.has(x.id) && x.h > lastAnswer.get(x.id)), fellBack = seedsOf.some((x) => lastAnswer.has(x.id) && lastAnswer.get(x.id) - x.h > 25);
+      seedsOf.forEach((x) => lastAnswer.set(x.id, x.h));
       if (highest === null) { highest = roundTop; countFrom = r.at; everRead = roundRead; everReadAt = r.at; continue; }
-      if (fellBack) sawArrive = false;                   // after a seed fell back the last arrival is no longer claimed
+      if (highest - roundRead > 25) sawArrive = false;   // everything read is more than 25 blocks below the height that arrived: that arrival is no longer claimed
       // what DNO had read before this round, and when its highest height was first read
       let readBefore = everRead, readBeforeAt = everReadAt;
       if (remembered) {
@@ -446,8 +447,8 @@ console.log("\n[" + TAG + "] the fold against a plain reading of its text");
       }
       if (roundRead > readBefore) { everRead = roundRead; everReadAt = r.at; } else { everRead = readBefore; everReadAt = readBeforeAt; }
       if (roundRead >= readBefore) run = null;           // the held height is read, or passed
-      else {
-        if (run && (fellBack || r.at - run.latest > 600000)) run = null;   // a node on another height now, or a pause
+      else if (withSeed) {                               // a round that rests on validators alone is no round of the run
+        if (run && (fellBack || r.at - run.latest > 600000)) run = null;   // a seed on another height now, or a pause
         const rising = up.filter((x) => !run || !run.best.has(x.id) || roundTop > run.best.get(x.id));   // above every answer it gave in this run
         if (rising.length) {
           if (run && r.at - run.began > 600000) {        // the start-over
@@ -458,11 +459,11 @@ console.log("\n[" + TAG + "] the fold against a plain reading of its text");
           if (!run) run = { began: r.at, latest: r.at, height: roundTop, best: new Map() };
           run.latest = r.at; run.height = roundTop;
         } else if (!up.length && run && roundTop > run.height + 25) run = null;
-        if (run) r.src.forEach((x) => { if (!run.best.has(x.id) || x.h > run.best.get(x.id)) run.best.set(x.id, x.h); });
+        if (run) seedsOf.forEach((x) => { if (!run.best.has(x.id) || x.h > run.best.get(x.id)) run.best.set(x.id, x.h); });
       }
       if (roundTop > highest) {
         if (roundTop <= readBefore) { highest = roundTop; countFrom = readBeforeAt; sawArrive = false; }      // a height read before: as old as the first reading of the highest height read
-        else { highest = roundTop; countFrom = r.at; sawArrive = seedUp && remembered === null; }                // above everything read
+        else { highest = roundTop; countFrom = r.at; sawArrive = up.length > 0 && remembered === null; }          // above everything read
       }
     }
     return { top: highest, topSince: countFrom, seen: sawArrive, gave: remembered ? [remembered.height, remembered.firstRead, remembered.at] : null, run: run ? [run.height, run.began, run.latest, [...run.best.entries()].sort()] : null, read: everRead, readSince: everReadAt };
@@ -729,7 +730,7 @@ console.log("\n[" + TAG + "] which rule wrote a history row is on the row");
     const V1 = (h) => [{ id: VALIDATORS_SOURCE, h }];
     const want = liveOf([[two(1000), T0], [two(1000), T0 + 20 * S], [V1(1003), T0 + 40 * S, 1004], [V1(1004), T0 + 60 * S, 1005], [V1(1004), T0 + 80 * S, 1005]]);
     check("O12 a row that rested on validators alone is replayed from the height its count stood on and its highest counted height: the count moves as it did live and no arrival is claimed; a row without a reading, with a height that is not one, or that cannot be read is no source",
-      JSON.stringify(got.clock) === JSON.stringify(want) && got.clock.top === 1004 && got.clock.topSince === T0 + 40 * S && got.clock.seen === false && got.clock.read === 1005 && got.clock.readSince === T0 + 60 * S && got.clock.last[VALIDATORS_SOURCE] === 1004, JSON.stringify(got.clock));
+      JSON.stringify(got.clock) === JSON.stringify(want) && got.clock.top === 1004 && got.clock.topSince === T0 + 40 * S && got.clock.seen === false && got.clock.read === 1005 && got.clock.readSince === T0 + 60 * S && !(VALIDATORS_SOURCE in got.clock.last), JSON.stringify(got.clock));
     // Beside one seed the row keeps the highest counted validator height, and the seed's own height stays its median.
     const e = fresh(), one = (h) => JSON.stringify([{ name: "a", block: h }, { name: "b", block: null }]);
     e.run(THIS, mine(T0, 1000, { states: one(1000), kept: JSON.stringify({ max: 1002 }) })); e.run(THIS, mine(T0 + 20 * S, 1001, { states: one(1001), kept: JSON.stringify({ max: 1002 }) }));

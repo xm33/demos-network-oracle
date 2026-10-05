@@ -8,7 +8,9 @@
 //   - one validator round with src/validator-watch.mjs: the list read on the seeds, then one dial per published origin
 //     unless VALIDATOR_WATCH_DIALS switches the dials off (read with the agent's own function, dialsEnabled). The switch
 //     and LOG_DIR are read as the agent reads them: a line in .env of the folder this runs in wins over a variable of
-//     the shell (the runtime's own loading of .env lets the shell win, which the agent does not). A value set only in
+//     the shell (the runtime's own loading of .env lets the shell win, which the agent does not). Where .env has no
+//     line for a name, a variable of the shell still decides here, and the agent under its service has none: start
+//     this check without the two (env -u VALIDATOR_WATCH_DIALS -u LOG_DIR, as the runbook does). A value set only in
 //     the service unit is not seen here
 //   - the validators that stand in for a seed, with readWitnesses (src/witnesses.mjs): this run's candidates when its
 //     validator round counted, else the ones the agent keeps in its store (LOG_DIR/marketplace.db in this folder,
@@ -50,7 +52,8 @@ const seedsGiven = process.argv.slice(2).some((a) => /^[A-Za-z0-9._-]+=https?:\/
 if (!seedsGiven) { try { rpcs = (await import("../src/fleet.config.mjs")).FLEET_CROSS_VALIDATION_RPCS || null; } catch (e) {} }
 // The two settings this check uses, as the agent reads them (src/agent.mjs reads .env itself, and its line wins). Only
 // these two names are taken, and no value is printed. Not when the seeds are given as arguments: that run is not about
-// this host's configuration.
+// this host's configuration. (The runtime's own loading of .env still fills a name the process was started without;
+// a run with seed arguments that must not depend on the folder sets both names, as the suites do.)
 if (!seedsGiven) {
   try {
     readFileSync(".env", "utf8").split("\n").forEach((line) => { const m = line.match(/^([^#=]+)=(.*)$/); const k = m ? m[1].trim() : null; if (k === "VALIDATOR_WATCH_DIALS" || k === "LOG_DIR") process.env[k] = m[2].trim(); });

@@ -108,12 +108,16 @@ console.log("\n[" + TAG + "] what the fixnet probe dials and shows");
   c.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [NUL, "http://127.0.0.1:" + nul.port]);
   c.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [LST, "http://127.0.0.1:" + lst.port]);
   c.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [FIXNET, ORIGIN]);
-  await c.probe().catch(() => []);
+  const shownC = await c.probe().catch(() => []);
   const okOf = (id) => c.db.query("SELECT probe_ok, last_block FROM fixnet_validator_discoveries WHERE identity = ?").get(id);
   check("P7 a discovered node that answers 200 with null, or with a list, is a failed probe and no fault of DNO's: nothing throws in DNO's own code (no error is categorised), and the node beside it is probed as before",
     okOf(NUL).probe_ok === 0 && okOf(LST).probe_ok === 0 && okOf(FIXNET).probe_ok === 1 && okOf(FIXNET).last_block === 77 && seenErrors.length === 0, JSON.stringify([okOf(NUL), okOf(LST), okOf(FIXNET), seenErrors]));
   check("P7b and the cycle's log line counts all three as probed: none is said to be 'not checked' for an internal error (the runbook counts those words in the agent's log)",
     c.logs.includes("  [fixnet-discovery] probed 3 discovered node(s)") && !c.logs.some((l) => /internal error/.test(l)), c.logs.join(" / "));
+  const whenOf = (id) => c.db.query("SELECT last_probed_at FROM fixnet_validator_discoveries WHERE identity = ?").get(id).last_probed_at, seenOf = (id) => shownC.find((x) => x.identity === id) || {};
+  check("P7c and each of the two is a row that was probed in this cycle: its probe time is written, and it is shown as probed and not online, not as a row that was never dialed",
+    Number.isFinite(whenOf(NUL)) && whenOf(NUL) > 0 && whenOf(NUL) === whenOf(FIXNET) && Number.isFinite(whenOf(LST)) && seenOf(NUL).probed === true && seenOf(NUL).online === false && seenOf(LST).probed === true && seenOf(LST).online === false
+    && seenOf(NUL).last_probed_at === whenOf(NUL), JSON.stringify([whenOf(NUL), whenOf(LST), whenOf(FIXNET), seenOf(NUL), seenOf(LST)]));
   nul.stop(true); lst.stop(true);
 }
 

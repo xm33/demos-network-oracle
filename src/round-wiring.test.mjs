@@ -570,7 +570,7 @@ const up = (h) => ({ seeds: [h, h, h] });
   script.push(up(6000), up(6000), up(6002));                             // rounds 57, 58, 59
   const live = await play(script), at = (i) => live.out[i].c;
   const FOLLOW = "DNO has been following heights below a height it read earlier";
-  check("C12 from the round the seeds fell back the last arrival is no longer claimed; while they rise below the highest height for ten minutes the count runs on and the reading is clear; then DNO follows them, and says so: uncertain with the reason, risk elevated, no arrival claimed",
+  check("C12 from the round everything DNO reads is far below it the last arrival is no longer claimed; while they rise below the highest height for ten minutes the count runs on and the reading is clear; then DNO follows them, and says so: uncertain with the reason, risk elevated, no arrival claimed",
     at(38).confidence === "clear" && at(38).status_reason === "Public nodes aligned; no new height for 11 min" && at(38).height_static_seconds === 700 && at(6).height_last_advanced_at === iso(live.out[3].at) && at(7).height_last_advanced_at === null && at(38).height_last_advanced_at === null
     && at(39).height_static_seconds === 0 && at(39).height_last_advanced_at === null && at(39).confidence === "uncertain" && at(39).confidence_reason === FOLLOW + ", and cannot tell why from here: a chain restarted lower, nodes catching up, and one answer far above the others look the same" && at(39).risk === "elevated"
     && at(40).status === "stable" && at(40).status_reason === "Public nodes aligned" && at(40).height_static_seconds === 0 && at(40).height_last_advanced_at === null && at(40).confidence === "uncertain"
@@ -587,6 +587,34 @@ const up = (h) => ({ seeds: [h, h, h] });
     if (differ) break;
   }
   check("C14 a restart while DNO follows the lower heights, in the round it starts over or in the round they land: the same readings, the same clock", differ === null, brief(differ, 900));
+}
+{
+  // Review 6, through the agent's own rounds: only a seed is a node. The seeds bring 6000 and stop answering. Three
+  // validators stand in 940 blocks below and rise 10 blocks a round for 15 minutes (a chain restarted lower, or
+  // validators that answer in turn: their height cannot tell). Then one seed answers among them and rises with them.
+  const script = [];
+  for (let i = 0; i < 4; i++) script.push(up(5994 + 2 * i));             // 6000 arrives in round 3
+  for (let i = 4; i < 6; i++) script.push(up(6000));
+  for (let i = 6; i <= 50; i++) script.push({ seeds: ["down", "down", "down"], vals: [5000 + 10 * i, 5000 + 10 * i, 4999 + 10 * i] });       // rounds 6 to 50: validators alone
+  for (let i = 51; i <= 84; i++) script.push({ seeds: [5000 + 10 * i, "down", "down"], vals: [5000 + 10 * i, 5000 + 10 * i, 4999 + 10 * i] });   // one seed among them; its first rise is round 52
+  const live = await play(script), at = (i) => live.out[i].c, says = (i) => at(i).summary + " | " + at(i).risk_factors.join(" | ") + " | " + at(i).confidence_reason;
+  check("C15 validators alone far below the height that arrived: from their first round the arrival is no longer claimed and nothing reads 'advancing'; while they rise for 15 minutes DNO gives no height up (no run of rises, nothing says it follows lower heights) and the count runs on from the arrival",
+    at(5).height_last_advanced_at === iso(live.out[3].at) && at(6).witnesses.mode === "validators_only" && at(6).height_last_advanced_at === null && at(6).status_reason === "3 validators aligned, no public seed"
+    && [6, 20, 37, 50].every((i) => live.out[i].clock.gave === null && live.out[i].clock.low === null && live.out[i].clock.top === 6000 && !/following/i.test(says(i)) && at(i).height_last_advanced_at === null)
+    && at(50).height_static_seconds === 47 * 20 && at(50).status === "stable" && at(50).status_reason === "3 validators aligned, no public seed; no new height for 15 min" && at(50).agreement.median_block === 5500,
+    brief([at(6).status_reason, at(6).height_last_advanced_at, live.out[37].clock.gave, live.out[37].clock.low, at(50).status_reason, at(50).height_static_seconds]));
+  check("C16 a seed that then answers among them is a node: ten minutes after its first rise, and not a round earlier, DNO gives the old height up, follows the lower heights and says so",
+    at(51).witnesses.mode === "seed_and_validators" && live.out[51].clock.low === null && live.out[52].clock.low !== null && live.out[52].clock.low.since === live.out[52].at
+    && live.out[82].clock.gave === null && !/following/i.test(says(82)) && J(live.out[83].clock.gave) === J({ top: 6000, since: live.out[3].at, at: live.out[83].at })
+    && at(83).height_static_seconds === 0 && at(83).confidence === "uncertain" && at(83).risk_factors.includes("following heights below a height read earlier") && at(83).height_last_advanced_at === null,
+    brief([live.out[52].clock.low, live.out[82].clock.gave, live.out[83].clock.gave, at(83).risk_factors]));
+  let differ = null;
+  for (const k of [6, 7, 30, 51, 52, 83, 84]) {
+    const re = await play(script, { restarts: [k] });
+    for (let i = k; i < script.length && !differ; i++) if (!sameRound(re.out[i], live.out[i])) differ = { restart: k, round: i, restarted: [re.out[i].c.status_reason, re.out[i].c.height_static_seconds], live: [live.out[i].c.status_reason, live.out[i].c.height_static_seconds], a: re.out[i].clock, b: live.out[i].clock };
+    if (differ) break;
+  }
+  check("C17 a restart while validators stand in below the held height, or while the seed's run of rises is on: the same readings, the same clock", differ === null, brief(differ, 900));
 }
 {
   // What the replay reads.
@@ -632,13 +660,14 @@ const up = (h) => ({ seeds: [h, h, h] });
   }
   check("R4 a restart replays the last 24 hours of stored rounds and no more (a round exactly 24 h old is the oldest replayed): a standstill older than that is counted from the oldest round replayed, a lower bound",
     J(lateAt) === J([[9 * 20 * S, 86400, null, "degraded"], [10 * 20 * S, 86400 + 1 - 20, null, "degraded"]]), J(lateAt));
-  // (d) every round of the day is replayed: at the 20 s cadence that is 4,320 rows. A standstill of 4,300 rounds, and a
-  // restart: the count is the standstill's whole length. A limit on rows below a day of rounds would cut it short.
-  const long = []; for (let i = 0; i < 4303; i++) long.push(up(7000));
-  const t4 = Date.now(), liveL = await play(long), reL = await play(long, { restarts: [4300] });
-  check("R4b a restart after 4,300 rounds of standstill (23 h 53 min) replays every one of them: the count is 86,000 s as in the agent that kept running, and the readings after it are the same",
-    liveL.out[4300].c.height_static_seconds === 86000 && reL.out[4300].restored === true && reL.out[4300].c.height_static_seconds === 86000 && [4300, 4301, 4302].every((i) => sameRound(reL.out[i], liveL.out[i]))
-    && reL.out[4300].c.status === "degraded", brief([liveL.out[4300].c.height_static_seconds, reL.out[4300].c.height_static_seconds, reL.out[4300].restored, Date.now() - t4]));
+  // (d) every round of the day is replayed: at the 20 s cadence that is 4,320 rows, the oldest exactly 24 h before the
+  // restart. A standstill of 4,320 rounds, and a restart: the count is the standstill's whole length, to the round. A
+  // limit on rows one below a day of rounds would cut it 20 s short.
+  const long = []; for (let i = 0; i < 4323; i++) long.push(up(7000));
+  const t4 = Date.now(), liveL = await play(long), reL = await play(long, { restarts: [4320] });
+  check("R4b a restart after 4,320 rounds of standstill (24 h at the 20 s cadence) replays every one of them: the count is 86,400 s as in the agent that kept running, and the readings after it are the same",
+    liveL.out[4320].c.height_static_seconds === 86400 && reL.out[4320].restored === true && reL.out[4320].c.height_static_seconds === 86400 && [4320, 4321, 4322].every((i) => sameRound(reL.out[i], liveL.out[i]))
+    && reL.out[4320].c.status === "degraded", brief([liveL.out[4320].c.height_static_seconds, reL.out[4320].c.height_static_seconds, reL.out[4320].restored, Date.now() - t4]));
 }
 
 console.log("\n[" + TAG + "] what a round without a reading keeps, and who can show a new height");

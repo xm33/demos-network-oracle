@@ -34,15 +34,17 @@
 //         wait early); seeds down and a fault in DNO's seed read look the same (not a pass and not by itself a
 //         rollback: the pre-restart check's seed lines, and whether the seeds answer another client, decide)
 //       5 "AGENT IS READING", two seeds are asked and the validator list is not agreed (not a rollback; run it again)
-//       9 "AGENT IS READING", and no read of the validator list has completed in the whole wait: the validator round
-//         is not running to its end (not a rollback by this check; the agent's log says whether a round failed)
+//       9 "AGENT IS READING", and no read of the validator list has completed though the agent has shown a reading
+//         for 90 s or more: the validator round is not running to its end (not a rollback by this check; the agent's
+//         log says whether a round failed)
 //       7 it read during this check and its latest observation is not enough (not a rollback; run it again)
 //       3 "AGENT IS NOT READING" (roll back, when the wait was long enough for a start), or it did not stay up
 //         during this check (roll back, whatever the wait: it answered and then stopped or started again)
 //       4 /health was never read (roll back, when the wait was long enough for a start)
 //       6 an older version is answering: this check is for the version that publishes witnesses (API 1.2)
 //       64 the arguments could not be read
-//       70 this check's own code failed on what /health returned: nothing is concluded about the agent
+//       70 this check's own code failed on what /health returned: nothing is concluded about the agent. (An agent
+//          that had already been seen not to stay up is said so, exit 3: that was concluded before the fault.)
 
 import { seedsSufficient } from "../src/seed-read.mjs";
 
@@ -123,8 +125,8 @@ export async function run(args, io = {}) {
   if (!/^https?:\/\/\S+$/.test(base) || !Number.isFinite(waitS) || waitS < 0) { console.error("Usage: bun tools/post-restart-check.mjs [base-url] [--wait seconds]"); return 64; }
   const started = now();
   // answered: a poll got a /health body. newest: the latest observation time seen. wentAway: why the agent is known
-  // not to have stayed up during this check.
-  let last = null, readError = null, sawReading = false, answered = false, newest = null, wentAway = null, ownFault = null;
+  // not to have stayed up during this check. readingSince: the first poll that showed a reading (ms).
+  let last = null, readError = null, sawReading = false, answered = false, newest = null, wentAway = null, ownFault = null, readingSince = null;
   for (;;) {
     try {
       const res = await fetchFn(base + "/health", { signal: AbortSignal.timeout(5000), headers: { "Cache-Control": "no-cache" } });
@@ -138,7 +140,7 @@ export async function run(args, io = {}) {
       readError = null; answered = true;
       if (newest !== null && !last.older && (last.observedAt === null || last.observedAt < newest)) wentAway = "its observation went back to " + (last.observedAt === null ? "none" : "an earlier one");
       if (last.observedAt !== null && (newest === null || last.observedAt > newest)) newest = last.observedAt;
-      if (last.reading) sawReading = true;
+      if (last.reading) { sawReading = true; if (readingSince === null) readingSince = now(); }
       // A reading that rests on validators alone does not end the wait: one round in which no seed answered, right
       // after a start, is followed by rounds in which they do. Only a reading with a seed's own height ends it early.
       if (last.older || (last.reading && last.mode !== "validators_only" && (last.listAgreed || !last.listExpected) && !wentAway)) break;
@@ -151,7 +153,7 @@ export async function run(args, io = {}) {
   }
   const waited = Math.round((now() - started) / 1000), long = waited >= ROLLBACK_MIN_WAIT_SECONDS;
   log(`post-restart check · waited ${waited} s`);
-  if (ownFault) {
+  if (ownFault && !wentAway) {
     log(`THIS CHECK FAILED ON WHAT /health RETURNED (${ownFault && ownFault.name ? ownFault.name : "error"}): a fault in the check's own code. Nothing is concluded about the agent, and this is no reason to roll back. Send this output.`);
     return 70;
   }
@@ -182,10 +184,13 @@ export async function run(args, io = {}) {
   if (!last.listExpected) { log(`AGENT IS READING: ${readingWords(last)}. No validator list is agreed while fewer than two seeds are asked for it; the agent keeps a witness candidate for 24 h after its last answer.`); return 0; }
   log(`AGENT IS READING: ${readingWords(last)}.`);
   if (last.listPending) {
-    // A validator round runs once a minute and the first begins with the agent: after a wait of two minutes or more one
-    // has had time to complete. A round that fails inside DNO never completes, and says so in the agent's log only.
-    if (!long) { log(`THE VALIDATOR LIST HAS NOT BEEN READ YET after ${waited} s. A first read needs about a minute: run this again with the default wait.`); return 5; }
-    log(`THE VALIDATOR ROUND HAS NOT COMPLETED after ${waited} s: no read of the validator list has finished since the agent started, though a round runs once a minute. This is not what a list that is not agreed looks like. The agent's log says whether a round failed inside DNO ("round failed"): send this output with that count. It is no reason to roll back by itself: the seeds are read, and no validator can stand in until a round completes.`);
+    // A validator round runs once a minute and the first begins with the agent: once the agent has shown a reading for
+    // 90 s one has had time to complete. That time is counted from the first poll that showed a reading, not from the
+    // start of this check: a slow start is not a round that never completes. A round that fails inside DNO never
+    // completes, and says so in the agent's log only.
+    const readingFor = readingSince === null ? 0 : Math.round((now() - readingSince) / 1000);
+    if (readingFor < ROLLBACK_MIN_WAIT_SECONDS) { log(`THE VALIDATOR LIST HAS NOT BEEN READ YET after ${waited} s (the agent has shown a reading for ${readingFor} s). A first read needs about a minute: run this again with the default wait.`); return 5; }
+    log(`THE VALIDATOR ROUND HAS NOT COMPLETED after ${waited} s: the agent has shown a reading for ${readingFor} s and no read of the validator list has finished since it started, though a round runs once a minute. This is not what a list that is not agreed looks like. The agent's log says whether a round failed inside DNO ("round failed"): send this output with that count. It is no reason to roll back by itself: the seeds are read. Until a round completes the witness candidates are not renewed: those kept before this start stand in for up to 24 h after their last answer.`);
     return 9;
   }
   log(`THE VALIDATOR LIST IS NOT AGREED after ${waited} s. It is no reason to roll back: the page says "not reported this cycle", and the agent keeps the witness candidates it has. Run this again in a minute; if it stays, send this output.`);

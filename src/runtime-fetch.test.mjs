@@ -356,11 +356,11 @@ else {
       const kidGiven = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: box, env: { ...process.env, VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "elsewhere" }, stdout: "pipe", stderr: "pipe" });
       const givenOn = await new Response(kidGiven.stdout).text(); await kidGiven.exited;
       rmSync(join(box, ".env"));
-      check("R11h the dial switch and the store's folder are read as the agent reads them: a line in this folder's .env wins over the shell's variable, both ways, and nothing of .env is printed",
-        off.includes("Watch (one round: the list only, no dials)") && !/Watch \(one round[^)]*dial per/.test(off) && !off.includes("do-not-print-this")
-        && !on.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(on) && /\n  candidates: 1, kept by the agent /.test(on), [off, on].map((o) => o.split("\n").filter((l) => /^Watch|candidates/.test(l)).join(" | ")).join(" || "));
-      check("R11i with the seeds given as arguments the check does not apply this folder's .env: the switch it was started with stands",
-        !givenOn.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(givenOn), givenOn.split("\n").filter((l) => /^Watch/.test(l)).join(" | "));
+      check("R11h the dial switch and the store's folder are read as the agent reads them: a line in this folder's .env wins over the shell's variable, both ways, and the value of another line of .env is not printed",
+        off.includes("Watch (one round: the list only, no dials)") && !off.includes("Watch (one round, --dial)") && !off.includes("do-not-print-this")
+        && !on.includes("the list only, no dials") && on.includes("Watch (one round, --dial)") && /\n  candidates: 1, kept by the agent /.test(on), [off, on].map((o) => o.split("\n").filter((l) => /^Watch|candidates/.test(l)).join(" | ")).join(" || "));
+      check("R11i with the seeds given as arguments the check's own reading of this folder's .env is skipped: the switch the process was started with stands",
+        !givenOn.includes("the list only, no dials") && givenOn.includes("Watch (one round, --dial)"), givenOn.split("\n").filter((l) => /^Watch/.test(l)).join(" | "));
     }
     const hitsBefore = rpcHits, given = await tool(["seed-a=" + A.url, "seed-b=" + B.url]);
     check("R11f with the seeds given as arguments, the same tool next to the same fleet config reads no cross-check RPC", given.code === 3 && rpcHits === hitsBefore && hitsBefore > hitsPlain && !/cross-check RPCs/.test(given.out), "exit " + given.code + " | hits " + hitsBefore + " -> " + rpcHits);

@@ -635,7 +635,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <defs>
-    <!-- The locked DNO mark: the supplied file (dno-logo-locked.jpg), embedded byte-for-byte. Do not replace, redraw or recolor. -->
+    <!-- The locked DNO mark: the supplied file (dno-logo-locked.jpg), unchanged. Do not replace, redraw or recolor. -->
     <image id="dno-mark" width="1408" height="1408" href="/assets/dno-mark-f72aa72b.jpg"/>
   </defs>
 </svg>
@@ -1200,7 +1200,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     data_quality: { note: 'When insufficient, status is unknown and risk elevated, by design.', values: [
       ['sufficient', 'At least two seeds reported their own block height, or validators that answer as listed stood in for the missing one, and the observation is at most 300 s old.'],
       ['insufficient', 'Fewer than two probed seeds reported their own block height and no validator stood in, or the observation is stale.']] },
-    agreement: { note: 'Computed from the heights compared: the seeds that reported their own height (their own peerlist entry); when one did, that seed and the validator closest to it; when none did, the validators counted. A height taken from a seed\'s first listed peer is not counted. The median is the middle height, or the upper of the two middle heights when the count is even; beside one seed it is that seed\'s own height.', values: [
+    agreement: { note: 'Computed from the heights compared: the seeds that reported their own height (their own peerlist entry); when one did, that seed and the validator closest to it; when none did, the validators counted. A height taken from a seed\'s first listed peer is not counted. The median is the middle height, or the upper of the two middle heights when the count is even; beside one seed it is that seed\'s own height; with no seed it is the upper median of every validator height read, counted or not.', values: [
       ['strong', 'Every height compared is within ±25 blocks of the median, and the spread is at most 20 blocks.'],
       ['moderate', 'At least 60% of those heights are within ±25 blocks of the median.'],
       ['weak', 'Fewer than 60% are within ±25 blocks of the median.'],
@@ -2072,7 +2072,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       const peerBlock = firstPeer && pn.ok === true && isNum(pn.block) && pn.block > 0 ? pn.block : firstPeer && isNum(r.block) && r.block > 0 ? r.block : null;
       return {
         display, source: display.toLowerCase().indexOf('community') === 0 ? 'Community' : 'Kynesys',
-        status: r.online === true ? ['ok', 'reachable'] : pn && pn.ok !== true && pn.error === 'internal error' ? ['unknown', "not read: a fault in DNO's own read"] : ['bad', 'unreachable'],
+        status: r.online === true ? ['ok', 'reachable'] : pn && pn.ok !== true && pn.error === 'internal error' ? ['unknown', "not read: a fault in DNO's own read"]
+          : !pn && h.data_quality_reason === 'no_observation' ? ['unknown', 'not read yet'] : ['bad', 'unreachable'],
         identity: pn && pn.ok === true && typeof pn.identityMatch === 'boolean' ? (pn.identityMatch ? 'matches the configured key' : 'does not match the configured key') : null,
         idNote: pn && pn.ok === true && pn.identityMatch === null ? 'no key reported' : 'not observed',   // answered without a key, or not read
         block: own ? r.block : peerBlock, fromPeer: !own && peerBlock != null,
