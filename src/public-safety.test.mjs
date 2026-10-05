@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory,
-  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS
+  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS, isInternalError
 } from "./public-safety.mjs";
 import { gzipSync } from "node:zlib";
 
@@ -69,7 +69,19 @@ check("O3 IP literal resolved without DNS", (await resolvePublicProbeOrigin("htt
 check("O4 private literal refused", (await resolvePublicProbeOrigin("http://127.0.0.1:55225")) === null && (await resolvePublicProbeOrigin("http://169.254.169.254")) === null);
 check("O5 hostname resolving to a private address refused", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8", "10.0.0.5"]))) === null);
 check("O6 hostname resolving to public addresses is pinned to the checked address", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["8.8.8.8"]))) === "http://8.8.8.8:53550");
-check("O7 DNS failure refused", (await resolvePublicProbeOrigin("http://node.example:53550", async () => { throw new Error("NXDOMAIN"); })) === null);
+// A check that rejects is a failed check with a name, not a suite that stops.
+const settled = (p) => p.catch((e) => "rejected: " + (e && e.constructor ? e.constructor.name : e));
+check("O7 DNS failure refused", (await settled(resolvePublicProbeOrigin("http://node.example:53550", async () => { throw new Error("NXDOMAIN"); }))) === null
+  && (await settled(resolvePublicProbeOrigin("http://node.example:53550", async () => { throw Object.assign(new Error("getaddrinfo ENOTFOUND node.example"), { code: "ENOTFOUND", name: "DNSException" }); }))) === null);
+{
+  // A fault in DNO's own lookup call is thrown on: read as "refused" it would say the peer's address is not public.
+  const rejects = async (lookup) => { try { await resolvePublicProbeOrigin("http://node.example:53550", lookup); return "resolved"; } catch (e) { return e.constructor.name; } };
+  check("O7b a TypeError or ReferenceError of the lookup call is thrown on, not read as a refused address: a lookup that is not callable as written, one that answers with something that is no list, one that names what does not exist",
+    (await rejects(async () => { throw new TypeError("dnsLookup is not a function"); })) === "TypeError" && (await rejects(async () => ({ address: "8.8.8.8" }))) === "TypeError"
+    && (await rejects(async () => { return notDefinedAnywhere; })) === "ReferenceError" && (await rejects(async () => [null])) === "TypeError");
+  check("O7c the two kinds are told apart by one function, the one the read's categories use", isInternalError(new TypeError("x")) && isInternalError(new ReferenceError("x")) && !isInternalError(new Error("x")) && !isInternalError(new SyntaxError("x"))
+    && !isInternalError(new RangeError("x")) && !isInternalError(null) && !isInternalError(Object.assign(new Error("t"), { name: "TimeoutError" })) && probeErrorCategory(new TypeError("x")) === "internal error" && probeErrorCategory(new Error("x")) === "connection failed");
+}
 check("O8 https is not probed (a pinned address cannot pass its certificate check)", (await resolvePublicProbeOrigin("https://node.example", fakeLookup(["8.8.8.8"]))) === null && (await resolvePublicProbeOrigin("https://8.8.8.8")) === null);
 check("O9 IPv6 results are pinned in brackets", (await resolvePublicProbeOrigin("http://node.example:53550", fakeLookup(["2606:4700:4700::1111"]))) === "http://[2606:4700:4700::1111]:53550");
 const errOf = async (p) => { try { await p; return null; } catch (e) { return e; } };

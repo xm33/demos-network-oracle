@@ -25,8 +25,8 @@ export const RULE = Object.freeze({
   moderateShare: 0.6,        // moderate: at least this share of the compared heights aligned
   confidenceGapBlocks: 50,   // confidence is uncertain when the compared heights are further apart than this
   standstillSeconds: 1800,   // a reading that would be stable reads degraded after this long without a new height
-  clockForgetSeconds: 600,   // the top is given up when sources below it have been rising for longer than this
-  clockRememberSeconds: 86400,   // a top given up is remembered this long: a source back on it restores the old count; also the stored rounds replayed at start, and how long a validator's last answer is kept
+  clockForgetSeconds: 600,   // a height is given up when nothing has been read at it for longer than this while the highest height read kept rising below it
+  clockRememberSeconds: 86400,   // a height given up is remembered this long after the last start-over: no arrival is claimed meanwhile; also the stored rounds replayed at start
   witnessMax: 8,             // validators read in one round, at most (witnesses.mjs)
   candidateMaxAgeMs: 24 * 3600 * 1000   // a validator stays a candidate this long after its last answer as listed at the seeds' height
 });
@@ -93,255 +93,177 @@ export function selectWitnesses(input) {
 // ---- the height clock -----------------------------------------------------------------------------------------------
 // What DNO can say about new blocks is what the nodes it reads show about themselves, round after round.
 //
-// What feeds the clock (clockSources):
-//   - each public seed that gave its own height, by its name, in every round, with or without a reading. A round
-//     without a reading publishes nothing about heights (heightMovementOf) and still keeps what each seed showed: a
-//     later round with a reading must not take a height DNO has read for a new one;
-//   - validators, only in a round whose reading rests on validators alone, as one source at their median. A median is
-//     not a node: it moves when another validator answers. So that source's step is what the validators show about
-//     themselves, each against its own last answer (stepValidators; kept by key whenever a validator is read, beside
-//     a seed too):
-//       rose:  more than half of the counted validators are above their own last answers;
-//       first: not that, and more than half of them are above their own last answers or heard for the first time:
-//              something may be new, and DNO did not see it arrive;
-//       same:  neither. Such a round shows nothing new, wherever its median stands.
-//     Beside a seed no validator feeds the clock: it can count with the seed, not against it.
-//
-// The clock keeps each source's last answer, the highest height it has counted (the top), and the highest height DNO
-// has read from a seed or from a validator counted in a reading, with the time it was first read (read, readSince).
-//   A new height: a source that rose (a seed above its own last answer; the validators with "rose"), that is the
-//     highest of its round and above the top. Nothing else is one. A change in which nodes answered never is: a node
-//     heard for the first time, or back at a height it showed before, shows nothing new about itself. So a seed that
-//     catches up, a seed that misses a round, a validator that stops answering and a validator that alternates between
-//     two heights produce none.
-//     DNO says it saw the height arrive only when it is also above read. A source at a height between the top and
-//     read (a seed stepping up to a height a counted validator showed before it) is followed, and that height is not
-//     new: the count runs from when read was first read, and no arrival is claimed. A validator cannot make the count
-//     younger than the seed's own heights make it; it can make a height the seed reaches later older: as old as the
-//     round in which a counted validator first showed it (within the band beside the seed; any distance when the seed
-//     was too far from validators that agreed among themselves, clockRound).
-//   A height above the top and above read from a source heard for the first time: the top moves there, the count
-//     starts again and the round claims nothing (DNO did not see it arrive).
-//   Validators with "same": nothing new was read. The count runs on, whatever their median.
-//   The top again: read again. Below the top: no new height.
-//   Start-over: when sources have been rising below the highest height DNO holds (read) for more than
-//     RULE.clockForgetSeconds (a rise that long ago, one in this round, and no pause between rises longer than that;
-//     the rises of different sources are one run) and this round has nothing at the height the count stands on,
-//     either a chain on a lower base is producing or the nodes DNO reads are catching up; DNO cannot tell which. It
-//     follows the lower heights, claims nothing in that round, and remembers the old height for
-//     RULE.clockRememberSeconds. Two shapes of it:
-//       - the sources of this round are below the top, and nothing read in this round (no source, no counted
-//         validator) is at or above the top: the top is given up;
-//       - the top itself has been rising under a height DNO read (validators showed it, and are not read or not
-//         counted now), and nothing read in this round is at or above that height: that height is given up. Without
-//         this, seeds on a producing chain below validators that stand elsewhere would read as a standstill: every
-//         height they reach was "read before".
-//     A rise counts for this only when it is above that source's highest answer since the run of rises began: a node
-//     going back and forth between two heights rises once.
-//     While the old top is remembered the count runs from each rise of the followed heights, as a lower bound, and no
-//     arrival is claimed: "Heights advancing" is not said and no time of a last new height is given. A source exactly
-//     on the old top within that time was catching up, or the old top still stands: the old count is restored and
-//     that round claims nothing. A source above it is an ordinary new height.
-//     A node that gives the old top in every round holds the count there: DNO cannot tell it from the head of a chain
-//     that stands still.
-//     While DNO follows the lower heights, and in the round a source is back on the old top, the reading says that it
-//     does (heightMovementOf: following; assess: confidence uncertain).
+// What DNO has read: the own height of a public seed, in every round, with or without a reading; and the height of a
+//   validator DNO counted in a reading (within the band of the one seed, or of the validators' median when they stand
+//   alone). A validator that was left out is not a witness: a height only it has shown has not been read.
+// What the count stands on (the round's sources, clockRound):
+//   - each seed that gave its own height, by its name. Beside a seed no validator moves the count: it can count with
+//     the seed, not against it;
+//   - with no seed height and a reading from validators alone: the height more than half of the counted validators
+//     have reached (their lower median), as one source. One validator ahead of the others moves nothing; a validator
+//     that stops answering cannot raise it above what the others show.
+// The clock keeps each source's last answer; the highest height the count has stood on and since when (top, topSince);
+// and the highest height read, with the time it was first read (read, readSince).
+//   The count runs from topSince. It moves up only when the round's highest source is above the top:
+//     - above everything read: the count starts in this round;
+//     - at a height DNO had read, or below one it had read (a seed stepping up to what a counted validator showed
+//       before it): the top moves there, and the count runs from the first reading of the highest height read until
+//       then. DNO keeps that one time, not one for every height: when a height between the two was read earlier, the
+//       count is younger than that reading. It never runs from before DNO first read the height it stands on, or a
+//       higher one.
+//   A new height DNO saw arrive: a SEED above its own last answer that is the highest of its round and above
+//     everything read. Nothing else is one: a node heard for the first time, a node back at a height it showed
+//     before, a seed catching up, a change in which nodes answered. With validators alone DNO gives the count and
+//     never says it saw a height arrive: a median is not a node.
+//   At the top, or below it: nothing new.
+//   Start-over. When nothing has been read at the highest height DNO holds (read) for more than RULE.clockForgetSeconds
+//     while the nodes it does read kept rising below it, either a chain on a lower base is producing or the nodes DNO
+//     reads are catching up, and DNO cannot tell which. "Kept rising" is a run of rises (low), over rounds in which
+//     nothing at the held height was read:
+//       - a rise: a round whose highest source is above its own last answer, and above every answer it has given
+//         since the run began. The first rise begins a run;
+//       - the run is over when the held height is read again; when a source is more than RULE.bandBlocks below its
+//         own last answer (it is on another height now); when the round's highest source stands more than
+//         RULE.bandBlocks above the latest rise without having risen (a node that holds a height of its own; within
+//         the band it stands with the rising ones, and only makes them wait); and after RULE.clockForgetSeconds
+//         without a rise. The next rise begins a new run.
+//     A rise in a run that began more than RULE.clockForgetSeconds before is the start-over. So a node going back and
+//     forth between two heights never gets there; and a node that keeps giving the held height, or a height of its
+//     own above the rising ones, holds the count for as long as it is read at least every ten minutes: DNO cannot
+//     tell it from the head of a chain that stands still.
+//     At the start-over DNO gives the held height up: it follows the lower heights from this round, says so
+//     (heightMovementOf: following; assess: confidence uncertain), and claims no arrival while the height given up is
+//     remembered: for RULE.clockRememberSeconds after the last time it gave one up. While it follows, the count runs
+//     from each rise of the followed heights, as a lower bound.
+//     Reading the height given up again, or a higher one (a source, or a counted validator), ends this: what DNO had
+//     read counts again, so that height is as old as its first reading, and a height above it is an ordinary new one.
 // The stored rounds a restart replays go through the same fold, so the live rule and the restart rule are one.
 
-export const VALIDATORS_SOURCE = "validators:median";
-const VALIDATOR_STEPS = Object.freeze({ rose: true, first: true, same: true });
-const VALIDATOR_KEY_RE = /^[0-9a-f]{1,128}$/;
+export const VALIDATORS_SOURCE = "validators:majority";
 
-// What the validators read in one round show about themselves. last: { key: { h, at } }, each validator's last answer
-// and when it gave it. entries: [{ key, h }], every validator that answered as listed with its own height this round.
-// reference: the median of a reading that rests on validators alone (selectWitnesses), or null in any other round.
-// -> { step, next }. step: "rose", "first" or "same" among the validators within the band of reference (see above), or
-// null without a reference. next: the last answers after this round; one not renewed for RULE.clockRememberSeconds is
-// dropped.
-export function stepValidators(last, entries, reference, at) {
-  var before = last && typeof last === "object" ? last : {}, next = {}, timed = typeof at === "number" && isFinite(at);
-  Object.keys(before).forEach(function(k) {
-    var e = before[k];
-    if (VALIDATOR_KEY_RE.test(k) && e && isHeight(e.h) && typeof e.at === "number" && isFinite(e.at) && (!timed || at - e.at <= RULE.clockRememberSeconds * 1000)) next[k] = { h: e.h, at: e.at };
-  });
-  var seen = {}, counted = 0, rose = 0, first = 0;
-  (Array.isArray(entries) ? entries : []).forEach(function(x) {
-    if (!x || typeof x.key !== "string" || !VALIDATOR_KEY_RE.test(x.key) || !isHeight(x.h) || seen[x.key]) return;
-    seen[x.key] = true;
-    var was = next[x.key];
-    if (isHeight(reference) && Math.abs(x.h - reference) <= RULE.bandBlocks) {
-      counted++;
-      if (!was) first++; else if (x.h > was.h) rose++;
-    }
-    if (timed) next[x.key] = { h: x.h, at: at };
-  });
-  return { step: !isHeight(reference) ? null : rose * 2 > counted ? "rose" : (rose + first) * 2 > counted ? "first" : "same", next: next };
-}
-
-// The sources of one round. seeds: [{ id, h }], the own height of each seed that gave one, by name: sources in every
-// round. validatorHeights: the own heights of the validator candidates read this round, or null. validatorStep: their
-// step (stepValidators). -> [{ id, h }] for seeds; with no seed height and a reading from validators alone,
-// [{ id: VALIDATORS_SOURCE, h: their median, step }]; else none.
-export function clockSources(seeds, validatorHeights, validatorStep) {
-  var own = (Array.isArray(seeds) ? seeds : []).filter(function(x) { return !!x && typeof x.id === "string" && isHeight(x.h); });
-  if (own.length) return own.map(function(x) { return { id: x.id, h: x.h }; });
-  var w = selectWitnesses({ seedHeights: [], validatorHeights: Array.isArray(validatorHeights) ? validatorHeights : null });
-  if (w.mode !== "validators_only") return [];
-  return [{ id: VALIDATORS_SOURCE, h: w.reference, step: VALIDATOR_STEPS[validatorStep] === true ? validatorStep : "first" }];   // a step that is not known claims nothing
-}
+// The middle height, or the lower of the two middle heights when the count is even. It is above a height exactly when
+// more than half of the heights are: 2 of 2, 2 of 3, 3 of 4.
+export function lowerMedian(heights) { var s = sorted(heights); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; }
 
 // One public round, as the clock takes it: the agent, the replay's tests and the searches all call this.
-// validatorLast: { key: { h, at } } (stepValidators). seeds: [{ id, h }], one per seed read (h null when it gave no
-// height of its own). entries: [{ key, h }], every validator that answered as listed with its own height, or null when
-// no validator was read. -> { sources: for stepHeightClock; counted: the highest height among the validators counted
-// in this round, or null; validators: the last answers after this round; reading: the round has a reading
-// (heightMovementOf publishes only then); row: what the round keeps of its validators for the replay: { max } beside a
-// seed, { h, step, max } from validators alone; else null }.
-// The validators counted: those of the reading (within the band of the one seed, or of their own median); and, when
-// one seed is too far from them for a reading, those that would be a reading by themselves. Their heights are heights
-// DNO has read: a seed that reaches them later shows nothing new.
-export function clockRound(validatorLast, seeds, entries, at) {
+// seeds: [{ id, h }], one per seed read (h null when it gave no height of its own). validatorHeights: the own heights
+// of the validators that answered as listed this round, or null when no validator was read (the list assess() gets).
+// -> { sources: for stepHeightClock: each seed that gave its own height; with none and a reading from validators
+//      alone, [{ id: VALIDATORS_SOURCE, h: the lower median of the counted validators }]; else none;
+//      counted: the highest height among the validators counted in this round's reading, or null;
+//      reading: the round has a reading (heightMovementOf publishes only then);
+//      row: what the round keeps of its validators for the replay: { max } beside a seed, { h, max } from validators
+//      alone; else null }.
+export function clockRound(seeds, validatorHeights) {
   var own = (Array.isArray(seeds) ? seeds : []).filter(function(x) { return !!x && typeof x.id === "string" && isHeight(x.h); });
-  var read = Array.isArray(entries);
-  var heights = read ? entries.map(function(e) { return e ? e.h : null; }).filter(isHeight) : null;
+  var heights = Array.isArray(validatorHeights) ? sorted(validatorHeights) : null;
   var w = selectWitnesses({ seedHeights: own.map(function(x) { return x.h; }), validatorHeights: heights });
   var only = w.mode === "validators_only", beside = w.mode === "seed_and_validators";
-  var v = read ? stepValidators(validatorLast, entries, only ? w.reference : null, at) : { step: null, next: validatorLast && typeof validatorLast === "object" ? validatorLast : {} };
-  // Beside a seed that no validator is near, the validators alone: do they agree among themselves?
-  var apart = !only && !beside && read && own.length === 1 ? selectWitnesses({ seedHeights: [], validatorHeights: heights }) : null;
-  var ref = only || beside ? w.reference : apart && apart.mode === "validators_only" ? apart.reference : null;
-  var counted = ref === null ? null : heights.filter(function(h) { return Math.abs(h - ref) <= RULE.bandBlocks; }).reduce(function(m, h) { return m === null || h > m ? h : m; }, null);
-  return { sources: clockSources(own, heights, v.step), counted: counted, validators: v.next, reading: w.mode !== "insufficient",
-    row: only ? { h: w.reference, step: v.step, max: counted } : counted !== null ? { max: counted } : null };
+  var mine = only ? w.counted : beside ? heights.filter(function(h) { return Math.abs(h - w.reference) <= RULE.bandBlocks; }) : [];   // the validators counted
+  var counted = mine.length ? mine[mine.length - 1] : null;
+  var sources = own.length ? own.map(function(x) { return { id: x.id, h: x.h }; }) : only ? [{ id: VALIDATORS_SOURCE, h: lowerMedian(mine) }] : [];
+  return { sources: sources, counted: counted, reading: w.mode !== "insufficient",
+    row: only ? { h: sources[0].h, max: counted } : counted !== null ? { max: counted } : null };
 }
 
-// last: each source's last answer. top: the highest height counted. topSince: when the count began (the last new
-// height, or the round the top was first read). compared: a later round has been set against the top, so "no new height
-// for N s" can be said. seen: topSince is a new height DNO saw arrive. read, readSince: the highest height read from a
-// seed or a counted validator, and when it was first read. lowSince, lowLast: the first and the latest counted rise of a source below the top (below the
-// remembered top, after a start-over) in the current run of such rises, or null; runHi: each source's highest answer in
-// that run. gave: what was given up at a start-over { top, since, seen, at, read, readSince }, or null. hold: this round
-// claims nothing.
-export function newHeightClock() { return { last: {}, top: null, topSince: null, compared: false, seen: false, read: null, readSince: null, lowSince: null, lowLast: null, runHi: {}, gave: null, hold: false }; }
+// last: each source's last answer. top: the highest height the count has stood on; topSince: since when it counts (ms).
+// seen: topSince is a new height DNO saw arrive. read, readSince: the highest height read, and when it was first read.
+// low: a run of rises below read, { h, since, last, hi }: the height of its latest rise, when it began, when that
+// latest rise was, and each source's highest answer since it began; null when none is on. gave: the height given up
+// at a start-over, { top, since, at }: the height, when it was first read, and when DNO last gave a height up.
+export function newHeightClock() { return { last: {}, top: null, topSince: null, seen: false, read: null, readSince: null, low: null, gave: null }; }
 
-// One round: its sources (clockSources) at its observation time in ms, and the highest height among the validators
+const isTime = function(t) { return typeof t === "number" && isFinite(t); };
+
+// One round: its sources (clockRound) at its observation time in ms, and the highest height among the validators
 // counted in its reading (clockRound: counted), or null. A round without a source returns the state as it is.
 export function stepHeightClock(state, sources, at, counted) {
   var s0 = state || newHeightClock(), src = [], ids = {};
   (Array.isArray(sources) ? sources : []).forEach(function(x) { if (x && typeof x.id === "string" && isHeight(x.h) && !ids[x.id]) { ids[x.id] = true; src.push(x); } });
-  if (!src.length || typeof at !== "number" || !isFinite(at)) return s0;
-  var s = { last: Object.assign({}, s0.last), top: s0.top, topSince: s0.topSince, compared: s0.compared, seen: s0.seen, read: isHeight(s0.read) ? s0.read : null, readSince: isHeight(s0.read) ? s0.readSince : null, lowSince: s0.lowSince, lowLast: s0.lowLast,
-    runHi: Object.assign({}, s0.runHi), gave: s0.gave ? { top: s0.gave.top, since: s0.gave.since, seen: s0.gave.seen, at: s0.gave.at, read: s0.gave.read, readSince: s0.gave.readSince } : null, hold: false };
-  var forget = RULE.clockForgetSeconds * 1000;
-  var ceiling = s0.gave ? s0.gave.top : isHeight(s0.read) ? s0.read : s0.top;   // rises below this are the run that a start-over rests on: the highest height DNO holds
-  var max = null, riser = null, low = [], same = false;   // the round's highest height; the highest height a source rose to; the sources that rose below the ceiling; validators that showed nothing new
+  if (!src.length || !isTime(at)) return s0;
+  var held = isHeight(s0.top) && isTime(s0.topSince) && isHeight(s0.read) && isTime(s0.readSince);
+  var s = { last: Object.assign({}, s0.last), top: held ? s0.top : null, topSince: held ? s0.topSince : null, seen: held && s0.seen === true, read: held ? s0.read : null, readSince: held ? s0.readSince : null,
+    low: held && s0.low && isHeight(s0.low.h) && isTime(s0.low.since) && isTime(s0.low.last) ? { h: s0.low.h, since: s0.low.since, last: s0.low.last, hi: Object.assign({}, s0.low.hi) } : null,
+    gave: held && s0.gave && isHeight(s0.gave.top) && isTime(s0.gave.since) && isTime(s0.gave.at) ? { top: s0.gave.top, since: s0.gave.since, at: s0.gave.at } : null };
+  var max = null;                                  // the round's highest source
+  src.forEach(function(x) { if (max === null || x.h > max) max = x.h; });
+  // risers: the sources at the round's highest height that are above their own last answers. arrival: a seed among
+  // them. fell: a source is more than the band below its own last answer (it is on another height now).
+  var risers = [], arrival = false, fell = false;
   src.forEach(function(x) {
-    if (max === null || x.h > max) max = x.h;
-    var before = s0.last[x.id];
-    var rose = typeof x.step === "string" ? x.step === "rose" : isHeight(before) && x.h > before;
-    if (x.step === "same") same = true;
-    if (rose) {
-      if (riser === null || x.h > riser) riser = x.h;
-      if (ceiling !== null && x.h < ceiling) low.push(x);
+    var before = s0.last ? s0.last[x.id] : null;
+    if (isHeight(before)) {
+      if (x.h > before && x.h === max) { risers.push(x.id); if (x.id !== VALIDATORS_SOURCE) arrival = true; }
+      else if (before - x.h > RULE.bandBlocks) fell = true;
     }
     s.last[x.id] = x.h;
   });
-  var lowRise = false;
-  if (low.length) {
-    if (s.lowSince === null || at - s.lowLast > forget) { s.lowSince = at; s.runHi = {}; }   // a pause longer than the forget time starts the run again
-    low.forEach(function(x) {
-      if (isHeight(s.runHi[x.id]) && x.h <= s.runHi[x.id]) return;   // back at a height it gave in this run: not a rise of the run
-      s.runHi[x.id] = x.h; lowRise = true;
-    });
-    if (lowRise) s.lowLast = at;
-  }
-  // What this round read: its sources, and the validators counted in its reading. Whether that is new is decided
-  // against what had been read before this round.
-  var readBefore = s.read, readSinceBefore = s.readSince, roundRead = isHeight(counted) && counted > max ? counted : max;
-  if (readBefore === null || roundRead > readBefore) { s.read = roundRead; s.readSince = at; }
-  var again = function() { s.top = max; s.topSince = at; s.compared = false; s.seen = false; };   // the count starts here; nothing is claimed
-  // A start-over: the height given up is remembered with its count and with what DNO had read up to it; the lower
-  // heights are followed from this round. While lower heights are already followed, the height first given up stays
-  // the one remembered, and a height read since then above everything read with it is kept with it: it was read on
-  // the heights given up.
-  var giveUp = function(height, since, seen) {
-    if (!s.gave) s.gave = { top: height, since: since, seen: seen, at: at, read: readBefore, readSince: readSinceBefore };
-    else if (isHeight(readBefore) && (!isHeight(s.gave.read) || readBefore > s.gave.read)) { s.gave.read = readBefore; s.gave.readSince = readSinceBefore; }   // (what was read with a height is never below it, so a height above that is above the remembered one too)
-    again();
-    s.read = roundRead; s.readSince = at;      // what was read on the heights given up says nothing about the ones followed
-  };
-  if (s.top === null) { again(); return s; }
+  var roundRead = isHeight(counted) && counted > max ? counted : max;   // the highest height read in this round
+  if (s.top === null) { s.top = max; s.topSince = at; s.read = roundRead; s.readSince = at; return s; }   // the first round: the count starts here
+
+  var forget = RULE.clockForgetSeconds * 1000;
+  var readBefore = s.read, readSinceBefore = s.readSince;
   if (s.gave) {
-    if (at - s.gave.at > RULE.clockRememberSeconds * 1000) s.gave = null;   // forgotten, with what was read on those heights
-    else if (max >= s.gave.top) {
-      // Back on the heights given up, or above them: what DNO read on them counts again, from when it was first read.
-      // A height read again since then (in this round, or by a counted validator while lower heights were followed)
-      // is as old as its first reading, before the start-over.
-      if (isHeight(s.gave.read) && (readBefore === null || s.gave.read >= readBefore)) {
-        readBefore = s.gave.read; readSinceBefore = s.gave.readSince;
-        if (s.gave.read >= s.read) { s.read = s.gave.read; s.readSince = s.gave.readSince; }
-      }
-      if (max === s.gave.top) {               // on the old top: the old count, and this round claims nothing
-        s.top = s.gave.top; s.topSince = s.gave.since; s.seen = s.gave.seen; s.compared = true; s.hold = true;
-        s.gave = null;
-        return s;
-      }
-      s.gave = null;                          // above it: an ordinary round, set against everything read before
+    if (at - s.gave.at > RULE.clockRememberSeconds * 1000) s.gave = null;      // forgotten
+    else if (roundRead >= s.gave.top) {
+      // The height given up is read again, or a higher one (by a source, or by a counted validator): what DNO had
+      // read counts again, from its first reading. While it followed, everything read was below the height given up,
+      // so the height the count stands on is one of those too: it is as old as that first reading.
+      readBefore = s.gave.top; readSinceBefore = s.gave.since;
+      s.topSince = s.gave.since; s.seen = false;
+      s.gave = null;
     }
   }
-  if (max > s.top) {
-    if (same) s.compared = true;               // validators that showed these heights before: nothing new was read
-    else if (readBefore !== null && max <= readBefore) {
-      if (lowRise && at - s.lowSince > forget && roundRead < readBefore) {
-        // The top has been rising under a height DNO read for longer than the forget time, and nothing read in this
-        // round is at that height: the start-over, seen from below. That height is given up and remembered.
-        giveUp(readBefore, readSinceBefore, false);
-      } else {
-        // A height DNO had read, from a seed or a counted validator, before this source reached it: the source is
-        // followed, and the height is as old as its first reading. No arrival is claimed.
-        s.top = max; s.topSince = readSinceBefore; s.compared = true; s.seen = false;
+  if (roundRead > readBefore) { s.read = roundRead; s.readSince = at; } else { s.read = readBefore; s.readSince = readSinceBefore; }
+
+  if (roundRead >= readBefore) s.low = null;                // the highest height DNO holds is read in this round, or passed
+  else {
+    if (s.low && (fell || at - s.low.last > forget)) s.low = null;   // a source fell back by more than the band, or a pause: the run of rises is over
+    // A rise of the run: the round's highest source is above its own last answer, and above every answer it gave in this run.
+    var up = risers.filter(function(id) { return !s.low || !isHeight(s.low.hi[id]) || max > s.low.hi[id]; });
+    if (up.length) {
+      if (s.low && at - s.low.since > forget) {
+        // Start-over: the held height is given up and remembered; the lower heights are followed from this round.
+        s.gave = s.gave ? { top: s.gave.top, since: s.gave.since, at: at } : { top: readBefore, since: readSinceBefore, at: at };   // the first height given up stays the one remembered: it is the highest
+        s.top = max; s.topSince = at; s.seen = false; s.read = roundRead; s.readSince = at; s.low = null;
+        return s;
       }
-    } else if (riser === max) {                // a new height
-      s.top = max; s.topSince = at; s.compared = true;
-      // After a start-over, while the old top is remembered, DNO does not say it saw a new height arrive: the nodes it
-      // follows may be catching up. The count still runs from here (a lower bound), so a stop of those heights shows.
-      s.seen = !s.gave;
-      if (!s.gave) { s.lowSince = null; s.lowLast = null; s.runHi = {}; }   // the top is producing: what rises below it is catching up
-    } else again();
-    return s;
+      if (!s.low) s.low = { h: max, since: at, last: at, hi: {} };   // a run begins
+      s.low.h = max; s.low.last = at;
+    } else if (!risers.length && s.low && max > s.low.h + RULE.bandBlocks) s.low = null;   // the round's highest source stands more than the band above the rising ones: the run is over
+    if (s.low) src.forEach(function(x) { if (!isHeight(s.low.hi[x.id]) || x.h > s.low.hi[x.id]) s.low.hi[x.id] = x.h; });   // each source's highest answer of the run
   }
-  if (max === s.top || roundRead >= s.top) { s.compared = true; return s; }   // the top is read in this round, by a source or by a counted validator
-  if (lowRise && at - s.lowSince > forget) {  // start-over: the lower heights are followed, the top is remembered
-    giveUp(s.top, s.topSince, s.seen);
-    return s;
+
+  if (max > s.top) {
+    if (max <= readBefore) { s.top = max; s.topSince = readSinceBefore; s.seen = false; }   // a height DNO had read: as old as the first reading of the highest height read
+    else { s.top = max; s.topSince = at; s.seen = arrival && !s.gave; }                     // above everything read: the count starts here; an arrival when a seed rose to it
   }
-  s.compared = true;
   return s;
 }
 
-// What is published about height movement at observedAt (ms). hadReading: the latest round had a reading; without one
-// nothing is said (the clock still kept what the seeds showed).
+// What is published about height movement at observedAt (ms). hadReading: the latest round had a reading and the
+// observation is not stale; without one nothing is said (the clock still kept what the seeds showed).
 // cfg: { roundSeconds, stalledSeconds }: "Heights advancing" within two rounds of a new height DNO saw arrive; "no new
 // height for N min" from stalledSeconds on. Status changes only at RULE.standstillSeconds (assess).
-//   staticSeconds: seconds since the last new height; without one DNO saw arrive, since the round the top was first read
-//     (a lower bound). null before any comparison, without a reading this round, on hold, or while the host clock is
-//     behind the count's own start (a clock set back: nothing is said until it has passed it again).
+//   staticSeconds: seconds since the count began: the last new height DNO saw arrive or, without one, the first
+//     reading of the height the count stands on (a lower bound). null without a reading, before the first round, and
+//     while the host clock is behind the count's own start (a clock set back: nothing is said until it has passed it).
 //   advancedAt: when the last new height arrived (ms), if DNO saw it arrive. since: the moment staticSeconds is counted
 //     from (ms), whenever staticSeconds is published: a condition record opens with it. The caller formats both.
 //   following: after a start-over, DNO is following heights below one it read earlier (remembered for
-//     RULE.clockRememberSeconds), or a source is back on that height in this round. A chain restarted lower and nodes
-//     catching up look the same.
+//     RULE.clockRememberSeconds after the last start-over). A chain restarted lower and nodes catching up look the same.
 export function heightMovementOf(state, observedAt, hadReading, cfg) {
   var s = state || newHeightClock(), c = cfg || {}, on = !!hadReading;
-  var timed = typeof observedAt === "number" && observedAt > 0 && s.topSince !== null && observedAt >= s.topSince;
-  var staticSeconds = s.compared && !s.hold && on && timed ? Math.round((observedAt - s.topSince) / 1000) : null;
+  var timed = isTime(observedAt) && observedAt > 0 && isTime(s.topSince) && observedAt >= s.topSince;
+  var staticSeconds = on && timed ? Math.round((observedAt - s.topSince) / 1000) : null;
+  var seen = staticSeconds !== null && s.seen === true;
   return {
     staticSeconds: staticSeconds,
-    advancedAt: s.seen && !s.hold && on && timed ? s.topSince : null,
+    advancedAt: seen ? s.topSince : null,
     since: staticSeconds !== null ? s.topSince : null,
-    advancing: staticSeconds !== null && s.seen && staticSeconds <= 2 * (c.roundSeconds || 0),
+    advancing: seen && staticSeconds <= 2 * (c.roundSeconds || 0),
     stalled: staticSeconds !== null && typeof c.stalledSeconds === "number" && staticSeconds >= c.stalledSeconds,
-    following: on && (s.gave !== null || s.hold)
+    following: on && !!s.gave
   };
 }
 

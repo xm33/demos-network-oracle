@@ -66,7 +66,7 @@
   "confidence_reason": "No cross-check: fewer than 2 public nodes answered",
   "agreement_reason": "Not compared: fewer than 2 public nodes answered",
   "staleness_seconds": 2,
-  "last_updated": "2026-10-04T22:32:31.665Z",
+  "last_updated": "2026-10-05T14:52:12.074Z",
   "api_version": "1.2",
   "last_24h": {
     "sufficient": false,
@@ -74,17 +74,17 @@
     "observed_cycles": 5,
     "expected_cycles": 17280,
     "message": "Insufficient observation in the last 24 hours — building baseline.",
-    "computed_at": "2026-10-04T22:32:33.617Z"
+    "computed_at": "2026-10-05T14:52:14.011Z"
   },
   "data_quality_reason": "too_few_answers",
-  "observed_at": "2026-10-04T22:32:31.665Z",
+  "observed_at": "2026-10-05T14:52:12.074Z",
   "height_last_advanced_at": null,
   "height_static_seconds": null,
   "active_public_conditions": 1,
   "agreement_detail": {
     "aligned_nodes": null,
     "total_nodes": 1,
-    "median_block": 396030,
+    "median_block": 395567,
     "block_spread": null
   },
   "witnesses": {
@@ -118,7 +118,7 @@
   "agreement_detail": {
     "aligned_nodes": 2,
     "total_nodes": 2,
-    "median_block": 396033,
+    "median_block": 395569,
     "block_spread": 0
   },
   "witnesses": {
@@ -133,7 +133,7 @@
       "read": 4,
       "own_height": 4,
       "counted": 4,
-      "list_agreed_at": "2026-10-04T22:32:36.682Z"
+      "list_agreed_at": "2026-10-05T14:52:17.085Z"
     }
   }
 }</pre>
@@ -177,7 +177,7 @@
 <section id="polling-guidance">
 <h2>Polling Guidance</h2>
 <p>The Oracle observes every 20 seconds, so polling more often than every 10–30 seconds returns the same observation. <code>/organism</code> and <code>/health</code> send an <code>ETag</code> and <code>Last-Modified</code> set to the observation time; a request with <code>If-None-Match</code> gets <code>304</code> until a new observation exists.</p>
-<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long no new height has been seen. A new height is a node above its own last answer that is the highest of its round and above every height DNO has read from a seed or from a validator it counted. Each public seed is taken by its own height, in every round; with no seed height, the counted validators by their own last answers, and more than half of them must be above theirs. So a seed that catches up, a node back at a height already read, and a change in which validators answered show none. It is null when the latest observation had no reading, when nothing has been compared yet (also in the round a node DNO had not heard before shows a height above every height read: the count starts again there), in a round where DNO starts over on lower heights or a node is back on the old highest height, and while the host's clock is behind the count's start. <code>height_last_advanced_at</code> is when DNO saw the last new height arrive. It is null in a round without a reading, when the count did not start with an arrival (the highest height was first read from a node not heard before, or from a counted validator before a seed reached it), and for up to 24 hours after a start-over. While it is null, <code>height_static_seconds</code> is a lower bound, counted from the first reading of the highest height. The cause is not known from here. Of a seed, only its own height counts (<span class="val">too_few_heights</span> means fewer than two seeds reported their own). <code>last_24h.chain_movement.blocks_advanced</code> is the median height at the newest round in the window minus the oldest, over rounds with a reading whose median is a seed's own height (a round that rested on validators alone is not part of it), as observed; it is null when there is no pair to compare or the median fell by more than 25 blocks between two rounds, and it implies no target rate. For 24 hours after the own-height rule starts or restarts on a server that holds rounds an older version recorded, <code>chain_movement</code> is <span class="val">unknown</span> with reason <span class="val">own_height_record_shorter_than_window</span> and <code>blocks_advanced</code> is null: the rounds recorded under that rule do not cover the window yet.</p>
+<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long DNO's count has run: the time without a new height, as DNO reads it. The count stands on the highest seed height of the round or, with no seed height, on the height more than half of the counted validators have reached. It starts again in the round that height is above every height DNO has read; when the count steps up to a height that is not, it runs from the first reading of the highest height read until then. It is published in every reading, and is 0 in the round the count starts (the first round, a height above every height read, a start-over). It is null when the latest observation had no reading or has gone stale, and while the host's clock is behind the count's start. <code>height_last_advanced_at</code> is when DNO saw the last new height arrive: a seed above its own last answer, highest of its round, and above every height DNO has read from a seed or from a validator it counted. So a seed that catches up, a node back at a height already read, a node read for the first time, and a change in which nodes answered show none. It is null in a round without a reading, when the count did not start with such an arrival (the height was first read from a seed not read before, from a counted validator before a seed reached it, or from validators alone, from which DNO takes no arrival), and from a start-over until the first arrival after it has ended (the height given up is read again, or 24 hours have passed since the last start-over). While it is null, <code>height_static_seconds</code> is a lower bound of how long that height has stood. The cause is not known from here. Of a seed, only its own height counts (<span class="val">too_few_heights</span> means fewer than two seeds reported their own). <code>last_24h.chain_movement.blocks_advanced</code> is the median height at the newest round in the window minus the oldest, over rounds with a reading whose median is a seed's own height (a round that rested on validators alone is not part of it), as observed; it is null when there is no pair to compare or the median fell by more than 25 blocks between two rounds, and it implies no target rate. For 24 hours after the own-height rule starts or restarts on a server that holds rounds an older version recorded, <code>chain_movement</code> is <span class="val">unknown</span> with reason <span class="val">own_height_record_shorter_than_window</span> and <code>blocks_advanced</code> is null: the rounds recorded under that rule do not cover the window yet.</p>
 <p>Respect the <code>Cache-Control: public, max-age=5</code> header. Do not poll faster than every 5 seconds.</p>
 <p>For less time-sensitive consumers, polling every 60 seconds is sufficient.</p>
 <p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is an export of observations, nothing more.</p>
@@ -234,7 +234,7 @@ if state['data_quality'] == 'insufficient':
 The Oracle cannot see enough public nodes to assess the network: fewer than two seeds gave their own height, and no validator stood in. This is not "the network is down" — it is "the Oracle cannot tell." <code>data_quality_reason</code> says why.</p>
 
 <p><b><code>status: degraded</code> + <code>confidence: clear</code></b><br>
-The heights compared agree only moderately (at least 60% within ±25 blocks of the median, rounded up), a warning-level public incident is active, or no new height has been seen for 30 minutes (<code>status_reason</code> then begins "No new height for"); and the compared heights are within 50 blocks of each other.</p>
+The heights compared agree only moderately (at least 60% within ±25 blocks of the median, rounded up), a warning-level public incident is active, or DNO has counted 30 minutes without a new height (<code>status_reason</code> then begins "No new height for"); and the compared heights are within 50 blocks of each other.</p>
 
 <p><b><code>agreement: unknown</code></b><br>
 Heights were not compared: fewer than 2 public seeds reported their own block height and no validator stood in, or the observation is stale (<code>data_quality_reason</code> says which). It always accompanies <code>data_quality: insufficient</code>. It does not mean the seeds disagree — it means the Oracle cannot observe enough to tell.</p>

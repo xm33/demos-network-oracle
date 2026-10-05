@@ -37,7 +37,7 @@ import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, p
 import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
-import { createCandidateStore, createHeightStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
+import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { sentinelStatePath } from "./sentinel-state.mjs";
 
 // --- Logging setup ---
@@ -1123,11 +1123,11 @@ function computeCanonicalState() {
     else if (sev === "info" && max_incident_severity === "none") max_incident_severity = "info";
   }
 
-  // Height movement as observed: seconds since the last round in which a source rose above the highest height counted
-  // (the height clock in status-rule.mjs). Null when the latest round had no reading, and before anything was
-  // compared. Without a new height DNO saw arrive, the duration is counted from the round the highest height was
-  // first read: a lower bound. Why no new height arrives is not known from here.
-  var hm = heightMovementOf(heightClock, observedAtMs, heightClockHadReading, { roundSeconds: Math.round(MONITOR_INTERVAL_MS / 1000), stalledSeconds: CHAIN_STATIC_RUN_MIN_24H * 60 });
+  // Height movement as observed: seconds the count has run (the height clock in status-rule.mjs): since the last new
+  // height DNO saw arrive or, without one, since the round that rule counts from: a lower bound of how long the height
+  // has stood. Null when the latest round had no reading, and when the observation has gone stale (the reading is then
+  // unknown, and nothing is said about heights). Why no new height arrives is not known from here.
+  var hm = heightMovementOf(heightClock, observedAtMs, heightClockHadReading && timeReason === null, { roundSeconds: Math.round(MONITOR_INTERVAL_MS / 1000), stalledSeconds: CHAIN_STATIC_RUN_MIN_24H * 60 });
   // When the last new height arrived (if DNO saw it arrive), and since when none was seen, to the second (UTC): a
   // condition record opens with it, and a time cut to the minute would lie before the height it counts from.
   var advancedAtIso = hm.advancedAt === null ? null : new Date(hm.advancedAt).toISOString();
@@ -1135,8 +1135,8 @@ function computeCanonicalState() {
 
   // The reading: which witnesses count, agreement, confidence, status, risk and every reason string (status-rule.mjs).
   // Status is what the witnesses show of the network, not observer coverage: seeds that do not answer raise risk,
-  // and status only when no reading is left. A reading that would be stable reads degraded once no new height has
-  // been seen for RULE.standstillSeconds.
+  // and status only when no reading is left. A reading that would be stable reads degraded once the count of the
+  // time without a new height reaches RULE.standstillSeconds.
   var reading = assess({ timeReason: timeReason, seedReason: timeReason ? null : dataQualityReason, seedsTotal: pubTotal, seedsAnswered: pubReachable,
     seedHeights: heights, validators: witnessInput(), maxIncidentSeverity: max_incident_severity, publicIncidentCount: publicIncidentCount,
     movement: { staticSeconds: hm.staticSeconds, advancing: hm.advancing, stalled: hm.stalled, following: hm.following, staticSince: staticSince } });
@@ -1494,7 +1494,7 @@ function recordPublicNodeHistory() {
       return { name: n.name, identity: n.identity || null, ok: n.ok || false, block: ownHeight(n), latency: n.latencyMs || null };
     });
     sharedDb.run(
-      "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states, own_height, witness_step) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+      "INSERT INTO public_node_history (ts, status, risk, confidence, data_quality, agreement_state, median_block, block_spread, nodes_total, nodes_reachable, node_states, own_height, witness_clock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
       [
         lastPublicObservedAt,   // the observation's own time, the time the height clock stepped on: a restart replays these rows as they were lived
         canonical.status,
@@ -1502,15 +1502,15 @@ function recordPublicNodeHistory() {
         canonical.confidence,
         canonical.data_quality,
         canonical.agreement.state,
-        // median_block is a seed's height in every row that has one. A reading from validators alone keeps its median
-        // in witness_step: figures made from the seeds' medians (24 h chain movement; 7.1.1's own clock after a
-        // rollback) then never take a validators' median for a seed's.
-        heightClockRow && heightClockRow.step !== undefined ? null : canonical.agreement.median_block,
+        // median_block is a seed's height in every row that has one. A reading from validators alone keeps the height
+        // its count stood on in witness_clock: figures made from the seeds' medians (24 h chain movement; 7.1.1's own
+        // clock after a rollback) then never take a validators' height for a seed's.
+        heightClockRow && heightClockRow.h !== undefined ? null : canonical.agreement.median_block,
         canonical.agreement.block_spread,
         canonical.seed_heights,   // seeds that reported their own height, in every mode: a row that is sufficient with fewer than two was read with validators
         nodes.filter(function(n) { return n.ok; }).length,
         JSON.stringify(nodes),
-        heightClockRow ? JSON.stringify(heightClockRow) : null   // what the clock took from the validators of this round: { max } beside a seed, { h, step, max } from validators alone
+        heightClockRow ? JSON.stringify(heightClockRow) : null   // what the clock took from the validators of this round: { max } beside a seed, { h, max } from validators alone
       ]
     );
     var cutoff = Date.now() - PUBLIC_NODE_HISTORY_RETENTION_DAYS * 86400000;
@@ -1681,18 +1681,14 @@ let lastCycleAt = 0; // start of the latest fleet cycle (fleet/SDK side only)
 let lastPublicObservedAt = 0;
 const AGENT_STARTED_AT = Date.now();
 // The height clock (status-rule.mjs): one step per public round, on that round's sources (each seed's own height, in
-// every round; with no seed height and a reading from validators alone, their median with its step). heightClock holds
-// each source's last answer, the highest height counted and when the count began; heightClockHadReading says whether
-// the latest round had a reading (without one nothing is published about heights); heightClockRow is what the round's
-// history row keeps of a reading from validators alone, for the replay; heightClockRestored whether the stored rounds
-// have been replayed after this start.
+// every round; with no seed height and a reading from validators alone, the height more than half of the counted
+// validators have reached). heightClock holds each source's last answer, the height the count stands on and since
+// when, and the highest height read; heightClockHadReading says whether the latest round had a reading (without one
+// nothing is published about heights); heightClockRow is what the round's history row keeps of its validators, for the
+// replay; heightClockRestored whether the stored rounds have been replayed after this start.
 var heightClock = newHeightClock();
 var heightClockHadReading = false, heightClockRestored = false, heightClockReplaySaid = false;
 var heightClockRow = null;
-// What each validator read as a witness last answered, by key: { key: { h, at } } (stepValidators in status-rule.mjs).
-// Kept in the store (witnessHeights, witnesses.mjs), so a restart knows it. Never published.
-var validatorLast = {};
-var witnessHeights = null;
 const CLOCK_REPLAY_MAX_ROWS = 20000;   // a day of rounds at a 5 s cadence; a day at the default 20 s is 4,320
 // Public history rows older than this were not written under the own-height rule (1.0 read a seed's first listed peer),
 // or are older than a row that was not. Median-based figures (the height clock at start-up, 24 h chain movement) do not
@@ -1703,9 +1699,9 @@ var OWN_HEIGHT_SINCE = 0;
 // just after the newest row without the mark, or 0 when every row has it. (A stored stamp goes stale across a rollback.)
 function ownHeightSince(db) {
   try { db.run("ALTER TABLE public_node_history ADD COLUMN own_height INTEGER"); } catch (e) { /* column exists */ }
-  // 1.2: what a round that rested on validators alone gave the height clock (recordPublicNodeHistory). Empty in every
-  // other row, and in rows an older agent writes.
-  try { db.run("ALTER TABLE public_node_history ADD COLUMN witness_step TEXT"); } catch (e) { /* column exists */ }
+  // 1.2: what the validators counted in a round gave the height clock (recordPublicNodeHistory). Empty in a round
+  // that counted none, and in rows an older agent writes.
+  try { db.run("ALTER TABLE public_node_history ADD COLUMN witness_clock TEXT"); } catch (e) { /* column exists */ }
   var row = db.query("SELECT ts FROM public_node_history WHERE own_height IS NULL ORDER BY ts DESC LIMIT 1").get();
   return row ? row.ts + 1 : 0;
 }
@@ -2242,8 +2238,9 @@ async function probePublicNodes() {
 
 // What a stored round gave the clock, as clockRound gave it live: { sources, counted }. Each seed that gave its own
 // height (node_states holds it by name), in every row, with or without a reading; with no seed height, what a row with
-// a reading kept of its validators (witness_step: their median and step). counted: the highest height among the
-// validators counted in that reading (witness_step.max), or null. A row that cannot be read gives nothing.
+// a reading kept of its validators (witness_clock.h: the height more than half of the counted had reached). counted:
+// the highest height among the validators counted in that reading (witness_clock.max), or null. A row that cannot be
+// read gives nothing.
 function clockInputOfRow(row) {
   var none = { sources: [], counted: null };
   if (!row) return none;
@@ -2253,12 +2250,12 @@ function clockInputOfRow(row) {
       var h = n ? sanitizeHeight(n.block) : null;
       if (n && typeof n.name === "string" && h !== null) seeds.push({ id: n.name, h: h });
     });
-    if (typeof row.witness_step === "string") v = JSON.parse(row.witness_step);
+    if (typeof row.witness_clock === "string") v = JSON.parse(row.witness_clock);
   } catch (e) { return none; }
   var counted = v && typeof v === "object" ? sanitizeHeight(v.max) : null;
   if (seeds.length) return { sources: seeds, counted: counted };
   var m = v && typeof v === "object" && row.data_quality === "sufficient" ? sanitizeHeight(v.h) : null;   // the validators are a source only in a round that had a reading
-  return m === null ? none : { sources: [{ id: VALIDATORS_SOURCE, h: m, step: v.step === "rose" || v.step === "same" ? v.step : "first" }], counted: counted };
+  return m === null ? none : { sources: [{ id: VALIDATORS_SOURCE, h: m }], counted: counted };
 }
 // The stored rounds of the last day, replayed through the clock's own fold: a restart during a standstill keeps it, and
 // nothing is said that the stored rounds do not show. Rows written under the older height rule are not replayed
@@ -2269,7 +2266,7 @@ function replayHeightClock(before) {
   if (!sharedDb) return true;
   try {
     var from = Math.max(OWN_HEIGHT_SINCE, before - RULE.clockRememberSeconds * 1000);
-    var rows = sharedDb.query("SELECT ts, data_quality, node_states, witness_step FROM public_node_history WHERE ts >= ? ORDER BY id DESC LIMIT ?").all(from, CLOCK_REPLAY_MAX_ROWS);
+    var rows = sharedDb.query("SELECT ts, data_quality, node_states, witness_clock FROM public_node_history WHERE ts >= ? ORDER BY id DESC LIMIT ?").all(from, CLOCK_REPLAY_MAX_ROWS);
     var clock = newHeightClock();
     for (var i = rows.length - 1; i >= 0; i--) { var x = clockInputOfRow(rows[i]); clock = stepHeightClock(clock, x.sources, rows[i].ts, x.counted); }
     heightClock = clock;
@@ -2280,13 +2277,12 @@ function replayHeightClock(before) {
     return false;
   }
 }
-// One step of the height clock per public round. What the validators read this round show about themselves is taken
-// first (their last answers are kept, also beside a seed, and stored). Before the first step after a start the stored
-// rounds are replayed; until that has worked no round is stepped and nothing is claimed.
+// One step of the height clock per public round, on the heights the reading itself is made of (the seeds' own heights;
+// the validators' heights witnessInput() gives assess()). Before the first step after a start the stored rounds are
+// replayed; until that has worked no round is stepped and nothing is claimed.
 function stepPublicHeightClock(publicNodeResults, witnesses, observedAt) {
-  var r = clockRound(validatorLast, publicNodeResults.map(function(n) { return { id: n.name, h: ownHeight(n) }; }),
-    witnesses ? witnesses.rows.map(function(x) { return { key: x.key, h: x.height }; }) : null, observedAt);
-  if (witnesses) { validatorLast = r.validators; if (witnessHeights) witnessHeights.save(validatorLast); }
+  var r = clockRound(publicNodeResults.map(function(n) { return { id: n.name, h: ownHeight(n) }; }),
+    witnesses ? witnesses.rows.map(function(x) { return x.height; }) : null);
   heightClockRow = r.row;
   if (!heightClockRestored) {
     if (!replayHeightClock(observedAt)) { heightClockHadReading = false; return; }
@@ -2591,7 +2587,11 @@ async function probeDiscoveredFixnetNodes() {
   var probeJobs = due.slice(0, 64).map(function(r) {
     return (async function() {
       var probedAt = Date.now();
-      var connUrl = await resolvePublicProbeOrigin(r.connection);
+      // The check rejects only with a fault of its own. That says nothing about the address: the row is left as it
+      // was (it is due again next cycle), and the fault is counted in the log line, apart from "address not public".
+      var connUrl;
+      try { connUrl = await resolvePublicProbeOrigin(r.connection); }
+      catch (e) { return { ok: false, identity: r.identity, error: "not probed: internal error" }; }
       if (!connUrl) {
         sharedDb.run("UPDATE fixnet_validator_discoveries SET last_probed_at = ?, probe_ok = NULL, last_latency_ms = NULL WHERE identity = ?", [probedAt, r.identity]);
         return { ok: false, identity: r.identity, error: "not probed: address not public" };
@@ -2632,7 +2632,9 @@ async function probeDiscoveredFixnetNodes() {
   if (probeJobs.length > 0) {
     var probeResults = await mapWithConcurrency(probeJobs, 8, function(job) { return job(); });
     var skipped = probeResults.filter(function(x) { return x && x.error === "not probed: address not public"; }).length;
-    log("  [fixnet-discovery] probed " + (probeJobs.length - skipped) + " discovered node(s)" + (skipped ? ", " + skipped + " skipped (address not public)" : ""));
+    var unchecked = probeResults.filter(function(x) { return x && x.error === "not probed: internal error"; }).length;
+    log("  [fixnet-discovery] probed " + (probeJobs.length - skipped - unchecked) + " discovered node(s)" + (skipped ? ", " + skipped + " skipped (address not public)" : "")
+      + (unchecked ? ", " + unchecked + " not checked (an internal error in DNO's own address check)" : ""));
   }
 
   // Return fresh data (including just-updated rows) for use in UI/API payload
@@ -4621,8 +4623,6 @@ async function main() {
   // seeds are not answering then still has a reading, and opens no visibility record of its own making.
   witnessCandidates = createCandidateStore(sharedDb);
   log("  Witness candidates kept: " + (witnessCandidates.readable ? witnessCandidates.load(Date.now()).candidates.length : "not readable (none is read until a validator round has counted)"));
-  witnessHeights = createHeightStore(sharedDb);
-  validatorLast = witnessHeights.load(Date.now());
   try { apiFirstStarts = loadApiFirstStart(sharedDb, Date.now()); }
   catch (eApi) { logError("  [timeline] the first start of API " + API_VERSION + " was not kept: " + eApi.message); }
 

@@ -8,9 +8,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Database } from "bun:sqlite";
-import { createCandidateStore, createHeightStore, nextCandidates, readWitnesses, witnessSnapshot, WITNESS_MAX, CANDIDATE_MAX_AGE_MS, WITNESS_LOOKUP_TIMEOUT_MS } from "./witnesses.mjs";
+import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot, WITNESS_MAX, CANDIDATE_MAX_AGE_MS, WITNESS_LOOKUP_TIMEOUT_MS } from "./witnesses.mjs";
+import * as W from "./witnesses.mjs";
 import { RULE } from "./status-rule.mjs";
-import { parseProbeOrigin } from "./public-safety.mjs";
+import { parseProbeOrigin, resolvePublicProbeOrigin } from "./public-safety.mjs";
 import { keyOf } from "./validator-watch.mjs";
 
 const TAG = "WITNESSES";
@@ -100,8 +101,23 @@ console.log("\n[" + TAG + "] the address is checked at every read");
   resetHits();
   const [refused] = await read([c(0x21, V.good)], { resolveOrigin: async () => null });
   check("N2 an address the resolver refuses is not read at all", refused.asListed === false && refused.error === "address not resolved to a public http origin" && hits.good === 0);
-  const [thrown] = await read([c(0x21, V.good)], { resolveOrigin: async () => { throw new Error("resolver down"); } });
-  check("N3 a resolver that throws: no witness, nothing thrown", thrown.asListed === false && hits.good === 0);
+  // A read that rejects is a failed check with a name, not a suite that stops: the rejection is turned into a row.
+  const REJECTED = [{ key: "", asListed: null, height: null, error: "the read was rejected" }];
+  const [thrown] = await read([c(0x21, V.good)], { resolveOrigin: async () => { throw new Error("resolver down"); } }).catch(() => REJECTED);
+  check("N3 a resolver that fails as a lookup fails (a plain error): no witness, nothing thrown, and the address is what was not resolved", thrown.asListed === false && thrown.error === "address not resolved to a public http origin" && hits.good === 0, JSON.stringify(thrown));
+  // A fault in DNO's own address check is not the validator's address being refused: the row says "internal error", as
+  // for a fault in the read itself, and the agent then counts no validator in that round.
+  const faultyCheck = await read([c(0x21, V.good), c(0x22, V.upper), c(0x23, V.other)], { resolveOrigin: async (u) => { if (u === V.good.url) throw new TypeError("isPublicIp is not a function"); if (u === V.upper.url) { const x = undefinedName; return x; } return loopResolver(u); } });
+  check("N3b a TypeError or a ReferenceError of the address check is an internal error of DNO's own, said as that; the other candidates are read as before",
+    faultyCheck.map((r) => r.error).join(" | ") === "internal error | internal error | " && faultyCheck[0].asListed === false && faultyCheck[1].asListed === false && hits.good === 0 && hits.upper === 0 && hits.other === 1, JSON.stringify(faultyCheck));
+  const [syncFault] = await read([c(0x21, V.good)], { resolveOrigin: () => { throw new ReferenceError("resolvePublicProbeOrigin is not defined"); } });
+  check("N3c also when the check throws before it returns a promise", syncFault.error === "internal error" && syncFault.asListed === false);
+  // The production check with a lookup of its own: a name that does not resolve is refused; a fault in the lookup call is thrown on.
+  const lookupDown = Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" });
+  const prodWith = (lookup) => read([{ key: K(0x21), url: "http://validator-one.test:" + V.good.srv.port }], { resolveOrigin: (u) => resolvePublicProbeOrigin(u, lookup) });
+  const [notFound] = await prodWith(async () => { throw lookupDown; }), [lookupFault] = await prodWith(async () => { throw new TypeError("lookup is not a function"); }), [badAnswer] = await prodWith(async () => ({ address: "203.0.113.5" }));
+  check("N3d with the production check: a name that does not resolve is an address not resolved; a lookup call that fails as code fails (a TypeError, or an answer that is not a list) is an internal error",
+    notFound.error === "address not resolved to a public http origin" && lookupFault.error === "internal error" && badAnswer.error === "internal error" && hits.good === 0, JSON.stringify([notFound, lookupFault, badAnswer]));
   const t0 = Date.now();
   const [hung] = await within(read([c(0x21, V.good)], { resolveOrigin: () => new Promise(() => {}), lookupTimeoutMs: 150 }), 4000);
   check("N4 a name lookup that does not come back within its limit: no witness, and the round goes on", hung.asListed === false && hung.error === "address not resolved to a public http origin" && Date.now() - t0 < 1500 && hits.good === 0, (Date.now() - t0) + " ms " + hung.error);
@@ -201,40 +217,16 @@ console.log("\n[" + TAG + "] the candidates, kept");
   eq("C20 a stored candidate whose own time no date can hold takes the list's time; one with a time keeps it", createCandidateStore(d3).load(T + 1).candidates.map((c) => c.at), [T, T, T - 5]);
 }
 
-console.log("\n[" + TAG + "] each validator's last answer, kept for the height clock (createHeightStore)");
+console.log("\n[" + TAG + "] the candidates are the only thing this module keeps");
 {
-  const T = 1_790_000_000_000, DAY = RULE.clockRememberSeconds * 1000;
+  const T = 1_790_000_000_000;
   const db = new Database(":memory:");
   db.run("CREATE TABLE dno_meta (key TEXT PRIMARY KEY, value TEXT)");
   db.run("INSERT INTO dno_meta (key, value) VALUES ('catalog_count_started', '1780000000000')");
   createCandidateStore(db).save([{ key: K(0x51), url: "http://203.0.113.9:53550" }], T);
-  const candidatesBefore = db.query("SELECT value FROM dno_meta WHERE key = 'witness_candidates'").get().value;
-  const hs = createHeightStore(db), two = { [K(0x51)]: { h: 1000, at: T }, [K(0x52)]: { h: 1002, at: T - 20000 } };
-  eq("H1 a new store holds none, and counts as read", [hs.load(T), hs.readable], [{}, true]);
-  check("H2 saved and loaded as they were given: a key, its own height and when it gave it", hs.save(two) === true && JSON.stringify(hs.load(T)) === JSON.stringify(two));
-  eq("H3 a restart keeps them: another store on the same database", createHeightStore(db).load(T + 60000), two);
-  eq("H4 an answer is kept 24 hours: one millisecond more and it is not loaded; loading without a time drops none", [Object.keys(hs.load(T - 20000 + DAY)).length, Object.keys(hs.load(T - 20000 + DAY + 1)), Object.keys(hs.load(T + DAY + 1)).length, Object.keys(hs.load()).length], [2, [K(0x51)], 0, 2]);
-  check("H5 they are one row of dno_meta, and the other rows are left as they were", db.query("SELECT COUNT(*) AS n FROM dno_meta").get().n === 3 && db.query("SELECT value FROM dno_meta WHERE key = 'catalog_count_started'").get().value === "1780000000000"
-    && db.query("SELECT value FROM dno_meta WHERE key = 'witness_candidates'").get().value === candidatesBefore && JSON.stringify(JSON.parse(db.query("SELECT value FROM dno_meta WHERE key = 'witness_heights'").get().value)) === JSON.stringify(two));
-  check("H6 the stored value holds keys, heights and times, and no address", !/http|:\/\/|url|\./.test(db.query("SELECT value FROM dno_meta WHERE key = 'witness_heights'").get().value));
-  const messy = { [K(0x61)]: { h: 5, at: T }, ["0x" + K(0x62)]: { h: 5, at: T }, [K(0xac).toUpperCase()]: { h: 5, at: T }, abc: { h: 5, at: T }, [K(0x64)]: { h: -1, at: T }, [K(0x65)]: { h: 1.5, at: T }, [K(0x66)]: { h: "7", at: T },
-    [K(0x67)]: { h: 2 ** 53, at: T }, [K(0x68)]: { h: 5, at: 9e15 }, [K(0x69)]: { h: 5, at: 0 }, [K(0x6a)]: { h: 5 }, [K(0x6b)]: null, [K(0x6c)]: "x", [K(0x6d)]: { h: 0, at: T } };
-  hs.save(messy);
-  eq("H7 what is not a 64-hex key with a height and a time is dropped, when saved and when a stored value is read", [Object.keys(hs.load(T)).sort(), Object.keys(createHeightStore(db).load(T)).sort()], [[K(0x61), K(0x6d)], [K(0x61), K(0x6d)]]);
-  for (const v of ["{not json", JSON.stringify([1, 2]), JSON.stringify("x"), "null"]) db.run("UPDATE dno_meta SET value = ? WHERE key = 'witness_heights'", [v]), messy[v] = createHeightStore(db);
-  check("H8 a stored value that is not a map of answers: none, nothing thrown; one that is not JSON says the store was not read", ["{not json", JSON.stringify([1, 2]), JSON.stringify("x"), "null"].every((v) => Object.keys(messy[v].load(T)).length === 0)
-    && messy["{not json"].readable === false && messy["null"].readable === true);
-  const many = {}; for (let i = 0; i < 80; i++) many[K(i + 1)] = { h: 1000 + i, at: T + i };
-  hs.save(many);
-  const loaded = Object.keys(hs.load(T + 100));
-  check("H9 at most 64 are kept: the 64 newest answers", loaded.length === 64 && !loaded.includes(K(16)) && loaded.includes(K(17)) && loaded.includes(K(80)) && Object.keys(createHeightStore(db).load(T + 100)).length === 64, loaded.length);
-  const mem = createHeightStore(null);
-  check("H10 without a store they are kept in memory", mem.save(two) === true && Object.keys(mem.load(T)).length === 2 && Object.keys(createHeightStore(null).load(T)).length === 0 && mem.readable === true);
-  const closed = new Database(":memory:"); const cs = createHeightStore(closed); closed.close();
-  check("H11 a store that cannot be written: save says so, and this process still has them", cs.save(two) === false && Object.keys(cs.load(T)).length === 2);
-  const broken = { run() { throw new Error("disk"); }, query() { throw new Error("disk"); } };
-  check("H12 a store that cannot be read at start: none, nothing thrown, and it says so", Object.keys(createHeightStore(broken).load(T)).length === 0 && createHeightStore(broken).readable === false);
-  check("H13 what is given back is a copy: changing it does not change what is kept", (() => { const st = createHeightStore(null); st.save(two); const got = st.load(T); got[K(0x51)].h = 1; delete got[K(0x52)]; return JSON.stringify(st.load(T)) === JSON.stringify(two); })());
+  eq("H1 one row of dno_meta, and the other rows are left as they were", db.query("SELECT key FROM dno_meta ORDER BY key").all().map((r) => r.key), ["catalog_count_started", "witness_candidates"]);
+  check("H2 no validator's height is kept by this module: the height clock needs none (it stands on the heights of a round, not on what each validator gave before)", Object.keys(W).sort().join(" ") === "CANDIDATE_MAX_AGE_MS WITNESS_LOOKUP_TIMEOUT_MS WITNESS_MAX createCandidateStore nextCandidates readWitnesses witnessSnapshot"
+    && !/"h"|height/.test(db.query("SELECT value FROM dno_meta WHERE key = 'witness_candidates'").get().value), Object.keys(W).sort().join(" "));
 }
 
 console.log("\n[" + TAG + "] who is kept after a counted round (nextCandidates)");

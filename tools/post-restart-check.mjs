@@ -30,8 +30,9 @@
 //       On the host that runs the agent: the age of an observation is measured on this machine's clock.
 // Exit: 0 "AGENT IS READING", a seed's own height is in the reading, and the validator list is agreed or fewer than
 //         two seeds are asked for it
-//       8 "AGENT IS READING WITHOUT A SEED": validators alone; seeds down and a fault in DNO's seed read look the same
-//         (not a pass and not by itself a rollback: see whether the seeds answer another client)
+//       8 "AGENT IS READING WITHOUT A SEED": validators alone at the end of the wait (such a reading does not end the
+//         wait early); seeds down and a fault in DNO's seed read look the same (not a pass and not by itself a
+//         rollback: the pre-restart check's seed lines, and whether the seeds answer another client, decide)
 //       5 "AGENT IS READING", two seeds are asked and the validator list is not agreed (not a rollback; run it again)
 //       7 it read during this check and its latest observation is not enough (not a rollback; run it again)
 //       3 "AGENT IS NOT READING" (roll back, when the wait was long enough for a start), or it did not stay up
@@ -130,7 +131,9 @@ export async function run(args, io = {}) {
       if (newest !== null && !last.older && (last.observedAt === null || last.observedAt < newest)) wentAway = "its observation went back to " + (last.observedAt === null ? "none" : "an earlier one");
       if (last.observedAt !== null && (newest === null || last.observedAt > newest)) newest = last.observedAt;
       if (last.reading) sawReading = true;
-      if (last.older || (last.reading && (last.listAgreed || !last.listExpected) && !wentAway)) break;
+      // A reading that rests on validators alone does not end the wait: one round in which no seed answered, right
+      // after a start, is followed by rounds in which they do. Only a reading with a seed's own height ends it early.
+      if (last.older || (last.reading && last.mode !== "validators_only" && (last.listAgreed || !last.listExpected) && !wentAway)) break;
     } catch (e) {
       readError = e && e.category ? e.category : e && (e.name === "TimeoutError" || e.name === "AbortError") ? "timeout" : e instanceof SyntaxError ? "not JSON" : "connection failed";
       if (answered && readError === "connection failed") wentAway = "its port stopped answering after it had answered";
@@ -160,7 +163,7 @@ export async function run(args, io = {}) {
     return 3;
   }
   if (last.mode === "validators_only") {
-    log(`AGENT IS READING WITHOUT A SEED: ${readingWords(last)}. This check cannot tell seeds that are down from a fault in DNO's own seed read (the failure of 1 Oct was one). If the seeds answer another client from this host, DNO's read is at fault: roll back. If they do not, this is the outage the validators stand in for.`);
+    log(`AGENT IS READING WITHOUT A SEED after ${waited} s: ${readingWords(last)}. This check cannot tell seeds that are down from a fault in DNO's own seed read (the failure of 1 Oct was one). Run tools/pre-restart-check.mjs: where it says a seed gave no answer for a timeout, a failed connection or an internal error, and that seed answers another client from this host, DNO's read is at fault: roll back. Otherwise this is the outage the validators stand in for.`);
     return 8;
   }
   if (last.listAgreed) { log(`AGENT IS READING: ${readingWords(last)}. The validator list is agreed.`); return 0; }

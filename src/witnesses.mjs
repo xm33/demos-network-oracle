@@ -22,7 +22,7 @@
 // Runtime tests: bun src/witnesses.test.mjs
 
 import { readSeedInfo, SEED_INFO_TIMEOUT_MS, SEED_INFO_MAX_BYTES } from "./seed-read.mjs";
-import { parseProbeOrigin, resolvePublicProbeOrigin } from "./public-safety.mjs";
+import { parseProbeOrigin, resolvePublicProbeOrigin, isInternalError } from "./public-safety.mjs";
 import { RULE } from "./status-rule.mjs";
 
 export const WITNESS_MAX = RULE.witnessMax;
@@ -30,7 +30,6 @@ export const CANDIDATE_MAX_AGE_MS = RULE.candidateMaxAgeMs;
 export const WITNESS_LOOKUP_TIMEOUT_MS = 3000;   // one name lookup; a name that does not resolve in time is not read
 const STORE_KEY = "witness_candidates";
 const KEY_RE = /^[0-9a-f]{64}$/;                 // a Demos identity without its 0x, as the watch compares keys
-const HEIGHTS_KEY = "witness_heights", HEIGHTS_MAX = 64;
 // A time in ms that a Date can hold: a stored number outside that range is not one (new Date(9e15) cannot be printed).
 const isTime = function(t) { return typeof t === "number" && Number.isFinite(t) && t > 0 && t <= 8.64e15; };
 
@@ -107,55 +106,14 @@ export function createCandidateStore(db) {
   };
 }
 
-// What each validator read as a witness last answered, for the height clock (stepValidators in status-rule.mjs):
-// { key: { h, at } }. It is stored so that a restart knows what each validator had shown before it: otherwise the first
-// round that rests on validators alone would take every one of them for a node heard for the first time. Never published.
-//   load(now): the stored answers given at most RULE.clockRememberSeconds before now; 64-hex keys, whole heights, at
-//     most HEIGHTS_MAX of them (the latest).
-//   save(map): false when the store could not be written (memory is still updated).
-//   readable: false when a store was given and could not be read.
-function cleanHeights(map, now) {
-  var out = [];
-  Object.keys(map && typeof map === "object" && !Array.isArray(map) ? map : {}).forEach(function(k) {
-    var e = map[k];
-    if (!KEY_RE.test(k) || !e || typeof e !== "object" || !Number.isSafeInteger(e.h) || e.h < 0 || !isTime(e.at)) return;
-    if (now !== null && now - e.at > RULE.clockRememberSeconds * 1000) return;
-    out.push([k, { h: e.h, at: e.at }]);
-  });
-  out.sort(function(a, b) { return b[1].at - a[1].at || (a[0] < b[0] ? -1 : 1); });
-  var kept = {};
-  out.slice(0, HEIGHTS_MAX).forEach(function(x) { kept[x[0]] = x[1]; });
-  return kept;
-}
-export function createHeightStore(db) {
-  var mem = {}, readable = true;
-  if (db) {
-    try { db.run("CREATE TABLE IF NOT EXISTS dno_meta (key TEXT PRIMARY KEY, value TEXT)"); } catch (e) {}
-    try {
-      var has = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dno_meta'").get();
-      var row = has ? db.query("SELECT value FROM dno_meta WHERE key = ?").get(HEIGHTS_KEY) : null;
-      mem = cleanHeights(row ? JSON.parse(row.value) : {}, null);
-    } catch (e) { mem = {}; readable = false; }
-  }
-  return {
-    readable: readable,
-    save: function(map) {
-      mem = cleanHeights(map, null);
-      if (!db) return true;
-      try { db.run("INSERT OR REPLACE INTO dno_meta (key, value) VALUES (?, ?)", [HEIGHTS_KEY, JSON.stringify(mem)]); return true; }
-      catch (e) { return false; }
-    },
-    load: function(now) { return cleanHeights(mem, typeof now === "number" ? now : null); }
-  };
-}
-
 function withTimeout(promise, ms) {
   var timer;
   return Promise.race([promise, new Promise(function(resolve) { timer = setTimeout(function() { resolve(null); }, ms); })]).finally(function() { clearTimeout(timer); });
 }
 
-// Read the candidates once, all at the same time. Resolves, never throws: the lookup's failure is caught here, and
-// readSeedInfo turns every failure into a category. One row per candidate read: { key, asListed, height, error }.
+// Read the candidates once, all at the same time. Resolves, never throws: the address check's failure is caught here
+// (a fault of DNO's own in it is the category "internal error", like one in the read), and readSeedInfo turns every
+// failure into a category. One row per candidate read: { key, asListed, height, error }.
 // asListed: the answer named the listed key. height: that key's own height from its own peerlist entry, or null.
 // error: why there was no answer, as a category (never runtime text or a host), else null; "internal error" is a
 // fault in DNO's own read (readSeedInfo's category), which the pre-restart check looks for.
@@ -166,7 +124,10 @@ export async function readWitnesses(candidates, opts) {
     var row = { key: c.key, asListed: false, height: null, error: null };
     // The address is checked again at every read: it must still be a public http origin, and the read goes to the
     // address that was checked.
-    var origin = await withTimeout(Promise.resolve().then(function() { return o.resolveOrigin(c.url); }).catch(function() { return null; }), o.lookupTimeoutMs);
+    // A fault in DNO's own check (a TypeError or ReferenceError) is not the validator's address being refused.
+    var fault = false;
+    var origin = await withTimeout(Promise.resolve().then(function() { return o.resolveOrigin(c.url); }).catch(function(e) { fault = isInternalError(e); return null; }), o.lookupTimeoutMs);
+    if (fault) { row.error = "internal error"; return row; }
     if (!origin) { row.error = "address not resolved to a public http origin"; return row; }
     var r = await readSeedInfo({ url: origin, identity: "0x" + c.key }, { timeoutMs: o.timeoutMs, maxBytes: o.maxBytes, fetch: o.fetch });
     if (!r.ok) row.error = r.error;

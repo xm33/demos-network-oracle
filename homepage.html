@@ -1191,7 +1191,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   const DEFS = {
     status: { note: 'Status does not use the catalog. "Public incident" here excludes the condition records DNO opens when its reading stays unknown, degraded or unstable.', values: [
       ['stable', 'Data quality sufficient, no critical or warning-level public incident active, agreement neither weak nor moderate, and DNO has not counted 30 minutes without a new height.'],
-      ['degraded', 'A warning-level public incident is active, agreement is moderate, or DNO has counted 30 minutes without a new height: a node above its own last answer and above the highest height DNO has read.'],
+      ['degraded', 'A warning-level public incident is active, agreement is moderate, or DNO has counted 30 minutes without a new height. It counts from its own readings, not from when a block was produced.'],
       ['unstable', 'A critical public incident is active, or agreement is weak.'],
       ['unknown', 'Data quality insufficient: fewer than two seeds reported their own block height and no validator stood in for the missing one, or the observation is stale.']] },
     trend: { note: 'Backward-looking: trend describes what has changed, never what will change.', values: [
@@ -1568,7 +1568,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       const st = o ? lower(o.status) : null, ag = h && h.agreement ? lower(h.agreement.state) : null;
       text = [el('h3', { text: 'Public seeds: what status is made of' }),
         el('p', { text: `${API10 ? 'Each monitor cycle (20 s by default) DNO reads /info from three public Kynesys seeds, one after another.' : 'Every 20 s DNO reads /info from three public Kynesys seeds, in parallel.'} ${API10 ? 'Under api 1.0 a seed\'s height is the first entry on its peerlist, which is not always the seed itself.' : 'A seed\'s height is its own peerlist entry.'} The median of those heights and a ±25-block band give agreement; agreement, data quality and public incidents give status.` }),
-        el('p', { text: API10 ? 'Peer-listed identities never enter status.' : 'A seed that does not list itself has no height here: its first listed peer\'s height is shown on its row and counted nowhere. When fewer than two seeds give their own height, validators that answer as listed stand in, and /organism says so in witnesses. A reading that would be stable is degraded once no new height has been seen for 30 minutes. Peer-listed identities never enter status.' }),
+        el('p', { text: API10 ? 'Peer-listed identities never enter status.' : 'A seed that does not list itself has no height here: its first listed peer\'s height is shown on its row and counted nowhere. When fewer than two seeds give their own height, validators that answer as listed stand in, and /organism says so in witnesses. A reading that would be stable is degraded once DNO has counted 30 minutes without a new height. Peer-listed identities never enter status.' }),
         links(['/methodology', 'methodology'], ['/sources', 'sources'], ['#seeds', 'probed seeds'])];
       facts = [
         ['seeds answered', nodes ? `${nodes.filter((x) => x && x.ok === true).length} of ${nodes.length}` : wait()],
@@ -1711,16 +1711,17 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     renderExplain('x-agree');
     renderLanes();
   }
-  // Seconds since the last new height: a node above its own last answer and above the highest height read (the field is
-  // api 1.1's, the rule 1.2's). While height_last_advanced_at is null DNO has seen no new height arrive, or it follows
-  // heights below the highest one it read: the figure is then a lower bound, and no arrival is said. Absent: no line.
+  // Seconds since DNO first read the height its count stands on (the field is api 1.1's, the rule 1.2's). It is 0 in
+  // the cycle the count starts: with height_last_advanced_at, a seed's new height arrived; without it, the count began
+  // on a first reading (nothing is said to rise: a first round is such a cycle). While height_last_advanced_at is
+  // null the figure is a lower bound, and no arrival is said. Absent: no line.
   function renderHeightLine() {
     const node = $('ag-height'), hs = pick('height_static_seconds');
     if (hs === undefined) { node.hidden = true; return; }
     node.hidden = false;
     const seen = typeof pick('height_last_advanced_at') === 'string', span = hs < 120 ? `${hs} s` : `${Math.floor(hs / 60)} min`;
     setText(node, !isNum(hs) ? 'height movement not observed this cycle'
-      : hs === 0 ? (seen ? 'a new height arrived this cycle' : 'heights rising; no new height seen arriving')
+      : hs === 0 ? (seen ? 'a new height arrived this cycle' : 'count started this cycle; no arrival seen')
       : seen ? `no new height for ${span}` : `no new height seen for at least ${span}`);
   }
   let laneKey = '';

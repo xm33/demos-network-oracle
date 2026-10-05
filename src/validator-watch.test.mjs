@@ -120,6 +120,17 @@ console.log("\n[" + TAG + "] the read");
   check("R7 rows without an address or a status, or a repeated address, are an unexpected shape", reduceValidatorRows([{ address: KEY(1), status: 2 }]) === null
     && reduceValidatorRows([{ address: "", status: "2" }]) === null && reduceValidatorRows([{ address: KEY(1), status: "2" }, { address: KEY(1).toUpperCase().replace("0X", "0x"), status: "2" }]) === null
     && reduceValidatorRows("x") === null && reduceValidatorRows([]).length === 0);
+  // One key listed twice in two spellings (another letter case; with and without 0x): every seed returns that list.
+  const spelt = BASE_ROWS.concat([Object.assign({}, BASE_ROWS[0], { address: KEY(0x11).toUpperCase().replace("0X", "0x") })]), bare = BASE_ROWS.concat([Object.assign({}, BASE_ROWS[1], { address: KEY(0x12).slice(2) })]);
+  SEED.a = { list: spelt, stake: "1000000000000" }; SEED.b = { list: spelt, stake: "1000000000000" }; SEED.c = { list: bare, stake: "1000000000000" };
+  const r7 = await round(), oc7 = publicOnChainValidators(r7, r7.listAt, { seedsConfigured: 3 });
+  check("R7b a list that names one address twice is not counted, and the reason says that: the seeds did return a list (it was: 'fewer than two public seeds returned a validator list')",
+    oc7.state === "not_agreed" && oc7.seeds_answered === 0 && oc7.reason === "3 of 3 public seeds returned a validator list that names an address twice; such a list is not counted" && r7.faults.list === 0
+    && r7.seedErrors.every((e) => e.list === "an address listed twice") && /; no list from seed-a an address listed twice, seed-b an address listed twice, seed-c an address listed twice$/.test(roundLogLine(r7)) && FORBIDDEN(JSON.stringify(oc7)).length === 0, JSON.stringify([oc7.reason, r7.seedErrors]));
+  SEED.b = { list: BASE_ROWS, stake: "1000000000000" }; SEED.c = { list: BASE_ROWS, stake: "1000000000000" };
+  const r7c = await round(), oc7c = publicOnChainValidators(r7c, r7c.listAt, { seedsConfigured: 3 });
+  check("R7c beside two seeds whose lists agree, the third's doubled address changes nothing that is published", oc7c.state === "agreed" && oc7c.seeds_agreed === 2 && r7c.seedErrors.find((e) => e.name === "seed-a").list === "an address listed twice", JSON.stringify(oc7c.reason));
+  SEED.a = { list: BASE_ROWS, stake: "1000000000000" }; SEED.b = { list: "down", stake: "1000000000000" }; SEED.c = { list: "shape", stake: "1000000000000" };
   const reduced = reduceValidatorRows([row(0x31, "2", "http://example.invalid:1")]);
   check("R8 stake and timestamps are dropped on arrival", reduced.length === 1 && JSON.stringify(Object.keys(reduced[0]).sort()) === JSON.stringify(["key", "noUrl", "status", "url"]), JSON.stringify(reduced));
   const st = agreeLists([{ rows: [], stake: "5" }, { rows: [], stake: "6" }, { rows: [], stake: null }]);
@@ -354,6 +365,29 @@ console.log("\n[" + TAG + "] a fault in DNO's own read is not a peer's answer");
     && publicValidatorWatch(lbc, lbc.roundAt, {}).state === "no_agreed_list", JSON.stringify([lbc.faults, ocbc.reason]));
   const lc = await round({ fetch: faulty(listOf("c")) });
   check("X8 with two lists that agree, a third read's fault does not change what is published; the round still counts it", lc.faults.list === 1 && lc.list.agreed === true && publicValidatorWatch(lc, lc.roundAt, {}).state === "observed" && lc.counted === true, JSON.stringify(lc.faults));
+  // The address check. Its own fault (a TypeError or ReferenceError) is a fault in DNO's own read, not the peer's
+  // address being refused; a check that fails as a lookup fails (a plain error) is the address, as before.
+  const checkThat = (pick, err) => async (u) => { if (pick(u)) throw err(); return loopResolver(u); };
+  const isB = (u) => u === V.b.url, down = () => Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" });
+  const litFault = await round({ resolveOrigin: checkThat(isB, () => new ReferenceError("isPublicIp is not defined")) }), litRefused = await round({ resolveOrigin: checkThat(isB, down) });
+  check("X9 the check of an address literal ends in a fault of DNO's own: a read fault, and no counts for the round; the same check failing as a lookup fails is the address, not a fault",
+    litFault.faults.dials === 1 && litFault.outcomes === null && litFault.counted === false && litFault.witnessFacts === null && publicValidatorWatch(litFault, litFault.roundAt, {}).state === "read_fault"
+    && litRefused.faults.dials === 0 && litRefused.outcomes.not_dialed_reasons.not_public_http === okRound.outcomes.not_dialed_reasons.not_public_http + 1 && litRefused.outcomes.answered_as_listed === okRound.outcomes.answered_as_listed - 1,
+    JSON.stringify([litFault.faults, litRefused.faults, litRefused.outcomes && litRefused.outcomes.not_dialed_reasons]));
+  const keep = { a: SEED.a, b: SEED.b };
+  const namedRows = [row(0x01, "2", "http://one.test:1"), row(0x02, "2", "http://two.test:1"), row(0x11, "2", "http://good.test:1")];
+  SEED.a = { list: namedRows, stake: "1" }; SEED.b = { list: namedRows, stake: "1" };
+  const byName = (bad, err) => async (u) => { const p = parseProbeOrigin(u); if (p && p.hostname === "good.test") return V.a.url; if (p && p.hostname === bad) throw err(); if (p && /\.test$/.test(p.hostname)) return null; return loopResolver(u); };
+  const nameFault = await round({ resolveOrigin: byName("one.test", () => new TypeError("lookup is not a function")) }), nameDown = await round({ resolveOrigin: byName("one.test", down) });
+  check("X10 a name lookup that ends in a fault of DNO's own: a read fault, and no counts; a name that does not resolve is a name that did not resolve",
+    nameFault.faults.dials === 1 && nameFault.outcomes === null && publicValidatorWatch(nameFault, nameFault.roundAt, {}).state === "read_fault"
+    && nameDown.faults.dials === 0 && nameDown.outcomes.not_dialed_reasons.name_unresolved === 2 && nameDown.outcomes.answered_as_listed === 1, JSON.stringify([nameFault.faults, nameDown.faults, nameDown.outcomes && nameDown.outcomes.not_dialed_reasons]));
+  SEED.a = keep.a; SEED.b = keep.b;
+  const seedB = (u) => u === S.b.url;
+  const seedFault = await round({ resolveOrigin: checkThat(seedB, () => new TypeError("u.hostname.replace is not a function")) }), seedRefused = await round({ resolveOrigin: checkThat(seedB, down) });
+  check("X11 the check of a seed's own address ends in a fault of DNO's own: the list read is an internal error for that seed and the round counts it; failing as a lookup fails, the seed's address was not resolved",
+    seedFault.faults.list === 1 && seedFault.seedErrors.find((e) => e.name === "seed-b").list === "internal error"
+    && seedRefused.faults.list === 0 && seedRefused.seedErrors.find((e) => e.name === "seed-b").list === "address not resolved to a public http origin", JSON.stringify([seedFault.seedErrors, seedRefused.seedErrors]));
 }
 
 console.log("\n[" + TAG + "] hardening");
@@ -732,6 +766,29 @@ console.log("\n[" + TAG + "] the rows that answered before are dialed first");
     (await dialedAt(0)) === "11 12" && (await dialedAt(1)) === "12" && (await dialedAt(undefined)) === "11 12" && (await dialedAt(-3)) === "11 12" && (await dialedAt(19 * 5)) === (await dialedAt(0)), [await dialedAt(0), await dialedAt(1), await dialedAt(2)].join(" | "));
   check("Y6 the rows that answered before keep their place whatever the round's number: only the others start elsewhere", (await dialedAt(1, { maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) })) === "12 1c 1d"
     && (await dialedAt(0, { maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) })) === "11 1c 1d", await dialedAt(1, { maxOrigins: 3, first: new Set([k(0x1c), k(0x1d)]) }));
+  check("Y6b the kept candidates themselves do not start elsewhere: with the cap at one origin and two of them, the first in address order is dialed in every round", (await dialedAt(0, { maxOrigins: 1, first: new Set([k(0x1c), k(0x1d)]) })) === "1c"
+    && (await dialedAt(1, { maxOrigins: 1, first: new Set([k(0x1c), k(0x1d)]) })) === "1c" && (await dialedAt(3, { maxOrigins: 1, first: new Set([k(0x1c), k(0x1d)]) })) === "1c", await dialedAt(1, { maxOrigins: 1, first: new Set([k(0x1c), k(0x1d)]) }));
+  // A kept candidate comes before the keys that only have a record in the window, and those start at another row each
+  // round like the rest: rows that answered before cannot keep a kept candidate from its dial, or each other.
+  const seenBefore = () => { const h = createWatchHistory(3600000, 60000); h.record(Date.now() - 60000, true, new Set([k(0x11), k(0x12), k(0x1c)])); return h; };
+  const keptLast = { maxOrigins: 2, first: new Set([k(0x1d)]) };
+  const turns = [];
+  for (const n of [0, 1, 2, 3]) turns.push(await dialedAt(n, Object.assign({ history: seenBefore() }, keptLast)));
+  check("Y8 with the cap at two origins and three keys with a record before it in address order, the kept candidate is dialed in every round, and the other dial goes to another of the three each round",
+    turns.join(" | ") === "11 1d | 12 1d | 1c 1d | 11 1d", turns.join(" | "));
+  check("Y9 without a kept candidate the keys with a record still come before the rest, starting at another one each round",
+    (await dialedAt(0, { history: seenBefore() })) === "11 12" && (await dialedAt(1, { history: seenBefore() })) === "12 1c" && (await dialedAt(2, { history: seenBefore() })) === "11 1c", [await dialedAt(0, { history: seenBefore() }), await dialedAt(1, { history: seenBefore() }), await dialedAt(2, { history: seenBefore() })].join(" | "));
+  {
+    // The cap as a round without options gets it: 201 ACTIVE rows, each at an address of its own where nothing listens.
+    const keepLists = { a: SEED.a, b: SEED.b };
+    const many = Array.from({ length: 201 }, (_, i) => row(0x30 + i, "2", "http://127.0.0.1:" + (20001 + i)));
+    SEED.a = { list: many, stake: "1" }; SEED.b = { list: many, stake: "1" };
+    const capped = await round();
+    check("Y10 without an option the round dials at most 200 published addresses: of 201 rows one is over the cap, and the others were dialed once each",
+      capped.list.agreed === true && capped.outcomes.origins_dialed === 200 && capped.outcomes.not_dialed === 1 && capped.outcomes.not_dialed_reasons.over_cap === 1
+      && capped.outcomes.no_answer + capped.outcomes.answered_other_key + capped.outcomes.answered_no_key + capped.outcomes.answered_as_listed === 200, JSON.stringify(capped.outcomes).slice(0, 300));
+    SEED.a = keepLists.a; SEED.b = keepLists.b;
+  }
   // Names that never resolve hold the lookup budget. Two such rows come before one that resolves and answers.
   const save = { a: SEED.a, b: SEED.b };
   const named = [row(0x01, "2", "http://dead1.test:1"), row(0x02, "2", "http://dead2.test:1"), row(0x11, "2", "http://good.test:1")];

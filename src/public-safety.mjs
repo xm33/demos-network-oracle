@@ -70,9 +70,12 @@ export function probeErrorCategory(err, httpStatus) {
   if (err.name === "TimeoutError" || err.name === "AbortError") return "timeout";
   if (err.name === "ResponseTooLarge") return "response too large";
   if (err instanceof SyntaxError || err instanceof RangeError) return "invalid response";  // RangeError: e.g. nesting too deep
-  if (err instanceof TypeError || err instanceof ReferenceError) return "internal error";
+  if (isInternalError(err)) return "internal error";
   return "connection failed";
 }
+// A fault in DNO's own code, as against anything a peer or the network can cause. The address check has the same line:
+// a name that does not resolve is the peer's address; a TypeError or ReferenceError while checking it is not.
+export function isInternalError(err) { return err instanceof TypeError || err instanceof ReferenceError; }
 
 // ---- admin token -------------------------------------------------------------------------------------
 // An admin route is open only when a token of at least 16 characters is configured and the presented
@@ -146,6 +149,8 @@ export function isPublicIp(ip) {
 // resolvePublicProbeOrigin() returns the origin pinned to the address it checked, so the probe connects to that
 // address and the name is not resolved a second time (no DNS rebinding between check and connect). Callers must
 // also refuse redirects (fetch option redirect: "manual"), or a public address could forward the probe inward.
+// It resolves to null for an address it refuses and rejects only with a fault of its own (isInternalError): a caller
+// must not read that rejection as "the address is not public".
 export function parseProbeOrigin(connection) {
   if (typeof connection !== "string") return null;
   var s = connection.trim();
@@ -167,8 +172,10 @@ export async function resolvePublicProbeOrigin(connection, lookupFn) {
   var addrs;
   if (isIP(host)) addrs = [host];
   else {
+    // A name that does not resolve is refused. A fault in DNO's own call is thrown on: it says nothing about the name
+    // (the runtime's lookup rejects with a plain Error and a code such as ENOTFOUND for a name it cannot resolve).
     try { addrs = (await (lookupFn || dnsLookup)(host, { all: true })).map(function(a) { return a.address; }); }
-    catch (e) { return null; }
+    catch (e) { if (isInternalError(e)) throw e; return null; }
   }
   if (!addrs.length || !addrs.every(isPublicIp)) return null;
   // Only plain http is probed: a pinned https origin fails its certificate check (hostname) or rarely has one (IP).

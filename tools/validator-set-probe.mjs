@@ -38,7 +38,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Database } from "bun:sqlite";
 import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, keyOf, WATCH_DEFAULTS, reduceValidatorRows, listSignature, largestGroup } from "../src/validator-watch.mjs";
-import { resolvePublicProbeOrigin, sanitizeHeight, cappedJson, probeErrorCategory, nativeFetch } from "../src/public-safety.mjs";
+import { resolvePublicProbeOrigin, sanitizeHeight, cappedJson, probeErrorCategory } from "../src/public-safety.mjs";
 import { readSeedInfo, seedsSufficient } from "../src/seed-read.mjs";
 import { readWitnesses, createCandidateStore, witnessSnapshot, nextCandidates } from "../src/witnesses.mjs";
 import { assess } from "../src/status-rule.mjs";
@@ -72,27 +72,18 @@ export function seedsUnread(agentSource, seeds) {
   return configured > 0 && seeds.length === configured && full === configured ? null : `src/agent.mjs configures ${configured} seeds; ${full} could be read with a url and an identity.`;
 }
 
-async function readCapped(res) {
-  const reader = res.body && res.body.getReader ? res.body.getReader() : null;
-  if (!reader) return await res.text();
-  const chunks = []; let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > BODY_MAX_BYTES) { try { await reader.cancel(); } catch {} throw new Error("answer larger than 2 MB"); }
-    chunks.push(value);
-  }
-  return new TextDecoder().decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
-}
-
+// One read of the probe's own, through the agent's capped reader (cappedJson): identity encoding is asked for and the
+// runtime does not expand a compressed body, so at most 2 MB are taken from the wire and at most 2 MB come out of
+// decoding; a redirect is a status, not followed; the connection is closed. The runtime's fetch, as in the agent (under
+// the SDK's replacement a body could not be read capped). Only a 200 is read.
+// -> { ok: true, status, body } (body undefined unless the status is 200), or { ok: false, why } with why a category
+// (probeErrorCategory: timeout, connection failed, invalid response, response too large, internal error): never
+// runtime text. Nothing is thrown.
 async function getJson(url, init) {
-  // The runtime's fetch: under the SDK's replacement (pre-restart check) a body has no getReader and would be read uncapped.
-  const res = await nativeFetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
-  const text = await readCapped(res);
-  let body = null;
-  try { body = JSON.parse(text); } catch { return { status: res.status, body: null, parseError: true }; }
-  return { status: res.status, body };
+  try {
+    const res = await cappedJson(url, init || null, { timeoutMs: TIMEOUT_MS, maxBytes: BODY_MAX_BYTES, read: (status) => status === 200 });
+    return { ok: true, status: res.status, body: res.data };
+  } catch (e) { return { ok: false, why: probeErrorCategory(e) }; }
 }
 
 function nodeCall(url, message, data = {}) {
@@ -266,38 +257,41 @@ const resultWord = (v) => (Number.isInteger(v) && v >= 0 && v <= 999 ? String(v)
 export async function probeSeed(seed) {
   const out = { name: seed.name, info: null, params: null, validators: null, shapeErrors: [] };
   const root = seed.url.replace(/\/+$/, "");
+  // An answer is "no answer (why)" only when the read itself failed: why is the read's category, or the HTTP status, or
+  // "invalid response" for a 200 whose body is not a JSON object. What this tool then makes of an answer is apart: if
+  // that fails here, the seed did answer, and the line says the answer could not be read (an unexpected shape).
+  const noAnswer = (r) => (!r.ok ? r.why : r.status !== 200 ? "HTTP " + r.status : !isObject(r.body) ? "invalid response" : null);
+  const unread = (call) => { out.shapeErrors.push(call + ": the answer could not be read by this tool"); return { answered: true, shapeOk: false }; };
   // 1. /info: key names only.
-  try {
-    const r = await getJson(root + "/info");
-    if (r.status !== 200 || !r.body || typeof r.body !== "object") out.info = { answered: false, why: r.status !== 200 ? "HTTP " + r.status : "not JSON" };
-    else {
+  {
+    const r = await getJson(root + "/info"), why = noAnswer(r);
+    if (why) out.info = { answered: false, why };
+    else try {
       const entry = Array.isArray(r.body.peerlist) && r.body.peerlist.length ? r.body.peerlist[0] : null;
       const id = keyOf(r.body.identity);
       const self = id && Array.isArray(r.body.peerlist) ? r.body.peerlist.find((p) => p && keyOf(p.identity) === id) : null;
       out.info = { answered: true, keys: nested(r.body), entryKeys: entry ? nested(entry) : [],
         hashField: namesHold(r.body, "hash") || namesHold(entry, "hash"), shardField: namesHold(r.body, "shard") || namesHold(entry, "shard"),
         ownHeight: self && self.sync ? sanitizeHeight(self.sync.block) : null, key: id };
-    }
-  } catch (e) { out.info = { answered: false, why: e.name === "TimeoutError" ? "no answer within 8 s" : "not reached" }; }
+    } catch (e) { out.info = Object.assign(unread("/info"), { keys: [], entryKeys: [], hashField: false, shardField: false, ownHeight: null, key: null }); }
+  }
   // 2. getNetworkParameters
-  try {
-    const r = await nodeCall(root, "getNetworkParameters");
-    const b = r.body;
-    if (r.status !== 200 || !b) out.params = { answered: false, why: r.status !== 200 ? "HTTP " + r.status : "not JSON" };
+  {
+    const r = await nodeCall(root, "getNetworkParameters"), why = noAnswer(r), b = r.body;
+    if (why) out.params = { answered: false, why };
     else if (b.result !== 200) out.params = { answered: false, why: "result " + resultWord(b.result) };
     else if (!b.response || typeof b.response !== "object" || typeof b.response.minValidatorStake !== "string" || !STAKE_DIGITS.test(b.response.minValidatorStake)) {
       out.params = { answered: true, shapeOk: false }; out.shapeErrors.push("getNetworkParameters: no minValidatorStake digit string of at most 78 digits");
     } else out.params = { answered: true, shapeOk: true, minValidatorStake: b.response.minValidatorStake, keys: keysOf(b.response) };
-  } catch (e) { out.params = { answered: false, why: e.name === "TimeoutError" ? "no answer within 8 s" : "not reached" }; }
+  }
   // 3. getValidators (current head)
-  try {
-    const r = await nodeCall(root, "getValidators", {});
-    const b = r.body;
-    if (r.status !== 200 || !b) out.validators = { answered: false, why: r.status !== 200 ? "HTTP " + r.status : "not JSON" };
+  {
+    const r = await nodeCall(root, "getValidators", {}), why = noAnswer(r), b = r.body;
+    if (why) out.validators = { answered: false, why };
     else if (b.result !== 200) out.validators = { answered: false, why: "result " + resultWord(b.result) };
     else if (!Array.isArray(b.response) || !b.response.every((v) => v && typeof v === "object" && typeof v.status === "string")) {
       out.validators = { answered: true, shapeOk: false }; out.shapeErrors.push("getValidators: not a list of rows with a status");
-    } else {
+    } else try {
       const byStatus = {}, firstSeen = new Map();   // its names are digits, or one of two fixed words (below)
       b.response.forEach((v) => {
         let st = STATUS_CODE.test(v.status.trim()) ? v.status.trim() : "(not a status code)";
@@ -312,8 +306,8 @@ export async function probeSeed(seed) {
       const pairs = reduceValidatorRows(b.response);
       if (!pairs) out.shapeErrors.push("getValidators: a row without a usable address or status, or an address listed twice: the agent would not accept this list");
       out.validators = { answered: true, shapeOk: true, rows: b.response.length, byStatus, rowKeys: keysOf(b.response[0] || {}), firstSeen, pairs };
-    }
-  } catch (e) { out.validators = { answered: false, why: e.name === "TimeoutError" ? "no answer within 8 s" : "not reached" }; }
+    } catch (e) { out.shapeErrors = out.shapeErrors.filter((x) => !x.startsWith("getValidators:")); out.validators = unread("getValidators"); }
+  }
   return out;
 }
 
@@ -324,7 +318,10 @@ export function firstSeenValue(v) {
   if (typeof v === "string" && /^\d{1,15}$/.test(v)) return { key: "n" + Number(v), n: Number(v), kind: "number" };
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v) && Number.isFinite(Date.parse(v))) return { key: "t" + Date.parse(v), n: Date.parse(v), kind: "date" };
   if (v === null || v === undefined || v === "") return null;
-  return { key: "x" + String(v).slice(0, 64), n: null, kind: "other" };
+  // Any other shape, compared by its JSON text: String() of an object a peer sent can throw (a "toString" that is no function).
+  let text = null;
+  try { text = JSON.stringify(v); } catch (e) {}
+  return { key: "x" + (typeof text === "string" ? text : typeof v).slice(0, 64), n: null, kind: "other" };
 }
 
 // What the homepage may say, from these answers. A value is printed only when at least two seeds report it and all

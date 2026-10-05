@@ -29,7 +29,7 @@ let hits = 0;
 const srv = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { hits++; return Response.json({ identity: ID("f1"), peerlist: [{ identity: ID("f1"), sync: { block: 77 } }] }); } });
 const ORIGIN = "http://127.0.0.1:" + srv.port;
 
-function agent() {
+function agent(resolve) {
   const db = new Database(":memory:");
   db.run("CREATE TABLE fixnet_validator_discoveries (identity TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, connection TEXT, online INTEGER, last_block INTEGER, last_probed_at INTEGER, last_latency_ms INTEGER, probe_ok INTEGER)");
   db.run("CREATE TABLE validator_discoveries (identity TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, public_listed_since INTEGER)");
@@ -40,7 +40,7 @@ function agent() {
     + "\nreturn { discover: discoverFixnetValidators, probe: probeDiscoveredFixnetNodes, listed: publicListedIdentities,"
     + " crawl: function(ids, read) { latestPublicListed = new Set(ids); if (read) publicPeerlistRead = true; }, wait: function(id) { catalogPending.set(id, { sources: ['seed'] }); } };";
   const api = new Function("sharedDb", "isValidIdentity", "sanitizeHeight", "log", "logError", "resolvePublicProbeOrigin", "cappedJson", "INFO_BODY_MAX_BYTES", "probeErrorCategory", "mapWithConcurrency", code)(
-    db, isValidIdentity, sanitizeHeight, (m) => logs.push(m), (m) => logs.push(m), async (u) => (String(u).startsWith("http://127.0.0.1:") ? u : null), cappedJson, 2 * 1024 * 1024, probeErrorCategory, mapWithConcurrency);
+    db, isValidIdentity, sanitizeHeight, (m) => logs.push(m), (m) => logs.push(m), resolve || (async (u) => (String(u).startsWith("http://127.0.0.1:") ? u : null)), cappedJson, 2 * 1024 * 1024, probeErrorCategory, mapWithConcurrency);
   return Object.assign(api, { db, logs, kept: () => db.query("SELECT identity FROM fixnet_validator_discoveries ORDER BY identity").all().map((r) => r.identity) });
 }
 const peer = (id, conn) => ({ identity: id, connection: { string: conn || "http://203.0.113.9:53550" }, status: { online: true }, sync: { block: 431000 } });
@@ -85,6 +85,19 @@ console.log("\n[" + TAG + "] what the fixnet probe dials and shows");
   a.crawl([LATEST, FIXNET], true);
   const later = await a.probe();
   check("P5 a row that a public peerlist lists later is removed then, undialed", later.length === 0 && hits === 0 && a.kept().length === 0);
+  // The address check rejects only with a fault of its own. One row's check does; another's address is refused.
+  const OTHER = ID("f2"), FAULTY = ID("f3");
+  const b = agent(async (u) => { if (String(u).includes(":7001")) throw new TypeError("isPublicIp is not a function"); return String(u).startsWith("http://127.0.0.1:") ? u : null; });
+  b.crawl([LATEST], true);
+  b.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [FIXNET, ORIGIN]);
+  b.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [OTHER, "http://10.0.0.8:53550"]);
+  b.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [FAULTY, "http://203.0.113.7:7001"]);
+  hits = 0;
+  const mixed = await b.probe().catch(() => []), rowOf = (id) => b.db.query("SELECT probe_ok, last_probed_at FROM fixnet_validator_discoveries WHERE identity = ?").get(id), shownOf = (id) => mixed.find((x) => x.identity === id);
+  check("P6 a fault in DNO's own address check does not end the cycle and is not read as an address that is not public: the other rows are probed, that row is left as it was (not probed, due again), and the log line counts it apart",
+    mixed.length === 3 && hits === 1 && shownOf(FIXNET) && shownOf(FIXNET).online === true && rowOf(OTHER).last_probed_at !== null && rowOf(OTHER).probe_ok === null
+    && rowOf(FAULTY).last_probed_at === null && rowOf(FAULTY).probe_ok === null && shownOf(FAULTY) && shownOf(FAULTY).probed === false
+    && b.logs.includes("  [fixnet-discovery] probed 1 discovered node(s), 1 skipped (address not public), 1 not checked (an internal error in DNO's own address check)"), JSON.stringify([mixed.length, hits, rowOf(OTHER), rowOf(FAULTY)]) + " | " + b.logs.join(" / "));
 }
 
 console.log("\n[" + TAG + "] the sources");

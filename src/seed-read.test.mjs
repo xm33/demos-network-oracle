@@ -39,6 +39,11 @@ console.log("\n[" + TAG + "] what an answer says");
   check("A1 a seed that lists itself: its own height, height_source self, identity matches, version and peer count",
     r.ok === true && r.block === 5000 && r.height_source === "self" && r.identityMatch === true && r.version === "0.9.9 RC" && r.peers === 2 && Number.isFinite(r.latencyMs), JSON.stringify(r).slice(0, 240));
   check("A2 the peerlist and the answering identity are returned for the catalog intake", Array.isArray(r.peerlist) && r.peerlist.length === 2 && r.answeredId === SEED);
+  // One node that writes its key in another letter case on a second URL is one node: the intake gets one name for it.
+  const shouted = s(info({ identity: SEED.toUpperCase().replace("0X", "0x"), peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+  const sh = await readSeedInfo(shouted.node);
+  check("A2b the answering identity is given in lower case, whatever case the node wrote it in: one node answering in two letter cases is one peerlist for the catalog intake",
+    SEED === SEED.toLowerCase() && sh.ok === true && sh.answeredId === SEED && sh.answeredId === r.answeredId && sh.identityMatch === true, JSON.stringify([sh.answeredId, sh.identityMatch]));
 
   const versions = [];
   for (const v of ["0.9.8", "v1.2", "1.0.0-beta.2", "203.0.113.9:53550", "node7.example:53550", "10.0.0.8", "<b>x</b>", "testnet build of Tuesday", "", 7, null]) {

@@ -298,8 +298,20 @@ else {
   // --dial given by hand does not turn the dials back on: the switch decides, as it does in the agent.
   const byHand = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "--dial", "seed-a=" + A.url, "--dial", "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "0" }, stdout: "pipe", stderr: "pipe" });
   const byHandOut = await new Response(byHand.stdout).text(), byHandCode = await byHand.exited;
-  const withDials = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "1" }, stdout: "pipe", stderr: "pipe" });
+  // A store of this test's own, holding a kept candidate, in the folder the check would read by default (LOG_DIR).
+  const logDir = mkdtempSync(join(tmpdir(), "dno-pre-restart-logs-"));
+  {
+    const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs");
+    const db = new Database(join(logDir, "marketplace.db")), store = createCandidateStore(db);
+    store.save([{ key: "c7".repeat(32), url: "http://203.0.113.77:53550", at: Date.now() - 60000 }], Date.now() - 70000);
+    db.close();
+  }
+  const withDials = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "1", LOG_DIR: logDir }, stdout: "pipe", stderr: "pipe" });
   const withDialsOut = await new Response(withDials.stdout).text(); await withDials.exited;
+  rmSync(logDir, { recursive: true, force: true });
+  check("R11c3 with the seeds given as arguments the check does not read this host's store either: the candidate kept there is not read, and the witness line says the agent keeps none here",
+    withDialsOut.includes("  candidates: none (this run's validator round did not count, and the agent keeps none here)") && !/kept by the agent/.test(withDialsOut) && !/read as the agent reads them/.test(withDialsOut),
+    withDialsOut.split("\n").filter((l) => /candidates|read as the agent/.test(l)).join(" | "));
   check("R11c2 --dial given by hand is ignored while the switch is off (the list only, no dials, the same verdict); with the switch on the same run dials",
     byHandCode === 3 && byHandOut.includes("Watch (one round: the list only, no dials)") && !byHandOut.includes("with one dial per published origin") && byHandOut.split("\n").slice(-3).join("\n") === preOut.split("\n").slice(-3).join("\n")
     && !withDialsOut.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(withDialsOut),
