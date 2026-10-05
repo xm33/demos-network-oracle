@@ -208,7 +208,7 @@ var TIMELINE_RELEASE_EVENTS = [
 // A release dated by this server's store: the day the API version that carries it first started here (dno_meta,
 // written once by loadApiFirstStart). A release has no entry until that version has run on this store.
 var TIMELINE_STORE_DATED_RELEASES = [
-  { api: "1.2", type: "contract", text: "API 1.2 and methodology v1.2 served from this day: when fewer than two public seeds give their own height, validators that answer as listed stand in for the missing seed, and /organism says so in witnesses; status reads degraded after 30 minutes without a new height; a seed catching up is no longer counted as a new height." }
+  { api: "1.2", type: "contract", text: "API 1.2 and methodology v1.2 served from this day: when fewer than two public seeds give their own height, validators that answer as listed stand in for the missing seed, and /organism says so in witnesses; a reading that would be stable reads degraded after 30 minutes without a new height; a seed catching up is no longer counted as a new height." }
 ];
 var apiFirstStarts = {};   // api version -> ms, as kept in the store
 // Dated notes on stored records. A record is never edited: where it is shown, the note is added beside it. A note is
@@ -2600,6 +2600,16 @@ async function probeDiscoveredFixnetNodes() {
         var fetchedAt = Date.now();
         var resp = await cappedJson(connUrl + "/info", { redirect: "manual" }, { timeoutMs: 5000, maxBytes: INFO_BODY_MAX_BYTES });
         var latencyMs = fetchedAt - probedAt + resp.headersMs;
+        // An answer that is not an object (a 200 with the body null, or a list) is the peer's answer, and no /info:
+        // it must not make DNO's own code throw.
+        var isInfo = resp.ok && !!resp.data && typeof resp.data === "object" && !Array.isArray(resp.data);
+        if (resp.ok && !isInfo) {
+          sharedDb.run(
+            "UPDATE fixnet_validator_discoveries SET probe_ok = 0, last_probed_at = ?, last_latency_ms = NULL WHERE identity = ?",
+            [probedAt, r.identity]
+          );
+          return { ok: false, identity: r.identity, error: "invalid response" };
+        }
         if (resp.ok) {
           var data = resp.data;
           var selfBlock = null;

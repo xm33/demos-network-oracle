@@ -45,7 +45,7 @@ Built by [XM33](https://demos-oracle.com). Not an official Demos or KyneSys prod
 | `active_incidents` | integer | [/incidents](https://demos-oracle.com/incidents) |
 | `witnesses` | what the reading rests on: `seeds_only`, `seed_and_validators`, `validators_only` or `insufficient`, with counts | |
 
-Status is what the heights DNO read show of the network, not how many nodes DNO could read. A reading that would be `stable` is `degraded` once DNO has counted 30 minutes without a new block height.
+Status is what the heights DNO read show, not how many nodes DNO could read. A reading that would be `stable` is `degraded` once DNO has counted 30 minutes without a new block height.
 
 ## Quick start
 

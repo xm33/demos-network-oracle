@@ -7,8 +7,9 @@
 //   - each seed's /info with readSeedInfo (src/seed-read.mjs), the function the agent's public round calls
 //   - one validator round with src/validator-watch.mjs: the list read on the seeds, then one dial per published origin
 //     unless VALIDATOR_WATCH_DIALS switches the dials off (read with the agent's own function, dialsEnabled). The switch
-//     is taken from this process's environment, which holds .env of the folder this runs in (the runtime loads it). A
-//     value set only in the service unit is not seen here
+//     and LOG_DIR are read as the agent reads them: a line in .env of the folder this runs in wins over a variable of
+//     the shell (the runtime's own loading of .env lets the shell win, which the agent does not). A value set only in
+//     the service unit is not seen here
 //   - the validators that stand in for a seed, with readWitnesses (src/witnesses.mjs): this run's candidates when its
 //     validator round counted, else the ones the agent keeps in its store (LOG_DIR/marketplace.db in this folder,
 //     opened read-only; nothing is written to it). Not read when the dials are off
@@ -28,7 +29,7 @@
 //       DNO's own seed read look the same from here, so this is not a pass and nothing restarts on it by itself;
 //       64 the check could not run: no SDK here, or the seeds configured in src/agent.mjs could not be read from it.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +48,14 @@ const { run } = await import("./validator-set-probe.mjs");
 let rpcs = null;
 const seedsGiven = process.argv.slice(2).some((a) => /^[A-Za-z0-9._-]+=https?:\/\//.test(a));
 if (!seedsGiven) { try { rpcs = (await import("../src/fleet.config.mjs")).FLEET_CROSS_VALIDATION_RPCS || null; } catch (e) {} }
+// The two settings this check uses, as the agent reads them (src/agent.mjs reads .env itself, and its line wins). Only
+// these two names are taken, and no value is printed. Not when the seeds are given as arguments: that run is not about
+// this host's configuration.
+if (!seedsGiven) {
+  try {
+    readFileSync(".env", "utf8").split("\n").forEach((line) => { const m = line.match(/^([^#=]+)=(.*)$/); const k = m ? m[1].trim() : null; if (k === "VALIDATOR_WATCH_DIALS" || k === "LOG_DIR") process.env[k] = m[2].trim(); });
+  } catch (e) { /* no .env here: the process's environment stands */ }
+}
 // As the agent: the validator list is always read; published addresses are dialed unless the switch is off.
 const { dialsEnabled } = await import("../src/validator-watch.mjs");
 const dials = dialsEnabled(process.env.VALIDATOR_WATCH_DIALS);

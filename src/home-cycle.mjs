@@ -81,9 +81,10 @@ export function seedsParts(r, active) {
   // A stale observation's figures are as old as the observation: nothing is said about new heights then. "No new
   // height", not "the height has not moved": below the highest height read, a height DNO reads can rise without being new.
   // From the standstill limit on (1.2) a reading that would be stable reads degraded: the line says so.
+  // Beside one seed the count is the seed's: the validators counted with it can show higher heights meanwhile.
   if (dq !== "stale" && isNum(r.height_static_seconds) && r.height_static_seconds >= 300) {
     var limit = isNum(r.height_standstill_after_seconds) && r.height_standstill_after_seconds > 0 ? r.height_standstill_after_seconds : null;
-    p.stall = "No new height for " + Math.floor(r.height_static_seconds / 60) + " min"
+    p.stall = (stoodIn && mode === "seed_and_validators" ? "The seed has shown no new height for " : "No new height for ") + Math.floor(r.height_static_seconds / 60) + " min"
       + (limit !== null && compared && r.height_static_seconds >= limit ? "; from " + Math.floor(limit / 60) + " min on, status does not read stable." : ".");
   }
   if (isNum(r.active_incidents) && r.active_incidents > 0) p.incidents = r.active_incidents + " active public incident" + (r.active_incidents === 1 ? "" : "s") + ".";

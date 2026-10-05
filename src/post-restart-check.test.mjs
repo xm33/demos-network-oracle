@@ -151,7 +151,7 @@ console.log("\n[" + TAG + "] the wait and the verdict");
   const hung = await sim([slowHealth]);
   check("R4b /health times out for the whole wait: exit 4, and it says timeout", hung.code === 4 && hung.out[1].startsWith(`AGENT IS NOT ANSWERING after ${W} s: /health could not be read (timeout).`), JSON.stringify(hung.out));
   // An agent that does not stay up. After a poll that answered, a refused connection is the process gone.
-  const STAY = (why) => `THE AGENT DID NOT STAY UP DURING THIS CHECK (after ${W} s): ${why}. An agent that stops or starts again by itself is failing: roll back. (If you restarted the service yourself while this ran, run it again instead.)`;
+  const STAY = (why) => `THE AGENT DID NOT STAY UP DURING THIS CHECK (after ${W} s): ${why}. An agent that stops or starts again by itself is failing: roll back. systemd knows which: a start time later than your own restart, or a restart count above 0, is the proof; with the start time of your restart and a count of 0 the process did not start again, and this check is run once more instead.`;
   const stopped = await sim([at({ on_chain_validators: PENDING }), refused]);
   check("R5 seeds read once, then the port refuses: exit 3, never READING, 'roll back'", stopped.code === 3 && !/AGENT IS READING/.test(stopped.out.join("\n")) && stopped.out[stopped.out.length - 1] === STAY("its port stopped answering after it had answered"), JSON.stringify(stopped.out));
   const neverThenDown = await sim([OCT1, refused]);
@@ -205,7 +205,19 @@ console.log("\n[" + TAG + "] the wait and the verdict");
   const oneOut = at({ status: "unknown", data_quality: "insufficient", data_quality_reason: "too_few_answers", publicNodes: [own("kyne-node2"), no("kyne-node3", "timeout"), no("kyne-node3b")], on_chain_validators: NOLIST });
   const flake = await sim([...Array(POLLS - 1).fill(at({ on_chain_validators: NOLIST })), oneOut]);
   check("R10 reading for the whole wait, then one seed times out in the last round: exit 7, not 'Roll back'", flake.code === 7 && flake.polls === POLLS && !/[Rr]oll back\.|AGENT IS READING|NOT READING/.test(flake.out.join("\n"))
-    && flake.out[flake.out.length - 1] === `AGENT WAS READING DURING THIS CHECK AND IS NOT NOW (after ${W} s): fewer than two seeds answered, and no validator stood in. A seed that stops answering looks like this; the failure of 1 Oct never read. Not a rollback yet: run this again in a minute.`, JSON.stringify(flake.out));
+    && flake.out[flake.out.length - 1] === `AGENT WAS READING DURING THIS CHECK AND IS NOT NOW (after ${W} s): fewer than two seeds answered, and no validator stood in. A seed or a validator that stops answering looks like this; the failure of 1 Oct never read. Not a rollback yet: run this again in a minute.`, JSON.stringify(flake.out));
+  // A validator round that never completes: the list stays "pending" (no read has completed), which is not "not agreed".
+  const never = await sim([at({ on_chain_validators: PENDING })]), neverShort = await sim([at({ on_chain_validators: PENDING })], ["--wait", "30"]);
+  check("R17 seeds read and no read of the validator list completed in the whole wait: said apart from a list that is not agreed (exit 9), with where to look; after a wait too short for a first read it only says so (exit 5)",
+    never.code === 9 && never.polls === POLLS && never.out[never.out.length - 2] === "AGENT IS READING: two seeds gave their own height and the status comes from them."
+    && never.out[never.out.length - 1].startsWith(`THE VALIDATOR ROUND HAS NOT COMPLETED after ${W} s: no read of the validator list has finished since the agent started`) && /"round failed"/.test(never.out[never.out.length - 1]) && !/NOT AGREED/.test(never.out.join("\n"))
+    && neverShort.code === 5 && neverShort.out[neverShort.out.length - 1] === "THE VALIDATOR LIST HAS NOT BEEN READ YET after 30 s. A first read needs about a minute: run this again with the default wait.", JSON.stringify([never.code, never.out.slice(-2), neverShort.code, neverShort.out.slice(-1)]));
+  // A document on which this check's own code throws (a name that cannot be made a string) is the check's fault.
+  const odd = await sim([() => ({ publicNodes: [{ name: { toString: null } }] })]);
+  check("R18 a fault of the check's own on what /health returned is said as one (exit 70): not 'the agent does not answer', and no instruction to roll back",
+    odd.code === 70 && odd.polls === 1 && odd.out.length === 2 && odd.out[1] === "THIS CHECK FAILED ON WHAT /health RETURNED (TypeError): a fault in the check's own code. Nothing is concluded about the agent, and this is no reason to roll back. Send this output.", JSON.stringify(odd));
+  const three = await sim([at({ publicNodes: [own("kyne-node2"), own("kyne-node3"), own("kyne-node3b")] })]);
+  check("R19 with three seeds giving their own height the line says three, not two", three.code === 0 && three.out[three.out.length - 1] === "AGENT IS READING: three seeds gave their own height and the status comes from them. The validator list is agreed.", JSON.stringify(three.out));
   const flakeMid = await sim([at({ on_chain_validators: NOLIST }), oneOut, at({ on_chain_validators: NOLIST })]);
   check("R10b a round without enough seeds in the middle of the wait changes nothing: exit 5", flakeMid.code === 5 && flakeMid.polls === POLLS);
   const recovered = await sim([OCT1, OCT1, at({})]);

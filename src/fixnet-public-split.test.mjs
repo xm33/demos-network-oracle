@@ -29,7 +29,7 @@ let hits = 0;
 const srv = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { hits++; return Response.json({ identity: ID("f1"), peerlist: [{ identity: ID("f1"), sync: { block: 77 } }] }); } });
 const ORIGIN = "http://127.0.0.1:" + srv.port;
 
-function agent(resolve) {
+function agent(resolve, category) {
   const db = new Database(":memory:");
   db.run("CREATE TABLE fixnet_validator_discoveries (identity TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, connection TEXT, online INTEGER, last_block INTEGER, last_probed_at INTEGER, last_latency_ms INTEGER, probe_ok INTEGER)");
   db.run("CREATE TABLE validator_discoveries (identity TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, public_listed_since INTEGER)");
@@ -40,7 +40,7 @@ function agent(resolve) {
     + "\nreturn { discover: discoverFixnetValidators, probe: probeDiscoveredFixnetNodes, listed: publicListedIdentities,"
     + " crawl: function(ids, read) { latestPublicListed = new Set(ids); if (read) publicPeerlistRead = true; }, wait: function(id) { catalogPending.set(id, { sources: ['seed'] }); } };";
   const api = new Function("sharedDb", "isValidIdentity", "sanitizeHeight", "log", "logError", "resolvePublicProbeOrigin", "cappedJson", "INFO_BODY_MAX_BYTES", "probeErrorCategory", "mapWithConcurrency", code)(
-    db, isValidIdentity, sanitizeHeight, (m) => logs.push(m), (m) => logs.push(m), resolve || (async (u) => (String(u).startsWith("http://127.0.0.1:") ? u : null)), cappedJson, 2 * 1024 * 1024, probeErrorCategory, mapWithConcurrency);
+    db, isValidIdentity, sanitizeHeight, (m) => logs.push(m), (m) => logs.push(m), resolve || (async (u) => (String(u).startsWith("http://127.0.0.1:") ? u : null)), cappedJson, 2 * 1024 * 1024, category || probeErrorCategory, mapWithConcurrency);
   return Object.assign(api, { db, logs, kept: () => db.query("SELECT identity FROM fixnet_validator_discoveries ORDER BY identity").all().map((r) => r.identity) });
 }
 const peer = (id, conn) => ({ identity: id, connection: { string: conn || "http://203.0.113.9:53550" }, status: { online: true }, sync: { block: 431000 } });
@@ -98,6 +98,23 @@ console.log("\n[" + TAG + "] what the fixnet probe dials and shows");
     mixed.length === 3 && hits === 1 && shownOf(FIXNET) && shownOf(FIXNET).online === true && rowOf(OTHER).last_probed_at !== null && rowOf(OTHER).probe_ok === null
     && rowOf(FAULTY).last_probed_at === null && rowOf(FAULTY).probe_ok === null && shownOf(FAULTY) && shownOf(FAULTY).probed === false
     && b.logs.includes("  [fixnet-discovery] probed 1 discovered node(s), 1 skipped (address not public), 1 not checked (an internal error in DNO's own address check)"), JSON.stringify([mixed.length, hits, rowOf(OTHER), rowOf(FAULTY)]) + " | " + b.logs.join(" / "));
+  // A discovered node that answers 200 with a body that is no object (null, or a list): that is the peer's answer.
+  // DNO's own code must not throw on it: no error is categorised at all, and the row reads as a failed probe.
+  const nul = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { return new Response(new URL(req.url).port && req.url.includes("list") ? "[]" : "null", { headers: { "content-type": "application/json" } }); } });
+  const lst = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("[1,2]", { headers: { "content-type": "application/json" } }); } });
+  const seenErrors = [], NUL = ID("f4"), LST = ID("f5");
+  const c = agent(null, (e, st) => { seenErrors.push(e && e.name); return probeErrorCategory(e, st); });
+  c.crawl([LATEST], true);
+  c.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [NUL, "http://127.0.0.1:" + nul.port]);
+  c.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [LST, "http://127.0.0.1:" + lst.port]);
+  c.db.run("INSERT INTO fixnet_validator_discoveries (identity, first_seen, last_seen, connection, online, last_block) VALUES (?, 1, 2, ?, 1, 5)", [FIXNET, ORIGIN]);
+  await c.probe().catch(() => []);
+  const okOf = (id) => c.db.query("SELECT probe_ok, last_block FROM fixnet_validator_discoveries WHERE identity = ?").get(id);
+  check("P7 a discovered node that answers 200 with null, or with a list, is a failed probe and no fault of DNO's: nothing throws in DNO's own code (no error is categorised), and the node beside it is probed as before",
+    okOf(NUL).probe_ok === 0 && okOf(LST).probe_ok === 0 && okOf(FIXNET).probe_ok === 1 && okOf(FIXNET).last_block === 77 && seenErrors.length === 0, JSON.stringify([okOf(NUL), okOf(LST), okOf(FIXNET), seenErrors]));
+  check("P7b and the cycle's log line counts all three as probed: none is said to be 'not checked' for an internal error (the runbook counts those words in the agent's log)",
+    c.logs.includes("  [fixnet-discovery] probed 3 discovered node(s)") && !c.logs.some((l) => /internal error/.test(l)), c.logs.join(" / "));
+  nul.stop(true); lst.stop(true);
 }
 
 console.log("\n[" + TAG + "] the sources");

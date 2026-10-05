@@ -111,22 +111,25 @@ export function selectWitnesses(input) {
 //       then. DNO keeps that one time, not one for every height: when a height between the two was read earlier, the
 //       count is younger than that reading. It never runs from before DNO first read the height it stands on, or a
 //       higher one.
-//   A new height DNO saw arrive: a SEED above its own last answer that is the highest of its round and above
-//     everything read. Nothing else is one: a node heard for the first time, a node back at a height it showed
-//     before, a seed catching up, a change in which nodes answered. With validators alone DNO gives the count and
-//     never says it saw a height arrive: a median is not a node.
+//   A new height DNO saw arrive: a SEED above its own last answer, at the highest seed height of its round, and above
+//     everything read before that round. Nothing else is one: a node heard for the first time, a node back at a
+//     height it showed before, a seed catching up, a change in which nodes answered. With validators alone DNO gives
+//     the count and takes no arrival from them: a median is not a node.
+//   A seed that fell back (more than RULE.bandBlocks below its own last answer) is on another height now. Only a seed
+//     is said to fall back: the validators' height can drop because other validators answered. DNO then no longer
+//     claims the last arrival (seen is false until the next one): the seed may have taken that very height back, or
+//     every seed may be on a lower chain.
 //   At the top, or below it: nothing new.
 //   Start-over. When nothing has been read at the highest height DNO holds (read) for more than RULE.clockForgetSeconds
-//     while the nodes it does read kept rising below it, either a chain on a lower base is producing or the nodes DNO
-//     reads are catching up, and DNO cannot tell which. "Kept rising" is a run of rises (low), over rounds in which
-//     nothing at the held height was read:
+//     while the nodes it does read kept rising below it, a chain on a lower base is producing, the nodes DNO reads are
+//     catching up, or that height was one answer far above the others, and DNO cannot tell which. "Kept rising" is a
+//     run of rises (low), over rounds in which nothing at the held height was read:
 //       - a rise: a round whose highest source is above its own last answer, and above every answer it has given
 //         since the run began. The first rise begins a run;
-//       - the run is over when the held height is read again; when a source is more than RULE.bandBlocks below its
-//         own last answer (it is on another height now); when the round's highest source stands more than
-//         RULE.bandBlocks above the latest rise without having risen (a node that holds a height of its own; within
-//         the band it stands with the rising ones, and only makes them wait); and after RULE.clockForgetSeconds
-//         without a rise. The next rise begins a new run.
+//       - the run is over when the held height is read again; when a seed fell back; when the round's highest source
+//         stands more than RULE.bandBlocks above the latest rise without having risen (a node that holds a height of
+//         its own; within the band it stands with the rising ones, and only makes them wait); and after more than
+//         RULE.clockForgetSeconds without a rise. The next rise begins a new run.
 //     A rise in a run that began more than RULE.clockForgetSeconds before is the start-over. So a node going back and
 //     forth between two heights never gets there; and a node that keeps giving the held height, or a height of its
 //     own above the rising ones, holds the count for as long as it is read at least every ten minutes: DNO cannot
@@ -134,9 +137,10 @@ export function selectWitnesses(input) {
 //     At the start-over DNO gives the held height up: it follows the lower heights from this round, says so
 //     (heightMovementOf: following; assess: confidence uncertain), and claims no arrival while the height given up is
 //     remembered: for RULE.clockRememberSeconds after the last time it gave one up. While it follows, the count runs
-//     from each rise of the followed heights, as a lower bound.
+//     by the same rule over what it reads from that round on.
 //     Reading the height given up again, or a higher one (a source, or a counted validator), ends this: what DNO had
-//     read counts again, so that height is as old as its first reading, and a height above it is an ordinary new one.
+//     read counts again, so the count runs from the first reading of the height given up, and a height above it
+//     starts the count as any height above everything read does.
 // The stored rounds a restart replays go through the same fold, so the live rule and the restart rule are one.
 
 export const VALIDATORS_SOURCE = "validators:majority";
@@ -188,18 +192,19 @@ export function stepHeightClock(state, sources, at, counted) {
   var max = null;                                  // the round's highest source
   src.forEach(function(x) { if (max === null || x.h > max) max = x.h; });
   // risers: the sources at the round's highest height that are above their own last answers. arrival: a seed among
-  // them. fell: a source is more than the band below its own last answer (it is on another height now).
+  // them. fell: a seed is more than the band below its own last answer (it is on another height now).
   var risers = [], arrival = false, fell = false;
   src.forEach(function(x) {
     var before = s0.last ? s0.last[x.id] : null;
     if (isHeight(before)) {
       if (x.h > before && x.h === max) { risers.push(x.id); if (x.id !== VALIDATORS_SOURCE) arrival = true; }
-      else if (before - x.h > RULE.bandBlocks) fell = true;
+      else if (x.id !== VALIDATORS_SOURCE && before - x.h > RULE.bandBlocks) fell = true;
     }
     s.last[x.id] = x.h;
   });
   var roundRead = isHeight(counted) && counted > max ? counted : max;   // the highest height read in this round
   if (s.top === null) { s.top = max; s.topSince = at; s.read = roundRead; s.readSince = at; return s; }   // the first round: the count starts here
+  if (fell) s.seen = false;                        // the arrival last claimed is no longer claimed; one in this round is taken below
 
   var forget = RULE.clockForgetSeconds * 1000;
   var readBefore = s.read, readSinceBefore = s.readSince;
@@ -251,7 +256,8 @@ export function stepHeightClock(state, sources, at, counted) {
 //   advancedAt: when the last new height arrived (ms), if DNO saw it arrive. since: the moment staticSeconds is counted
 //     from (ms), whenever staticSeconds is published: a condition record opens with it. The caller formats both.
 //   following: after a start-over, DNO is following heights below one it read earlier (remembered for
-//     RULE.clockRememberSeconds after the last start-over). A chain restarted lower and nodes catching up look the same.
+//     RULE.clockRememberSeconds after the last start-over). A chain restarted lower, nodes catching up, and one answer
+//     far above the others look the same.
 export function heightMovementOf(state, observedAt, hadReading, cfg) {
   var s = state || newHeightClock(), c = cfg || {}, on = !!hadReading;
   var timed = isTime(observedAt) && observedAt > 0 && isTime(s.topSince) && observedAt >= s.topSince;
@@ -292,6 +298,8 @@ const blocksWord = function(n) { return n + " " + plural(n, "block", "blocks"); 
 const capital = function(s) { return s.charAt(0).toUpperCase() + s.slice(1); };
 // Said in every reading made while DNO follows lower heights after a start-over.
 const FOLLOWING_TEXT = "DNO has been following heights below a height it read earlier";
+// The causes DNO cannot tell apart: the third is a single answer, which no chain needs to have produced.
+const FOLLOWING_WHY = ", and cannot tell why from here: a chain restarted lower, nodes catching up, and one answer far above the others look the same";
 // status_reason's two phrases about agreement: the 1.1 words while the seeds decide.
 function reasonPhrases(mode, n) {
   if (mode === "seed_and_validators") return { aligned: "one public seed and " + validatorsWord(n) + " aligned", reduced: "Agreement reduced between one public seed and the validator closest to it" };
@@ -350,7 +358,7 @@ export function assess(input) {
   else if (w.compare[w.compare.length - 1] - w.compare[0] > RULE.confidenceGapBlocks) { confidence = "uncertain"; confidenceReason = "Public nodes report block heights more than 50 blocks apart"; }
   else if (mode === "validators_only") { confidence = "uncertain"; confidenceReason = "No public seed reported its own height: the reading rests on validators alone"; }
   else if (seedOutnumbered) { confidence = "uncertain"; confidenceReason = leftOut + " of " + withHeight + " validators that answered as listed with a height " + plural(leftOut, "is", "are") + " more than 25 blocks from the one public seed"; }
-  else if (following) { confidence = "uncertain"; confidenceReason = FOLLOWING_TEXT + ": a chain restarted lower and nodes catching up look the same from here"; }
+  else if (following) { confidence = "uncertain"; confidenceReason = FOLLOWING_TEXT + FOLLOWING_WHY; }
 
   // Status. A standstill turns a reading that would be stable into degraded; it never touches another status.
   var status;
@@ -369,7 +377,10 @@ export function assess(input) {
   else risk = "low";
 
   // "No new height", not "height unchanged": below the top a height DNO reads can rise without being a new one.
-  var staticText = staticSeconds === null ? "" : "no new height for " + Math.floor(staticSeconds / 60) + " min";
+  // Beside one seed the count is the seed's, and the words say whose: validators counted beside it can show higher
+  // heights meanwhile, and those are heights DNO has read.
+  var besideSeed = mode === "seed_and_validators";
+  var staticText = staticSeconds === null ? "" : (besideSeed ? "the seed has shown no new height for " : "no new height for ") + Math.floor(staticSeconds / 60) + " min";
   var stalled = !!move.stalled, advancing = !!move.advancing;
   var phrase = reasonPhrases(mode, n), aligned = phrase.aligned;
 
@@ -405,10 +416,11 @@ export function assess(input) {
 
   // A condition record's text is fixed when the record opens and the record can outlast its cause (a degraded reading
   // may go on for another reason), so the text is anchored at both ends: when the standstill began, and the opening.
-  var conditionReason = standstill ? (move.staticSince ? "No new height from " + move.staticSince + " UTC until this record opened" : "No new height for " + Math.floor(RULE.standstillSeconds / 60) + " min or more when this record opened") : statusReason;
+  var noNew = besideSeed ? "No new height at the seed " : "No new height ";
+  var conditionReason = standstill ? (move.staticSince ? noNew + "from " + move.staticSince + " UTC until this record opened" : noNew + "for " + Math.floor(RULE.standstillSeconds / 60) + " min or more when this record opened") : statusReason;
 
   var riskFactors = [];
-  if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push("Only " + pubReachable + " of " + pubTotal + " public nodes answered — limited cross-checking");
+  if (pubTotal > 2 && pubTotal - pubReachable > 1) riskFactors.push(pubReachable === 0 ? "No public seed answered" : "Only " + pubReachable + " of " + pubTotal + " public nodes answered — limited cross-checking");
   if (mode === "seed_and_validators") riskFactors.push("one public seed reported its own height; " + validatorsWord(n) + " " + plural(n, "is", "are") + " within 25 blocks of it");
   if (leftOut > 0) riskFactors.push(leftOut + " of " + withHeight + " validators that answered as listed with a height " + plural(leftOut, "is", "are") + " more than 25 blocks from the seed");
   if (mode === "validators_only") riskFactors.push("no public seed reported its own height; the reading rests on " + validatorsWord(n));

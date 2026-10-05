@@ -119,6 +119,15 @@ const still = { ...calmR, height_static_seconds: 1860, height_standstill_after_s
 eq("C38 31 minutes without a new height: the line says that status no longer reads stable", cycleSeeds(still, 35), "2 of 3 configured seeds answered. Their heights align. No new height for 31 min; from 30 min on, status does not read stable. Status is those seeds, not the 35.");
 check("C39 one second under the limit, or no limit published (API 1.1), or nothing compared: the plain sentence", cycleSeeds({ ...still, height_static_seconds: 1799 }, 35).includes("No new height for 29 min. Status")
   && cycleSeeds({ ...still, height_standstill_after_seconds: undefined }, 35).includes("No new height for 31 min. Status") && cycleSeeds({ ...none1, height_static_seconds: 4000, height_standstill_after_seconds: 1800 }, null).includes("No new height for 66 min. Status"));
+eq("C39b beside one seed the count is the seed's, and the line says whose: the validators counted with it can show higher heights meanwhile",
+  cycleSeeds({ ...oneSeed, height_static_seconds: 2460, height_standstill_after_seconds: 1800 }, null) + " | " + cycleSeeds({ ...oneSeed, height_static_seconds: 420, height_standstill_after_seconds: 1800 }, null),
+  "1 of 3 configured seeds answered. 2 validators that answer as listed are within 25 blocks of it. The seed has shown no new height for 41 min; from 30 min on, status does not read stable. Status is that seed and those validators."
+  + " | 1 of 3 configured seeds answered. 2 validators that answer as listed are within 25 blocks of it. The seed has shown no new height for 7 min. Status is that seed and those validators.");
+check("C39c with validators alone, with two seeds, and with a mode named without its validators the sentence names no seed",
+  cycleSeeds({ ...noSeed, height_static_seconds: 2460, height_standstill_after_seconds: 1800 }, null).includes("report heights that align. No new height for 41 min; from 30 min on, status does not read stable. Status is those validators alone.")
+  && cycleSeeds({ ...still, witnesses: wit("seeds_only", 2, null) }, 35) === cycleSeeds(still, 35)
+  && cycleSeeds({ ...still, witnesses: { mode: "seed_and_validators", validators: { counted: 0 } } }, 35) === cycleSeeds(still, 35)
+  && readbarText({ ...oneSeed, height_static_seconds: 420 }) === "1 of 3 configured seeds answered. 2 validators that answer as listed are within 25 blocks of it. The seed has shown no new height for 7 min.");
 eq("C40 the readbar in a reading that rests on validators", readbarText({ ...oneSeed, active_incidents: 1 }), "1 active public incident. 1 of 3 configured seeds answered. 2 validators that answer as listed are within 25 blocks of it.");
 check("C41 a mode named without its validators is not taken on its word: the line stays the seeds'", cycleSeeds({ ...calmR, witnesses: { mode: "validators_only", public_seeds: { own_height: 2 }, validators: null } }, 35) === cycleSeeds(calmR, 35)
   && cycleSeeds({ ...calmR, witnesses: { mode: "seed_and_validators", validators: { counted: 0 } } }, 35) === cycleSeeds(calmR, 35));

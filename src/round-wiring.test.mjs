@@ -570,9 +570,9 @@ const up = (h) => ({ seeds: [h, h, h] });
   script.push(up(6000), up(6000), up(6002));                             // rounds 57, 58, 59
   const live = await play(script), at = (i) => live.out[i].c;
   const FOLLOW = "DNO has been following heights below a height it read earlier";
-  check("C12 while the seeds rise below the highest height for ten minutes the count runs on and the reading is clear; then DNO follows them, and says so: uncertain with the reason, risk elevated, no arrival claimed",
-    at(38).confidence === "clear" && at(38).status_reason === "Public nodes aligned; no new height for 11 min" && at(38).height_static_seconds === 700 && at(38).height_last_advanced_at === iso(live.out[3].at)
-    && at(39).height_static_seconds === 0 && at(39).height_last_advanced_at === null && at(39).confidence === "uncertain" && at(39).confidence_reason === FOLLOW + ": a chain restarted lower and nodes catching up look the same from here" && at(39).risk === "elevated"
+  check("C12 from the round the seeds fell back the last arrival is no longer claimed; while they rise below the highest height for ten minutes the count runs on and the reading is clear; then DNO follows them, and says so: uncertain with the reason, risk elevated, no arrival claimed",
+    at(38).confidence === "clear" && at(38).status_reason === "Public nodes aligned; no new height for 11 min" && at(38).height_static_seconds === 700 && at(6).height_last_advanced_at === iso(live.out[3].at) && at(7).height_last_advanced_at === null && at(38).height_last_advanced_at === null
+    && at(39).height_static_seconds === 0 && at(39).height_last_advanced_at === null && at(39).confidence === "uncertain" && at(39).confidence_reason === FOLLOW + ", and cannot tell why from here: a chain restarted lower, nodes catching up, and one answer far above the others look the same" && at(39).risk === "elevated"
     && at(40).status === "stable" && at(40).status_reason === "Public nodes aligned" && at(40).height_static_seconds === 0 && at(40).height_last_advanced_at === null && at(40).confidence === "uncertain"
     && at(40).risk_factors.join("|") === "following heights below a height read earlier" && at(40).summary === "All 3 public seeds answered and their reported heights agree. " + FOLLOW + ".",
     brief([at(38).status_reason, at(39).confidence_reason, at(40).status_reason, at(40).height_static_seconds, at(40).risk_factors]));
@@ -632,6 +632,13 @@ const up = (h) => ({ seeds: [h, h, h] });
   }
   check("R4 a restart replays the last 24 hours of stored rounds and no more (a round exactly 24 h old is the oldest replayed): a standstill older than that is counted from the oldest round replayed, a lower bound",
     J(lateAt) === J([[9 * 20 * S, 86400, null, "degraded"], [10 * 20 * S, 86400 + 1 - 20, null, "degraded"]]), J(lateAt));
+  // (d) every round of the day is replayed: at the 20 s cadence that is 4,320 rows. A standstill of 4,300 rounds, and a
+  // restart: the count is the standstill's whole length. A limit on rows below a day of rounds would cut it short.
+  const long = []; for (let i = 0; i < 4303; i++) long.push(up(7000));
+  const t4 = Date.now(), liveL = await play(long), reL = await play(long, { restarts: [4300] });
+  check("R4b a restart after 4,300 rounds of standstill (23 h 53 min) replays every one of them: the count is 86,000 s as in the agent that kept running, and the readings after it are the same",
+    liveL.out[4300].c.height_static_seconds === 86000 && reL.out[4300].restored === true && reL.out[4300].c.height_static_seconds === 86000 && [4300, 4301, 4302].every((i) => sameRound(reL.out[i], liveL.out[i]))
+    && reL.out[4300].c.status === "degraded", brief([liveL.out[4300].c.height_static_seconds, reL.out[4300].c.height_static_seconds, reL.out[4300].restored, Date.now() - t4]));
 }
 
 console.log("\n[" + TAG + "] what a round without a reading keeps, and who can show a new height");
@@ -669,7 +676,8 @@ console.log("\n[" + TAG + "] what a round without a reading keeps, and who can s
     a2(89).status === "stable" && a2(90).status === "degraded" && a2(124).witnesses.mode === "seed_and_validators" && a2(124).status === "degraded" && a2(125).witnesses.mode === "validators_only" && a2(125).agreement.median_block === 1002
     && a2(125).status === "degraded" && a2(125).status_reason === "No new height for 41 min; 3 validators aligned, no public seed" && a2(125).height_static_seconds === 2500 && l2.out.every((x) => x.c.height_last_advanced_at === null)
     && l2.out.slice(90).every((x) => x.c.status === "degraded") && l2.out[124].clock.top === 1000 && l2.out[144].clock.top === 1002 && l2.out[144].clock.topSince === T0
-    && recs2.length === 1 && recs2[0].status === "active" && recs2[0].description === "Public network condition observed: No new height from " + iso(T0).slice(0, 19).replace("T", " ") + " UTC until this record opened"
+    && recs2.length === 1 && recs2[0].status === "active" && a2(124).status_reason === "The seed has shown no new height for 41 min; one public seed and 3 validators aligned"
+    && recs2[0].description === "Public network condition observed: No new height at the seed from " + iso(T0).slice(0, 19).replace("T", " ") + " UTC until this record opened"
     && l2.agent.rows()[124].witness_clock === J({ max: 1002 }) && l2.agent.rows()[125].witness_clock === J({ h: 1002, max: 1002 }),
     brief([a2(124).status, a2(125).status, a2(125).status_reason, a2(125).height_static_seconds, recs2, l2.agent.rows()[125].witness_clock], 900));
   check("N2b a restart at the switch, before it or after it says the same", await restartsAgree(s2, [60, 124, 125, 126, 140]) === null, brief(await restartsAgree(s2, [60, 124, 125, 126, 140]), 900));

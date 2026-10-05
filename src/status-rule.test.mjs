@@ -170,6 +170,9 @@ console.log("\n[" + TAG + "] no seed: validators alone");
     && a.confidence_reason === "No public seed reported its own height: the reading rests on validators alone");
   check("V2 its words", a.summary === "No public seed reported its own height. 3 validators that answer as listed report heights within 25 blocks of each other." && a.status_reason === "Heights advancing; 3 validators aligned, no public seed"
     && a.agreement_reason === "3 of 3 validators with a height within ±25 blocks of the median (spread: 1 block)" && a.risk_factors.includes("no public seed reported its own height; the reading rests on 3 validators"), a.summary + " | " + a.status_reason);
+  check("V2b when no seed answered the first risk factor says so in plain words (it read 'Only 0 of 3 public nodes answered'); with one of three it keeps the 1.1 words; with no reading at all it is the only factor",
+    JSON.stringify(a.risk_factors) === JSON.stringify(["No public seed answered", "no public seed reported its own height; the reading rests on 3 validators"])
+    && round(1, [H], [H]).risk_factors[0] === "Only 1 of 3 public nodes answered — limited cross-checking" && JSON.stringify(round(0, [], null).risk_factors) === JSON.stringify(["No public seed answered"]), JSON.stringify([a.risk_factors, round(0, [], null).risk_factors]));
   eq("V3 the witnesses object", a.witnesses, { mode: "validators_only", counted: 3, public_seeds: { configured: 3, answered: 0, own_height: 0 }, validators: { read: 3, own_height: 3, counted: 3, list_agreed_at: "2026-10-02T08:07:00.000Z" } });
   check("V4 one validator, or two that differ: unknown, as before", round(0, [], [H]).status === "unknown" && round(0, [], [H, H + 1000]).status === "unknown" && round(0, [], [H]).data_quality_reason === "too_few_answers" && round(0, [], [H]).agreement.median_block === null);
   check("V5 a split is no reading", round(0, [], [H - 900, H - 900, H, H]).status === "unknown");
@@ -330,6 +333,25 @@ console.log("\n[" + TAG + "] the height clock: the start-over");
     const off = run([[{ b: H - 400 }, 320]], on), back = run([[{ b: H - 885 }, 340]], off), steps = []; for (let t = 360, h = H - 884; t <= 980; t += 20, h++) steps.push([{ b: h }, t]);
     const x = run(steps.slice(0, -1), back), y = run(steps, back);
     return J(off.low) === J({ h: H - 400, since: at(40), last: at(320), hi: { b: H - 400 } }) && back.low === null && x.gave === null && x.low.since === at(360) && y.gave !== null && y.gave.at === at(980) && y.gave.top === H + 1; })());
+  check("O17 only a seed is said to fall back. With validators alone, the height more than half of them have reached drops by 28 blocks every other round because other validators answer, while every one of them rises: the run of rises goes on, and DNO starts over after ten minutes of them. A seed that does the same falls back every other round, and in two hours never gets there", (() => {
+    const steps = (id) => { const out = []; for (let t = 40, i = 0; t <= 7240; t += 20, i++) out.push([{ [id]: H - 800 + 2 * i - (i % 2 ? 28 : 0) }, t]); return out; };   // two hours: still below the held height
+    const v = steps(V), x = run(v.slice(0, 34), held), y = run(v.slice(0, 35), held), seed = run(steps("b"), held);
+    return x.gave === null && x.low !== null && x.low.since === at(80) && y.gave !== null && y.gave.at === at(720) && y.gave.top === H + 1 && seed.gave === null && seed.top === H + 1; })());
+  check("O18 two seeds reach the round's highest height together; one is only back on its own highest answer of the run, the other is above its own: that round is a rise (one of the highest nodes rose), and here it is the start-over", (() => {
+    const steps = [[{ b: H - 897, c: H - 899 }, 40], [{ b: H - 895, c: H - 899 }, 60]]; for (let t = 80; t <= 640; t += 20) steps.push([{ b: H - 896, c: H - 899 }, t]);
+    const x = run(steps, held), y = run([[{ b: H - 895, c: H - 895 }, 660]], x), alone = run([[{ b: H - 895, c: H - 899 }, 660]], x);
+    return x.gave === null && J(x.low) === J({ h: H - 895, since: at(40), last: at(60), hi: { b: H - 895, c: H - 899 } }) && y.gave !== null && y.gave.at === at(660) && y.top === H - 895 && alone.gave === null && alone.low !== null && alone.low.last === at(60); })());
+  check("O19 one answer of one seed far above the others, during a standstill: in that round it is a new height DNO saw arrive; the round the seed is back, the arrival is no longer claimed (no time, no 'advancing'). The count stays where that answer put it, which is the stated limit: the standstill reads as 20 s old", (() => {
+    const steps = [[{ a: 1000, b: 1000, c: 1000 }, 0], [{ a: 1001, b: 1000, c: 1000 }, 20]]; for (let t = 40; t <= 2400; t += 20) steps.push([{ a: 1001, b: 1001, c: 1001 }, t]);
+    const still = run(steps), far = run([[{ a: 5000, b: 1001, c: 1001 }, 2420]], still), back = run([[{ a: 1001, b: 1001, c: 1001 }, 2440]], far), stays = run([[{ a: 5000, b: 1001, c: 1001 }, 2440]], far);
+    return said(still, 2400).staticSeconds === 2380 && J(said(far, 2420)) === J({ staticSeconds: 0, advancedAt: at(2420), since: at(2420), advancing: true, stalled: false, following: false })
+      && J(said(back, 2440)) === J({ staticSeconds: 20, advancedAt: null, since: at(2420), advancing: false, stalled: false, following: false }) && back.top === 5000 && back.seen === false && back.gave === null
+      && said(stays, 2440).advancing === true && said(stays, 2440).advancedAt === at(2420); })());
+  check("O19b every seed on a lower chain the round after a new height: nothing says 'advancing' any more; a seed that shows a new height in the round another one fell back is still an arrival; and a drop of the validators' height withdraws nothing", (() => {
+    const up = run([[{ a: 100002, b: 100002 }, 0], [{ a: 100004, b: 100004 }, 20]]), low = run([[{ a: 99804, b: 99804 }, 40]], up), both = run([[{ a: 100006, b: 99000 }, 40]], up);
+    const v = run([[{ a: 1000 }, 0], [{ [V]: 1005 }, 20], [{ a: 1010 }, 40], [{ [V]: 975 }, 60]]);
+    return said(up, 20).advancing === true && J([said(low, 40).advancing, said(low, 40).advancedAt, said(low, 40).staticSeconds, low.top]) === J([false, null, 20, 100004])
+      && J([said(both, 40).advancing, said(both, 40).advancedAt, both.top]) === J([true, at(40), 100006]) && J([said(v, 60).advancing, said(v, 60).advancedAt, v.top, v.seen]) === J([true, at(40), 1010, true]); })());
   check("O13 a node going back and forth beside one that stands at its upper height (a tie in every other round) rises once in a run: no start-over", (() => { const steps = []; for (let t = 40, i = 0; t <= 7240; t += 20, i++) steps.push([{ b: H - 800 + (i % 2), c: H - 799 }, t]);
     const x = run(steps, held); return x.gave === null && x.top === H + 1 && said(x, 7240).staticSeconds === 7220; })());
   check("O14 two nodes that follow the same heights and answer in turn, one a block behind the other: each rises above its own last answer, and the run goes on to a start-over", (() => { const steps = []; for (let t = 40, i = 0; t <= 700; t += 20, i++) steps.push([i % 2 ? { b: H - 800 + i } : { c: H - 801 + i }, t]);
@@ -400,8 +422,16 @@ console.log("\n[" + TAG + "] standstill: a reading that would be stable reads de
   check("T7b but it is said in every reading it holds in: the summary and the risk factors of a degraded or unstable reading name it", m.summary === "Degraded reading of the public seeds: no new height for 150 min; agreement moderate."
     && m.risk_factors.includes("no new height for 150 min") && u.summary === "Unstable reading of the public seeds: 1 of 3 public nodes did not answer; no new height for 150 min; agreement weak." && u.risk_factors.includes("no new height for 150 min")
     && !round(3, [H - 300, H, H], null, { movement: mv(1799) }).summary.includes("no new height") && !round(1, [H], null, { movement: mv(9000) }).summary.includes("no new height"), m.summary + " | " + u.summary);
-  check("T8 it applies in the fallback modes too", round(1, [H], [H], { movement: mv(1800) }).status === "degraded" && round(1, [H], [H], { movement: mv(1800) }).status_reason === "No new height for 30 min; one public seed and 1 validator aligned"
-    && round(0, [], [H, H], { movement: mv(1800) }).status === "degraded" && round(0, [], [H, H], { movement: mv(1800) }).status_reason === "No new height for 30 min; 2 validators aligned, no public seed");
+  const beside = round(1, [H], [H], { movement: mv(1800) }), besideOn = round(1, [H], [H, H + 3], { movement: mv(480) });
+  check("T8 it applies in the fallback modes too. Beside one seed the count is the seed's, and every word of the reading says whose: validators counted beside it may show higher heights meanwhile", beside.status === "degraded"
+    && beside.status_reason === "The seed has shown no new height for 30 min; one public seed and 1 validator aligned" && beside.risk_factors.includes("the seed has shown no new height for 30 min")
+    && beside.summary === "Degraded reading of one public seed and 1 validator: 2 of 3 public nodes did not answer; the seed has shown no new height for 30 min; agreement strong."
+    && beside.condition_reason === "No new height at the seed from 2026-10-02 11:47:20 UTC until this record opened"
+    && round(1, [H], [H], { movement: Object.assign(mv(1800), { staticSince: null }) }).condition_reason === "No new height at the seed for 30 min or more when this record opened"
+    && besideOn.status === "stable" && besideOn.status_reason === "One public seed and 2 validators aligned; the seed has shown no new height for 8 min"
+    && besideOn.summary === "One public seed reported its own height, and 2 validators that answer as listed are within 25 blocks of it. The seed has shown no new height for 8 min."
+    && round(0, [], [H, H], { movement: mv(1800) }).status === "degraded" && round(0, [], [H, H], { movement: mv(1800) }).status_reason === "No new height for 30 min; 2 validators aligned, no public seed"
+    && round(0, [], [H, H], { movement: mv(1800) }).condition_reason === "No new height from 2026-10-02 11:47:20 UTC until this record opened", J([beside.status_reason, beside.summary, beside.condition_reason, besideOn.status_reason, besideOn.summary]));
   check("T9 outside a standstill the record's text is the status reason", before.condition_reason === before.status_reason);
 }
 
@@ -483,7 +513,7 @@ console.log("\n[" + TAG + "] fields of one reading do not contradict each other"
       : / 1 blocks\b|\b1 validators\b|\b1 others\b/.test(text) ? "a plural of one"
       : /height unchanged|has not moved/i.test(text + r.risk_factors.join(" ")) ? "an old standstill phrase"
       : r.status === "unknown" && /no new height/i.test(text) ? "a standstill said without a reading"
-      : sec !== null && sec >= 1800 && r.status !== "unknown" && !r.risk_factors.some((f) => f.startsWith("no new height for ")) ? "a standstill of 30 min not in the risk factors"
+      : sec !== null && sec >= 1800 && r.status !== "unknown" && !r.risk_factors.some((f) => f.startsWith(r.witnesses.mode === "seed_and_validators" ? "the seed has shown no new height for " : "no new height for ")) ? "a standstill of 30 min not in the risk factors"
       : r.status === "stable" && sec !== null && sec >= 1800 ? "stable in a standstill" : null;
     if (why && !bad) bad = { why, seeds, v, sec, text, risk_factors: r.risk_factors };
   }
@@ -496,7 +526,7 @@ console.log("\n[" + TAG + "] after a start-over the reading says that DNO follow
   const fl = (on, sec) => ({ movement: { staticSeconds: sec === undefined ? 0 : sec, advancing: false, stalled: false, following: on, staticSince: null } });
   const r = round(3, [H, H, H], null, fl(true)), plain = round(3, [H, H, H], null, fl(false));
   check("L1 a reading of the seeds made while DNO follows lower heights: stable, confidence uncertain with the reason, risk elevated with the factor, and the summary says it",
-    r.status === "stable" && r.status_reason === "Public nodes aligned" && r.confidence === "uncertain" && r.confidence_reason === FOLLOW + ": a chain restarted lower and nodes catching up look the same from here"
+    r.status === "stable" && r.status_reason === "Public nodes aligned" && r.confidence === "uncertain" && r.confidence_reason === FOLLOW + ", and cannot tell why from here: a chain restarted lower, nodes catching up, and one answer far above the others look the same"
     && r.risk === "elevated" && r.risk_factors.join("|") === FACTOR && r.summary === "All 3 public seeds answered and their reported heights agree. " + FOLLOW + ".", JSON.stringify([r.confidence_reason, r.risk, r.risk_factors, r.summary]));
   check("L2 without it the same heights read clear and low, and none of those words is said", plain.confidence === "clear" && plain.risk === "low" && !/following/i.test(JSON.stringify(plain)), JSON.stringify(plain.risk_factors));
   const none = round(1, [H], null, fl(true));

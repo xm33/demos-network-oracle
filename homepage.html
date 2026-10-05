@@ -711,7 +711,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
             <p class="door"><span id="door-n"></span><a href="#catalog" id="door">find a node</a></p>
           </div>
         </div>
-        <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale. Public assessment is unknown. Peer-listed identities do not enter status.</p>
+        <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale or not made yet. Public assessment is unknown. Peer-listed identities do not enter status.</p>
         <div class="strip cards" id="cards">
           <div data-card="trend"><p class="k">trend</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="trend" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> trend</span></button></div>
           <div data-card="risk"><p class="k">risk</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="risk" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> risk</span></button></div>
@@ -1031,7 +1031,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <p class="words-k">DNO's words · seen from outside</p>
           <dl class="words-list">
             <div><dt><code>stable</code></dt><dd>this cycle's reading of the public seeds, or of the validators standing in for them, while DNO has not counted 30 minutes without a new height. Not <code>ok</code>, not <code>ACTIVE</code>.</dd></div>
-            <div><dt><code>strong</code></dt><dd>every height counted sits within ±25 blocks of the median, and the spread is at most 20 blocks.</dd></div>
+            <div><dt><code>strong</code></dt><dd>every height compared sits within ±25 blocks of the median, and the spread is at most 20 blocks.</dd></div>
             <div><dt><code>sufficient</code></dt><dd><span data-v10="at least two seeds answered, and the observation is at most 300 s old.">at least two seeds reported their own height, or validators that answer as listed stood in for the missing one, and the observation is at most 300 s old.</span> It describes DNO's vantage, not the network.</dd></div>
             <div><dt>peer-reported</dt><dd>what a public peerlist said. Never confirmed by DNO.</dd></div>
             <div><dt>at the seeds' height</dt><dd>a validator's own height, in its answer to DNO, within ±25 blocks of the seeds' median. Not Demos' sync check.</dd></div>
@@ -1070,9 +1070,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 (() => {
   'use strict';
 
-  // ---------- Constants ----------
-  // The repo build is served by the agent itself and reads the same origin. The standalone build reads
-  // demos-oracle.com unless it is served from there (every public endpoint allows any origin).
   const SERVED_BY_AGENT = true;
   const ORIGIN = SERVED_BY_AGENT || /(^|\.)demos-oracle\.com$/i.test(location.hostname) ? '' : 'https://demos-oracle.com';
   const PUBLIC_BASE = SERVED_BY_AGENT ? location.origin : 'https://demos-oracle.com';
@@ -1111,7 +1108,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   const dim = (t) => el('span', { class: 'dim', text: t });
   function setText(node, text) { if (node && node.textContent !== text) node.textContent = text; }
   function setTone(node, tone) { if (node && node.dataset.tone !== tone) node.dataset.tone = tone; }
-  // Rebuilding a region must not drop keyboard focus: a focused link inside it is found again by its href.
   function rebuildKeepingFocus(host, build) {
     const a = document.activeElement;
     const href = a && a !== host && host.contains(a) && a.matches('a[href]') ? a.getAttribute('href') : null;
@@ -1135,7 +1131,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   }
   const plural = (n, one, many) => `${fmtInt(n)} ${n === 1 ? one : many}`;   // n is a number: a formatted string would never be singular
 
-  // ---------- Reading ----------
   class ReadError extends Error {}
   const reads = {
     organism:  { path: '/organism', data: null, at: 0, error: null, errorAt: 0 },
@@ -1158,8 +1153,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       throw new ReadError(`${path.split('?')[0]} could not be reached from this browser`);
     } finally { clearTimeout(timer); }
   }
-  // A kept reading is shown after a failed read only while its observation is at most 300 s old, DNO's own
-  // freshness bound. After that the page says it has no reading, as it does before the first one.
   const KEEP_MS = 300000;
   const readingAge = (r) => (isNum(r.data && r.data.staleness_seconds) ? r.data.staleness_seconds * 1000 : 0) + (Date.now() - r.at);
   async function refresh(key) {
@@ -1171,14 +1164,12 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       return false;
     }
   }
-  // /health and /organism carry the same public reading; prefer /health where the contract names it.
   const pick = (field) => {
     const h = reads.health.data, o = reads.organism.data;
     if (h && field in h) return h[field];
     return o ? o[field] : undefined;
   };
 
-  // ---------- Definitions (summarised from /methodology and the public computation) ----------
   const TONE = {
     status: { stable: 'ok', degraded: 'warn', unstable: 'bad', unknown: 'unknown' },
     trend: { improving: 'ok', stable: 'neutral', worsening: 'warn', unknown: 'unknown' },
@@ -1215,7 +1206,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       ['weak', 'Fewer than 60% are within ±25 blocks of the median.'],
       ['unknown', 'Not compared: data quality insufficient (fewer than two seeds reported their own height and no validator stood in, or the observation is stale).']] },
   };
-  // api 1.0 took each seed's height from the first entry on its peerlist, which is not always the seed itself.
   const DEFS10 = {
     status: { unknown: 'Data quality insufficient: fewer than two seeds answered, or the last cycle is more than 300 s old.' },
     trend: { unknown: 'Fewer than 10 prior cycles recorded, or data quality insufficient.' },
@@ -1226,7 +1216,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       strong: 'Every height counted is within ±25 blocks of the median, and the spread is at most 20 blocks.',
       unknown: 'Not compared: fewer than two seeds answered, or fewer than two returned a height.' },
   };
-  // The serving version decides the copy: 1.0 wording replaces 1.1 wording while the reading reports api 1.0.
   let API10 = false;
   function applyVersion() {
     const v = pick('api_version');
@@ -1282,7 +1271,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     renderExplain(hostId);
   }));
 
-  // ---------- This cycle ----------
   function flash(cell) {
     cell.classList.remove('changed'); void cell.offsetWidth; cell.classList.add('changed');
     clearTimeout(cell._t); cell._t = setTimeout(() => cell.classList.remove('changed'), 2400);
@@ -1300,7 +1288,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   }
   const lower = (v) => (typeof v === 'string' && v ? v.toLowerCase() : null);
 
-  // The card's three lines (advisor, 1 Oct) are src/home-cycle.mjs, carried here verbatim by the build:
   const HOME_CYCLE = (() => {
 // home-cycle.mjs — the This cycle card's lines, one source: the agent's page for readers without JavaScript and the
 // page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases. No imports.
@@ -1385,9 +1372,10 @@ function seedsParts(r, active) {
   // A stale observation's figures are as old as the observation: nothing is said about new heights then. "No new
   // height", not "the height has not moved": below the highest height read, a height DNO reads can rise without being new.
   // From the standstill limit on (1.2) a reading that would be stable reads degraded: the line says so.
+  // Beside one seed the count is the seed's: the validators counted with it can show higher heights meanwhile.
   if (dq !== "stale" && isNum(r.height_static_seconds) && r.height_static_seconds >= 300) {
     var limit = isNum(r.height_standstill_after_seconds) && r.height_standstill_after_seconds > 0 ? r.height_standstill_after_seconds : null;
-    p.stall = "No new height for " + Math.floor(r.height_static_seconds / 60) + " min"
+    p.stall = (stoodIn && mode === "seed_and_validators" ? "The seed has shown no new height for " : "No new height for ") + Math.floor(r.height_static_seconds / 60) + " min"
       + (limit !== null && compared && r.height_static_seconds >= limit ? "; from " + Math.floor(limit / 60) + " min on, status does not read stable." : ".");
   }
   if (isNum(r.active_incidents) && r.active_incidents > 0) p.incidents = r.active_incidents + " active public incident" + (r.active_incidents === 1 ? "" : "s") + ".";
@@ -1419,10 +1407,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     if (vm.mode === 'pending') return 'ACTIVE on chain: reading.';
     return HOME_CYCLE.cycleLead(vm.oc);
   }
-  // Line 2 is made from one document: /health (seeds and agreement) when it carries the same observation as /organism,
-  // or, read this cycle, agrees with it on what status is made of (status, data quality, agreement, incidents); else
-  // /organism's own fields, which hold no answered count. An api 1.0 server's agreement counts are not the 1.1
-  // own-height counts, so only its word is used.
   const agWord = (a) => lower(a && typeof a === 'object' ? a.state : a);
   const restsOn = (x) => (x && x.witnesses && typeof x.witnesses === 'object' ? x.witnesses.mode || null : null);
   const statusAlike = (h, o) => lower(h.status) === lower(o.status) && agWord(h.agreement) === agWord(o.agreement)
@@ -1465,7 +1449,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
 
     const card = (key, subText) => { const v = lower(o[key]); setCard(key, v ? (TONE[key][v] || 'neutral') : 'unknown', v || 'unknown', subText); };
     card('trend', '');
-    // Reason lines come from /health; if /health is a cycle apart from /organism, /organism's own copy is used.
     const same = (key) => !!h && lower(h[key]) === lower(o[key]);
     const rf = same('risk') && Array.isArray(h.risk_factors) ? h.risk_factors : o.risk_factors;
     card('risk', Array.isArray(rf) && rf.length ? rf.map(String).join(' · ') : '');
@@ -1476,8 +1459,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     renderExplain('x-cycle');
     renderNotices(); renderReadbar(HOME_CYCLE.readbarText(r));
   }
-  // The slim bar that follows the reader once the panel has scrolled away. It repeats the panel: status, then what
-  // moves it (incidents first, then the seeds and their heights); it adds nothing.
   function renderReadbar(text) {
     const o = reads.organism.data;
     const st = o ? lower(o.status) : null;
@@ -1518,10 +1499,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     setText($('rb-live'), text);
   }
 
-  // ---------- How the reading is formed: five paths ----------
   let pathSel = 'seeds';
-  // Seeds that reported their own height. api 1.1 says where a height came from; under 1.0 every answering seed with a
-  // block counted, as the 1.0 server did.
   const ownHeightCount = (nodes) => nodes.filter((n) => n && n.ok === true && isNum(n.block) && n.block > 0 && (n.height_source === undefined || n.height_source === 'self')).length;
   function renderPaths() {
     const h = reads.health.data, o = reads.organism.data;
@@ -1543,7 +1521,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     setText($('pl-validators'), vm.mode === 'oneread' ? `${ONE_READ.active} ACTIVE in one read` : vm.mode === 'live'
       ? (vm.R.active.n != null ? `${fmtInt(vm.R.active.n)} ACTIVE${vm.R.answered.n != null ? ` · ${fmtInt(vm.R.answered.n)} answered as that key` : ''}` : vm.R.active.text)
       : vm.mode === 'unread' ? 'not read' : 'reading');
-    // Validators the reading rests on this cycle (/organism witnesses, api 1.2): the row says so and is drawn as a path into status.
     const inStatus = standingIn(o);
     if (inStatus) setText($('pl-validators'), `${vm.mode === 'live' && vm.R.active.n != null ? `${fmtInt(vm.R.active.n)} ACTIVE · ` : ''}${inStatus} in status this cycle`);
     $('tab-validators').classList.toggle('path--status', inStatus > 0);
@@ -1558,7 +1535,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
     const wait = () => dim(h ? 'not reported' : reads.health.error ? 'not read' : 'reading');
     const kv = (pairs) => el('dl', { class: 'pp-kv' }, pairs.map(([k, v]) => el('div', null, el('dt', { text: k }), el('dd', null, v))));
-    // What the reading rests on (/organism witnesses, api 1.2): counts only.
     const restsOnWords = (w) => { const c = w.validators && isNum(w.validators.counted) ? w.validators.counted : 0;
       return { seeds_only: 'the seeds alone', seed_and_validators: `one seed and ${c} validator${c === 1 ? '' : 's'}`, validators_only: `${c} validators, no seed`, insufficient: 'nothing: no reading' }[w.mode] || 'not reported'; };
     const links = (...ls) => el('p', { class: 'pp-links' }, ls.map(([href, t]) => el('a', { href, text: t })));
@@ -1653,7 +1629,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     });
   });
 
-  // ---------- Agreement ----------
   function setOdometer(value, why = 'not observed') {
     const node = $('odo');
     if (value == null) {
@@ -1698,8 +1673,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     } else {
       const s = lower(a.state);
       setCard('agreement', s ? (TONE.agreement[s] || 'neutral') : 'unknown', s || 'unknown', '');
-      // With fewer than two heights the API does not compare heights: total_nodes then carries the
-      // configured-seed count and block_spread a placeholder 0. Neither is printed as an observation.
       const compared = s != null && s !== 'unknown';
       setVal($('ag-aligned'), !compared ? 'not computed' : isNum(a.aligned_nodes) && isNum(a.total_nodes) ? `${a.aligned_nodes} / ${a.total_nodes}` : 'not reported');
       setVal($('ag-spread'), !compared ? 'not computed' : isNum(a.block_spread) ? plural(a.block_spread, 'block', 'blocks') : 'not reported');
@@ -1711,17 +1684,16 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     renderExplain('x-agree');
     renderLanes();
   }
-  // Seconds since DNO first read the height its count stands on (the field is api 1.1's, the rule 1.2's). It is 0 in
-  // the cycle the count starts: with height_last_advanced_at, a seed's new height arrived; without it, the count began
-  // on a first reading (nothing is said to rise: a first round is such a cycle). While height_last_advanced_at is
-  // null the figure is a lower bound, and no arrival is said. Absent: no line.
   function renderHeightLine() {
     const node = $('ag-height'), hs = pick('height_static_seconds');
     if (hs === undefined) { node.hidden = true; return; }
     node.hidden = false;
     const seen = typeof pick('height_last_advanced_at') === 'string', span = hs < 120 ? `${hs} s` : `${Math.floor(hs / 60)} min`;
+    const w = pick('witnesses'), rf = pick('risk_factors'), seed = !!w && w.mode === 'seed_and_validators';
+    const following = Array.isArray(rf) && rf.includes('following heights below a height read earlier');
     setText(node, !isNum(hs) ? 'height movement not observed this cycle'
-      : hs === 0 ? (seen ? 'a new height arrived this cycle' : 'count started this cycle; no arrival seen')
+      : hs === 0 ? (seen ? 'a new height arrived this cycle' : following ? 'following lower heights; no arrival is claimed' : 'count started this cycle; no arrival seen')
+      : seed ? `the seed has shown no new height for ${seen ? '' : 'at least '}${span}`
       : seen ? `no new height for ${span}` : `no new height seen for at least ${span}`);
   }
   let laneKey = '';
@@ -1772,7 +1744,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     rows.forEach((r) => {
       const m = laneMarks.get(String(r.display)); if (!m) return;
       const pn = nodes.find((n) => n && n.name === r.display);
-      // api 1.1: a seed that does not list itself has no height of its own; its first listed peer's is drawn hollow.
       const peer = pn && pn.ok === true && pn.height_source === 'first_peer' && isNum(pn.block) && pn.block > 0 ? pn.block : null;
       const own = r.online === true && isNum(r.block) && r.block > 0 && !(pn && pn.height_source === 'first_peer');
       const place = (block, hollow, txt) => {
@@ -1795,7 +1766,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     });
   }
 
-  // ---------- Last 24 hours ----------
   function render24h() {
     const o = reads.organism.data, box = $('h24');
     const item = (k, v, s, extra) => el('div', null, el('p', { class: 'k', text: k }), el('p', { class: 'v' }, v), extra || null, s ? el('p', { class: 's', text: s }) : null);
@@ -1834,13 +1804,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     box.replaceChildren(...items);
   }
 
-  // ---------- Validators on chain ----------
-  // One read made with DNO's probe tool (tools/validator-set-probe.mjs) before any server published the field. Shown, dated
-  // and marked, only while /health has no on_chain_validators; never as this cycle.
   const ONE_READ = { at: '2026-09-29T11:31:45Z', listed: 35, active: 35, stake: '1000000000000' };
   const RUNGS = ['active', 'answered', 'height', 'hour'];
-  // What the ladder shows. mode: pending | unread | oneread (the server has no such field) | live.
-  // R[rung] = { n: count or null, text: the word shown when there is no count, note: why }.
   function validatorModel() {
     const h = reads.health.data;
     const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : null);
@@ -1878,7 +1843,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     }
     return { mode, oc, w, R, base };
   }
-  // Every ACTIVE row of this round in exactly one part, from the most observed to the least. Parts with no row are left out.
   function accountingParts(w) {
     const n = (v) => (isNum(v) ? v : 0), r = w.not_dialed_reasons || {};
     const kinds = [[n(w.off_seed_height), "away from the seeds' height"], [n(w.height_not_reported), 'no own height in the answer'], [n(w.height_not_compared), 'height not compared this round']].filter(([c]) => c > 0);
@@ -1897,7 +1861,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   function accountingNotes(w) {
     const n = (v) => (isNum(v) ? v : 0), r = w.not_dialed_reasons || {}, out = [];
     const shared = n(w.other_key_shared), origins = n(w.other_key_shared_origins);
-    // The advisor's sentence (29 Sep), with this round's counts.
     if (shared > 0) out.push(`${fmtInt(shared)} listed ${shared === 1 ? 'key shares' : 'keys share'} ${origins > 1 ? `${fmtInt(origins)} published origins, each with a key that answered` : 'one published origin with a key that answered'}. That is not ${shared === 1 ? 'a node' : `${fmtInt(shared)} nodes`} down.`);
     if (n(r.no_address) > 0) out.push(`${fmtInt(r.no_address)} ${r.no_address === 1 ? 'row publishes' : 'rows publish'} no address on chain: there is nothing to dial.`);
     if (n(w.no_answer) > 0) out.push('No answer is not an exit: the row on chain does not change, and why it did not answer is not known from here.');
@@ -1907,7 +1870,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     const box = $('vw-acct'), w = vm.w;
     if (!(vm.mode === 'live' && w && w.state === 'observed' && isNum(w.watched) && w.watched > 0)) { box.hidden = true; delete box.dataset.sig; return; }
     const parts = accountingParts(w), notes = accountingNotes(w);
-    // The bar claims every ACTIVE row sits in exactly one part. If the parts a server reports do not add up, no bar is drawn.
     const whole = parts.reduce((t, [, c]) => t + c, 0) === w.watched;
     if (!whole) notes.unshift(`These parts do not add up to the ${fmtInt(w.watched)} ACTIVE rows of this round, so no bar is drawn. The counts are as reported.`);
     const dialedN = w.watched - (isNum(w.not_dialed) ? w.not_dialed : 0);
@@ -1924,9 +1886,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     $('acct-notes').hidden = !notes.length;
     markAccounting(acctMark);
   }
-  // Pointing at a part of the bar or a legend row marks both. The mark is applied again after a re-render, and cleared when
-  // the part it named is gone, so the bar never dims with nothing marked. No information waits behind it: the legend
-  // carries every count.
   var acctMark = null;             // var: a render before this line runs must not meet a temporal dead zone
   function markAccounting(k) {
     const box = $('vw-acct'), parts = box.querySelectorAll('[data-k]');
@@ -1937,9 +1896,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   }
   $('vw-acct').addEventListener('pointerover', (e) => { const t = e.target.closest('[data-k]'); markAccounting(t ? t.dataset.k : null); });
   $('vw-acct').addEventListener('pointerleave', () => markAccounting(null));
-  // First counted by DNO: ACTIVE keys first seen on an agreed list in the last 24 h, 7 days and 30 days (the DNO clock).
-  // A window with no figure says "not reported", and why, never +0.
-  // In window order: "+n today", and each run of windows without a figure in one clause: "this week, this month: not reported".
   function windowLine(src, W) {
     const out = [];
     let gap = [];
@@ -1993,12 +1949,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     setText($('vd-height'), `That answer's own height within ±${band} blocks of the seeds' median, the band the seeds' agreement uses.`);
     setText($('vd-hour'), `Answered as that key at the seeds' height in every counted round of the last ${mins === 1 ? 'minute' : `${mins} minutes`}.`);
 
-    // Where every ACTIVE row stands this round, and the history of the set.
     const observed = mode === 'live' && w && w.state === 'observed';
     renderAccounting(vm);
     renderGrowth(vm);
 
-    // The parameter, UNSTAKING and versions.
     const box = $('vw-facts');
     const mono = (t) => el('span', { class: 'mono', text: t }), plain = (t) => el('span', { text: t });
     let facts = null;
@@ -2032,7 +1986,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     setText($('vw-cap'), cap);
   }
 
-  // ---------- Two populations ----------
   function parseIdentity(id) {
     if (typeof id !== 'string' || !id) return null;
     const s = id.trim().toLowerCase();
@@ -2042,13 +1995,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     return null;
   }
   const catalog = { rows: [], seeds: [], seedRows: [], detail: false, loaded: false };
-  // Reading time of /health: ages ("3 d ago") are measured against the observation, not the browser clock.
   function readingNow() {
     const h = reads.health.data;
     return (h && (parseTime(h.observed_at) ?? parseTime(h.last_updated))) ?? Date.now();
   }
-  // One catalog row as this page uses it. Reported fields exist only when the identity was listed in the latest
-  // crawl (api 1.1); `listed` is null when the API does not say (1.0), and the page then shows names only.
   function catalogRow(v) {
     const p = parseIdentity(v.identity);
     if (!p) return null;
@@ -2084,11 +2034,9 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
         : `Latest crawl ${clock(crawlAt)} · ${isNum(vg.public_peerlists_read) ? plural(vg.public_peerlists_read, 'public peerlist', 'public peerlists') : 'public peerlists'} read`);
     } else crawlLine.hidden = true;
 
-    // Catalog rows: monitored = false only, shown as discovered- + the last 4 characters of the identity.
     const all = vg && Array.isArray(vg.validators) ? vg.validators : null;
     catalog.rows = (all || []).filter((v) => v && v.monitored !== true).map(catalogRow).filter(Boolean)
       .sort((x, y) => x.suffix.localeCompare(y.suffix) || x.prefix.localeCompare(y.prefix));
-    // Row keys: the published characters plus an occurrence count, so an open card survives rows sorting in before it.
     const seenKeys = {};
     catalog.rows.forEach((r) => { const k = `${r.prefix}${r.suffix}`; seenKeys[k] = (seenKeys[k] || 0) + 1; r.key = `${k}#${seenKeys[k]}`; });
     const seedRows = (all || []).filter((v) => v && v.monitored === true);
@@ -2107,7 +2055,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     renderOverlap(vg);
     $('seen-drop').hidden = !(h && typeof h.api_version === 'string' && /^1\.[1-9]\d*(\.|$)/.test(h.api_version) && vg && isNum(vg.discovered));
 
-    // Probed seeds
     const body = $('seeds-body');
     const rows = monitoredRows(h);
     const nodes = h && Array.isArray(h.publicNodes) ? h.publicNodes : [];
@@ -2122,11 +2069,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       const pn = nodes.find((n) => n && n.name === display);
       const firstPeer = !!pn && pn.height_source === 'first_peer';
       const own = isNum(r.block) && r.block > 0 && !firstPeer;
-      // api 1.1: the first listed peer's height is on the /health row only; 1.0 carried it on the seed's own row.
       const peerBlock = firstPeer && pn.ok === true && isNum(pn.block) && pn.block > 0 ? pn.block : firstPeer && isNum(r.block) && r.block > 0 ? r.block : null;
       return {
         display, source: display.toLowerCase().indexOf('community') === 0 ? 'Community' : 'Kynesys',
-        status: r.online === true ? ['ok', 'reachable'] : ['bad', 'unreachable'],
+        status: r.online === true ? ['ok', 'reachable'] : pn && pn.ok !== true && pn.error === 'internal error' ? ['unknown', "not read: a fault in DNO's own read"] : ['bad', 'unreachable'],
         identity: pn && pn.ok === true && typeof pn.identityMatch === 'boolean' ? (pn.identityMatch ? 'matches the configured key' : 'does not match the configured key') : null,
         idNote: pn && pn.ok === true && pn.identityMatch === null ? 'no key reported' : 'not observed',   // answered without a key, or not read
         block: own ? r.block : peerBlock, fromPeer: !own && peerBlock != null,
@@ -2150,7 +2096,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       el('td', { class: 'num', 'data-label': 'Uptime (obs.)' }, x.uptime != null ? `${x.uptime}%` : dim('not reported')))));
   }
 
-  // How many of the public peerlists read listed each identity in the latest crawl: a count of lists, not of nodes.
   function renderOverlap(vg) {
     const box = $('overlap'), bars = $('overlap-bars');
     const read = vg && isNum(vg.public_peerlists_read) ? vg.public_peerlists_read : 0;
@@ -2169,7 +2114,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       el('span', { class: 'ob-n', text: fmtInt(n) }))));
   }
 
-  // Version as each answering seed reports it, grouped. No "latest", no "behind".
   function renderVersions(h, nodes) {
     const box = $('versions');
     if (!h || !nodes.length) { box.hidden = true; return; }
@@ -2189,8 +2133,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     box.hidden = false;
   }
 
-  // Find a node: matching runs in this page over the rows /health already returned; nothing typed is sent.
-  // /health publishes each identity truncated (first 6 characters … last 4), so a key is matched on those.
   function classifyQuery(raw) {
     let q = raw.trim().toLowerCase().replace(/\s+/g, '');
     if (!q) return { kind: 'empty' };
@@ -2243,7 +2185,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   const fullKey = (c) => c.kind === 'full' && /^0x[0-9a-f]{64}$/.test(c.q);
   let catFilter = 'all';
   const passFilter = (r) => catFilter === 'all' || (catFilter === 'now' ? r.listed === true : r.listed === false);
-  // The detail card: open for one row, from a click on the grid ('click') or a unique search hit ('search').
   const openRow = { key: null, via: null, noAutoFor: null };
   function stateText(r, now) {
     if (r.listed === true) return ['listed now', true];
@@ -2333,12 +2274,9 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       setText(out, ''); return;
     }
     const matches = catalog.rows.filter((r) => rowMatches(c, r));
-    // A unique search hit opens its card (unless an exact check showed it is a different key); a card the search
-    // opened closes when the hit is no longer unique.
     if (catalog.detail && c.kind !== 'empty' && c.kind !== 'text' && matches.length === 1 && openRow.noAutoFor !== raw) { openRow.key = matches[0].key; openRow.via = 'search'; }
     else if (openRow.via === 'search') { openRow.key = null; openRow.via = null; }
     renderGrid(c, matches.filter(passFilter));
-    // The status line is announced to screen readers, so it waits for typing to pause.
     const write = () => { const nodes = resultNodes(c, matches), text = nodes.map((n) => (typeof n === 'string' ? n : n.textContent)).join('');
       if (out.dataset.sig !== text) { out.dataset.sig = text; out.replaceChildren(...nodes); } };
     clearTimeout(findTimer);
@@ -2364,8 +2302,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     $('cat-filter').querySelectorAll('.btn').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     applySearch(true);
   });
-  // Where the key stands on the agreed validators list, when the server says (on_chain on /catalog/lookup). That key only;
-  // a separate sentence from the catalog's, with its own source, never added to it.
   function onChainLine(v) {
     if (!v || typeof v !== 'object') return '';
     if (v.state === 'agreed' && typeof v.status === 'string') {
@@ -2377,7 +2313,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     }
     return `On the validators list: not reported${typeof v.reason === 'string' && v.reason ? `: ${v.reason}` : ''}.`;
   }
-  // Exact-key check: sent only when the button is pressed, and only for a full key.
   let lookupSeq = 0;
   $('lookup-btn').addEventListener('click', async () => {
     const c = classifyQuery($('find').value), out = $('lookup-result'), btn = $('lookup-btn');
@@ -2393,7 +2328,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     const same = catalog.rows.filter((r) => rowMatches(c, r));
     if (err) { out.replaceChildren(`The exact check did not complete: ${err}.`); return; }
     if (!body || typeof body !== 'object' || body.valid_key === false) { out.replaceChildren('DNO did not accept this as a key: a key is 0x followed by 64 hex characters.'); return; }
-    // The list's answer on a line of its own: two populations, two sentences, each with its source.
     const vl = onChainLine(body.on_chain), then = vl ? [el('span', { class: 'lk-chain', text: vl })] : [];
     if (typeof body.configured_seed === 'string' && body.configured_seed) { out.replaceChildren(`Exact match: this is the key of configured seed ${body.configured_seed}. Its probe result is under `, toSeeds(), '.', ...then); return; }
     if (body.in_catalog === true) {
@@ -2408,7 +2342,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     out.replaceChildren(`No exact match: this key is not in DNO's retained catalog.${same.length === 1 ? ` ${same[0].name} shares its published characters but is a different key.` : same.length > 1 ? ` The ${same.length} rows that share its published characters are different keys.` : ''}`, ...then);
   });
   $('find').addEventListener('input', () => applySearch(false));
-  // Ctrl+K (Cmd+K on a Mac) jumps to Find a node. A modified key, so typing never triggers it (WCAG 2.1.4).
   document.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() !== 'k' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
     e.preventDefault();
@@ -2423,7 +2356,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     $('find').focus({ preventScroll: true });
   });
 
-  // ---------- Incidents (active rows only) ----------
   function incidentItem(i) {
     const t = parseTime(i.startedAt);
     const since = t != null ? `${new Date(t).toISOString().slice(0, 10)} ${new Date(t).toISOString().slice(11, 16)} UTC` : null;
@@ -2433,7 +2365,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   function activeRows() {
     const d = reads.incidents.data;
     const rows = d && Array.isArray(d.incidents) ? d.incidents.filter((i) => i && i.status === 'active') : [];
-    // api 1.1 marks DNO's condition records with kind "condition"; 1.0 rows carry no kind and are all listed as incidents.
     const hasKind = rows.some((i) => typeof i.kind === 'string');
     return { incidents: hasKind ? rows.filter((i) => i.kind !== 'condition') : rows, conditions: hasKind ? rows.filter((i) => i.kind === 'condition') : [] };
   }
@@ -2471,7 +2402,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     list.replaceChildren(...(rows.length ? rows.map(incidentItem) : [el('li', { text: 'No active condition rows returned by /incidents?scope=public.' })]));
   }
 
-  // ---------- API ----------
   const EPS = {
     organism: { path: '/organism', what: 'The public reading: the 17 required fields plus the 1.1 and 1.2 additions (witnesses says what the reading rests on), with ETag and 304 between observations. The contract is /organism/schema.',
       what10: 'The public reading: the 17 required fields. The contract is /organism/schema.' },
@@ -2517,7 +2447,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     else { setText($('resp'), ep === 'organism' || ep === 'health' ? (reads[ep].error ? `Not read: ${reads[ep].error}.` : 'No reading yet.') : `Send request reads ${path} from this browser.`); setText($('send-meta'), ''); }
   }
   document.querySelectorAll('#lang-seg .btn').forEach((b) => b.addEventListener('click', () => { lang = b.dataset.lang; renderConsole(); }));
-  // A new endpoint cancels a request in flight; only the latest request's answer is shown.
   document.querySelectorAll('#ep-seg .btn').forEach((b) => b.addEventListener('click', () => {
     ep = b.dataset.ep; manual = null; sendSeq++;
     if (sendCtl) { sendCtl.abort(); sendCtl = null; }
@@ -2547,7 +2476,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       if (seq === sendSeq) { btn.disabled = false; sendCtl = null; }
     }
   });
-  // DAHR, said once: only while /health says attestation is available, and about the cross-check RPCs only.
   function renderDahr() {
     const h = reads.health.data, box = $('dahr-block');
     const att = h && h.attestation && typeof h.attestation === 'object' ? h.attestation : null;
@@ -2555,7 +2483,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     const ocp = typeof h.on_chain_publication === 'string' && h.on_chain_publication ? h.on_chain_publication : null;
     box.hidden = false;
     if (att.available === true) {
-      // Owner ruling, 2026-09-29. The reading itself is never posted, whatever on_chain_publication says.
       setText($('dahr'), 'This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.' + (ocp === 'disabled' ? ' DNO\'s own on-chain posts are disabled; the reading is never posted.' : ' The reading is never posted.'));
       setText($('dahr-meta'), `attestation.available true · last_count ${isNum(att.last_count) ? att.last_count : 'not reported'}${ocp ? ` · on_chain_publication ${ocp}` : ''} · /health`);
     } else {
@@ -2578,7 +2505,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
   });
 
-  // ---------- Motion: sweep (time to next read), blip (read landed), pulse (cycle completed) ----------
   let sweepAnims = [];
   function stopSweep() { sweepAnims.forEach((a) => a.cancel()); sweepAnims = []; $('sweep-mark').style.opacity = '0'; }
   function startSweep() {
@@ -2603,7 +2529,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   }
   reduceMQ.addEventListener('change', (e) => { MOTION = !e.matches; if (MOTION) startSweep(); else stopSweep(); });
 
-  // ---------- Polling ----------
   let timer = null, lastStart = 0, inFlight = false, paused = false;
   function renderCountdown() {
     const left = Math.max(0, Math.ceil((REFRESH_MS - (Date.now() - lastStart)) / 1000));
@@ -2650,7 +2575,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
   let rzc = 0;
   new ResizeObserver(() => { cancelAnimationFrame(rzc); rzc = requestAnimationFrame(() => { if (openRow.key) applySearch(true); }); }).observe($('cat-grid'));
 
-  // ---------- Start ----------
   renderConsole(); renderLanes(); applySearch();
   cycle();
 })();

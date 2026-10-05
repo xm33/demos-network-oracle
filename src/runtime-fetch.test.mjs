@@ -273,7 +273,7 @@ const underSdk = async (a, b) => {
 };
 let skipped = 0;
 const okRun = await underSdk(A.url, B.url);
-if (okRun.code === 64 && okRun.out.includes("NO-SDK")) { skipped += 6; console.log("  skip R11, R11b to R11f: @kynesyslabs/demosdk is not installed here (run this suite where the agent's node_modules are)"); }
+if (okRun.code === 64 && okRun.out.includes("NO-SDK")) { skipped += 11; console.log("  skip R11, R11b to R11i: @kynesyslabs/demosdk is not installed here (run this suite where the agent's node_modules are)"); }
 else {
   // What the fix rests on: the import replaces the global fetch (the suites and the harness stand in for exactly that)
   // and leaves alone everything else a capped read uses. A newer SDK that changes either must be looked at again.
@@ -334,13 +334,41 @@ else {
       plain.code === 3 && plain.out.includes("the Demos SDK was loaded first, as in the agent") && /\n  seed-a  answered · names the configured key · its own height\n  seed-b  answered · names the configured key · its own height\n  2 of 2 seeds answered; 2 gave their own height\./.test(plain.out)
       && plain.out.includes("cross-check RPCs (not in status), the agent's capped read: 1 of 1 answered") && hitsPlain === 1 && !/seed-off|rpc-name-not-to-print/.test(plain.out)
       && /AGENT READS FAILED: no validator list was agreed by two seeds\. Do not restart on this\.\s*$/.test(plain.out), "exit " + plain.code + " | hits " + hitsPlain + " | " + plain.out.split("\n").filter((l) => /seed-|cross-check|AGENT|answered;/.test(l)).join(" | "));
-    const given = await tool(["seed-a=" + A.url, "seed-b=" + B.url]);
-    check("R11f with the seeds given as arguments, the same tool next to the same fleet config reads no cross-check RPC", given.code === 3 && rpcHits === hitsPlain && !/cross-check RPCs/.test(given.out), "exit " + given.code + " | hits " + rpcHits);
+    // The same run with dials on and a store of the agent's in this folder (logs, the default LOG_DIR), holding one kept
+    // candidate: with no argument the check reads the kept candidates, as D11 of the runbook runs it.
+    {
+      const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs");
+      const fill = (dir, key) => { mkdirSync(join(box, dir)); const db = new Database(join(box, dir, "marketplace.db")); createCandidateStore(db).save([{ key, url: "http://203.0.113.77:53550", at: Date.now() - 60000 }], Date.now() - 70000); db.close(); };
+      fill("logs", "c7".repeat(32)); mkdirSync(join(box, "elsewhere"));
+      const spawnIn = async (env) => { const kid = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs"], { cwd: box, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" }); const out = await new Response(kid.stdout).text(); await kid.exited; return out; };
+      const kept = await spawnIn({ VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "" });
+      check("R11g the check with no argument reads the candidates the agent keeps in this folder's store, and says where they are from",
+        /\n  candidates: 1, kept by the agent from the list two seeds agreed on at \d{4}-\d\d-\d\d \d\d:\d\d UTC\n/.test(kept) && !kept.includes("the agent keeps none here"), kept.split("\n").filter((l) => /candidates/.test(l)).join(" | "));
+      // .env of the folder says the dials are off and names the store's folder; the shell says otherwise. The agent
+      // lets .env win (it reads the file itself), and so must the check: the runtime alone would let the shell win.
+      writeFileSync(join(box, ".env"), "OTHER_SETTING=do-not-print-this\nVALIDATOR_WATCH_DIALS=0\nLOG_DIR=logs\n");
+      const off = await spawnIn({ VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "elsewhere" });
+      writeFileSync(join(box, ".env"), "VALIDATOR_WATCH_DIALS=1\nLOG_DIR=logs\n");
+      const on = await spawnIn({ VALIDATOR_WATCH_DIALS: "0", LOG_DIR: "elsewhere" });
+      // With the seeds given as arguments the run is not about this host's configuration: the check does not apply the
+      // folder's .env, and the variable the process was started with stands (the suites run the check so).
+      writeFileSync(join(box, ".env"), "VALIDATOR_WATCH_DIALS=0\nLOG_DIR=logs\n");
+      const kidGiven = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: box, env: { ...process.env, VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "elsewhere" }, stdout: "pipe", stderr: "pipe" });
+      const givenOn = await new Response(kidGiven.stdout).text(); await kidGiven.exited;
+      rmSync(join(box, ".env"));
+      check("R11h the dial switch and the store's folder are read as the agent reads them: a line in this folder's .env wins over the shell's variable, both ways, and nothing of .env is printed",
+        off.includes("Watch (one round: the list only, no dials)") && !/Watch \(one round[^)]*dial per/.test(off) && !off.includes("do-not-print-this")
+        && !on.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(on) && /\n  candidates: 1, kept by the agent /.test(on), [off, on].map((o) => o.split("\n").filter((l) => /^Watch|candidates/.test(l)).join(" | ")).join(" || "));
+      check("R11i with the seeds given as arguments the check does not apply this folder's .env: the switch it was started with stands",
+        !givenOn.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(givenOn), givenOn.split("\n").filter((l) => /^Watch/.test(l)).join(" | "));
+    }
+    const hitsBefore = rpcHits, given = await tool(["seed-a=" + A.url, "seed-b=" + B.url]);
+    check("R11f with the seeds given as arguments, the same tool next to the same fleet config reads no cross-check RPC", given.code === 3 && rpcHits === hitsBefore && hitsBefore > hitsPlain && !/cross-check RPCs/.test(given.out), "exit " + given.code + " | hits " + hitsBefore + " -> " + rpcHits);
   } finally { rpc.stop(true); rmSync(box, { recursive: true, force: true }); }
   check("R11b and it says FAILED, exit 3, when the agent could not publish a status from the reads", badRun.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two, or validators that stand in \(the agent keeps no candidates here\)\. Do not restart on this\.\s*$/.test(badRun.out), brief(badRun));
 }
 
 A.srv.stop(true); B.srv.stop(true);
 globalThis.fetch = runtimeGlobal;
-console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed" + (skipped ? ", " + skipped + " skipped (R11 to R11f need the Demos SDK: run where the agent's node_modules are)" : ""));
+console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed" + (skipped ? ", " + skipped + " skipped (R11 to R11i need the Demos SDK: run where the agent's node_modules are)" : ""));
 process.exit(failed ? 1 : 0);

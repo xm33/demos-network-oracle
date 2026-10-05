@@ -584,9 +584,11 @@ console.log("\n[" + TAG + "] the probe's own reads: capped as the agent's, and '
     && formatReport([pg, gone]).text.includes("  /info                 no answer (invalid response)") && formatReport([gone]).text.includes("  getValidators         no answer (connection failed)"), JSON.stringify([pg.info, lg.info, by.info, li.info, gone.info]));
   // A value a peer chose that this tool cannot turn into text: the seed answered all the same.
   const odd = seedServer({ stake: "1000000000000000000", rows: [Object.assign({}, ROW(0, "2"), { firstSeen: { toString: 0, valueOf: 0 } }), Object.assign({}, ROW(1, "2"), { firstSeen: { toString: 0, valueOf: 0 } })] });
-  const o = await probeSeed({ name: "odd", url: url(odd) }), same = firstSeenValue({ toString: 0, valueOf: 0 }), other = firstSeenValue({ toString: 1 });
+  // The value is taken inside a guard: a firstSeenValue that throws on it must show as this check failing, by name, not as the suite stopping.
+  const fsv = (v) => { try { return firstSeenValue(v); } catch (e) { return { kind: "threw " + e.name, key: null }; } };
+  const o = await probeSeed({ name: "odd", url: url(odd) }), same = fsv({ toString: 0, valueOf: 0 }), other = fsv({ toString: 1 });
   check("C4 a firstSeen that cannot be turned into text does not make an answer 'no answer': the list is counted, and such values are still compared (it was: 'no answer (not reached)' beside '/info answered')",
-    o.validators.answered === true && o.validators.shapeOk === true && o.validators.rows === 2 && o.shapeErrors.length === 0 && same.kind === "other" && same.key === firstSeenValue({ toString: 0, valueOf: 0 }).key && same.key !== other.key
+    o.validators.answered === true && o.validators.shapeOk === true && o.validators.rows === 2 && o.shapeErrors.length === 0 && same.kind === "other" && same.key !== null && same.key === fsv({ toString: 0, valueOf: 0 }).key && same.key !== other.key
     && !formatReport([o]).text.includes("no answer"), JSON.stringify([o.validators && { a: o.validators.answered, s: o.validators.shapeOk }, o.shapeErrors, same, other]));
   [bomb, zipped, page, large, busy, list, odd].forEach((s) => s.stop(true));
 }

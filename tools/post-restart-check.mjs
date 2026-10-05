@@ -34,12 +34,15 @@
 //         wait early); seeds down and a fault in DNO's seed read look the same (not a pass and not by itself a
 //         rollback: the pre-restart check's seed lines, and whether the seeds answer another client, decide)
 //       5 "AGENT IS READING", two seeds are asked and the validator list is not agreed (not a rollback; run it again)
+//       9 "AGENT IS READING", and no read of the validator list has completed in the whole wait: the validator round
+//         is not running to its end (not a rollback by this check; the agent's log says whether a round failed)
 //       7 it read during this check and its latest observation is not enough (not a rollback; run it again)
 //       3 "AGENT IS NOT READING" (roll back, when the wait was long enough for a start), or it did not stay up
 //         during this check (roll back, whatever the wait: it answered and then stopped or started again)
 //       4 /health was never read (roll back, when the wait was long enough for a start)
 //       6 an older version is answering: this check is for the version that publishes witnesses (API 1.2)
 //       64 the arguments could not be read
+//       70 this check's own code failed on what /health returned: nothing is concluded about the agent
 
 import { seedsSufficient } from "../src/seed-read.mjs";
 
@@ -100,13 +103,15 @@ export function healthVerdict(h, now) {
   const listLine = !oc ? "  validators list: not reported by this server"
     : listAgreed ? `  validators list: agreed by ${oc.seeds_agreed} of ${oc.seeds_configured} seeds · ${oc.active} ACTIVE` : `  validators list: ${oc.state}${oc.reason ? ` (${oc.reason})` : ""}`;
   lines.push(listLine);
-  return { older, reading: !older && problems.length === 0, mode, counted: n, problems, listAgreed, listExpected, listLine: listLine.trim(), lines, observedAt: Number.isFinite(observedAt) ? observedAt : null };
+  // pending: no read of the validator list has completed since the agent started (the first one takes about a minute).
+  const listPending = !!oc && oc.state === "pending";
+  return { older, reading: !older && problems.length === 0, mode, counted: n, ownHeights: s.ownHeights, problems, listAgreed, listExpected, listPending, listLine: listLine.trim(), lines, observedAt: Number.isFinite(observedAt) ? observedAt : null };
 }
 // What "AGENT IS READING" says the status comes from.
 export function readingWords(v) {
   if (v.mode === "seed_and_validators") return `one seed gave its own height, ${v.counted} validator${v.counted === 1 ? " that answers as listed is" : "s that answer as listed are"} within 25 blocks of it, and the status comes from them`;
   if (v.mode === "validators_only") return `no seed gave its own height, and the status comes from ${v.counted} validators that answer as listed`;
-  return "two seeds gave their own height and the status comes from them";
+  return (v.ownHeights === 3 ? "three" : v.ownHeights > 3 ? String(v.ownHeights) : "two") + " seeds gave their own height and the status comes from them";
 }
 
 // args: [base-url] [--wait seconds]. io: { fetch, sleep, now, log } for tests. Returns the exit code.
@@ -119,7 +124,7 @@ export async function run(args, io = {}) {
   const started = now();
   // answered: a poll got a /health body. newest: the latest observation time seen. wentAway: why the agent is known
   // not to have stayed up during this check.
-  let last = null, readError = null, sawReading = false, answered = false, newest = null, wentAway = null;
+  let last = null, readError = null, sawReading = false, answered = false, newest = null, wentAway = null, ownFault = null;
   for (;;) {
     try {
       const res = await fetchFn(base + "/health", { signal: AbortSignal.timeout(5000), headers: { "Cache-Control": "no-cache" } });
@@ -127,7 +132,10 @@ export async function run(args, io = {}) {
       const body = await res.json();
       // A 200 that is not a /health document (an empty body parses as null) is a failed read, not an agent without an observation.
       if (!body || typeof body !== "object" || Array.isArray(body)) throw Object.assign(new Error("not a /health document"), { category: "not JSON" });
-      last = healthVerdict(body, now()); readError = null; answered = true;
+      // What this check makes of the document is its own code: a fault there says nothing about the agent, and must
+      // not read as "the agent does not answer".
+      try { last = healthVerdict(body, now()); } catch (e) { ownFault = e; break; }
+      readError = null; answered = true;
       if (newest !== null && !last.older && (last.observedAt === null || last.observedAt < newest)) wentAway = "its observation went back to " + (last.observedAt === null ? "none" : "an earlier one");
       if (last.observedAt !== null && (newest === null || last.observedAt > newest)) newest = last.observedAt;
       if (last.reading) sawReading = true;
@@ -143,6 +151,10 @@ export async function run(args, io = {}) {
   }
   const waited = Math.round((now() - started) / 1000), long = waited >= ROLLBACK_MIN_WAIT_SECONDS;
   log(`post-restart check · waited ${waited} s`);
+  if (ownFault) {
+    log(`THIS CHECK FAILED ON WHAT /health RETURNED (${ownFault && ownFault.name ? ownFault.name : "error"}): a fault in the check's own code. Nothing is concluded about the agent, and this is no reason to roll back. Send this output.`);
+    return 70;
+  }
   if (!last) {
     log(`AGENT IS NOT ANSWERING after ${waited} s: /health could not be read (${readError}). ` + (long ? "A start takes under a minute: roll back." : "A start needs about a minute: run this again with the default wait before deciding anything."));
     return 4;
@@ -150,14 +162,14 @@ export async function run(args, io = {}) {
   last.lines.forEach((l) => log(l));
   if (last.older) { log("AN OLDER VERSION IS ANSWERING: its /health has no witnesses object (API 1.2). This check is for the new version; nothing is concluded. If the service was restarted on the new code, the restart did not take effect."); return 6; }
   if (wentAway) {
-    log(`THE AGENT DID NOT STAY UP DURING THIS CHECK (after ${waited} s): ${wentAway}. An agent that stops or starts again by itself is failing: roll back. (If you restarted the service yourself while this ran, run it again instead.)`);
+    log(`THE AGENT DID NOT STAY UP DURING THIS CHECK (after ${waited} s): ${wentAway}. An agent that stops or starts again by itself is failing: roll back. systemd knows which: a start time later than your own restart, or a restart count above 0, is the proof; with the start time of your restart and a count of 0 the process did not start again, and this check is run once more instead.`);
     return 3;
   }
   // The verdict is not the last poll alone: an agent that read during this check is not the 1 Oct failure, whatever the last poll says.
   if (readError || !last.reading) {
     const why = readError ? `the latest read of /health failed (${readError}); the lines above are the read before it` : last.problems.join("; ") || "the latest observation is not enough";
     if (sawReading && readError) { log(`AGENT WAS READING DURING THIS CHECK AND ITS /health DID NOT ANSWER AT THE END (after ${waited} s: ${readError}); the lines above are the read before it. Not a rollback yet: run this again.`); return 7; }
-    if (sawReading) { log(`AGENT WAS READING DURING THIS CHECK AND IS NOT NOW (after ${waited} s): ${why}. A seed that stops answering looks like this; the failure of 1 Oct never read. Not a rollback yet: run this again in a minute.`); return 7; }
+    if (sawReading) { log(`AGENT WAS READING DURING THIS CHECK AND IS NOT NOW (after ${waited} s): ${why}. A seed or a validator that stops answering looks like this; the failure of 1 Oct never read. Not a rollback yet: run this again in a minute.`); return 7; }
     if (!long) { log(`AGENT IS NOT READING YET after ${waited} s: ${why}. A start needs about a minute: run this again with the default wait before deciding anything.`); return 3; }
     log(`AGENT IS NOT READING after ${waited} s: ${why}. Roll back.`);
     return 3;
@@ -169,6 +181,13 @@ export async function run(args, io = {}) {
   if (last.listAgreed) { log(`AGENT IS READING: ${readingWords(last)}. The validator list is agreed.`); return 0; }
   if (!last.listExpected) { log(`AGENT IS READING: ${readingWords(last)}. No validator list is agreed while fewer than two seeds are asked for it; the agent keeps a witness candidate for 24 h after its last answer.`); return 0; }
   log(`AGENT IS READING: ${readingWords(last)}.`);
+  if (last.listPending) {
+    // A validator round runs once a minute and the first begins with the agent: after a wait of two minutes or more one
+    // has had time to complete. A round that fails inside DNO never completes, and says so in the agent's log only.
+    if (!long) { log(`THE VALIDATOR LIST HAS NOT BEEN READ YET after ${waited} s. A first read needs about a minute: run this again with the default wait.`); return 5; }
+    log(`THE VALIDATOR ROUND HAS NOT COMPLETED after ${waited} s: no read of the validator list has finished since the agent started, though a round runs once a minute. This is not what a list that is not agreed looks like. The agent's log says whether a round failed inside DNO ("round failed"): send this output with that count. It is no reason to roll back by itself: the seeds are read, and no validator can stand in until a round completes.`);
+    return 9;
+  }
   log(`THE VALIDATOR LIST IS NOT AGREED after ${waited} s. It is no reason to roll back: the page says "not reported this cycle", and the agent keeps the witness candidates it has. Run this again in a minute; if it stays, send this output.`);
   return 5;
 }

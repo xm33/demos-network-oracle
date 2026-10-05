@@ -250,7 +250,7 @@ console.log("\n[" + TAG + "] a round without a reading says nothing, and what a 
   check("L6 and arriving on the head changes nothing: the standstill is " + Math.floor(at / 60) + " minutes old, not zero", p.staticS === at && c.state.top === H && c.state.gave === null, JSON.stringify(p));
   const r = assess({ timeReason: null, seedsTotal: 3, seedsAnswered: 1, seedHeights: [H], validators: { read: 3, heights: [H, H, H], listAgreedAt: null }, maxIncidentSeverity: "none", publicIncidentCount: 0,
     movement: { staticSeconds: p.staticS, advancing: false, stalled: true, following: p.following, staticSince: "2026-10-02 10:50:00" } });
-  check("L7 so the reading is degraded at once, where a count that began again would have read stable for another 30 minutes", r.status === "degraded" && r.standstill === true && r.status_reason.startsWith("No new height for " + Math.floor(at / 60) + " min"), r.status_reason);
+  check("L7 so the reading is degraded at once, where a count that began again would have read stable for another 30 minutes", r.status === "degraded" && r.standstill === true && r.status_reason === "The seed has shown no new height for " + Math.floor(at / 60) + " min; one public seed and 3 validators aligned", r.status_reason);
 }
 {
   // The same lone seed with no validator read at all (none kept, or the dials off): nothing shows the top any more, so
@@ -430,10 +430,12 @@ console.log("\n[" + TAG + "] the fold against a plain reading of its text");
       const roundTop = Math.max(...r.src.map((x) => x.h)), roundRead = Math.max(roundTop, r.counted === null ? -1 : r.counted);
       // of the sources at the round's highest height: who is above its own last answer; and has any source fallen back by more than 25 blocks
       const tops = r.src.filter((x) => x.h === roundTop);
-      const up = tops.filter((x) => lastAnswer.has(x.id) && x.h > lastAnswer.get(x.id)), fellBack = r.src.some((x) => lastAnswer.has(x.id) && lastAnswer.get(x.id) - x.h > 25);
+      // only a seed is said to fall back: the validators' height can drop because other validators answered
+      const up = tops.filter((x) => lastAnswer.has(x.id) && x.h > lastAnswer.get(x.id)), fellBack = r.src.some((x) => x.id !== VALIDATORS_SOURCE && lastAnswer.has(x.id) && lastAnswer.get(x.id) - x.h > 25);
       const seedUp = up.some((x) => x.id !== VALIDATORS_SOURCE);
       r.src.forEach((x) => lastAnswer.set(x.id, x.h));
       if (highest === null) { highest = roundTop; countFrom = r.at; everRead = roundRead; everReadAt = r.at; continue; }
+      if (fellBack) sawArrive = false;                   // after a seed fell back the last arrival is no longer claimed
       // what DNO had read before this round, and when its highest height was first read
       let readBefore = everRead, readBeforeAt = everReadAt;
       if (remembered) {
