@@ -6,7 +6,8 @@
 // when the read ends.
 // Runtime tests: bun src/seed-read.test.mjs
 
-import { cappedJson, isValidIdentity, sanitizeHeight, sanitizeLabel, probeErrorCategory } from "./public-safety.mjs";
+import { cappedJson, isValidIdentity, keyOf, sanitizeHeight, versionOf, probeErrorCategory } from "./public-safety.mjs";
+import { seedReasonOf } from "./status-rule.mjs";
 
 export const SEED_INFO_TIMEOUT_MS = 5000;
 export const SEED_INFO_MAX_BYTES = 2 * 1024 * 1024;   // a real /info is tens of KB
@@ -17,7 +18,9 @@ export const SEED_INFO_MAX_BYTES = 2 * 1024 * 1024;   // a real /info is tens of
 // A seed's height is its own peerlist entry (height_source "self"). The first listed peer's height is used only when the
 // seed does not list itself, and height_source says so ("first_peer"); it is counted nowhere.
 // identityMatch: whether the identity this /info names is the configured one (null when it names none). When it names
-// another key, the URL was answered by a different node: that answer is not this seed's, so it gives no height.
+// another key, the URL was answered by a different node: that answer is not this seed's, so it gives no height. Keys are
+// compared in one form (keyOf: trimmed, lower case, 0x or not), the form the validator watch compares in: a node is
+// not "as listed" for one of them and "another key" for the other.
 // peerlist and answeredId are for the catalog intake (one node answering two URLs is one peerlist); the agent does not
 // publish them.
 export async function readSeedInfo(node, opts) {
@@ -28,15 +31,15 @@ export async function readSeedInfo(node, opts) {
     var data = res.data;
     var peerlist = data && Array.isArray(data.peerlist) ? data.peerlist : [];
     var block = null, heightSource = null;
-    var nodeId = String(node.identity).toLowerCase();
+    var nodeKey = keyOf(node.identity), answeredKey = data ? keyOf(data.identity) : null;
     var answeredId = data && typeof data.identity === "string" && isValidIdentity(data.identity) ? data.identity.toLowerCase() : null;
-    var identityMatch = answeredId === null ? null : answeredId === nodeId;
+    var identityMatch = answeredKey === null ? null : answeredKey === nodeKey;
     if (identityMatch !== false) {
-      var selfEntry = peerlist.find(function(p) { return p && typeof p.identity === "string" && p.identity.toLowerCase() === nodeId; });
+      var selfEntry = nodeKey === null ? null : peerlist.find(function(p) { return p && keyOf(p.identity) === nodeKey; });
       if (selfEntry && selfEntry.sync) { block = sanitizeHeight(selfEntry.sync.block); if (block !== null) heightSource = "self"; }
       if (block === null && peerlist[0] && peerlist[0].sync) { block = sanitizeHeight(peerlist[0].sync.block); if (block !== null) heightSource = "first_peer"; }
     }
-    return { ok: true, latencyMs: res.headersMs, block: block, height_source: heightSource, version: sanitizeLabel(data && data.version, 32) || "?",
+    return { ok: true, latencyMs: res.headersMs, block: block, height_source: heightSource, version: versionOf(data && data.version) || "?",   // a release version, or none: a seed's free text is not published
       peers: peerlist.length, identityMatch: identityMatch, peerlist: peerlist, answeredId: answeredId };
   } catch (err) {
     return { ok: false, error: probeErrorCategory(err) };
@@ -49,6 +52,6 @@ export async function readSeedInfo(node, opts) {
 export function seedsSufficient(readings) {
   var answered = readings.filter(function(r) { return r && r.ok; });
   var own = answered.filter(function(r) { return r.height_source === "self" && sanitizeHeight(r.block) !== null; });
-  var reason = answered.length < 2 ? "too_few_answers" : own.length < 2 ? "too_few_heights" : null;
+  var reason = seedReasonOf(answered.length, own.length);   // one text for the seed-level rule (status-rule.mjs)
   return { answered: answered.length, ownHeights: own.length, sufficient: reason === null, reason: reason };
 }

@@ -5,7 +5,7 @@
 // are reported and make the tool exit non-zero.
 // Run: bun src/validator-set-probe.test.mjs   (executable harness, not `bun test`)
 
-import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue, agentSeedReads, agentSeedLine, agentReadsReport, agentRpcReads, agentVerdict, seedsForRound, seedsUnread, run } from "../tools/validator-set-probe.mjs";
+import { probeSeed, formatReport, summarize, seedsFromAgent, dialReport, firstSeenAgreement, firstSeenValue, agentSeedReads, agentSeedLine, agentReadsReport, agentRpcReads, agentVerdict, seedsForRound, seedsUnread, keysOf, run } from "../tools/validator-set-probe.mjs";
 import { parseProbeOrigin } from "./public-safety.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -54,7 +54,7 @@ console.log("\n[" + TAG + "] two seeds that agree");
   const { text, summary } = formatReport(rs, new Date(0));
   check("P1 nodeCalls use the SDK wire format, unauthenticated", calls.length >= 4 && calls.every((c) => c.method === "nodeCall" && c.type === "nodeCall" && !c.identityHeader) && calls.some((c) => c.message === "getValidators") && calls.some((c) => c.message === "getNetworkParameters"), JSON.stringify(calls.slice(0, 2)));
   check("P2 counts by status, the parameter as reported, agreement", summary.stake === "1000000000000000000" && JSON.stringify(summary.rows) === JSON.stringify({ 2: 5, 3: 1 }) && /agree: ACTIVE 5, UNSTAKING 1/.test(text) && /agrees: 1000000000000000000 \(raw, as reported\)/.test(text), text);
-  check("P3 /info key names only", text.includes("keys: identity, peerlist, version, version_name") && text.includes("peerlist entry keys: connection{string}, identity, status{online, ready}, sync{block, status}") && text.includes("a key naming a hash: no · a key naming a shard: no"), text);
+  check("P3 /info key names only", text.includes("keys: identity, peerlist, version, (1 other name not printed)") && text.includes("peerlist entry keys: identity, connection{string}, status{online, ready}, sync{status, block}") && text.includes("a key naming a hash: no · a key naming a shard: no"), text);
   check("P4 no host, address, connectionUrl, stake or full key in the output", leaks(text).length === 0, leaks(text).join(" "));
   check("P5 the EXITED limit is stated", /EXITED count does not come from it/.test(text));
 }
@@ -165,9 +165,35 @@ console.log("\n[" + TAG + "] --dial: one watch round with the agent's module");
     && /odd: getValidators: a row without a usable address or status/.test(t3.text), t3.text.split("\n").filter((l) => /lists, address|identities|odd:/.test(l)).join(" | "));
   T.forEach((x) => x.stop(true));
   other.stop(true);
+  // The tool's own one read of a seed follows no redirect: an answer may not send it to another address.
+  let trapped = 0;
+  const trapSrv = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { trapped++; return Response.json(INFO); } });
+  const redir = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { return new Response(null, { status: 302, headers: { location: url(trapSrv) + new URL(req.url).pathname } }); } });
+  const sent = await probeSeed({ name: "redir", url: url(redir) });
+  check("X9 a seed that answers with a redirect is not followed: no request reaches the address it names, and the seed has not answered", trapped === 0 && !(sent.info && sent.info.answered), JSON.stringify([trapped, sent.info]));
+  trapSrv.stop(true); redir.stop(true);
   const { spawnSync } = await import("node:child_process");
+  {
+    // tools/pre-restart-check.mjs in a folder without the agent's node_modules: it must not pass, and must not go on.
+    // The runtime fetches a package it does not find when no node_modules is near (and whether that takes long depends
+    // on its cache), so the child gets a package cache of its own and a registry that is this suite's: a request there
+    // is counted. Asked 0 times is the proof that the check looked on disk first.
+    const { mkdtempSync, mkdirSync, copyFileSync, rmSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+    const box = mkdtempSync(join(tmpdir(), "dno-nosdk-")); mkdirSync(join(box, "tools"));
+    copyFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "pre-restart-check.mjs"), join(box, "tools", "pre-restart-check.mjs"));
+    let asked = 0;
+    const registry = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { asked++; return new Response("{}", { status: 404, headers: { "content-type": "application/json" } }); } });
+    const env = { ...process.env, BUN_INSTALL_CACHE_DIR: join(box, "cache"), BUN_CONFIG_REGISTRY: url(registry) + "/", NPM_CONFIG_REGISTRY: url(registry) + "/", npm_config_registry: url(registry) + "/", NO_PROXY: "127.0.0.1,localhost", no_proxy: "127.0.0.1,localhost" };
+    for (const k of ["HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"]) delete env[k];
+    const kid = Bun.spawn([process.execPath, join(box, "tools", "pre-restart-check.mjs")], { cwd: box, env, stdout: "pipe", stderr: "pipe" });
+    const lone = { status: await kid.exited, stderr: await new Response(kid.stderr).text(), stdout: await new Response(kid.stdout).text() };
+    registry.stop(true);
+    check("X10 the pre-restart check without the Demos SDK beside it: exit 64, it says so, reads nothing and asks no registry for a package (it looks on disk first)", lone.status === 64 && /^The Demos SDK is not installed next to this tool\./.test(lone.stderr) && lone.stdout === "" && asked === 0,
+      JSON.stringify([lone.status, lone.stderr.slice(0, 90), asked]));
+    rmSync(box, { recursive: true, force: true });
+  }
   const bad = spawnSync("bun", [join(dirname(fileURLToPath(import.meta.url)), "..", "tools", "validator-set-probe.mjs"), "--dail"], { encoding: "utf8" });
-  check("X5 an argument that is not name=url (a mistyped flag) stops the tool with usage, exit 64", bad.status === 64 && /Not a name=url pair: --dail/.test(bad.stderr) && !/--dia\n/.test(bad.stdout), JSON.stringify([bad.status, bad.stderr.slice(0, 80)]));
+  check("X5 an argument that is not name=url (a mistyped flag) stops the tool with usage, exit 64", bad.status === 64 && /^1 argument is not a name=url pair\./.test(bad.stderr) && !/dail/.test(bad.stderr + bad.stdout), JSON.stringify([bad.status, bad.stderr.slice(0, 80)]));
   const prod = await dialReport(seeds, results);
   check("X3 --dial with the agent's resolver dials no loopback address, seeds included", prod.watch.state === "no_agreed_list" && /no figure/.test(prod.text), prod.text);
   [D1, D2, val].forEach((s) => s.stop(true));
@@ -186,8 +212,11 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
       return Response.json({ identity: o.names || key, version: "0.9.9 RC", peerlist: [{ identity: K("ee"), sync: { block: 6960 } }].concat(o.noSelf ? [] : [{ identity: key, sync: { block: 7000 } }]) });
     }
     const msg = (await req.json()).params[0].message;
-    return Response.json({ result: 200, response: msg === "getValidators" ? vrows(o.extraRow ? [{ address: K("d9"), status: "2", connectionUrl: null, stakedAmount: "1", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }] : []) : { minValidatorStake: "1000" } });
+    return Response.json({ result: 200, response: msg === "getValidators" ? vrows(o.rows ? o.rows() : o.extraRow ? [{ address: K("d9"), status: "2", connectionUrl: null, stakedAmount: "1", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null }] : []) : { minValidatorStake: "1000" } });
   } });
+  // A seed that takes the connection and never answers: started here, awaited at the end of this block.
+  const HANG = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Promise(() => {}) });
+  const hangRead = (async () => { const t = Date.now(); const r = await agentSeedReads([{ name: "seed-hang", url: "http://127.0.0.1:" + HANG.port, identity: K("b1") }]); return { ms: Date.now() - t, r: r[0] }; })();
   const G1 = agentSeed(K("a1")), G2 = agentSeed(K("a2")), NOSELF = agentSeed(K("a3"), { noSelf: true }), OTHERKEY = agentSeed(K("a4"), { names: K("a9") }), DOWN = agentSeed(K("a5"), { status: 503 }), DIFF = agentSeed(K("a6"), { extraRow: true });
   const cfg = (name, srv, key) => ({ name, url: url(srv), identity: key });
   // The global fetch is replaced the way the Demos SDK's import replaces it: the agent's read must not use it.
@@ -208,7 +237,7 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
   check("G4 cross-check RPCs: a count and categories, never a name", JSON.stringify(rpcs) === JSON.stringify({ total: 4, ok: 1, failed: ["2 HTTP 503", "1 connection failed"] }) && (await agentRpcReads([])) === null && (await agentRpcReads(null)) === null, JSON.stringify(rpcs));
   const rep = agentReadsReport(reads, true, rpcs);
   check("G5 the report: the runtime's version, the SDK line, the counts the agent's rule uses, the RPC count; no host, key or fleet name",
-    rep.text.includes("bun " + Bun.version + " · the Demos SDK was loaded first, as in the agent; it replaced the global fetch") && rep.text.includes("4 of 6 seeds answered; 2 gave their own height. The agent needs two for a status.")
+    rep.text.includes("bun " + Bun.version + " · the Demos SDK was loaded first, as in the agent; it replaced the global fetch") && rep.text.includes("4 of 6 seeds answered; 2 gave their own height. Two give a status from the seeds alone; with fewer, validators stand in (Witnesses, below).")
     && rep.text.includes("cross-check RPCs (not in status), the agent's capped read: 1 of 4 answered (2 HTTP 503 · 1 connection failed)") && rep.sufficient === true && leaks(rep.text).length === 0 && !/fleet-secret-name|fleet-other-name/.test(rep.text), rep.text);
 
   const own = { ok: true, block: 7000, height_source: "self" }, fp = { ok: true, block: 6960, height_source: "first_peer" }, no = { ok: false, error: "HTTP 503" };
@@ -221,23 +250,164 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
   check("V6 only an unexpected answer shape: FAILED, exit 2, never OK", v([own, own, no], "agreed", 1) === "2 AGENT READS FAILED: an answer had an unexpected shape (see above). Do not restart on this.");
   check("V7 several problems: all named, exit 3", v([own, no, no], "stale", 2) === "3 AGENT READS FAILED: 1 of 3 seeds answered /info, and the agent needs two; no validator list was agreed by two seeds; an answer had an unexpected shape (see above). Do not restart on this.");
   check("V8 no list read: the seeds alone", v([own, own], null) === "0 AGENT READS OK: 2 of 2 seeds gave their own height.");
+  // 1.2: the verdict follows the agent's rule on the reads, validators included (witnessReport's result).
+  const fault = { ok: false, error: "internal error" };
+  const wit = (mode, o = {}) => Object.assign({ mode, counted: 0, internalErrors: 0, why: null }, o);
+  const vw = (r, list, w, shape) => { const x = agentVerdict(r, list, shape || 0, w); return x.code + " " + x.text; };
+  check("V9 a read that ended in an internal error is DNO's own fault: FAILED, though two seeds gave a height",
+    vw([own, own, fault], "agreed", wit("seeds_only")) === "3 AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."
+    && vw([own, own, no], "agreed", wit("seeds_only", { internalErrors: 2 })) === "3 AGENT READS FAILED: 2 reads ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."
+    && v([own, own, fault], "agreed") === "3 AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this.", vw([own, own, fault], "agreed", wit("seeds_only")));
+  check("V10 one seed and validators within 25 blocks of it: OK, and a list that cannot be agreed by one seed is a note",
+    vw([own, no, no], "not_agreed", wit("seed_and_validators", { counted: 3 })) === "0 AGENT READS OK: 1 of 3 seeds gave its own height, and 3 validators that answer as listed are within 25 blocks of it. The agent would publish a reading that rests on them. No validator list is agreed while fewer than two seeds are asked for it; the agent keeps a candidate for 24 h after its last answer."
+    && vw([own, no, no], "not_agreed", wit("seed_and_validators", { counted: 1 })).includes("and 1 validator that answers as listed is within 25 blocks of it."), vw([own, no, no], "not_agreed", wit("seed_and_validators", { counted: 3 })));
+  check("V11 no seed, validators alone: a reading, and not a pass. Seeds that are down and a fault in DNO's own seed read look the same, so it has its own exit code and nothing restarts on it",
+    vw([no, no, no], "not_agreed", wit("validators_only", { counted: 3 })) === "4 AGENT READS GIVE A READING WITHOUT A SEED: no seed gave its own height, and 3 validators that answer as listed agree within 25 blocks. The agent would publish a reading that rests on validators alone. This check cannot tell seeds that are down from a fault in DNO's own seed read: do not restart on this without knowing which it is. No validator list is agreed while fewer than two seeds are asked for it; the agent keeps a candidate for 24 h after its last answer."
+    && agentVerdict([no, no, no], "not_agreed", 0, wit("validators_only", { counted: 3 })).ok === false);
+  const otherKey = { name: "s", ok: true, block: 7000, height_source: null, identityMatch: false };
+  check("V11b a seed that answered with another key is not asked for the list: with one seed left to ask, a list that is not agreed is a note",
+    vw([own, otherKey, no], "not_agreed", wit("seed_and_validators", { counted: 1 })).startsWith("0 AGENT READS OK: 1 of 3 seeds gave its own height, and 1 validator that answers as listed is within 25 blocks of it.")
+    && vw([own, Object.assign({}, own), no], "not_agreed", wit("seeds_only")) === "3 AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this.");
+  check("V12 no reading: FAILED with the seeds' count and why no validator stands in",
+    vw([own, no, no], "not_agreed", wit("insufficient", { why: "the agent keeps no candidates here" })) === "3 AGENT READS FAILED: 1 of 3 seeds answered /info, and the agent needs two, or validators that stand in (the agent keeps no candidates here). Do not restart on this."
+    && vw([own, fp, no], "agreed", wit("insufficient", { why: "none of the validators read is within 25 blocks of the seed" })) === "3 AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two, or validators that stand in (none of the validators read is within 25 blocks of the seed). Do not restart on this.");
+  check("V13 two seeds answered and no list agreed is still a failure, whatever the mode", vw([own, own, no], "not_agreed", wit("seeds_only")) === "3 AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this."
+    && vw([own, fp, no], "not_agreed", wit("seed_and_validators", { counted: 2 })) === "3 AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this.");
+  check("V14 a reading with a fault beside it is still FAILED", /^3 AGENT READS FAILED: 1 read ended in an internal error/.test(vw([own, no, no], "not_agreed", wit("seed_and_validators", { counted: 2, internalErrors: 1 }))));
+
+  check("V15 a list read or a dial of the check's validator round that ended in an internal error fails it too, whatever else holds: such a round's 'no answer' is DNO's own fault",
+    (() => { const x = agentVerdict([own, own, no], "agreed", 0, wit("seeds_only"), 3); return x.code + " " + x.text; })() === "3 AGENT READS FAILED: 3 reads ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."
+    && agentVerdict([own, own, fault], "agreed", 0, wit("seeds_only", { internalErrors: 1 }), 2).text === "AGENT READS FAILED: 4 reads ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."
+    && agentVerdict([own, own, no], "agreed", 0, wit("seeds_only"), 0).code === 0 && agentVerdict([own, own, no], "agreed", 0, wit("seeds_only"), undefined).code === 0);
 
   // run(): the whole check, as tools/pre-restart-check.mjs calls it. Loopback seeds need a resolver that admits them.
   const loop = async (u) => { const p = parseProbeOrigin(u); return p && p.hostname === "127.0.0.1" ? "http://127.0.0.1:" + p.port : null; };
-  const runOut = async (args, ctx) => { const out = [], log = console.log; console.log = (...a) => out.push(a.join(" ")); let code; try { code = await run(args, Object.assign({ agentReads: true, sdkReplaced: true, resolveOrigin: loop }, ctx)); } finally { console.log = log; } return { code, text: out.join("\n") }; };
+  // kept: null by default. A suite must not read this host's store: run in the agent's checkout it would find the agent's
+  // kept candidates and read real validators.
+  const runOut = async (args, ctx) => { const out = [], log = console.log; console.log = (...a) => out.push(a.join(" ")); let code; try { code = await run(args, Object.assign({ agentReads: true, sdkReplaced: true, resolveOrigin: loop, kept: null }, ctx)); } finally { console.log = log; } return { code, text: out.join("\n") }; };
   const pair = (a, b) => ["seed-a=" + url(a), "seed-b=" + url(b)];
   dialHits.n = 0;
   const good = await runOut(["--dial", ...pair(G1, G2)]);
-  check("W1 two good seeds, with dials: exit 0, the verdict last, the published origin dialed once", good.code === 0 && good.text.trim().endsWith("AGENT READS OK: 2 of 2 seeds gave their own height, and two seeds agree on the validator list.") && dialHits.n === 1
+  check("W1 two good seeds, with dials: exit 0, the verdict last; the published origin is dialed once by the watch and read once as a witness", good.code === 0 && good.text.trim().endsWith("AGENT READS OK: 2 of 2 seeds gave their own height, and two seeds agree on the validator list.") && dialHits.n === 2
     && good.text.includes("Watch (one round, --dial)") && leaks(good.text).length === 0, good.code + " | " + good.text.split("\n").slice(-3).join(" | ") + " | dials " + dialHits.n);
+  check("W1b the witnesses are read even when two seeds answer, so the read is tested before every restart; the rule then leaves them out", good.text.includes("Witnesses (validators the agent reads when fewer than two seeds give their own height)\n  candidates: 1, from this run's validator list\n  read as the agent reads them: 1 of 1 answered as the listed key with its own height\n  the agent's rule on these reads: 2 seeds gave their own height, so the seeds alone decide and no validator enters the reading (seeds_only)"), good.text.split("\n").slice(-6).join(" | "));
   dialHits.n = 0;
   const nodial = await runOut(pair(G1, G2));
-  check("W2 without --dial (VALIDATOR_WATCH_DIALS=0): the list is still read and agreed, and no published address is dialed", nodial.code === 0 && dialHits.n === 0 && nodial.text.includes("Watch (one round: the list only, no dials)")
-    && nodial.text.trim().endsWith("and two seeds agree on the validator list."), nodial.code + " | dials " + dialHits.n);
+  check("W2 without --dial (VALIDATOR_WATCH_DIALS=0): the list is still read and agreed, and no published address is dialed, as a witness either", nodial.code === 0 && dialHits.n === 0 && nodial.text.includes("Watch (one round: the list only, no dials)")
+    && nodial.text.includes("  not read: the dials are off (VALIDATOR_WATCH_DIALS), and the agent then reads no validator") && nodial.text.trim().endsWith("and two seeds agree on the validator list."), nodial.code + " | dials " + dialHits.n);
   const few = await runOut(["--dial", ...pair(G1, NOSELF)]);
-  check("W3 a seed that does not list itself: exit 3, FAILED (the agent would publish unknown)", few.code === 3 && few.text.trim().endsWith("AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two. Do not restart on this."), few.code + " | " + few.text.split("\n").slice(-1));
+  check("W3 a seed that does not list itself: exit 3, FAILED (the agent would publish unknown)", few.code === 3 && few.text.trim().endsWith("AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two, or validators that stand in (the agent keeps no candidates here). Do not restart on this."), few.code + " | " + few.text.split("\n").slice(-1));
   const one = await runOut(["--dial", ...pair(G1, DOWN)]);
-  check("W4 one seed down: exit 3, FAILED on both counts", one.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two; no validator list was agreed by two seeds\. Do not restart on this\.$/.test(one.text.trim()), one.code + " | " + one.text.split("\n").slice(-1));
+  check("W4 one seed down and no candidates kept: exit 3, FAILED (the agent would publish unknown); the list one seed cannot agree is not a second failure", one.code === 3 && one.text.trim().endsWith("AGENT READS FAILED: 1 of 2 seeds answered /info, and the agent needs two, or validators that stand in (the agent keeps no candidates here). Do not restart on this.")
+    && one.text.includes("  candidates: none (this run's validator round did not count, and the agent keeps none here)"), one.code + " | " + one.text.split("\n").slice(-1));
+  // 1.2: one seed down, and the agent kept candidates from the last agreed list. The validator stands in.
+  const KEPT = (list) => ({ agreedAt: Date.now() - 3600000, candidates: list });
+  const cand = (key, srv) => ({ key: key.slice(2), url: "http://127.0.0.1:" + srv.port });
+  const val2 = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: K("c8"), peerlist: [{ identity: K("c8"), sync: { block: 7002 } }] }); } });
+  const far = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: K("c9"), peerlist: [{ identity: K("c9"), sync: { block: 7026 } }] }); } });
+  dialHits.n = 0;
+  const stood = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([cand(K("c7"), val)]) });
+  check("W9 one seed down, a kept validator within 25 blocks of the other: exit 0, OK, and it says what the reading rests on", stood.code === 0 && dialHits.n === 1
+    && stood.text.includes("  candidates: 1, kept by the agent from the list two seeds agreed on at ") && stood.text.includes("  the agent's rule on these reads: one seed gave its own height and 1 validator is within 25 blocks of it (seed_and_validators)")
+    && stood.text.trim().endsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator that answers as listed is within 25 blocks of it. The agent would publish a reading that rests on them. No validator list is agreed while fewer than two seeds are asked for it; the agent keeps a candidate for 24 h after its last answer.")
+    && leaks(stood.text).length === 0, stood.code + " | " + stood.text.split("\n").slice(-5).join(" | "));
+  const offBand = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([cand(K("c9"), far)]) });
+  check("W10 the kept validator is 26 blocks from the seed: it does not stand in, exit 3", offBand.code === 3 && offBand.text.trim().endsWith("AGENT READS FAILED: 1 of 2 seeds answered /info, and the agent needs two, or validators that stand in (none of the validators read is within 25 blocks of the seed). Do not restart on this."), offBand.text.split("\n").slice(-1));
+  const alone = await runOut(["--dial", "seed-a=" + url(DOWN), "seed-b=" + url(DOWN)], { kept: KEPT([cand(K("c7"), val), cand(K("c8"), val2)]) });
+  check("W11 no seed answers, two kept validators agree: exit 4, a reading that rests on validators alone and is not a pass", alone.code === 4 && alone.text.includes("  the agent's rule on these reads: no seed gave its own height; 2 validators agree within 25 blocks (validators_only)")
+    && alone.text.trim().split("\n").pop().startsWith("AGENT READS GIVE A READING WITHOUT A SEED: no seed gave its own height, and 2 validators that answer as listed agree within 25 blocks.") && !/AGENT READS OK/.test(alone.text), alone.code + " | " + alone.text.split("\n").slice(-1));
+  const single = await runOut(["--dial", "seed-a=" + url(DOWN), "seed-b=" + url(DOWN)], { kept: KEPT([cand(K("c7"), val)]) });
+  check("W12 no seed answers and one kept validator: one is not a reading, exit 3", single.code === 3 && single.text.trim().endsWith("AGENT READS FAILED: 0 of 2 seeds answered /info, and the agent needs two, or validators that stand in (the validators read give no majority within 25 blocks). Do not restart on this."), single.text.split("\n").slice(-1));
+  dialHits.n = 0;
+  const offSwitch = await runOut(pair(G1, DOWN), { kept: KEPT([cand(K("c7"), val)]) });
+  check("W13 the dials are off: the kept validators are not read, and one seed is not enough, exit 3", offSwitch.code === 3 && dialHits.n === 0 && offSwitch.text.trim().endsWith("AGENT READS FAILED: 1 of 2 seeds answered /info, and the agent needs two, or validators that stand in (the dials are off). Do not restart on this."), offSwitch.text.split("\n").slice(-1));
+  // A fault in DNO's own read: the transport throws a TypeError for chosen requests, and the peers answer as always.
+  {
+    const real = Bun.fetch.bind(Bun), port = (srv) => String(srv.port);
+    const faulty = (pick) => async (u, init) => { if (pick(new URL(u), (init && init.method) || "GET")) throw new TypeError("resp.body.getReader is not a function"); return real(u, init); };
+    const control = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty(() => false) });
+    const dialFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty((u, m) => m === "GET" && u.port === port(val)) });
+    check("W30 the dial of a validator ends in an internal error while both seeds and the validator answer: FAILED, exit 3. The check does not print 'no answer' for it, and names no candidate from that round (without the fault: exit 0)",
+      control.code === 0 && dialFault.code === 3 && dialFault.text.includes("  dials: none (a fault in DNO's own read: 1 dial of this round ended in an internal error, so no counts are given for it)") && !/no answer \d/.test(dialFault.text)
+      && dialFault.text.includes("  candidates: none (") && dialFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this.") && leaks(dialFault.text).length === 0,
+      dialFault.code + " | " + dialFault.text.split("\n").filter((l) => /dials:|candidates|AGENT/.test(l)).join(" | "));
+    // The dial works and the witness read of the same address does not (the second GET to it).
+    const seen = {}; const second = (u, m) => { if (m !== "GET" || u.port !== port(val)) return false; seen[u.port] = (seen[u.port] || 0) + 1; return seen[u.port] >= 2; };
+    const witFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty(second) });
+    check("W31 a witness read ends in an internal error: FAILED, exit 3, though two seeds gave their height and the watch round counted",
+      witFault.code === 3 && witFault.text.includes("  read as the agent reads them: 0 of 1 answered as the listed key with their own height · 1 ended in an internal error")
+      && witFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."), witFault.code + " | " + witFault.text.split("\n").slice(-4).join(" | "));
+    // One seed down, two kept validators, and the read of one of them faults: as in the agent, no validator is then
+    // counted, so the rule's line says there is no reading (it must not count the other one beside the fault).
+    const seenW = {}; const secondOf = (srv) => (u, m) => { if (m !== "GET" || u.port !== port(srv)) return false; seenW[u.port] = (seenW[u.port] || 0) + 1; return true; };
+    const partFault = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([cand(K("c7"), val), cand(K("c8"), val2)]), fetch: faulty(secondOf(val2)) });
+    check("W43 one of two witness reads ends in an internal error: no validator is counted in the rule, which then gives no reading, and the verdict names both: FAILED, exit 3",
+      partFault.code === 3 && partFault.text.includes("  read as the agent reads them: 1 of 2 answered as the listed key with its own height · 1 ended in an internal error")
+      && partFault.text.includes("  the agent's rule on these reads: no reading (insufficient)")
+      && partFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's; 1 of 2 seeds answered /info, and the agent needs two, or validators that stand in (their read ended in an internal error). Do not restart on this."),
+      partFault.code + " | " + partFault.text.split("\n").filter((l) => /read as the agent|agent's rule|AGENT/.test(l)).join(" | "));
+    const listFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty((u, m) => m === "POST" && u.port === port(G2)) });
+    check("W32 one seed's list read ends in an internal error: FAILED, and the fault is named before the list that was not agreed",
+      listFault.code === 3 && listFault.text.includes("  list: no figure: DNO's own read of the validator list ended in an internal error for 1 of 2 public seeds")
+      && listFault.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's; no validator list was agreed by two seeds. Do not restart on this."), listFault.code + " | " + listFault.text.split("\n").slice(-1));
+    // One seed is asked for the list (the other is down), a kept validator stands in, and the list read of the one seed faults.
+    const lone = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([cand(K("c7"), val)]), fetch: faulty((u, m) => m === "POST" && u.port === port(G1)) });
+    check("W33 with one seed asked for the list, its faulty list read is not passed over as 'no list is agreed while fewer than two seeds are asked': FAILED, exit 3 (it was: exit 0)",
+      lone.code === 3 && /^AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's\. Do not restart on this\.$/.test(lone.text.trim().split("\n").pop()), lone.code + " | " + lone.text.split("\n").slice(-1));
+    const seedFault = await runOut(["--dial", ...pair(G1, G2)], { fetch: faulty((u, m) => m === "GET" && u.port === port(G2)) });
+    check("W34 a seed's /info read that ends in an internal error is said as that on the seed's line, and fails the check", seedFault.code === 3 && seedFault.text.includes("seed-b  no answer (internal error)") && /1 read ended in an internal error/.test(seedFault.text.trim().split("\n").pop()),
+      seedFault.code + " | " + seedFault.text.split("\n").filter((l) => /seed-b|AGENT/.test(l)).join(" | "));
+    // A fault in DNO's own address check, while every peer answers. Read as "the address is not public" it passed the
+    // check with exit 0 (review 4): the validator was "not dialed", no candidate was named, and two seeds were enough.
+    const checkFault = (pick) => async (u) => { if (pick(String(u))) throw new ReferenceError("isPublicIp is not defined"); return loop(u); };
+    const valUrl = "http://127.0.0.1:" + port(val);
+    const dialCheck = await runOut(["--dial", ...pair(G1, G2)], { resolveOrigin: checkFault((u) => u === valUrl) });
+    check("W39 the address check of a validator's published address ends in a fault of DNO's own while both seeds answer: FAILED, exit 3. It is not said to be 'not a public http origin'",
+      dialCheck.code === 3 && dialCheck.text.includes("  dials: none (a fault in DNO's own read: 1 dial of this round ended in an internal error, so no counts are given for it)") && !/not a public http origin \d/.test(dialCheck.text)
+      && dialCheck.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this.") && leaks(dialCheck.text).length === 0,
+      dialCheck.code + " | " + dialCheck.text.split("\n").filter((l) => /dials:|not dialed|candidates|AGENT/.test(l)).join(" | "));
+    // The dial's check works and the witness read's check of the same address does not (the second check of it).
+    let checks = 0;
+    const witCheck = await runOut(["--dial", ...pair(G1, G2)], { resolveOrigin: checkFault((u) => u === valUrl && ++checks >= 2) });
+    check("W40 the address check before a witness read ends so: FAILED, exit 3, and the read is counted as an internal error, not as an address that was not resolved",
+      witCheck.code === 3 && witCheck.text.includes("  read as the agent reads them: 0 of 1 answered as the listed key with their own height · 1 ended in an internal error")
+      && witCheck.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's. Do not restart on this."), witCheck.code + " | " + witCheck.text.split("\n").slice(-4).join(" | "));
+    const seedCheck = await runOut(["--dial", ...pair(G1, G2)], { resolveOrigin: checkFault((u) => u === url(G2)) });
+    check("W41 the address check of a seed before its list read ends so: FAILED, exit 3, with the fault named before the list that was not agreed",
+      seedCheck.code === 3 && seedCheck.text.includes("  list: no figure: DNO's own read of the validator list ended in an internal error for 1 of 2 public seeds")
+      && seedCheck.text.trim().endsWith("AGENT READS FAILED: 1 read ended in an internal error, a fault in DNO's own read and not the peer's; no validator list was agreed by two seeds. Do not restart on this."), seedCheck.code + " | " + seedCheck.text.split("\n").slice(-1));
+    const refusedAddr = await runOut(["--dial", ...pair(G1, G2)], { resolveOrigin: async (u) => (String(u) === valUrl ? null : loop(u)) });
+    check("W42 an address the check refuses is still what it was: not dialed as not a public http origin, no fault, exit 0",
+      refusedAddr.code === 0 && /not a public http origin 1 /.test(refusedAddr.text) && !/internal error/.test(refusedAddr.text), refusedAddr.code + " | " + refusedAddr.text.split("\n").filter((l) => /not dialed|AGENT/.test(l)).join(" | "));
+  }
+  const stale = await runOut(["--dial", ...pair(G1, DOWN)], { kept: { agreedAt: null, candidates: [] } });
+  check("W14 candidates older than 24 h are none (the store gives none): exit 3", stale.code === 3 && /the agent keeps no candidates here/.test(stale.text.trim().split("\n").pop()));
+  const gone = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([{ key: K("c7").slice(2), url: "http://127.0.0.1:1" }]) });
+  check("W15 the kept validator does not answer: no reading, exit 3, and no fault is claimed", gone.code === 3 && gone.text.includes("  read as the agent reads them: 0 of 1 answered as the listed key with their own height") && !/internal error/.test(gone.text), gone.text.split("\n").slice(-4).join(" | "));
+  // The agent's store, read without writing.
+  {
+    const { mkdtempSync, rmSync, statSync, readFileSync: rf } = await import("node:fs"), { tmpdir } = await import("node:os"), { join: pj } = await import("node:path");
+    const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs"), { keptCandidates } = await import("../tools/validator-set-probe.mjs");
+    const dir = mkdtempSync(pj(tmpdir(), "dno-kept-")), file = pj(dir, "marketplace.db");
+    const db = new Database(file); createCandidateStore(db).save([cand(K("c7"), val)], Date.now() - 60000); db.close();
+    const before = rf(file).toString("hex"), got = keptCandidates(file, Date.now());
+    {
+      // The same on a store in WAL mode that another connection holds open and writes to, as a running agent does.
+      const wfile = pj(dir, "wal.db"), agentDb = new Database(wfile);
+      agentDb.run("PRAGMA journal_mode = WAL"); createCandidateStore(agentDb).save([cand(K("c7"), val)], Date.now() - 60000);
+      agentDb.run("CREATE TABLE t (x INTEGER)"); agentDb.run("INSERT INTO t VALUES (1)");
+      const mainBefore = rf(wfile).toString("hex"), walGot = keptCandidates(wfile, Date.now());
+      agentDb.run("INSERT INTO t VALUES (2)");                                   // the agent goes on writing
+      const stillWrites = agentDb.query("SELECT COUNT(*) AS n FROM t").get().n === 2, keptAfter = createCandidateStore(agentDb).load(Date.now()).candidates.length;
+      check("W16b beside a store in WAL mode that the agent holds open: the kept candidates are read, the store's main file is byte for byte as it was, and the agent goes on writing and still holds what it kept",
+        agentDb.query("PRAGMA journal_mode").get().journal_mode === "wal" && walGot && walGot.candidates.length === 1 && rf(wfile).toString("hex") === mainBefore && stillWrites && keptAfter === 1, JSON.stringify([walGot, stillWrites, keptAfter]));
+      agentDb.close();
+    }
+    check("W16 the agent's kept candidates are read from its store without writing to it; no store here is none", got && got.candidates.length === 1 && got.candidates[0].key === K("c7").slice(2) && rf(file).toString("hex") === before
+      && keptCandidates(pj(dir, "absent.db"), Date.now()) === null && keptCandidates(file, Date.now() + 25 * 3600000).candidates.length === 0);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  [val2, far].forEach((x) => x.stop(true));
   const differ = await runOut(["--dial", ...pair(G1, DIFF)]);
   check("W5 the seeds' lists differ: exit 3", differ.code === 3 && differ.text.trim().endsWith("AGENT READS FAILED: no validator list was agreed by two seeds. Do not restart on this."), differ.code + " | " + differ.text.split("\n").slice(-1));
   // A seed whose /info names another key than the configured one is not asked for the list, as in the agent.
@@ -256,14 +426,171 @@ console.log("\n[" + TAG + "] the pre-restart check: the agent's own seed read, i
     && fromConf.text.includes("  list: 2 of 3 public seeds returned the same list") && fromConf.text.trim().endsWith("AGENT READS OK: 2 of 3 seeds gave their own height, and two seeds agree on the validator list.") && leaks(fromConf.text).length === 0,
     fromConf.code + " | " + fromConf.text.split("\n").filter((l) => /another key|AGENT|  list:|getValidators answered by/.test(l)).join(" | "));
   const twoOnly = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]) });
-  check("W7b with one seed left to ask, no list is agreed: exit 3", twoOnly.code === 3 && /no validator list was agreed by two seeds\. Do not restart on this\.$/.test(twoOnly.text.trim()), twoOnly.code + " | " + twoOnly.text.split("\n").slice(-1));
+  check("W7b with one seed left to ask (this run has no --dial) and one seed height: exit 3 for the missing reading; the list one seed cannot agree is not a second failure", twoOnly.code === 3 && twoOnly.text.trim().endsWith("AGENT READS FAILED: 1 of the 2 seeds that answered gave its own height, and the agent needs two, or validators that stand in (the dials are off). Do not restart on this."), twoOnly.code + " | " + twoOnly.text.split("\n").slice(-1));
+  // The candidates as the agent would hold and read them.
+  const seedKeyKept = await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-x", DOWN, K("c7")]]), kept: KEPT([cand(K("c7"), val)]) });
+  check("W17 a kept candidate whose key is a configured seed's is not read as a witness, as in the agent: no reading, exit 3 (it was: OK, where the agent publishes unknown)", seedKeyKept.code === 3
+    && seedKeyKept.text.includes("  candidates: none (") && !/read as the agent reads them/.test(seedKeyKept.text) && seedKeyKept.text.trim().endsWith("validators that stand in (the agent keeps no candidates here). Do not restart on this."), seedKeyKept.code + " | " + seedKeyKept.text.split("\n").slice(-4).join(" | "));
+  const otherKeyKept = await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]), kept: KEPT([cand(K("c7"), val)]) });
+  check("W18 one seed with its height, one that answers as another key (so it is not asked for the list), and a kept validator within 25 blocks: the agent reads, and so does this check (it was: FAILED for a list no two seeds could agree)", otherKeyKept.code === 0
+    && otherKeyKept.text.trim().split("\n").pop().startsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator that answers as listed is within 25 blocks of it."), otherKeyKept.code + " | " + otherKeyKept.text.split("\n").slice(-1));
+  // A kept candidate whose key is the one a seed URL answered with (not that seed's configured key): the agent reads it.
+  const val9 = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: K("a9"), peerlist: [{ identity: K("a9"), sync: { block: 7003 } }] }); } });
+  const aliasKept = await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-otherkey", OTHERKEY, K("a4")]]), kept: KEPT([cand(K("a9"), val9)]) });
+  check("W18b a seed's key is its configured key, as in the agent: a kept candidate with the key some seed URL answered with is still read, and stands in (it was: dropped, FAILED 'the agent keeps no candidates here')", aliasKept.code === 0
+    && aliasKept.text.includes("  candidates: 1, kept by the agent from the list two seeds agreed on at ") && aliasKept.text.trim().split("\n").pop().startsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator that answers as listed is within 25 blocks of it."),
+    aliasKept.code + " | " + aliasKept.text.split("\n").slice(-4).join(" | "));
+  val9.stop(true);
+  const unreadable = await runOut(["--dial", ...pair(G1, DOWN)], { kept: { unreadable: true } });
+  check("W19 a store that is there and cannot be read is said as that, not as an agent that keeps none", unreadable.code === 3 && unreadable.text.includes("  the agent's store is here and could not be read: the candidates it keeps are not known to this check")
+    && unreadable.text.includes("  candidates: none (this run's validator round did not count, and the kept ones could not be read)") && unreadable.text.trim().endsWith("validators that stand in (the agent's store could not be read). Do not restart on this."), unreadable.text.split("\n").slice(-4).join(" | "));
+  {
+    const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs"), { tmpdir } = await import("node:os"), { join: pj } = await import("node:path"), { keptCandidates } = await import("../tools/validator-set-probe.mjs");
+    const dir = mkdtempSync(pj(tmpdir(), "dno-kept-")), file = pj(dir, "marketplace.db");
+    writeFileSync(file, "this is not a database, and it is long enough to be read as one".repeat(40));
+    check("W19b and the store read says which it was", JSON.stringify(keptCandidates(file, Date.now())) === JSON.stringify({ unreadable: true }) && keptCandidates(pj(dir, "none.db"), Date.now()) === null);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  dialHits.n = 0;
+  const renewed = await runOut(["--dial", ...pair(G1, G2)], { kept: KEPT([{ key: K("c8").slice(2), url: "http://127.0.0.1:9", at: Date.now() - 3600000 }, Object.assign(cand(K("c7"), val), { at: Date.now() - 7200000 })]) });
+  check("W20 when this run's validator round counts, the candidates are the kept ones renewed by it, as the agent would hold them: a kept key that is no longer on the list is gone, one that answered is kept", renewed.code === 0
+    && renewed.text.includes("  candidates: 1, the ones the agent keeps, renewed by this run's validator list\n  read as the agent reads them: 1 of 1 answered as the listed key with its own height") && dialHits.n === 2, renewed.text.split("\n").slice(-6).join(" | "));
+  // More rows on the list: c1 is ACTIVE at an address where nothing answers; 01 answers as listed, with the lowest key.
+  {
+    const row = (key, urlOf) => ({ address: key, status: "2", connectionUrl: urlOf, stakedAmount: "1", firstSeen: 1, validAt: 1, unstakeRequestedAt: null, unstakeAvailableAt: null });
+    const low = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: K("01"), peerlist: [{ identity: K("01"), sync: { block: 7000 } }] }); } });
+    const more = () => [row(K("c1"), "http://127.0.0.1:9"), row(K("01"), "http://127.0.0.1:" + low.port)];
+    const M1 = agentSeed(K("a1"), { rows: more }), M2 = agentSeed(K("a2"), { rows: more });
+    const kept1 = KEPT([{ key: K("c1").slice(2), url: "http://127.0.0.1:9", at: Date.now() - 3600000 }]);
+    const keptOne = await runOut(["--dial", ...pair(M1, M2)], { kept: kept1 });
+    check("W21 a kept candidate that does not answer in this run's round stays, as in the agent: it is read with those that answered (3 candidates, 2 of 3 with a height)", keptOne.code === 0
+      && keptOne.text.includes("  candidates: 3, the ones the agent keeps, renewed by this run's validator list\n  read as the agent reads them: 2 of 3 answered as the listed key with their own height"), keptOne.text.split("\n").slice(-6).join(" | "));
+    // The order of the dials: each published address is checked just before it is dialed, in dial order.
+    const asked = [], spy = async (u) => { asked.push(u); return loop(u); };
+    await runOut(["--dial", ...pair(M1, M2)], { kept: KEPT([Object.assign(cand(K("c7"), val), { at: Date.now() - 3600000 })]), resolveOrigin: spy });
+    const first = (port) => asked.findIndex((u) => u === "http://127.0.0.1:" + port);
+    check("W22 the kept candidates are dialed first, before a row with a lower key", first(val.port) >= 0 && first(low.port) >= 0 && first(val.port) < first(low.port), JSON.stringify([first(val.port), first(low.port)]));
+    // Answers as the listed key, and lists itself nowhere: no height of its own.
+    const nohi = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return Response.json({ identity: K("c2"), peerlist: [{ identity: K("ee"), sync: { block: 7000 } }] }); } });
+    const noHeight = await runOut(["--dial", ...pair(G1, DOWN)], { kept: KEPT([cand(K("c2"), nohi)]) });
+    check("W23 a kept validator that answers as listed without its own height is not counted as one with a height: 0 of 1, no reading, exit 3", noHeight.code === 3
+      && noHeight.text.includes("  read as the agent reads them: 0 of 1 answered as the listed key with their own height"), noHeight.text.split("\n").slice(-4).join(" | "));
+    low.stop(true); nohi.stop(true); M1.stop(true); M2.stop(true);
+  }
+  // The agent's store is opened read-only: a store that has no candidates table yet still has none after the check.
+  {
+    const { mkdtempSync, rmSync, readFileSync: rf } = await import("node:fs"), { tmpdir } = await import("node:os"), { join: pj } = await import("node:path");
+    const { Database } = await import("bun:sqlite"), { keptCandidates } = await import("../tools/validator-set-probe.mjs");
+    const dir = mkdtempSync(pj(tmpdir(), "dno-kept-ro-")), file = pj(dir, "marketplace.db");
+    const db = new Database(file); db.run("CREATE TABLE incidents (id TEXT)"); db.close();
+    const before = rf(file).toString("hex"), got = keptCandidates(file, Date.now());
+    const after = new Database(file, { readonly: true }), tables = after.query("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name); after.close();
+    {
+      // The same on a WAL store nothing else holds: the read may leave the store's side files, never a change in the store.
+      const wfile = pj(dir, "wal-alone.db"), w0 = new Database(wfile); w0.run("PRAGMA journal_mode = WAL"); w0.run("CREATE TABLE incidents (id TEXT)"); w0.run("INSERT INTO incidents VALUES ('INC-1')"); w0.close();
+      const mainBefore = rf(wfile).toString("hex"), gotW = keptCandidates(wfile, Date.now()), mainAfterRead = rf(wfile).toString("hex");
+      const again = new Database(wfile), rowsAfter = again.query("SELECT id FROM incidents").all().map((r) => r.id).join(), tablesAfter = again.query("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name).join();
+      again.run("INSERT INTO incidents VALUES ('INC-2')"); const writable = again.query("SELECT COUNT(*) AS n FROM incidents").get().n === 2; again.close();
+      check("W24b on a store in WAL mode that nothing else holds: no candidates table appears, the main file's bytes are the same after the read, and the store opens and takes writes afterwards as before",
+        !!gotW && gotW.candidates.length === 0 && mainAfterRead === mainBefore && tablesAfter === "incidents", JSON.stringify([gotW, tablesAfter, mainAfterRead === mainBefore]));
+      check("W24c and its content is what it was", rowsAfter === "INC-1" && tablesAfter === "incidents" && writable, JSON.stringify([rowsAfter, tablesAfter, writable]));
+    }
+    check("W24 the check writes nothing into the agent's store: one without the candidates table has none afterwards, and its bytes are the same", got && got.candidates.length === 0 && tables.join() === "incidents" && rf(file).toString("hex") === before, JSON.stringify([got, tables]));
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // One seed with its own height, one that answers as another key (and lists that key with a height), one that does not
+  // list itself; the store keeps no candidates. The agent has one seed height, its watch counts no round, and it would
+  // publish unknown. Before the round's reference followed the agent's read rule, this check counted the other key's
+  // height as a second seed height, named candidates from its own round and said OK.
+  const ALIAS = agentSeed(K("b9"));
+  const mixed = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-alias", ALIAS, K("a4")], ["seed-noself", NOSELF, K("a3")]]) }), mixedDial = Object.assign(await runOut(["--dial"], { agentSource: conf([["seed-a", G1, K("a1")], ["seed-alias", ALIAS, K("a4")], ["seed-noself", NOSELF, K("a3")]]) }));
+  check("W9x a height from a seed that answers as another key is not a seed height here either: the round does not count, no candidate is named, exit 3",
+    mixedDial.code === 3 && mixedDial.text.includes("  seeds' median: not known (fewer than two own heights): heights not compared") && mixedDial.text.includes("  candidates: none (this run's validator round did not count, and the agent keeps none here)")
+    && mixedDial.text.trim().endsWith("AGENT READS FAILED: 1 of the 3 seeds that answered gave its own height, and the agent needs two, or validators that stand in (the agent keeps no candidates here). Do not restart on this.") && mixed.code === 3,
+    mixedDial.code + " | " + mixedDial.text.split("\n").filter((l) => /median|candidates|AGENT/.test(l)).join(" | "));
+  ALIAS.stop(true);
+  // Text a peer chose is not echoed: a field name, a status or a result that carries an address.
+  const HOSTILE = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    if (req.method === "GET") return Response.json({ identity: K("f1"), "peer at 10.9.8.7:53550": 1, version: "0.9.9 RC", peerlist: [{ identity: K("f1"), sync: { block: 7000 }, "http://10.9.8.7": { "10.9.8.7": 1, port: 2 } }] });
+    const msg = (await req.json()).params[0].message;
+    return Response.json(msg === "getValidators" ? { result: 200, response: [{ address: K("c7"), status: "http://10.9.8.7:53550", connectionUrl: null, "url 10.9.8.7:53550": 1 }] } : { result: "see 10.9.8.7", response: null });
+  } });
+  const hostile = await runOut(["seed-x=" + url(HOSTILE)], { agentReads: false });
+  check("W10x a field name, a status or a result that is not a plain name, a status or a number is counted, not printed", !/10\.9\.8\.7/.test(hostile.text) && hostile.text.includes("keys: identity, peerlist, version, (1 other name not printed)")
+    && hostile.text.includes("peerlist entry keys: identity, sync{block}, (1 other name not printed)") && hostile.text.includes('status "(not a status code)": 1') && hostile.text.includes("no answer (result not a status code)")
+    && hostile.text.includes("row keys: status, address, connectionUrl, (1 other name not printed)"), hostile.text.split("\n").slice(0, 8).join(" | "));
+  check("W10b of a peer's field names only those DNO itself reads are printed; any other is counted, however plain it looks", JSON.stringify(keysOf({ version_name: 1, identity: 2, peerlist: [] })) === JSON.stringify(["identity", "peerlist", "(1 other name not printed)"])
+    && JSON.stringify(keysOf({ call: 1, this: 1, number: 1, now: 1 })) === JSON.stringify(["(4 other names not printed)"]) && keysOf(null).length === 0 && keysOf([1]).length === 0
+    && keysOf(Object.fromEntries(Array.from({ length: 60000 }, (_, i) => ["n" + i, 1]))).join().length < 60);
+  // A peer cannot make the report long, or make it print a method of Object, a long number or a number that is not a code.
+  const LOUD = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    if (req.method === "GET") return Response.json({ identity: K("f1"), version: "0.9.9 RC", peerlist: [{ identity: K("f1"), sync: { block: 7000 } }] });
+    const msg = (await req.json()).params[0].message;
+    if (msg === "getNetworkParameters") return Response.json({ result: 200, response: { minValidatorStake: "9".repeat(50000) } });
+    return Response.json({ result: 200, response: ["toString", "constructor", "2", "3", "0", "11", "12", "13", "14", "15", "16", "17"].map((st, i) => ({ address: K((0x30 + i).toString(16)), status: st, connectionUrl: null })) });
+  } });
+  const HUGE = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { return req.method === "GET" ? new Response("x", { status: 500 }) : Response.json({ result: 1e21, response: null }); } });
+  const loud = await runOut(["seed-x=" + url(LOUD), "seed-y=" + url(HUGE)], { agentReads: false });
+  check("W10c a status named like a method prints as 'not a status code', never as code; at most 8 kinds of status are named; a stake of 50,000 digits is an unexpected shape; a result that is not a small whole number is not printed",
+    !/function|native code|\[object/.test(loud.text) && loud.text.includes('status "(not a status code)": 2') && loud.text.includes('status "(more kinds)": ') && (loud.text.match(/status "/g) || []).length <= 9
+    && !/9{100}/.test(loud.text) && loud.text.includes("seed-x: getNetworkParameters: no minValidatorStake digit string of at most 78 digits") && !/1e\+21/.test(loud.text) && loud.text.includes("no answer (result not a status code)")
+    && loud.text.length < 3000, loud.text.length + " | " + loud.text.split("\n").filter((l) => /getValidators|getNetworkParameters/.test(l)).join(" | ").slice(0, 600));
+  LOUD.stop(true); HUGE.stop(true);
+  HOSTILE.stop(true);
   const unread = await errOut({ agentSource: conf([["seed-a", G1, K("a1")], ["seed-b", 'BASE + "/x"', K("a2")]]) });
   check("W8 a configured seed the check cannot read in full: exit 64 before any read, and it says how many", unread.code === 64 && unread.text === "" && unread.err === "src/agent.mjs configures 2 seeds; 1 could be read with a url and an identity. The pre-restart check needs all of them.", JSON.stringify(unread));
   const noBlock = await errOut({ agentSource: "const OTHER = {};" });
   check("W8b a source with no seed configuration: exit 64, said plainly", noBlock.code === 64 && noBlock.err === "The seeds could not be read from src/agent.mjs: it has no PUBLIC_NODES block.", JSON.stringify(noBlock));
   const plain = await runOut(pair(G1, G2), { agentReads: false });
   check("W6 the plain probe (no agent reads) prints no verdict and keeps its exit codes", plain.code === 0 && !/AGENT READS/.test(plain.text) && !/Watch \(/.test(plain.text));
-  [G1, G2, NOSELF, OTHERKEY, DOWN, DIFF, val].forEach((x) => x.stop(true));
+  // The store the check reads by default: marketplace.db in the agent's log folder (LOG_DIR, as the agent reads it).
+  {
+    const { mkdtempSync, rmSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+    const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs");
+    const dir = mkdtempSync(join(tmpdir(), "dno-logdir-")), db = new Database(join(dir, "marketplace.db"));
+    createCandidateStore(db).save([cand(K("c7"), val)], Date.now() - 60000); db.close();
+    const was = process.env.LOG_DIR; process.env.LOG_DIR = dir;
+    let byDefault; try { byDefault = await runOut(["--dial", ...pair(G1, DOWN)], { kept: undefined }); } finally { if (was === undefined) delete process.env.LOG_DIR; else process.env.LOG_DIR = was; }
+    check("W35 by default the check reads the candidates the agent keeps from marketplace.db in its log folder: one seed down, the kept validator stands in, exit 0", byDefault.code === 0
+      && byDefault.text.includes("  candidates: 1, kept by the agent from the list two seeds agreed on at ") && byDefault.text.trim().split("\n").pop().startsWith("AGENT READS OK: 1 of 2 seeds gave its own height, and 1 validator"), byDefault.code + " | " + byDefault.text.split("\n").slice(-4).join(" | "));
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const hung = await hangRead;
+  check("G6 a seed that never answers is given the agent's own five seconds, and is then 'no answer (timeout)'", hung.r.ok === false && hung.r.error === "timeout" && hung.ms >= 4500 && hung.ms < 9000 && agentSeedLine(hung.r) === "seed-hang  no answer (timeout)", JSON.stringify(hung));
+  [G1, G2, NOSELF, OTHERKEY, DOWN, DIFF, val, HANG].forEach((x) => x.stop(true));
+}
+
+console.log("\n[" + TAG + "] the probe's own reads: capped as the agent's, and 'no answer' only when the read failed");
+{
+  const { gzipSync } = await import("node:zlib");
+  const asked = [];
+  const mk = (fn) => Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: fn });
+  const gz = (text) => new Response(gzipSync(text), { headers: { "content-type": "application/json", "content-encoding": "gzip" } });
+  // 6 MB of JSON in a few kB of gzip: read by a client that lets the runtime expand it, it is 6 MB in memory before any cap.
+  const packedBig = JSON.stringify({ identity: ADDR("aa"), peerlist: [], pad: "x".repeat(6 * 1024 * 1024) });
+  const bomb = mk((req) => { asked.push(req.headers.get("accept-encoding")); return gz(packedBig); });
+  const zipped = mk((req) => (new URL(req.url).pathname === "/info" ? gz(JSON.stringify(INFO)) : Response.json({ result: 404, response: "unknown" })));
+  const page = mk(() => new Response("<html>busy</html>", { headers: { "content-type": "text/html" } }));
+  const large = mk(() => new Response("[" + "1,".repeat(1300000) + "1]", { headers: { "content-type": "application/json" } }));   // 2.6 MB, not compressed
+  const busy = mk(() => new Response("later", { status: 503 }));
+  const list = mk(() => Response.json([1, 2, 3]));
+  const [b, z, pg, lg, by, li, gone] = [await probeSeed({ name: "bomb", url: url(bomb) }), await probeSeed({ name: "zipped", url: url(zipped) }), await probeSeed({ name: "page", url: url(page) }),
+    await probeSeed({ name: "large", url: url(large) }), await probeSeed({ name: "busy", url: url(busy) }), await probeSeed({ name: "list", url: url(list) }), await probeSeed({ name: "gone", url: "http://127.0.0.1:1" })];
+  check("C1 a compressed body that would expand past 2 MB is not expanded: 'response too large' for each of the three reads, and each asked for identity encoding",
+    [b.info, b.params, b.validators].every((x) => x.answered === false && x.why === "response too large") && asked.length === 3 && asked.every((x) => x === "identity"), JSON.stringify([b.info, b.params, b.validators, asked]));
+  check("C2 a small compressed body is still read", z.info.answered === true && z.info.keys.includes("identity") && z.params.answered === false && z.params.why === "result 404", JSON.stringify([z.info, z.params]));
+  check("C3 why there was no answer is the read's own category, as on the agent's lines: a page that is not JSON, a body over 2 MB, a status, a list where an object is expected, a closed port",
+    [pg.info.why, lg.info.why, by.info.why, li.info.why, gone.info.why, gone.validators.why].join(" | ") === "invalid response | response too large | HTTP 503 | invalid response | connection failed | connection failed"
+    && formatReport([pg, gone]).text.includes("  /info                 no answer (invalid response)") && formatReport([gone]).text.includes("  getValidators         no answer (connection failed)"), JSON.stringify([pg.info, lg.info, by.info, li.info, gone.info]));
+  // A value a peer chose that this tool cannot turn into text: the seed answered all the same.
+  const odd = seedServer({ stake: "1000000000000000000", rows: [Object.assign({}, ROW(0, "2"), { firstSeen: { toString: 0, valueOf: 0 } }), Object.assign({}, ROW(1, "2"), { firstSeen: { toString: 0, valueOf: 0 } })] });
+  // The value is taken inside a guard: a firstSeenValue that throws on it must show as this check failing, by name, not as the suite stopping.
+  const fsv = (v) => { try { return firstSeenValue(v); } catch (e) { return { kind: "threw " + e.name, key: null }; } };
+  const o = await probeSeed({ name: "odd", url: url(odd) }), same = fsv({ toString: 0, valueOf: 0 }), other = fsv({ toString: 1 });
+  check("C4 a firstSeen that cannot be turned into text does not make an answer 'no answer': the list is counted, and such values are still compared (it was: 'no answer (not reached)' beside '/info answered')",
+    o.validators.answered === true && o.validators.shapeOk === true && o.validators.rows === 2 && o.shapeErrors.length === 0 && same.kind === "other" && same.key !== null && same.key === fsv({ toString: 0, valueOf: 0 }).key && same.key !== other.key
+    && !formatReport([o]).text.includes("no answer"), JSON.stringify([o.validators && { a: o.validators.answered, s: o.validators.shapeOk }, o.shapeErrors, same, other]));
+  [bomb, zipped, page, large, busy, list, odd].forEach((s) => s.stop(true));
 }
 
 [A, B, C, E].forEach((s) => s.stop(true));

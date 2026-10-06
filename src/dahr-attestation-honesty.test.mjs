@@ -50,7 +50,7 @@ try {
     if (att && att.last_count > 0) {
       check("A3b the badge names the cross-check RPCs and the count", dash.includes("DAHR on cross-check RPCs: " + att.last_count));
     } else {
-      check("A3b no count => 'DAHR attestation unavailable'", dash.includes("DAHR attestation unavailable") && !dash.includes("DAHR on cross-check RPCs"));
+      check("A3bx no count => 'DAHR attestation unavailable'", dash.includes("DAHR attestation unavailable") && !dash.includes("DAHR on cross-check RPCs"));
     }
   } else {
     console.log("  skip A3 (no internal base given)");

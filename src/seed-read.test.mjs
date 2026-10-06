@@ -39,6 +39,19 @@ console.log("\n[" + TAG + "] what an answer says");
   check("A1 a seed that lists itself: its own height, height_source self, identity matches, version and peer count",
     r.ok === true && r.block === 5000 && r.height_source === "self" && r.identityMatch === true && r.version === "0.9.9 RC" && r.peers === 2 && Number.isFinite(r.latencyMs), JSON.stringify(r).slice(0, 240));
   check("A2 the peerlist and the answering identity are returned for the catalog intake", Array.isArray(r.peerlist) && r.peerlist.length === 2 && r.answeredId === SEED);
+  // One node that writes its key in another letter case on a second URL is one node: the intake gets one name for it.
+  const shouted = s(info({ identity: SEED.toUpperCase().replace("0X", "0x"), peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+  const sh = await readSeedInfo(shouted.node);
+  check("A2b the answering identity is given in lower case, whatever case the node wrote it in: one node answering in two letter cases is one peerlist for the catalog intake",
+    SEED === SEED.toLowerCase() && sh.ok === true && sh.answeredId === SEED && sh.answeredId === r.answeredId && sh.identityMatch === true, JSON.stringify([sh.answeredId, sh.identityMatch]));
+
+  const versions = [];
+  for (const v of ["0.9.8", "v1.2", "1.0.0-beta.2", "203.0.113.9:53550", "node7.example:53550", "10.0.0.8", "<b>x</b>", "testnet build of Tuesday", "", 7, null]) {
+    const srv = s(info({ identity: SEED, version: v, peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+    versions.push((await readSeedInfo(srv.node)).version);
+  }
+  check("A1b a seed's version is published only when it reads as a release version, by the validators' rule: an address, a host name, markup or free text is '?'",
+    JSON.stringify(versions) === JSON.stringify(["0.9.8", "v1.2", "1.0.0-beta.2", "?", "?", "?", "?", "?", "?", "?", "?"]), JSON.stringify(versions));
 
   const first = s(info({ identity: SEED, peerlist: [{ identity: PEER, sync: { block: 4960 } }] }));
   const f = await readSeedInfo(first.node);
@@ -56,6 +69,35 @@ console.log("\n[" + TAG + "] what an answer says");
   const hostile = s(info({ identity: SEED, version: "<script>alert(1)</script>" + "x".repeat(80), peerlist: [{ identity: SEED, sync: { block: "<b>9</b>" } }, { identity: PEER, sync: { block: -4 } }] }));
   const h = await readSeedInfo(hostile.node);
   check("A6 markup as a height gives no height; a version label is sanitized and bounded", h.ok === true && h.block === null && h.height_source === null && !/[<>]/.test(h.version) && h.version.length <= 32, JSON.stringify(h).slice(0, 200));
+
+  // One key form for every comparison (keyOf: trimmed, lower case, 0x or not), the form the validator watch compares in.
+  const bare = SEED.slice(2), forms = [SEED, bare, SEED.toUpperCase().replace("0X", "0x"), bare.toUpperCase(), "  " + SEED + " ", "0X" + bare];
+  const got = [];
+  for (const configured of [SEED, bare, bare.toUpperCase()]) for (const answered of forms) for (const listed of [SEED, bare.toUpperCase()]) {
+    const x = s(info({ identity: answered, peerlist: [{ identity: PEER, sync: { block: 4960 } }, { identity: listed, sync: { block: 5000 } }] }));
+    const r8 = await readSeedInfo({ url: x.url, identity: configured });
+    got.push(r8.ok === true && r8.identityMatch === true && r8.block === 5000 && r8.height_source === "self");
+  }
+  check("A8 the configured key, the key the answer names and the key of the own entry are compared in one form: 0x or not, any letter case, blanks around (36 combinations, each its own height)",
+    got.length === 36 && got.every(Boolean), JSON.stringify(got));
+  const near = s(info({ identity: SEED.slice(0, -1) + "3", peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+  const short = s(info({ identity: "abc", peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+  const n9 = await readSeedInfo(near.node), s9 = await readSeedInfo(short.node);
+  check("A9 an answer that names any other key, one character apart or a short one, is another node's: no height, identityMatch false; a name that is not an identity does not go to the intake",
+    n9.identityMatch === false && n9.block === null && n9.height_source === null && s9.identityMatch === false && s9.block === null && s9.answeredId === null, JSON.stringify([n9, s9]).slice(0, 300));
+  const outs = [];
+  for (const odd of [5, null, { a: 1 }, ["0x"], "", "<b>" + bare, "x".repeat(200)]) {
+    const x = s(info({ identity: odd, peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+    const r10 = await readSeedInfo(x.node);
+    outs.push(r10.ok === true && r10.identityMatch === null && r10.answeredId === null && r10.block === 5000 && r10.height_source === "self");
+  }
+  check("A10 an identity that is no key at all (a number, null, an object, markup, 200 characters) names none: identityMatch null, never true", outs.length === 7 && outs.every(Boolean), JSON.stringify(outs));
+  const unkeyed = s(info({ identity: SEED, peerlist: [{ identity: SEED, sync: { block: 5000 } }] }));
+  const u = await readSeedInfo({ url: unkeyed.url, identity: undefined }), u2 = await readSeedInfo({ url: unkeyed.url, identity: "" });
+  const named = s(info({ identity: "undefined", peerlist: [{ identity: "undefined", sync: { block: 5000 } }] }));
+  const u3 = await readSeedInfo({ url: named.url, identity: undefined }), u4 = await readSeedInfo({ url: named.url });
+  check("A11 a node configured without a key matches nothing: the answer names another key, so no height, also when the answer names itself \"undefined\"",
+    u.identityMatch === false && u.block === null && u2.identityMatch === false && u2.block === null && u3.identityMatch === false && u3.block === null && u4.identityMatch === false && u4.height_source === null, JSON.stringify([u, u2, u3, u4]).slice(0, 400));
 
   const empty = s(info({ identity: SEED }));
   const e = await readSeedInfo(empty.node);

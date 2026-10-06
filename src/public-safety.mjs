@@ -15,6 +15,13 @@ import { gunzipSync, inflateSync, brotliDecompressSync } from "node:zlib";
 // A Demos identity is 0x followed by 64 hex characters. Anything else from a peerlist is not stored.
 export const IDENTITY_RE = /^0x[0-9a-fA-F]{64}$/;
 export function isValidIdentity(id) { return typeof id === "string" && IDENTITY_RE.test(id); }
+// The comparison form of a key: trimmed, lower case, without a leading 0x. Used only to compare, never published. One
+// function for every "is this the listed key" question: the validator watch, the seed read and the witness read.
+export function keyOf(value) {
+  if (typeof value !== "string") return null;
+  var s = value.trim().toLowerCase().replace(/^0x/, "");
+  return /^[0-9a-z]{1,128}$/.test(s) ? s : null;
+}
 
 // Public form used on every surface: first 6 characters, an ellipsis, last 4 ("0xabcd…1234").
 export function truncIdentity(id) {
@@ -31,6 +38,10 @@ export function sanitizeHeight(value) {
 }
 
 // Short peer-reported labels (sync status, version). Printable, conservative charset, bounded length.
+// A version as releases name them (0.9.9, v1.2, 0.9.9 RC, 1.0.0-beta.2). Anything else is "no version": a node's free
+// text never reaches a public surface as its version (four numbers and a port would pass sanitizeLabel).
+const VERSION_RE = /^v?\d{1,2}\.\d{1,3}(\.\d{1,3})?([ -]?(rc|beta|alpha)[ .]?\d{0,2})?$/i;
+export function versionOf(value) { return typeof value === "string" && VERSION_RE.test(value.trim()) ? value.trim() : null; }
 export function sanitizeLabel(value, maxLen) {
   if (typeof value !== "string") return null;
   var s = value.trim();
@@ -59,9 +70,12 @@ export function probeErrorCategory(err, httpStatus) {
   if (err.name === "TimeoutError" || err.name === "AbortError") return "timeout";
   if (err.name === "ResponseTooLarge") return "response too large";
   if (err instanceof SyntaxError || err instanceof RangeError) return "invalid response";  // RangeError: e.g. nesting too deep
-  if (err instanceof TypeError || err instanceof ReferenceError) return "internal error";
+  if (isInternalError(err)) return "internal error";
   return "connection failed";
 }
+// A fault in DNO's own code, as against anything a peer or the network can cause. The address check has the same line:
+// a name that does not resolve is the peer's address; a TypeError or ReferenceError while checking it is not.
+export function isInternalError(err) { return err instanceof TypeError || err instanceof ReferenceError; }
 
 // ---- admin token -------------------------------------------------------------------------------------
 // An admin route is open only when a token of at least 16 characters is configured and the presented
@@ -135,6 +149,8 @@ export function isPublicIp(ip) {
 // resolvePublicProbeOrigin() returns the origin pinned to the address it checked, so the probe connects to that
 // address and the name is not resolved a second time (no DNS rebinding between check and connect). Callers must
 // also refuse redirects (fetch option redirect: "manual"), or a public address could forward the probe inward.
+// It resolves to null for an address it refuses and rejects only with a fault of its own (isInternalError): a caller
+// must not read that rejection as "the address is not public".
 export function parseProbeOrigin(connection) {
   if (typeof connection !== "string") return null;
   var s = connection.trim();
@@ -156,8 +172,10 @@ export async function resolvePublicProbeOrigin(connection, lookupFn) {
   var addrs;
   if (isIP(host)) addrs = [host];
   else {
+    // A name that does not resolve is refused. A fault in DNO's own call is thrown on: it says nothing about the name
+    // (the runtime's lookup rejects with a plain Error and a code such as ENOTFOUND for a name it cannot resolve).
     try { addrs = (await (lookupFn || dnsLookup)(host, { all: true })).map(function(a) { return a.address; }); }
-    catch (e) { return null; }
+    catch (e) { if (isInternalError(e)) throw e; return null; }
   }
   if (!addrs.length || !addrs.every(isPublicIp)) return null;
   // Only plain http is probed: a pinned https origin fails its certificate check (hostname) or rarely has one (IP).
@@ -178,7 +196,10 @@ export const nativeFetch = typeof Bun !== "undefined" && typeof Bun.fetch === "f
 // applies) and parses with readJsonCapped(): at most maxBytes are read from the wire and at most maxBytes are produced
 // by decompression. Past the cap the error is named ResponseTooLarge; a peer streaming an endless or highly compressed
 // body cannot exhaust memory.
-export const CAPPED_FETCH_OPTIONS = Object.freeze({ decompress: false, headers: Object.freeze({ "Accept-Encoding": "identity" }) });
+// No kept connection: the connection is closed when the read ends. Kept open, it stays in the runtime's pool, and a peer
+// that goes on sending after a complete response is received for as long as it sends. The runtime decides this by the
+// request's Connection header when there is one, and by the keepalive option only when there is none, so both are fixed.
+export const CAPPED_FETCH_OPTIONS = Object.freeze({ decompress: false, keepalive: false, headers: Object.freeze({ "Accept-Encoding": "identity", "Connection": "close" }) });
 function responseTooLarge(maxBytes) { var e = new Error("response larger than " + maxBytes + " bytes"); e.name = "ResponseTooLarge"; return e; }
 // One capped read with the runtime's fetch, and the only way DNO makes one. Resolves to { status, ok, headersMs, data }:
 // data is the parsed JSON body when the status is read (2xx, or opts.read(status)), else undefined. It throws what the
@@ -195,12 +216,13 @@ export async function cappedJson(url, init, opts) {
   var maxBytes = Number.isFinite(o.maxBytes) && o.maxBytes > 0 ? o.maxBytes : CAPPED_DEFAULT_MAX_BYTES;
   var timer = setTimeout(function() { ctl.abort(new DOMException("The operation timed out.", "TimeoutError")); }, o.timeoutMs || 5000);
   try {
-    // The fixed options come last, so a caller's init cannot change them: no automatic decompression, no redirect, this
-    // read's own signal (a caller's signal is not used), and identity encoding whatever case the caller named it in.
+    // The fixed options come last, so a caller's init cannot change them: no automatic decompression, no redirect, no
+    // kept connection, this read's own signal (a caller's signal is not used), and identity encoding and a closed
+    // connection whatever case the caller named those headers in.
     var headers = new Headers((init && init.headers) || {});
     Object.keys(CAPPED_FETCH_OPTIONS.headers).forEach(function(k) { headers.set(k, CAPPED_FETCH_OPTIONS.headers[k]); });
     var resp = await (o.fetch || nativeFetch)(url, Object.assign({}, init || {}, {
-      decompress: CAPPED_FETCH_OPTIONS.decompress, redirect: "manual", signal: ctl.signal, headers: headers }));
+      decompress: CAPPED_FETCH_OPTIONS.decompress, keepalive: CAPPED_FETCH_OPTIONS.keepalive, redirect: "manual", signal: ctl.signal, headers: headers }));
     var out = { status: resp.status, ok: resp.ok, headersMs: Date.now() - started, data: undefined };
     if (o.read ? o.read(resp.status) : resp.ok) out.data = await readJsonCapped(resp, maxBytes);
     return out;

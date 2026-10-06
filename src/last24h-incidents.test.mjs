@@ -81,5 +81,24 @@ console.log("\n[" + TAG + "] chain movement is published only when own-height ro
   check("L10 the other parts of the summary do not change", ["coverage_pct", "typical_set_size", "longest_non_stable_minutes", "active_critical_public_incidents"].every((k) => twoHours[k] === whole[k]));
 }
 
+console.log("\n[" + TAG + "] a dated note beside a stored record (the record itself is never edited)");
+{
+  const a = SRC.indexOf("var INCIDENT_NOTES = ["), b = SRC.indexOf("\n}\n", SRC.indexOf("function incidentNote(id, startedAt) {")) + 3;
+  const starts = { "1.2": Date.UTC(2026, 9, 7, 23, 59, 59) };
+  const note = new Function("apiFirstStarts", SRC.slice(a, b) + "\nreturn { note: incidentNote, all: INCIDENT_NOTES };")(starts);
+  const n = note.note("INC-1349", "2026-10-01T20:07:58.199Z");
+  check("N1 the visibility record of 1 October has a note, and it says the cause was in DNO", n && /^The cause was in DNO, not in the seeds\./.test(n.text) && /says nothing about the seeds or the network/.test(n.text), JSON.stringify(n));
+  delete starts["1.2"]; const undated = note.note("INC-1349", "2026-10-01T20:07:58.199Z"); starts["1.2"] = Date.UTC(2026, 9, 8, 0, 0, 0);
+  check("N1b the note's date is this server's: the day (UTC) the version that carries it first started on this store, and none while that day is not kept", n.added === "2026-10-07" && undated && undated.added === null && undated.text === n.text
+    && note.note("INC-1349", "2026-10-01T20:07:58.199Z").added === "2026-10-08" && note.all.every((x) => x.api === "1.2" && x.added === undefined), JSON.stringify([n.added, undated && undated.added]));
+  check("N2 the note is keyed by id and start time: a record another store numbered the same, or any other record, has none", note.note("INC-1349", "2026-10-01T20:07:58.198Z") === null && note.note("INC-1349", null) === null && note.note("INC-1350", "2026-10-01T20:07:58.199Z") === null && note.note(undefined, undefined) === null);
+  const BANNED = /\b(approved|certified|trusted|recommended|safe|best|scores?|ranking|ranked|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i;
+  check("N3 no banned word, no host, no key in a note", note.all.every((x) => !BANNED.test(x.text) && !/\d+\.\d+\.\d+\.\d+|0x[0-9a-f]{8}|https?:/i.test(x.text) && /^\d\.\d$/.test(x.api)));
+  const route = SRC.slice(SRC.indexOf('reqPath === "/incidents" || reqPath.indexOf("/incidents/") === 0'), SRC.indexOf('reqPath === "/federate"'));
+  check("N4 /incidents adds it as a field of its own beside the stored description, and only where there is one", route.includes("var incNote = incidentNote(r.id, r.started_at);\n          if (incNote) incRow.note = incNote;") && route.includes("description: r.description,"));
+  check("N5 /timeline shows it under the record, escaped, with its date when there is one", SRC.includes("return note ? '<div class=\"tl-meta tl-note\">Note' + (note.added ? ' added ' + escapeHtmlTL(note.added) : '') + ': ' + escapeHtmlTL(note.text) + '</div>' : '';"));
+  check("N6 nothing writes a note into the store", !/UPDATE incidents SET description/.test(SRC));
+}
+
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
 if (failed) process.exit(1);

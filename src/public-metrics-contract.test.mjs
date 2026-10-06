@@ -117,8 +117,8 @@ try {
   check("X6 isolation load returns callable buildPublicMetrics", typeof bpm === "function");
   check("X7 isolation load returns callable promLabelValue",     typeof plv === "function");
 } catch (e) {
-  check("X6 isolation load returns callable buildPublicMetrics", false, e.message);
-  check("X7 isolation load returns callable promLabelValue",     false, e.message);
+  check("X6x isolation load returns callable buildPublicMetrics", false, e.message);
+  check("X7x isolation load returns callable promLabelValue",     false, e.message);
 }
 
 // ---- Output helpers ---------------------------------------------------------
@@ -305,7 +305,7 @@ if (typeof bpm === "function") {
   body = run(fresh([{ rpc: "bogus", up: true, latencyMs: 1 }, { rpc: "bogus", up: true, latencyMs: 1 }, { rpc: V1, up: true, latencyMs: 2 }]), NOW, BOUND);
   structurallyValid(body, "H1");
   check("H1 duplicate INVALID aliases skipped, no snapshot rejection", upOf(body, V1) === "1" && latOf(body, V1) === "2");
-  check("H1 invalid aliases never serialized", !body.includes("bogus"));
+  check("H1x invalid aliases never serialized", !body.includes("bogus"));
   exactAliases(body, "H1", [V1], [V1]);
 
   // H2 — version escaping, behavioral, routed through the full validator
@@ -318,8 +318,8 @@ if (typeof bpm === "function") {
     exactAliases(escaped, "H2", [], []);
     const oiLine = escaped.split("\n").find(l => l.startsWith("dno_oracle_info{"));
     check("H2 nasty version emits a single-line oracle_info sample", !!oiLine);
-    check("H2 quote/backslash/newline Prometheus-escaped exactly", !!oiLine && oiLine.includes('version="v\\"1\\\\2\\n3"'));
-  } catch (e) { check("H2 nasty-version load/serialize", false, e.message); }
+    check("H2x quote/backslash/newline Prometheus-escaped exactly", !!oiLine && oiLine.includes('version="v\\"1\\\\2\\n3"'));
+  } catch (e) { check("H2xx nasty-version load/serialize", false, e.message); }
 
   // H3 — malformed now / staleBound (§1b clauses) → oracle_info only
   const goodSnap = fresh([{ rpc: V1, up: true, latencyMs: 1 }]);

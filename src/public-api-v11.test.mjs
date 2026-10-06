@@ -1,5 +1,5 @@
 // public-api-v11.test.mjs — PUBLIC_API_V11 guard: the 1.1 additions (catalog, exact lookup, condition records,
-// height movement, conditional GET) and the homepage that renders them.
+// height movement, conditional GET), the 1.2 additions (witnesses, the standstill limit) and the homepage that renders them.
 // Static part: homepage.html against agent.mjs (server-side fill markers, mark asset, ban list).
 // Served part: every public representation of the new data, against a running agent.
 // Run:  bun src/public-api-v11.test.mjs [baseUrl]   (executable harness, not `bun test`)
@@ -116,6 +116,39 @@ const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
+// The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.
+const SCHEMA = JSON.parse(readFileSync(join(ROOT, "organism.schema.json"), "utf8"));
+const apiVersion = (SRC.match(/var API_VERSION = "([0-9.]+)";/) || [])[1];
+const changelog = Array.isArray(SCHEMA["x-changelog"]) ? SCHEMA["x-changelog"].map((e) => String(e.version)) : [];
+check("H27x the agent's API version is 1.2, the newest entry of the schema's changelog", apiVersion === "1.2" && changelog.length > 0 && changelog.every((v) => v <= apiVersion) && changelog.includes(apiVersion), apiVersion + " | " + changelog.join(","));
+// Every endpoint /docs lists has a route (up to 7.1.1 it listed GET /signals, which answered 404).
+const docsPaths = [...SRC.matchAll(/docsEntry\('GET (\/[^' ?]*)/g)].map((m) => m[1]);
+const noRoute = docsPaths.filter((p) => !SRC.includes('reqPath === "' + p + '"') && !SRC.includes('reqPath.startsWith("' + p + '")'));
+check("H28 every endpoint /docs lists has a route in the agent", docsPaths.length >= 15 && noRoute.length === 0, docsPaths.length + " listed; no route: " + noRoute.join(", "));
+// And the other way: every route the public handler serves is on /docs. Not listed, by their nature: /docs itself, /home
+// (a redirect to /), and the routes the public listener answers 404 or 401 for (the internal views and the private one).
+const NOT_PUBLIC = ["/docs", "/home", "/history", "/history/export", "/dashboard", "/private/commerce/status"];
+const served = [...new Set([...SRC.matchAll(/reqPath === "(\/[^"]*)"/g)].map((m) => m[1].replace(/(.)\/$/, "$1")))];
+const unlisted = served.filter((p) => !NOT_PUBLIC.includes(p) && !docsPaths.includes(p));
+check("H28b every route the public site serves is listed on /docs, which says 'every route'", served.length >= 28 && unlisted.length === 0 && NOT_PUBLIC.every((p) => served.includes(p)) && /Every route the public site serves/.test(SRC), served.length + " routes; not listed: " + unlisted.join(", "));
+check("H28c /docs says which of them are not JSON", /docsEntry\('GET \/federate', 'Prometheus text, not JSON/.test(SRC) && /docsEntry\('GET \/badge', 'An SVG image, not JSON/.test(SRC) && /JSON unless noted, and the pages are HTML/.test(SRC));
+check("H29 the height signal on /health says what was read, not 'the public network'", SRC.includes('message: "Highest own height among the seeds that answered: " + pubBlock + " (" + pubOnline.length + " answered)"') && !/Public network at block/.test(SRC) && !/nodes online\)"/.test(SRC));
+check("H30 a record without a block publishes none: null, not block 0", SRC.includes("detectedBlock: r.detected_block || null, resolvedBlock: r.resolved_block || null,"));
+// The disclosure: DNO reads its operator's nodes as fleet data, so "DNO reads it like any other" said too much. What is
+// true is said the same way wherever it is said: in the public reading that validator counts like any other.
+{
+  const core = "counts like any other validator, and only if it publishes an address on chain";
+  const places = { "the site footer (src/agent.mjs)": SRC, "homepage.html": HOME };
+  for (const f of ["about-demos.html", "criteria.html", "methodology.html", "README.md"]) places[f] = readFileSync(join(ROOT, f), "utf8");
+  const without = Object.keys(places).filter((k) => places[k].split(core).length !== 2);
+  const old = Object.keys(places).filter((k) => /reads? (it|that validator) like any other|read like any other|which DNO reads like any other/.test(places[k]));
+  check("H31 the disclosure says the same in six places: in the public reading the operator's validator counts like any other, and none says DNO reads it like any other", without.length === 0 && old.length === 0, "without: " + without.join(", ") + " | old wording: " + old.join(", "));
+}
+// The seed table shows what DNO read: no percentage of a seed's height against the highest seed's, and the count beside
+// it is named for what it counts.
+check("H34 the agent's own version label is this release's (it read 6.9 through three releases): /version, /docs and /federate say 7.2", /^const AGENT_VERSION = "7\.2";/m.test(SRC));
+check("H32 the homepage has no 'Sync' column and no 'at head' label; the count is 'within 100 blocks of the highest seed'", !/>Sync<\/th>/.test(HOME) && !/sync_pct/.test(HOME) && !/>at head</.test(HOME) && HOME.includes('<p class="k">within 100 blocks of the highest seed</p>'));
+check("H33 the homepage shows no median when nothing was compared (one seed's height is not a median), and no dash for a latency that was not observed", HOME.includes("setOdometer(compared && isNum(a.median_block) ? a.median_block : null, compared ? undefined : 'not computed');") && !HOME.includes("no latency this cycle"));
 if (STATIC_ONLY) {
   console.log("\n[" + TAG + "] served checks skipped (--static)");
   console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
@@ -126,7 +159,7 @@ async function get(path, headers) { const r = await fetch(BASE + path, { headers
 try {
   const org = await get("/organism");
   const o = org.body;
-  check("S1 api_version 1.1", o.api_version === "1.1", o.api_version);
+  check("S1 api_version 1.2", o.api_version === "1.2", o.api_version);
   check("S2 additive fields typed", (o.observed_at === null || typeof o.observed_at === "string")
     && (o.height_static_seconds === null || Number.isInteger(o.height_static_seconds))
     && Number.isInteger(o.active_public_conditions) && o.active_public_conditions >= 0
@@ -195,7 +228,27 @@ try {
   // R1: a seed that did not list itself has no height; its first listed peer's height is on its row only.
   const pn = health.publicNodes || [];
   const own = pn.filter((n) => n.ok && n.height_source === "self" && Number.isInteger(n.block)).length;
-  check("S34 agreement counts only seeds that reported their own height", (o.agreement_detail || {}).total_nodes === own, (o.agreement_detail || {}).total_nodes + " vs " + own);
+  // 1.2: what the reading rests on. Counts and one time; the mode decides what agreement compared.
+  const wt = o.witnesses || {}, wv = wt.validators, ps = wt.public_seeds || {}, ad = o.agreement_detail || {};
+  const compared = wt.mode === "seed_and_validators" ? 2 : wt.mode === "validators_only" ? (wv || {}).counted : own;
+  check("S34 agreement counts the heights compared: the seeds that reported their own height; beside one seed, that seed and one validator; with no seed, the counted validators", ad.total_nodes === compared, ad.total_nodes + " vs " + compared + " (" + wt.mode + ")");
+  check("W1 /organism witnesses: exactly its keys, and a mode from the documented set", Object.keys(wt).sort().join(",") === "counted,mode,public_seeds,validators" && ["seeds_only", "seed_and_validators", "validators_only", "insufficient"].includes(wt.mode)
+    && Object.keys(ps).sort().join(",") === "answered,configured,own_height" && (wv === null || Object.keys(wv).sort().join(",") === "counted,list_agreed_at,own_height,read"), JSON.stringify(wt));
+  check("W2 the seed counts are the /health rows' own: configured, answered, with their own height", ps.configured === pn.length && ps.answered === pn.filter((n) => n.ok).length && ps.own_height === own, JSON.stringify(ps) + " vs " + pn.length + "/" + own);
+  check("W3 the mode follows the counts: two seed heights are seeds_only with no validator read; one is never seeds_only; a reading without a seed height is validators_only",
+    (own >= 2 ? wt.mode === "seeds_only" || o.data_quality_reason === "stale" || o.data_quality_reason === "no_observation" : wt.mode !== "seeds_only") && (wt.mode !== "seeds_only" || wv === null)
+    && (wt.mode !== "seed_and_validators" || (own === 1 && wv && wv.counted >= 1)) && (wt.mode !== "validators_only" || (own === 0 && wv && wv.counted >= 2 && wv.counted * 2 > wv.own_height)), JSON.stringify(wt));
+  check("W4 counted: the heights the reading rests on, none without a reading", wt.counted === (wt.mode === "seeds_only" ? own : wt.mode === "seed_and_validators" ? 1 + wv.counted : wt.mode === "validators_only" ? wv.counted : 0)
+    && (wv === null || (wv.counted <= wv.own_height && wv.own_height <= wv.read && wv.read <= 8)), JSON.stringify(wt));
+  check("W5 no reading is unknown and insufficient, and a reading is neither: the three go together", (wt.mode === "insufficient") === (o.status === "unknown") && (wt.mode === "insufficient") === (o.data_quality === "insufficient"), wt.mode + " " + o.status + " " + o.data_quality);
+  check("W6 a reading that rests on validators says so: risk is not low, a risk factor names it, and validators alone are uncertain", wt.mode === "seeds_only" || wt.mode === "insufficient"
+    || (o.risk !== "low" && o.risk_factors.some((f) => /validator/.test(f)) && (wt.mode !== "validators_only" || o.confidence === "uncertain")), JSON.stringify([o.risk, o.risk_factors, o.confidence]));
+  check("W7 list_agreed_at is a time at most 24 h before the observation", wv === null || (wv.list_agreed_at !== null && Date.parse(o.observed_at) - Date.parse(wv.list_agreed_at) <= 86400000 && Date.parse(wv.list_agreed_at) <= Date.parse(o.observed_at)), wv && wv.list_agreed_at);
+  check("W8 witnesses carries no key, address, URL or height", !stringsDeep(wt).some((x) => FULL_ID.test(x) || IPV4.test(x) || HOSTPORT.test(x) || /https?:|0x[0-9a-f]{8,}/i.test(x)) && !/\d{5,}/.test(JSON.stringify(wt).replace(/"list_agreed_at":"[^"]*"/, "")), JSON.stringify(wt));
+  check("W9 the standstill limit is published, and status obeys it: a reading at or past it is not stable", o.height_standstill_after_seconds === 1800 && health.height_standstill_after_seconds === 1800
+    && !(o.status === "stable" && Number.isInteger(o.height_static_seconds) && o.height_static_seconds >= o.height_standstill_after_seconds), o.status + " " + o.height_static_seconds);
+  check("W10 /health carries the same witnesses object (the two requests may fall in different rounds: the keys and the seed counts must match)", health.witnesses && Object.keys(health.witnesses).sort().join(",") === "counted,mode,public_seeds,validators"
+    && health.witnesses.public_seeds.configured === ps.configured, JSON.stringify(health.witnesses));
   const firstPeer = pn.filter((n) => n.height_source === "first_peer").map((n) => n.name);
   const vgSeeds = (vg.validators || []).filter((v) => v.monitored && firstPeer.includes(v.display));
   check("S35 a first-peer seed has no height in validator_growth", vgSeeds.length === firstPeer.length && vgSeeds.every((v) => v.block === null && v.lag === null && v.sync_pct === null), JSON.stringify(vgSeeds.map((v) => [v.display, v.block])));
@@ -218,7 +271,7 @@ try {
   const VW_KEYS = "answered_as_listed,answered_as_listed_seeds,answered_no_key,answered_other_key,at_seed_height,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,max_rows_per_origin,no_answer,not_dialed,not_dialed_reasons,off_seed_height,origins_dialed,other_key_shared,other_key_shared_origins,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
   check("V1 /health on_chain_validators: exactly the published keys", ocv && Object.keys(ocv).sort().join(",") === OC_KEYS, ocv && Object.keys(ocv).sort().join(","));
   check("V2 /health validator_watch: exactly the published keys", vwt && Object.keys(vwt).sort().join(",") === VW_KEYS, vwt && Object.keys(vwt).sort().join(","));
-  check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
+  check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "read_fault", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
   const ocCounts = ["listed", "active", "unstaking", "other_status", "first_agreed_today", "first_agreed_week", "first_agreed_month", "first_agreed_as_of"];
   const vwCounts = ["watched", "not_dialed", "no_answer", "answered_other_key", "answered_no_key", "answered_as_listed", "every_round_last_hour",
     "origins_dialed", "max_rows_per_origin", "other_key_shared", "other_key_shared_origins", "answered_as_listed_seeds"];
@@ -271,16 +324,28 @@ try {
   const docs = await get("/docs");
   const docsHtml = typeof docs.body === "string" ? docs.body : "";
   check("S36 /docs prints no full wallet or identity and no /dashboard link", docs.status === 200 && !FULL_ID.test(docsHtml) && !/0x[0-9a-fA-F]{40}\b/.test(docsHtml) && !/href="\/dashboard"/.test(docsHtml));
+  // Every endpoint /docs lists is served: up to 7.1.1 it listed GET /signals, which answered 404.
+  const listed = [...docsHtml.matchAll(/<dt><code>GET (\/[^<\s]*)<\/code><\/dt>/g)].map((m) => m[1].replace(/&amp;/g, "&").replace(/\?key=0x…$/, "?key=0x" + "ab".repeat(32)));
+  const notServed = [];
+  for (const pth of listed) { const r = await fetch(BASE + pth); if (r.status !== 200) notServed.push(pth + " " + r.status); await r.arrayBuffer(); }
+  check("S36b every GET endpoint /docs lists answers 200", listed.length >= 15 && notServed.length === 0, listed.length + " listed; " + notServed.join(", "));
 
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
   const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('id="cards"'));
   const ocH = health.on_chain_validators;
-  check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then the seeds status is made of; no 'nodes aligned'",
+  // The card's second line says what status is made of in this observation (1.2): the seeds; one seed and the validators
+  // standing in; validators alone; or, when validators were read and gave no reading, that status is unknown. The page
+  // and /organism may be a round apart, so any of the endings the two rounds' modes allow is accepted.
+  const hw = (await get("/health")).body.witnesses || {};
+  const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
+    : w.mode === "insufficient" && w.validators ? "Status is unknown" : "Status is those seeds");
+  const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
+  check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then what status is made of in this observation; no 'nodes aligned'",
     !o.observed_at || (/<p class="cycle-lead" id="cycle-lead" data-src="api">([\d,]+ ACTIVE on chain as \w+ public seeds list them\.|ACTIVE on chain: (reading|not reported this cycle[^<]*)\.)<\/p>/.test(cardHtml)
       && (ocH.state !== "agreed" || cardHtml.includes(">" + cycleLead(ocH) + "<"))
-      && /<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ Status is those seeds(, not the [\d,]+)?\.<\/p>/.test(cardHtml)
+      && seedsLineOk(cardHtml)
       && !/nodes aligned/.test(cardHtml)), cardHtml.slice(0, 600));
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());

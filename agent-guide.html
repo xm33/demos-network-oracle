@@ -41,13 +41,13 @@
     <article class="prose">
 <section id="purpose">
 <h2>Purpose</h2>
-<p>The Oracle publishes its reading of the Demos testnet's public seeds, taken from outside. It is strictly watch-only: it observes, interprets, and publishes. It does not advise, predict, or issue instructions.</p>
+<p>The Oracle publishes its reading of the Demos testnet's public seeds, taken from outside. When fewer than two seeds give their own height, validators that answer as listed stand in, and <code>witnesses</code> says so. It is strictly watch-only: it observes, interprets, and publishes. It does not advise, predict, or issue instructions.</p>
 <p>Your agent reads the state and decides what to do with it. The Oracle never tells you.</p>
 </section>
 <section id="endpoint">
 <h2>Endpoint</h2>
 <pre data-copy>GET /organism</pre>
-<p>The default context is GET /organism. It returns the 17 required top-level fields plus six added in 1.1 (<code>observed_at</code>, <code>data_quality_reason</code>, <code>height_last_advanced_at</code>, <code>height_static_seconds</code>, <code>active_public_conditions</code>, <code>agreement_detail</code>). No fleet data. Every top-level field is always present. The 17 required fields are never null; the four time and reason fields added in 1.1 are null when there is nothing to report. <code>risk_factors</code> is an array of strings; <code>agreement_detail</code> and <code>last_24h</code> are small objects whose fields may be null (nothing compared, or history still accumulating). Refreshes every 20 seconds.</p>
+<p>The default context is GET /organism. It returns the 17 required top-level fields plus six added in 1.1 (<code>observed_at</code>, <code>data_quality_reason</code>, <code>height_last_advanced_at</code>, <code>height_static_seconds</code>, <code>active_public_conditions</code>, <code>agreement_detail</code>) and two added in 1.2 (<code>witnesses</code>, <code>height_standstill_after_seconds</code>). No fleet data. Every top-level field is always present. The 17 required fields are never null; the four time and reason fields added in 1.1 are null when there is nothing to report. <code>risk_factors</code> is an array of strings; <code>agreement_detail</code> and <code>last_24h</code> are small objects whose fields may be null (nothing compared, or history still accumulating). Refreshes every 20 seconds.</p>
 <p>Machine-readable contract: <a href="/organism/schema">/organism/schema</a> — JSON Schema with stability guarantees (additive-only within api_version 1.x) and changelog. <code>unknown</code> is a published value, not an HTTP error. Breaking field removals or type changes increment <code>api_version</code>. Validate your integration against it.</p>
 <pre data-copy>{
   "status": "unknown",
@@ -65,38 +65,88 @@
   ],
   "confidence_reason": "No cross-check: fewer than 2 public nodes answered",
   "agreement_reason": "Not compared: fewer than 2 public nodes answered",
-  "staleness_seconds": 1,
-  "last_updated": "2026-09-29T00:10:01.518Z",
-  "api_version": "1.1",
+  "staleness_seconds": 2,
+  "last_updated": "2026-10-05T19:32:28.216Z",
+  "api_version": "1.2",
   "last_24h": {
     "sufficient": false,
-    "coverage_pct": 0.2,
-    "observed_cycles": 34,
+    "coverage_pct": 0,
+    "observed_cycles": 5,
     "expected_cycles": 17280,
     "message": "Insufficient observation in the last 24 hours — building baseline.",
-    "computed_at": "2026-09-29T00:10:02.532Z"
+    "computed_at": "2026-10-05T19:32:30.174Z"
   },
   "data_quality_reason": "too_few_answers",
-  "observed_at": "2026-09-29T00:10:01.518Z",
-  "height_last_advanced_at": "2026-09-29T00:10:01.518Z",
-  "height_static_seconds": 0,
+  "observed_at": "2026-10-05T19:32:28.216Z",
+  "height_last_advanced_at": null,
+  "height_static_seconds": null,
   "active_public_conditions": 1,
   "agreement_detail": {
     "aligned_nodes": null,
     "total_nodes": 1,
-    "median_block": 395041,
+    "median_block": 395007,
     "block_spread": null
-  }
+  },
+  "witnesses": {
+    "mode": "insufficient",
+    "counted": 0,
+    "public_seeds": {
+      "configured": 3,
+      "answered": 1,
+      "own_height": 1
+    },
+    "validators": null
+  },
+  "height_standstill_after_seconds": 1800
 }</pre>
 <p>A response captured from this version of the agent running against test seeds, not from the live network. The test setup reads every 5 s, so <code>expected_cycles</code> is 17,280 here rather than 4,320. Note the honest-uncertainty values (<span class="val">unknown</span>, <span class="val">insufficient</span>, <span class="val">uncertain</span>) — your parser must treat these as first-class states, not errors.</p>
+<p>That capture is a start with one seed answering and no validator kept yet: no reading. Once two seeds have agreed on the validators list, the same outage of two seeds reads as follows (the fields of the reading that differ, from the same test setup; <code>observed_at</code>, <code>last_updated</code>, <code>staleness_seconds</code> and <code>last_24h</code> are left out):</p>
+<pre data-copy>{
+  "status": "stable",
+  "data_quality": "sufficient",
+  "confidence": "clear",
+  "agreement": "strong",
+  "summary": "One public seed reported its own height, and 4 validators that answer as listed are within 25 blocks of it.",
+  "status_reason": "Heights advancing; one public seed and 4 validators aligned",
+  "risk_factors": [
+    "Only 1 of 3 public nodes answered — limited cross-checking",
+    "one public seed reported its own height; 4 validators are within 25 blocks of it"
+  ],
+  "confidence_reason": "Observed public signals agree",
+  "agreement_reason": "One public seed and the closest of 4 validators within ±25 blocks of it (spread: 0 blocks)",
+  "data_quality_reason": null,
+  "height_last_advanced_at": "2026-10-05T19:32:38.221Z",
+  "height_static_seconds": 0,
+  "agreement_detail": {
+    "aligned_nodes": 2,
+    "total_nodes": 2,
+    "median_block": 395010,
+    "block_spread": 0
+  },
+  "witnesses": {
+    "mode": "seed_and_validators",
+    "counted": 5,
+    "public_seeds": {
+      "configured": 3,
+      "answered": 1,
+      "own_height": 1
+    },
+    "validators": {
+      "read": 4,
+      "own_height": 4,
+      "counted": 4,
+      "list_agreed_at": "2026-10-05T19:32:33.227Z"
+    }
+  }
+}</pre>
 </section>
 <section id="field-meanings">
 <h2>Field Meanings</h2>
-<p><code>status</code> — what DNO saw of the public seeds this cycle. <span class="val">stable</span> <span class="val">degraded</span> <span class="val">unstable</span> <span class="val">unknown</span></p>
+<p><code>status</code> — what DNO saw this cycle of the public seeds, or of the validators standing in for a missing one. A reading that would be stable is degraded after 30 minutes without a new height. <span class="val">stable</span> <span class="val">degraded</span> <span class="val">unstable</span> <span class="val">unknown</span></p>
 <p><code>risk</code> — the observed conditions that reduce the margin of this reading. <span class="val">low</span> <span class="val">elevated</span> <span class="val">high</span></p>
-<p><code>confidence</code> — whether the compared heights are within 50 blocks of each other. <span class="val">clear</span> <span class="val">uncertain</span></p>
-<p><code>data_quality</code> — whether at least two seeds reported their own height, and the observation is at most 300 s old. <span class="val">sufficient</span> <span class="val">insufficient</span></p>
-<p><code>agreement</code> — whether the seeds' own heights sit within ±25 blocks of their median (strong also needs a spread of at most 20 blocks). <span class="val">strong</span> <span class="val">moderate</span> <span class="val">weak</span> <span class="val">unknown</span></p>
+<p><code>confidence</code> — whether the compared heights are within 50 blocks of each other, a seed's own height is among them, beside one seed more than half of the validators that gave a height are within 25 blocks of it, and DNO is not following lower heights after a start-over. <span class="val">clear</span> <span class="val">uncertain</span></p>
+<p><code>data_quality</code> — whether there is a reading (two seeds reported their own height, or validators stood in for the missing one) in an observation at most 300 s old. <span class="val">sufficient</span> <span class="val">insufficient</span></p>
+<p><code>agreement</code> — whether the heights compared sit within ±25 blocks of the published median (strong also needs a spread of at most 20 blocks). The heights compared are the seeds' own; with validators standing in, the one seed's and the closest validator's, or the counted validators'. The median is the upper median of the seeds' own heights; beside one seed it is that seed's height; with no seed it is the upper median of every validator height read, counted or not. <span class="val">strong</span> <span class="val">moderate</span> <span class="val">weak</span> <span class="val">unknown</span></p>
 <p><code>trend</code> — direction of change. <span class="val">improving</span> <span class="val">stable</span> <span class="val">worsening</span> <span class="val">unknown</span></p>
 <p><code>active_incidents</code> — count of active public incidents. DNO's own condition records are not in it.</p>
 <p><code>active_public_conditions</code> — count of DNO's active condition records (visibility, degraded, unstable). They follow status; they do not feed it.</p>
@@ -106,6 +156,8 @@
 <p><code>risk_factors</code> — array of strings; the concrete observations behind the current risk level.</p>
 <p><code>confidence_reason</code> — why confidence is at its current state.</p>
 <p><code>agreement_reason</code> — why agreement is at its current state.</p>
+<p><code>witnesses</code> — what the reading rests on. <code>mode</code>: <span class="val">seeds_only</span> <span class="val">seed_and_validators</span> <span class="val">validators_only</span> <span class="val">insufficient</span>. <code>counted</code>, <code>public_seeds</code> (<code>configured</code>, <code>answered</code>, <code>own_height</code>) and <code>validators</code> (<code>read</code>, <code>own_height</code>, <code>counted</code>, <code>list_agreed_at</code>; null when no validator was read). Counts and one time only: no key, no address, and no height attributed to a validator. With validators in the reading, <code>agreement_detail</code> also uses their heights: beside one seed <code>median_block</code> is the seed's own height and <code>block_spread</code> the distance to the closest validator; with no seed both are the validators' (the median is the upper median of every validator height read, counted or not: when only two gave a height it is the higher). Without a reading <code>aligned_nodes</code> and <code>block_spread</code> are null, and <code>median_block</code> is null too unless one seed gave its own height in an observation that is not stale: then it is that one height, which nothing was compared with.</p>
+<p><code>height_standstill_after_seconds</code> — the standstill limit: once <code>height_static_seconds</code> reaches it, a reading that would be stable is degraded.</p>
 <p><code>last_24h</code> — rolling 24-hour observability summary (coverage, observed vs expected cycles, chain movement, incident counts). Fields inside it may be null while history accumulates.</p>
 </section>
 <section id="the-minimal-triple">
@@ -118,15 +170,16 @@
 <section id="before-relying">
 <h2>Before Relying on a Reading</h2>
 <p>These fields describe how complete this observation is. DNO informs context; it does not advise, predict, score, certify, or decide action.</p>
-<p><code>data_quality</code> — <span class="val">insufficient</span> means fewer than two seeds reported their own height, or the observation is stale.</p>
+<p><code>data_quality</code> — <span class="val">insufficient</span> means fewer than two seeds reported their own height and no validator stood in, or the observation is stale.</p>
+<p><code>witnesses.mode</code> — what the reading rests on. <span class="val">seed_and_validators</span>: one seed, and the validators within 25 blocks of it. <span class="val">validators_only</span>: no seed; DNO does not check who runs those validators, and confidence is <span class="val">uncertain</span>.</p>
 <p><code>staleness_seconds</code> — how old the observation is. Above 300 s, data quality is insufficient.</p>
-<p><code>confidence</code> — <span class="val">uncertain</span> means the compared heights are more than 50 blocks apart, or nothing was compared.</p>
+<p><code>confidence</code> — <span class="val">uncertain</span> means the compared heights are more than 50 blocks apart, the reading rests on validators alone, half or more of the validators that gave a height are more than 25 blocks from the one seed, DNO has been following heights below a height it read earlier (it cannot tell a chain restarted lower, nodes catching up, and one answer far above the others apart), or nothing was compared.</p>
 <div class="aside aside-warn">When <code>data_quality</code> is <span class="val">insufficient</span>, status will be <span class="val">unknown</span> and risk will be <span class="val">elevated</span>. This is intentional — the Oracle treats missing data as a reason for caution.</div>
 </section>
 <section id="polling-guidance">
 <h2>Polling Guidance</h2>
 <p>The Oracle observes every 20 seconds, so polling more often than every 10–30 seconds returns the same observation. <code>/organism</code> and <code>/health</code> send an <code>ETag</code> and <code>Last-Modified</code> set to the observation time; a request with <code>If-None-Match</code> gets <code>304</code> until a new observation exists.</p>
-<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long no answering seed has reported a higher height than in its previous answer (null when the latest observation returned no height or nothing has been compared yet; a lower bound until DNO has observed an advance); the cause is not known from here. Only a seed's own height counts (<span class="val">too_few_heights</span> means fewer than two seeds reported their own). <code>last_24h.chain_movement.blocks_advanced</code> is the median height at the newest round in the window minus the oldest, over rounds with sufficient data, as observed; it is null when there is no pair to compare or the median fell by more than 25 blocks between two rounds, and it implies no target rate. For 24 hours after the own-height rule starts or restarts on a server that holds rounds an older version recorded, <code>chain_movement</code> is <span class="val">unknown</span> with reason <span class="val">own_height_record_shorter_than_window</span> and <code>blocks_advanced</code> is null: the rounds recorded under that rule do not cover the window yet.</p>
+<p><code>observed_at</code> is the time of that observation. <code>data_quality_reason</code> names why data quality is insufficient (<span class="val">no_observation</span>, <span class="val">stale</span>, <span class="val">too_few_answers</span>, <span class="val">too_few_heights</span>) and is null otherwise. <code>height_static_seconds</code> is how long DNO's count has run: the time without a new height, as DNO reads it. The count stands on the highest seed height of the round or, with no seed height, on the height more than half of the counted validators have reached. It starts again in the round that height is above every height DNO had read before that round; when the count steps up to a height that is not, it runs from the first reading of the highest height read before that round. So it never runs from before DNO first read the height it stands on, or a higher one. It is published in every reading (after a start, once the stored rounds have been replayed), and is 0 in the round the count starts (the first round, a height above every height read, a start-over). Beside one seed the count is the seed's, and the texts say so ("the seed has shown no new height for N min"). It is null when the latest observation had no reading or has gone stale, and while the host's clock is behind the count's start. <code>height_last_advanced_at</code> is when DNO saw the last new height arrive: a seed above its own last answer, at the highest seed height of its round, and above every height DNO had read before that round from a seed or from a validator it counted. So a seed that catches up, a node back at a height already read, a node read for the first time, and a change in which nodes answered show none. It is null in a round without a reading or with a stale observation, when the count did not start with such an arrival (the height was first read from a seed not read before, from a counted validator before a seed reached it, or from validators alone, from which DNO takes no arrival), once the highest height DNO reads in a round (a seed's, or a counted validator's) is more than 25 blocks below the height that arrived (DNO then no longer claims that arrival), and from a start-over until the first arrival after it has ended (the height given up is read again, or a higher one, or more than 24 hours have passed since the last start-over). While it is null, <code>height_static_seconds</code> is a lower bound of how long that height has stood, with one exception: when a height given up at a start-over is read again without the count's own height passing it, the count runs from that height's first reading, before the start-over, until the count's own height has passed it, or steps up after a higher height was read, or DNO gives it up again. That is one or two rounds at a 10 s block time when the nodes DNO follows reach it themselves; up to 13 rounds (25 blocks) when a validator that still stands on it is counted; and until the next start-over, ten minutes of rises or more, when a seed that still stands on it answers. The cause is not known from here. Of a seed, only its own height counts (<span class="val">too_few_heights</span> means fewer than two seeds reported their own). <code>last_24h.chain_movement.blocks_advanced</code> is the median height at the newest round in the window minus the oldest, over rounds with a reading whose median is a seed's own height (a round that rested on validators alone is not part of it), as observed; it is null when there is no pair to compare or the median fell by more than 25 blocks between two rounds, and it implies no target rate. For 24 hours after the own-height rule starts or restarts on a server that holds rounds an older version recorded, <code>chain_movement</code> is <span class="val">unknown</span> with reason <span class="val">own_height_record_shorter_than_window</span> and <code>blocks_advanced</code> is null: the rounds recorded under that rule do not cover the window yet.</p>
 <p>Respect the <code>Cache-Control: public, max-age=5</code> header. Do not poll faster than every 5 seconds.</p>
 <p>For less time-sensitive consumers, polling every 60 seconds is sufficient.</p>
 <p>Prometheus scrape of observed public-RPC reachability and latency: <a href="/metrics">GET /metrics</a>. Families are emitted only when a sample exists. This is an export of observations, nothing more.</p>
@@ -149,13 +202,15 @@ if state['data_quality'] == 'insufficient':
 </section>
 <section id="other-endpoints">
 <h2>Other Endpoints</h2>
-<p><code>/health</code> — full diagnostic with agreement details, public nodes, signals, and the on-chain validator counts.</p>
-<p><code>/incidents</code> — public incident log (<code>?status=active|resolved</code>, <code>?limit=1–500</code>). Rows with <code>kind: "condition"</code> are DNO's own condition records (visibility, degraded, unstable); they are counted in <code>active_public_conditions</code>, not in <code>active_incidents</code>.</p>
-<p><code>/catalog</code> — peer-listed identities: identities listed on the public seeds' peerlists, kept once two public peerlists have listed them (one peerlist brings at most 50 new identities into that count per crawl), with what those peerlists reported this cycle (<code>?q=</code> filters by the end of a display name or a truncated key; <code>?listed=now</code> or <code>?listed=not</code> by whether the latest crawl listed the row; ETag / 304 between observations). <code>/catalog/lookup?key=0x…</code> checks a full key exactly and returns only the sanitized row, and <code>on_chain</code>: where that key stands on the agreed validators list (<code>status</code> <span class="val">ACTIVE</span>, <span class="val">UNSTAKING</span>, <span class="val">other</span> or <span class="val">not_listed</span>, with <code>seeds_agreed</code>, <code>seeds_configured</code> and <code>observed_at</code>). <code>status</code> is null, with the list's <code>reason</code>, whenever <code>on_chain_validators</code> is not <span class="val">agreed</span> (two seeds returning the same list, read in the last 300 s); <code>on_chain</code> is null for a key that is not valid. <span class="val">not_listed</span> also covers a key that has exited or whose stake takes effect at a later block: the SDK describes <code>getValidators</code> as the validators in force at the block read. Peer-listed identities are never dialed. <code>first_seen</code> is the first public listing DNO counted toward keeping the identity (the count is kept in memory, so a restart starts it again) and <code>last_listed</code> the last public crawl that listed it; rows recorded before 1.1 (when DNO also read its own node's peerlist) appear once a public seed peerlist lists them again. The <code>reported</code> block exists only for identities listed in the latest crawl: height and sync status come from the listing with the highest height, and the online flag is set when any listing peerlist reports it online. The peerlists' second status flag is not published: what it means has not been confirmed.</p>
-<p><code>/health</code> <code>validator_growth</code> keeps the two populations apart: <code>discovered</code> and <code>discovered_online</code> count catalog rows (online as reported in the latest crawl); <code>monitored</code>, <code>monitored_online</code> and <code>monitored_at_head</code> count the configured seeds DNO dials. <code>online</code> and <code>synced</code> add seeds and catalog rows together; <code>mixed_fields</code> names them, they are kept for 1.x compatibility, and they are not a count of either population. <code>first_counted</code> has <code>today</code>, <code>week</code> and <code>month</code>: the identities first counted in the last 24 h, 7 days and 30 days, each null while the count does not cover the window or when a gap in the count crosses the window's start (<code>reason</code> says why; several causes are joined with semicolons, each naming its window), and <code>since</code>, when the count of new identities started. That is one hour after DNO first counted an identity: the first hour is the starting set, what the peerlists already listed, and it is in no window. An identity that an older DNO record already held is in no window either, whenever the public peerlists come to list it. Nor is an identity that a peerlist lists in its first read after DNO starts, before DNO keeps it: it may have been listed there before, and DNO keeps the identities waiting for a second peerlist in memory only. The top-level <code>today</code>, <code>week</code> and <code>month</code> are the 1.0 fields: the same counts as numbers, partial where <code>first_counted</code> has null.</p>
+<p><code>/health</code> — full diagnostic with agreement details, public nodes, <code>witnesses</code>, signals, and the on-chain validator counts. Its <code>agreement</code> object also has <code>min_block</code> and <code>max_block</code>, the lowest and highest of the heights compared: with validators in the reading they are validators' heights, unattributed. It has no <code>summary</code>. In <code>signals_grouped</code>, <code>first_seen</code> and <code>duration_min</code> count from the first <code>/health</code> request that showed the signal, not from when its condition began. On <code>/incidents</code>, <code>detectedBlock</code> and <code>resolvedBlock</code> are null when no block is attached to a record, as on every condition record.</p>
+<p><code>/incidents</code> — public incident log (<code>?status=active|resolved</code>, <code>?limit=1–500</code>). Rows with <code>kind: "condition"</code> are DNO's own condition records (visibility, degraded, unstable); they are counted in <code>active_public_conditions</code>, not in <code>active_incidents</code>. A record may carry <code>note</code>: a note DNO added later (<code>added</code>: the day this server first showed it; <code>text</code>); the stored record is never edited.</p>
+<p><code>/catalog</code> — peer-listed identities: identities listed on the public seeds' peerlists, kept once two public peerlists have listed them (one peerlist brings at most 50 new identities into that count per crawl), with what those peerlists reported this cycle (<code>?q=</code> filters by the end of a display name or a truncated key; <code>?listed=now</code> or <code>?listed=not</code> by whether the latest crawl listed the row; ETag / 304 between observations). <code>/catalog/lookup?key=0x…</code> checks a full key exactly and returns only the sanitized row, and <code>on_chain</code>: where that key stands on the agreed validators list (<code>status</code> <span class="val">ACTIVE</span>, <span class="val">UNSTAKING</span>, <span class="val">other</span> or <span class="val">not_listed</span>, with <code>seeds_agreed</code>, <code>seeds_configured</code> and <code>observed_at</code>). <code>status</code> is null, with the list's <code>reason</code>, whenever <code>on_chain_validators</code> is not <span class="val">agreed</span> (two seeds returning the same list, read in the last 300 s); <code>on_chain</code> is null for a key that is not valid. <span class="val">not_listed</span> also covers a key that has exited or whose stake takes effect at a later block: the SDK describes <code>getValidators</code> as the validators in force at the block read. Peer-listed identities are never dialed. <code>first_seen</code> is the first public listing DNO counted toward keeping the identity (the count is kept in memory, so a restart starts it again) and <code>last_listed</code> the last public crawl that listed it; rows recorded before 1.1 (when DNO also read its own node's peerlist) appear once two public peerlists have listed them, like any other row. The <code>reported</code> block exists only for identities listed in the latest crawl: height and sync status come from the listing with the highest height, and the online flag is set when any listing peerlist reports it online. The peerlists' second status flag is not published: what it means has not been confirmed.</p>
+<p><code>/health</code> <code>validator_growth</code> keeps the two populations apart: <code>discovered</code> and <code>discovered_online</code> count catalog rows (online as reported in the latest crawl); <code>monitored</code>, <code>monitored_online</code> and <code>monitored_at_head</code> count the configured seeds DNO dials. <code>network_head</code> is the highest own height among those seeds in this round, not the chain's head; it is 0 when no seed gave one, which is not a height. <code>monitored_at_head</code> counts the seeds that answered fewer than 100 blocks below it, and a row's <code>lag</code> and <code>sync_pct</code> are measured against it (null when it is 0). <code>online</code> and <code>synced</code> add seeds and catalog rows together; <code>mixed_fields</code> names them, they are kept for 1.x compatibility, and they are not a count of either population. <code>first_counted</code> has <code>today</code>, <code>week</code> and <code>month</code>: the identities first counted in the last 24 h, 7 days and 30 days, each null while the count does not cover the window or when a gap in the count crosses the window's start (<code>reason</code> says why; several causes are joined with semicolons, each naming its window), and <code>since</code>, when the count of new identities started. That is one hour after DNO first counted an identity: the first hour is the starting set, what the peerlists already listed, and it is in no window. An identity that an older DNO record already held is in no window either, whenever the public peerlists come to list it. Nor is an identity that a peerlist lists in its first read after DNO starts, before DNO keeps it: it may have been listed there before, and DNO keeps the identities waiting for a second peerlist in memory only. The top-level <code>today</code>, <code>week</code> and <code>month</code> are the 1.0 fields: the same counts as numbers, partial where <code>first_counted</code> has null.</p>
 <p><code>/health</code> <code>on_chain_validators</code> is the on-chain validators table as the public seeds list it: <code>listed</code>, <code>active</code>, <code>unstaking</code> (null when the list has no UNSTAKING row), <code>other_status</code>, <code>min_validator_stake</code> (a raw whole-number string, as reported), <code>seeds_configured</code>, <code>seeds_answered</code>, <code>seeds_agreed</code>, <code>observed_at</code> and <code>reason</code>. From DNO's own record, only while the list agrees: <code>first_agreed_today</code>, <code>first_agreed_week</code> and <code>first_agreed_month</code>, the ACTIVE keys DNO first counted on an agreed list in the last 24 h, 7 days and 30 days, each null when the record does not cover the window (<code>first_agreed_reason</code> says why); <code>first_agreed_as_of</code>, the list they were computed at; and <code>first_agreed_since</code>, the record's first list (the first agreed list with an ACTIVE key). The keys on that first list never count as new, and the figures are not net of exits. Outside <span class="val">agreed</span> every first-agreed figure is null and <code>first_agreed_reason</code> is the list's own reason. <code>state</code> is <span class="val">agreed</span>, <span class="val">not_agreed</span> (fewer than two seeds returned the same list; every count is null), <span class="val">stale</span> (the last read is older than 300 s) or <span class="val">pending</span>.</p>
-<p><code>/health</code> <code>validator_watch</code> counts what DNO saw when it dialed the address each ACTIVE validator published: <code>watched</code>, <code>not_dialed</code> with <code>not_dialed_reasons</code> (<code>no_address</code>, <code>not_public_http</code>, <code>name_unresolved</code>, <code>seeds_differ</code>, <code>over_cap</code>), <code>no_answer</code>, <code>answered_other_key</code> with <code>other_key_shared</code> (those whose published origin answered as another key listed on it) and <code>other_key_shared_origins</code>, <code>answered_no_key</code>, <code>answered_as_listed</code> with <code>answered_as_listed_seeds</code> (how many of them are public seeds: an overlap, never added), <code>origins_dialed</code> (distinct published origins dialed) and <code>max_rows_per_origin</code> (the most ACTIVE rows that published one of them), then <code>at_seed_height</code>, <code>off_seed_height</code>, <code>height_not_reported</code> and <code>height_not_compared</code> among those answers, <code>every_round_last_hour</code> with its <code>window</code>, and <code>versions</code>. <code>state</code> is <span class="val">observed</span>, <span class="val">no_agreed_list</span>, <span class="val">stale</span>, <span class="val">disabled</span> or <span class="val">pending</span>; outside <span class="val">observed</span> every count is null. <code>at_seed_height</code> is null when the seeds' median is not known. <code>every_round_last_hour</code> is null until DNO has watched for an hour with at least half the expected rounds counted, and in any round that did not count itself (<code>window.counted_this_round</code> false). Version groups are named only in a release form shared by at least two validators. A round runs once a minute. Neither object is in <code>/organism</code>, and neither ever carries an address, a key or any validator's stake; <code>min_validator_stake</code> is the network parameter.</p>
+<p><code>/health</code> <code>validator_watch</code> counts what DNO saw when it dialed the address each ACTIVE validator published: <code>watched</code>, <code>not_dialed</code> with <code>not_dialed_reasons</code> (<code>no_address</code>, <code>not_public_http</code>, <code>name_unresolved</code>, <code>seeds_differ</code>, <code>over_cap</code>), <code>no_answer</code>, <code>answered_other_key</code> with <code>other_key_shared</code> (those whose published origin answered as another key listed on it) and <code>other_key_shared_origins</code>, <code>answered_no_key</code>, <code>answered_as_listed</code> with <code>answered_as_listed_seeds</code> (how many of them are public seeds: an overlap, never added), <code>origins_dialed</code> (distinct published origins dialed) and <code>max_rows_per_origin</code> (the most ACTIVE rows that published one of them), then <code>at_seed_height</code>, <code>off_seed_height</code>, <code>height_not_reported</code> and <code>height_not_compared</code> among those answers, <code>every_round_last_hour</code> with its <code>window</code>, and <code>versions</code>. <code>state</code> is <span class="val">observed</span>, <span class="val">no_agreed_list</span>, <span class="val">read_fault</span> (a dial of that round ended in a fault of DNO's own read, so nothing is said of the validators it dialed), <span class="val">stale</span>, <span class="val">disabled</span> or <span class="val">pending</span>; outside <span class="val">observed</span> every count is null. <code>at_seed_height</code> is null when the seeds' median is not known. <code>every_round_last_hour</code> is null until DNO has watched for an hour with at least half the expected rounds counted, and in any round that did not count itself (<code>window.counted_this_round</code> false). Version groups are named only in a release form shared by at least two validators. A round runs once a minute. Neither object is in <code>/organism</code>, and neither ever carries an address, a key, a validator's own height or any validator's stake; <code>reference_height</code> is the seeds' median and <code>min_validator_stake</code> the network parameter. Up to 8 of the validators that answer as listed at the seeds' height are kept as candidates, and only those are read in a seed's place.</p>
+<p><code>/health</code> <code>publicNodes[].error</code> says why a seed gave no answer. <span class="val">timeout</span>, <span class="val">connection failed</span>, <span class="val">HTTP 503</span> (with the status the seed sent), <span class="val">invalid response</span> and <span class="val">response too large</span> are what DNO saw of the seed. <span class="val">internal error</span> is a fault in DNO's own read (a TypeError or a ReferenceError inside it; a fault of another kind in DNO's own code would show under one of the other values): the reading still counts that seed as not answered, so <code>status_reason</code> can say "fewer than 2 public nodes answered" when the fault is DNO's.</p>
 <p><code>/health</code> <code>publicNodes[].height_source</code> says where a seed's height came from: <span class="val">self</span> (its own peerlist entry) or <span class="val">first_peer</span>. A <span class="val">first_peer</span> height is shown on that row only; it is not the seed's height and is left out of data quality, agreement (<code>total_nodes</code>, <code>aligned_nodes</code>, the median, the spread), <code>network_head</code> and <code>validator_growth</code>.</p>
+<p><code>/version</code> — <code>running</code> is DNO's own version; <code>nodeVersion</code> the version label most answering seeds report (null when none reads as a release version); <code>latestCommit</code>, <code>latestMessage</code>, <code>latestDate</code> and <code>checkedAt</code> the newest commit on the master branch of DNO's public repository as GitHub gave it at <code>checkedAt</code>, which need not be the code this server runs.</p>
 <p><code>/commerce/observations</code> — commerce infrastructure reachability (Layer 2, independent from the core network assessment).</p>
 <p><code>/methodology</code> — how the Oracle makes assessments.</p>
 <p><code>/commerce/methodology</code> — how commerce observation works.</p>
@@ -168,7 +223,7 @@ if state['data_quality'] == 'insufficient':
 
 <p><b>Stale data</b> — If <code>staleness_seconds</code> exceeds 120, the Oracle may be restarting or experiencing issues. The data describes the last observation, not the current moment.</p>
 
-<p><b>Insufficient data quality</b> — When <code>data_quality</code> is <span class="val">insufficient</span>, the Oracle cannot see enough public nodes to form a credible assessment. All other fields are still present and describe that limited view: status is <span class="val">unknown</span> and risk <span class="val">elevated</span>.</p>
+<p><b>Insufficient data quality</b> — When <code>data_quality</code> is <span class="val">insufficient</span>, the Oracle cannot see enough public nodes to form a reading. All other fields are still present and describe that limited view: status is <span class="val">unknown</span> and risk <span class="val">elevated</span>.</p>
 
 <p><b>Timeouts</b> — DNO's own endpoints normally answer in well under a second. If the Oracle does not respond, the last response received remains the latest observation available to your agent; <code>observed_at</code> in it says how old that observation is.</p>
 
@@ -179,21 +234,28 @@ if state['data_quality'] == 'insufficient':
 <p>These state combinations occur:</p>
 
 <p><b><code>status: unknown</code> + <code>data_quality: insufficient</code></b><br>
-The Oracle cannot see enough public nodes to assess the network. This is not "the network is down" — it is "the Oracle cannot tell." <code>data_quality_reason</code> says why.</p>
+The Oracle cannot see enough public nodes to assess the network: fewer than two seeds gave their own height, and no validator stood in. This is not "the network is down" — it is "the Oracle cannot tell." <code>data_quality_reason</code> says why.</p>
 
 <p><b><code>status: degraded</code> + <code>confidence: clear</code></b><br>
-The seeds' own heights agree only moderately (at least 60% within ±25 blocks of the median, rounded up), or a warning-level public incident is active, and the compared heights are within 50 blocks of each other.</p>
+The heights compared agree only moderately (at least 60% within ±25 blocks of the median, rounded up), a warning-level public incident is active, or DNO has counted 30 minutes without a new height (<code>status_reason</code> then begins "No new height for", or beside one seed "The seed has shown no new height for"); and the compared heights are within 50 blocks of each other.</p>
 
 <p><b><code>agreement: unknown</code></b><br>
-Heights were not compared: fewer than 2 public seeds reported their own block height, or the observation is stale (<code>data_quality_reason</code> says which). It always accompanies <code>data_quality: insufficient</code>. It does not mean the seeds disagree — it means the Oracle cannot observe enough to tell.</p>
+Heights were not compared: fewer than 2 public seeds reported their own block height and no validator stood in, or the observation is stale (<code>data_quality_reason</code> says which). It always accompanies <code>data_quality: insufficient</code>. It does not mean the seeds disagree — it means the Oracle cannot observe enough to tell.</p>
 
 <p><b><code>trend: unknown</code></b><br>
 Not enough recent history to compute a trend. Common after Oracle restarts or data gaps. Trend resets to <span class="val">unknown</span> until enough consecutive observations accumulate. This is normal, not an error.</p>
 
 <p><b><code>staleness_seconds</code> &gt; 60</b><br>
-The Oracle's last observation is more than a minute old. Possible causes: Oracle restarting, high load, network issues between the Oracle and its data sources. The data is the last observation; it is not fresh.</p>
+The Oracle's last observation is more than a minute old. Staleness means DNO's own round did not complete: the process stopped or is restarting, or a round failed inside DNO. A seed that does not answer does not cause it. The data is the last observation; it is not fresh.</p>
 
-<p>These combinations do not occur: <code>status: stable</code> with <code>confidence: uncertain</code> (stable needs strong agreement, a spread of at most 20 blocks; uncertain needs a gap of more than 50), and, with the three configured seeds, <code>status: stable</code> with <code>risk: elevated</code> (two silent seeds leave one height, and the reading is unknown).</p>
+<p><b><code>status: stable</code> + <code>risk: elevated</code></b> (new in 1.2)<br>
+Validators stand in for a missing seed (<code>witnesses.mode</code> <span class="val">seed_and_validators</span> or <span class="val">validators_only</span>; before 1.2 this reading was <span class="val">unknown</span>), or DNO is following heights below a height it read earlier (any mode, <span class="val">seeds_only</span> included). <code>risk_factors</code> says which. Do not infer the mode from the pair: read <code>witnesses.mode</code>.</p>
+
+<p><b><code>status: stable</code> + <code>confidence: uncertain</code></b> (new in 1.2)<br>
+Validators alone give the reading; or, beside one seed, half or more of the validators that gave a height are more than 25 blocks from it; or DNO is following heights below a height it read earlier (<span class="val">seeds_only</span> included). <code>confidence_reason</code> names the first of these that holds. DNO does not check who runs a validator.</p>
+
+<p><b><code>status: degraded</code> + <code>agreement: strong</code>, no incident</b> (new in 1.2)<br>
+A standstill: the heights agree, and DNO has seen no new height for 30 minutes. <code>status_reason</code> starts "No new height for", or beside one seed "The seed has shown no new height for". It can read stable again for up to 30 minutes without a new block: when a node DNO had not read before, validators counted for the first time, or one answer of a seed far above the others shows a higher height. With no seed answering it can also be a chain that restarted at a lower height: with validators alone DNO gives no height up, and reports no new height while their heights rise below the one it holds: until a seed gives its own height again and has risen for 10 minutes, until a seed or the validators pass that height, or until the validators can stand in no longer (24 hours at most).</p>
 </section>
 <section id="production-python-example">
 <h2>Production Python Example</h2>
@@ -255,8 +317,8 @@ def assess_reliability(state):
                 "reason": f"Data is {state['staleness_seconds']}s old"}
 
     if state["confidence"] == "uncertain":
-        return {"reliable": True,  # usable but flagged
-                "reason": "Signals conflict — use with caution",
+        return {"reliable": True,  # your own rule decides; DNO says why
+                "reason": state.get("confidence_reason"),
                 "flagged": True}
 
     return {"reliable": True, "reason": None}
@@ -322,7 +384,7 @@ GET /commerce/observations  →  authority states (Layer 2, separate from the co
 <p><code>401</code> — Unauthorized. The one admin route, <code>/private/commerce/status</code>, needs the <code>X-DNO-Admin-Token</code> header. It is not part of the public API.</p>
 <p><code>404</code> — Endpoint not found.</p>
 <p><code>502/503</code> — Oracle restarting. Retry after 5–10 seconds.</p>
-<div class="aside">All public endpoints return JSON with <code>Content-Type: application/json</code> and <code>Access-Control-Allow-Origin: *</code> (CORS enabled).</div>
+<div class="aside">The public endpoints return JSON with <code>Content-Type: application/json</code>, except <code>/federate</code> and <code>/metrics</code> (Prometheus text), <code>/badge</code> (an SVG image) and the pages (HTML). All are served with <code>Access-Control-Allow-Origin: *</code> (CORS enabled). <a href="/docs">/docs</a> lists every route.</div>
 </section>
 <section id="design-principle">
 <h2>Design Principle</h2>

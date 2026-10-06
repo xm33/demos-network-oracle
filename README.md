@@ -2,77 +2,83 @@
 
 **Live at:** [demos-oracle.com](https://demos-oracle.com)
 
-The Demos Network Oracle (DNO) is a watch-only network intelligence service for the [Demos blockchain](https://demos.network) testnet. It monitors public validator nodes, tracks network agreement, detects incidents, attests observed public sources on-chain via DAHR when attestation is available, and serves a public API.
+The Demos Network Oracle (DNO) is an independent, watch-only observer of the public [Demos](https://demos.network) testnet. It reads public nodes, publishes what they report as a machine-readable reading at `/organism`, and explains how each value is derived. It does not operate the protocol or admit validators. DNO informs context; it does not advise, predict, score, certify, or decide action.
 
-Built by [XM33](https://demos-oracle.com), independently of the Demos team.
+Built by [XM33](https://demos-oracle.com). Not an official Demos or KyneSys product.
 
-## Core Principles
+## What it is, and what it is not
 
-- **Watch-only.** The Oracle observes the network; it does not validate, vote, or participate in consensus.
-- **Public-first.** Canonical truth comes from public validator nodes. Fleet-internal data is reference-only.
-- **Observation ≠ endorsement.** Being monitored by the Oracle is not a signal of approval.
-- **Explainability.** Every categorical signal comes with a paired reason string.
+- **Watch-only.** DNO reads. It does not validate, vote, or take part in consensus.
+- **Its operator takes part.** XM33 runs a validator on the public Demos testnet. In the public reading that validator has no special place: it counts like any other validator, and only if it publishes an address on chain and answers there as the key the validator list holds. DNO does not publish which validator it is.
+- **Public sources only.** The public reading is made from the configured public seeds. When fewer than two of them report their own block height, validators that answer as listed stand in for the missing seed, and the reading says so. The operator's private nodes never enter it.
+- **Every label has a reason.** Each categorical value is published with the reason for it. `unknown` and `insufficient` are states of the reading, not errors.
+- **Observation is not endorsement.** A node that DNO reads or lists is not endorsed by Demos or by XM33.
 
-## Live Endpoints
+## Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| [/](https://demos-oracle.com/) | Homepage — live status, agreement, incidents |
-| [/organism](https://demos-oracle.com/organism) | Canonical JSON state (primary machine-readable endpoint) |
-| [/health](https://demos-oracle.com/health) | Network health snapshot |
-| [/methodology](https://demos-oracle.com/methodology) | How the Oracle computes what it publishes |
-| [/agent](https://demos-oracle.com/agent) | Agent/consumer integration guide |
-| [/sources](https://demos-oracle.com/sources) | Data provenance and monitoring sources |
-| [/community](https://demos-oracle.com/community) | Community node onboarding (reference surface) |
-| [/submit](https://demos-oracle.com/submit) | Submit a community node for observation |
+| Endpoint | What it is |
+|----------|------------|
+| [/](https://demos-oracle.com/) | The reading, the public seeds, incidents |
+| [/organism](https://demos-oracle.com/organism) | The public reading as JSON (the default for software) |
+| [/organism/schema](https://demos-oracle.com/organism/schema) | The JSON Schema contract: stability policy, enums, changelog |
+| [/health](https://demos-oracle.com/health) | The same labels and reasons without the summary sentence, and their parts: each seed, validator counts, signals |
+| [/incidents](https://demos-oracle.com/incidents) | Public incidents and DNO's condition records |
+| [/catalog](https://demos-oracle.com/catalog) | Identities listed on the public seeds' peerlists |
+| [/methodology](https://demos-oracle.com/methodology) | How each value is derived, and where the observation stops |
+| [/sources](https://demos-oracle.com/sources) | What DNO reads, and which of it enters status |
+| [/agent](https://demos-oracle.com/agent) | How software consumes the API |
+| [/timeline](https://demos-oracle.com/timeline) | Incidents, condition records and releases, by date |
+| [/docs](https://demos-oracle.com/docs) | Every public endpoint |
 
-## Canonical data model
+## The reading
 
-The Oracle publishes seven canonical fields via `/organism`:
+`/organism` publishes each label with its reason. The schema at `/organism/schema` is the contract; this table is a summary of it.
 
-| Field | Type | Paired reason |
+| Field | Values | Reason field |
 |---|---|---|
-| `status` | operable / partial / degraded / unknown | `status_reason` |
-| `trend` | improving / stable / worsening | — |
+| `status` | stable / degraded / unstable / unknown | `status_reason` |
 | `risk` | low / elevated / high | `risk_factors` |
-| `data_quality` | sufficient / partial / insufficient | — |
-| `confidence` | clear / provisional | `confidence_reason` |
-| `agreement` | strong / split / unknown | `agreement_reason` |
-| `active_incidents` | integer | (incident list) |
+| `confidence` | clear / uncertain | `confidence_reason` |
+| `data_quality` | sufficient / insufficient | `data_quality_reason` |
+| `agreement` | strong / moderate / weak / unknown | `agreement_reason` |
+| `trend` | improving / stable / worsening / unknown | |
+| `active_incidents` | integer | [/incidents](https://demos-oracle.com/incidents) |
+| `witnesses` | what the reading rests on: `seeds_only`, `seed_and_validators`, `validators_only` or `insufficient`, with counts | |
 
-Status = **operability** of the network right now. Risk = **resilience** under near-term stress.
+Status is what the heights DNO read show, not how many nodes DNO could read. A reading that would be `stable` is `degraded` once DNO has counted 30 minutes without a new block height.
 
-## Quick Start
-
-### Read current state
-
-```bash
-curl -s https://demos-oracle.com/organism | jq '{status, risk, agreement, summary}'
-```
-
-### Check if network is operable
+## Quick start
 
 ```bash
-curl -s https://demos-oracle.com/organism | jq -r '.status'
+curl -s https://demos-oracle.com/organism | jq '{status, status_reason, risk, agreement, rests_on: .witnesses.mode, summary}'
 ```
-
-### Full health snapshot
 
 ```bash
-curl -s https://demos-oracle.com/health | jq
+curl -s https://demos-oracle.com/health | jq '.publicNodes'
 ```
 
-## Architecture
+Check a deployment against the published contract:
 
-- Single-file Node/Bun service: `src/agent.mjs` (~3,500 lines)
-- Runtime: Bun
-- Monitoring interval: 20 seconds
-- Publishing interval: 20 minutes
-- On-chain attestation: DAHR when available (state at /health)
+```bash
+bun tools/organism-contract-test.mjs https://demos-oracle.com
+```
+
+## Source
+
+- Runtime: Bun. One service, `src/agent.mjs`, with its rules in small modules:
+  - `src/status-rule.mjs`: how one round's readings become status, risk, confidence and agreement
+  - `src/seed-read.mjs`: one seed's `/info` read
+  - `src/witnesses.mjs`: the validators that stand in for a seed that gave no height
+  - `src/validator-watch.mjs`: the on-chain validator list as the seeds report it, and the dials to published addresses
+  - `src/public-safety.mjs`: everything that crosses the public boundary, in and out
+- A public observation round runs every 20 seconds, independent of the wallet.
+- DAHR attestation is attempted on the cross-check RPCs; its state is on `/health` (`attestation`). The public reading is never posted on chain.
+- Tests: `bun run test` (no running agent needed) and `bun run test:served` (against a running agent).
+- Before and after a restart: `bun tools/pre-restart-check.mjs` and `bun tools/post-restart-check.mjs`.
 
 ## Running your own
 
-Not currently a supported use case — the Oracle is operated as a singular public service. If you want to run a modified instance for research or auditing, see [/methodology](https://demos-oracle.com/methodology) and the source in `src/agent.mjs`.
+Not currently a supported use case: the Oracle is operated as a single public service. To run a modified instance for research or auditing, see [/methodology](https://demos-oracle.com/methodology) and the source in `src/`.
 
 ## Reporting issues
 
@@ -80,8 +86,8 @@ Bugs, data inconsistencies, or security issues: see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 ---
 
-**Attribution.** This repository and the Oracle service are built and maintained by XM33, independent of the Demos team. Inclusion of a node in the Oracle's monitoring set does not imply endorsement by Demos or XM33.
+**Attribution.** This repository and the Oracle service are built and maintained by XM33, independent of the Demos team. A node that DNO reads or lists is not endorsed by Demos or by XM33.

@@ -79,13 +79,23 @@ non2xx.stop(true);
   // What a capped request carries, whatever the caller passes: identity encoding, the caller's own headers, no redirect
   // followed, no automatic decompression.
   const seen = [];
-  const echo = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { seen.push({ ae: req.headers.get("accept-encoding"), ct: req.headers.get("content-type"), method: req.method }); return Response.json({ ok: 1 }); } });
+  const echo = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) { seen.push({ ae: req.headers.get("accept-encoding"), ct: req.headers.get("content-type"), conn: req.headers.get("connection"), method: req.method }); return Response.json({ ok: 1 }); } });
   const e = "http://127.0.0.1:" + echo.port + "/";
   await attempt(() => cappedJson(e, { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } }, { timeoutMs: 3000 }));
   await attempt(() => cappedJson(e, { headers: { "Accept-Encoding": "gzip, br" }, redirect: "follow", decompress: true }, { timeoutMs: 3000 }));
-  await attempt(() => cappedJson(e, { headers: { "accept-encoding": "gzip" }, signal: AbortSignal.abort() }, { timeoutMs: 3000 }));
-  check("R5b the caller's headers are sent, and identity encoding is kept even when the caller names another, in any letter case; a caller's signal is not used",
-    seen.length === 3 && seen[0].method === "POST" && seen[0].ct === "application/json" && seen[0].ae === "identity" && seen[1].ae === "identity" && seen[2].ae === "identity", JSON.stringify(seen));
+  await attempt(() => cappedJson(e, { headers: { "accept-encoding": "gzip", "connection": "keep-alive" }, keepalive: true, signal: AbortSignal.abort() }, { timeoutMs: 3000 }));
+  check("R5b the caller's headers are sent, and identity encoding and Connection: close are kept even when the caller names others, in any letter case; a caller's signal is not used",
+    seen.length === 3 && seen[0].method === "POST" && seen[0].ct === "application/json" && seen.every((x) => x.ae === "identity" && x.conn === "close"), JSON.stringify(seen));
+  // What the runtime's fetch is handed, whatever the caller passes (a recording fetch in its place): each fixed option
+  // on its own, since the runtime reads the Connection header before the keepalive option and one hides the other.
+  const handed = [], mine = AbortSignal.abort();
+  const recording = async (u, init) => { handed.push(init); return Response.json({ ok: 1 }); };
+  await attempt(() => cappedJson(e, { keepalive: true, decompress: true, redirect: "follow", signal: mine, headers: { CONNECTION: "keep-alive", "ACCEPT-ENCODING": "br" } }, { timeoutMs: 3000, fetch: recording }));
+  await attempt(() => cappedJson(e, null, { timeoutMs: 3000, fetch: recording }));
+  check("R5e the request handed to the runtime: keepalive false, decompress false, redirect manual, this read's own signal, identity encoding and Connection: close, with or without a caller's init",
+    handed.length === 2 && handed.every((h) => h.keepalive === false && h.decompress === false && h.redirect === "manual" && h.signal instanceof AbortSignal && h.signal !== mine
+      && h.headers.get("accept-encoding") === "identity" && h.headers.get("connection") === "close"),
+    JSON.stringify(handed.map((h) => [h.keepalive, h.decompress, h.redirect, h.signal !== mine, h.headers.get("accept-encoding"), h.headers.get("connection")])));
   const target = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { seen.push("target"); return Response.json({ secret: 1 }); } });
   const hop = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response(null, { status: 301, headers: { Location: "http://127.0.0.1:" + target.port + "/" } }); } });
   const viaHop = await attempt(() => cappedJson("http://127.0.0.1:" + hop.port + "/", { redirect: "follow" }, { timeoutMs: 3000 }));
@@ -103,6 +113,7 @@ console.log("\n[" + TAG + "] a capped read stops receiving");
 // The peer itself stops at FLOOD_LIMIT and marks the run (capped): if a read here ever fails to stop receiving, this
 // suite must fail, not fill the memory of the host it runs on (it runs on the production host before a restart).
 const FLOOD_LIMIT = 64 * 1048576;
+const COMPLETE = JSON.stringify({ identity: KEY(7), peerlist: [{ identity: KEY(7), sync: { block: 7000 } }] });
 const floods = [];
 function flood(mode) {
   const st = { accepted: 0, closedAt: null, openedAt: null, capped: false };
@@ -114,7 +125,9 @@ function flood(mode) {
     c.on("error", over); c.on("close", over); c.on("end", over); c.on("data", () => {});
     c.once("data", () => {
       const chunk = Buffer.alloc(256 * 1024, 0x20);
-      if (mode === "declared") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 107374182400\r\n\r\n");
+      // "complete": a whole small answer (its length declared, the connection left open), and then the peer goes on sending.
+      if (mode === "complete") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + COMPLETE.length + "\r\n\r\n" + COMPLETE);
+      else if (mode === "declared") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 107374182400\r\n\r\n");
       else if (mode === "endless") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
       else if (mode === "chunked") c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n");
       else c.write("HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n");
@@ -165,6 +178,26 @@ for (const [mode, want] of [["declared", "ResponseTooLarge"], ["endless", "Respo
   const took = Date.now() - t2;
   for (let i = 0; i < 30 && st.closedAt === null; i++) await sleep(50);
   check("R6d a body that stalls after the headers ends as TimeoutError at the timeout, and the connection is closed", stalled === "TimeoutError" && took >= 480 && took < 2500 && st.closedAt !== null, JSON.stringify({ stalled, took, closed: st.closedAt !== null }));
+}
+// A read that ended well leaves no connection behind either. The runtime keeps a connection for the next request to the
+// same address unless the request says otherwise, and goes on taking what the peer sends on it: a peer that answers a
+// whole small response and then keeps sending would fill DNO's memory after the read had returned its data.
+{
+  const f = await flood("complete"), t0 = Date.now();
+  const res = await attempt(() => cappedJson(f.url + "/info", null, { timeoutMs: 5000, maxBytes: 2 * MB }));
+  const took = Date.now() - t0;
+  for (let i = 0; i < 30 && f.st.closedAt === null; i++) await sleep(50);
+  const closedAfter = f.st.closedAt === null ? null : f.st.closedAt - t0;
+  check("R6f complete: the read returns the answer, and the connection is closed at once though the peer goes on sending (little was received)",
+    res.status === 200 && !!res.data && res.data.identity === KEY(7) && took < 2500 && closedAfter !== null && closedAfter < 1500 && !f.st.capped && f.st.accepted < 48 * MB,
+    JSON.stringify({ got: res.threw || res.status, took_ms: took, closed_after_ms: closedAfter, accepted_MB: Math.round(f.st.accepted / MB), peer_gave_up: f.st.capped }));
+  // And when the caller asks for a kept connection, it is still not kept.
+  const g = await flood("complete"), t1 = Date.now();
+  const res2 = await attempt(() => cappedJson(g.url + "/info", { keepalive: true, headers: { Connection: "keep-alive" } }, { timeoutMs: 5000, maxBytes: 2 * MB }));
+  for (let i = 0; i < 30 && g.st.closedAt === null; i++) await sleep(50);
+  check("R6g a caller that asks for a kept connection does not get one: the same answer, the same close",
+    res2.status === 200 && !!res2.data && g.st.closedAt !== null && g.st.closedAt - t1 < 1500 && !g.st.capped && g.st.accepted < 48 * MB,
+    JSON.stringify({ got: res2.threw || res2.status, closed_after_ms: g.st.closedAt === null ? null : g.st.closedAt - t1, accepted_MB: Math.round(g.st.accepted / MB), peer_gave_up: g.st.capped }));
 }
 // A finished read leaves no timer behind: a process that made one read with a 20 s timeout exits at once.
 {
@@ -232,7 +265,7 @@ console.log("SDK-IMPORT fetch " + (globalThis.fetch !== before ? "replaced" : "k
 const { run } = await import("./tools/validator-set-probe.mjs");
 const { parseProbeOrigin } = await import("./src/public-safety.mjs");
 const loop = async (u) => { const p = parseProbeOrigin(u); return p && p.hostname === "127.0.0.1" ? "http://127.0.0.1:" + p.port : null; };
-process.exit(await run(["--dial", "seed-a=" + process.env.SEED_A, "seed-b=" + process.env.SEED_B], { agentReads: true, sdkReplaced: globalThis.fetch !== before, resolveOrigin: loop }));
+process.exit(await run(["--dial", "seed-a=" + process.env.SEED_A, "seed-b=" + process.env.SEED_B], { agentReads: true, sdkReplaced: globalThis.fetch !== before, resolveOrigin: loop, kept: null }));
 `;
 const underSdk = async (a, b) => {
   const kid = Bun.spawn([process.execPath, "-e", child], { cwd: join(__dir, ".."), env: { ...process.env, SEED_A: a, SEED_B: b }, stdout: "pipe", stderr: "pipe" });
@@ -240,7 +273,7 @@ const underSdk = async (a, b) => {
 };
 let skipped = 0;
 const okRun = await underSdk(A.url, B.url);
-if (okRun.code === 64 && okRun.out.includes("NO-SDK")) { skipped += 6; console.log("  skip R11, R11b to R11f: @kynesyslabs/demosdk is not installed here (run this suite where the agent's node_modules are)"); }
+if (okRun.code === 64 && okRun.out.includes("NO-SDK")) { skipped += 11; console.log("  skip R11, R11b to R11i: @kynesyslabs/demosdk is not installed here (run this suite where the agent's node_modules are)"); }
 else {
   // What the fix rests on: the import replaces the global fetch (the suites and the harness stand in for exactly that)
   // and leaves alone everything else a capped read uses. A newer SDK that changes either must be looked at again.
@@ -248,7 +281,8 @@ else {
     okRun.out.includes("SDK-IMPORT fetch replaced · others changed: none"), (okRun.out.split("\n").find((l) => l.startsWith("SDK-IMPORT")) || "no SDK-IMPORT line"));
   const brief = (r) => "exit " + r.code + " | " + r.out.split("\n").filter((l) => /AGENT|seeds answered|list:|global fetch/.test(l)).join(" | ");
   check("R11 with the real SDK loaded before DNO's modules, the agent's own seed read and a validator round work (AGENT READS OK, exit 0)",
-    okRun.code === 0 && /it replaced the global fetch|it did not replace the global fetch/.test(okRun.out) && okRun.out.includes("2 of 2 seeds answered; 2 gave their own height. The agent needs two for a status.")
+    okRun.code === 0 && okRun.out.includes("the Demos SDK was loaded first, as in the agent; it replaced the global fetch") && okRun.out.includes("2 of 2 seeds answered; 2 gave their own height. Two give a status from the seeds alone; with fewer, validators stand in (Witnesses, below).")
+    && okRun.out.includes("Witnesses (validators the agent reads when fewer than two seeds give their own height)") && okRun.out.includes("(seeds_only)")
     && okRun.out.trim().endsWith("AGENT READS OK: 2 of 2 seeds gave their own height, and two seeds agree on the validator list."), brief(okRun));
   // The same, against one seed that answers and one address where nothing listens: the verdict must be FAILED, exit 3.
   const freed = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") }), nobody = "http://127.0.0.1:" + freed.port; freed.stop(true);   // a port nothing listens on
@@ -261,6 +295,27 @@ else {
   check("R11c tools/pre-restart-check.mjs with VALIDATOR_WATCH_DIALS=0: the list only, no dials; never OK when no list is agreed; and with seeds given it reads no cross-check RPC of this host",
     preCode === 3 && preOut.includes("the Demos SDK was loaded first, as in the agent") && preOut.includes("2 of 2 seeds answered; 2 gave their own height.") && preOut.includes("Watch (one round: the list only, no dials)") && !/cross-check RPCs/.test(preOut)
     && /AGENT READS FAILED: no validator list was agreed by two seeds\. Do not restart on this\.\s*$/.test(preOut), "exit " + preCode + " | " + preOut.split("\n").slice(-4).join(" | "));
+  // --dial given by hand does not turn the dials back on: the switch decides, as it does in the agent.
+  const byHand = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "--dial", "seed-a=" + A.url, "--dial", "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "0" }, stdout: "pipe", stderr: "pipe" });
+  const byHandOut = await new Response(byHand.stdout).text(), byHandCode = await byHand.exited;
+  // A store of this test's own, holding a kept candidate, in the folder the check would read by default (LOG_DIR).
+  const logDir = mkdtempSync(join(tmpdir(), "dno-pre-restart-logs-"));
+  {
+    const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs");
+    const db = new Database(join(logDir, "marketplace.db")), store = createCandidateStore(db);
+    store.save([{ key: "c7".repeat(32), url: "http://203.0.113.77:53550", at: Date.now() - 60000 }], Date.now() - 70000);
+    db.close();
+  }
+  const withDials = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: join(__dir, ".."), env: { ...process.env, VALIDATOR_WATCH_DIALS: "1", LOG_DIR: logDir }, stdout: "pipe", stderr: "pipe" });
+  const withDialsOut = await new Response(withDials.stdout).text(); await withDials.exited;
+  rmSync(logDir, { recursive: true, force: true });
+  check("R11c3 with the seeds given as arguments the check does not read this host's store either: the candidate kept there is not read, and the witness line says the agent keeps none here",
+    withDialsOut.includes("  candidates: none (this run's validator round did not count, and the agent keeps none here)") && !/kept by the agent/.test(withDialsOut) && !/read as the agent reads them/.test(withDialsOut),
+    withDialsOut.split("\n").filter((l) => /candidates|read as the agent/.test(l)).join(" | "));
+  check("R11c2 --dial given by hand is ignored while the switch is off (the list only, no dials, the same verdict); with the switch on the same run dials",
+    byHandCode === 3 && byHandOut.includes("Watch (one round: the list only, no dials)") && !byHandOut.includes("with one dial per published origin") && byHandOut.split("\n").slice(-3).join("\n") === preOut.split("\n").slice(-3).join("\n")
+    && !withDialsOut.includes("the list only, no dials") && /Watch \(one round[^)]*dial/.test(withDialsOut),
+    "exit " + byHandCode + " | " + byHandOut.split("\n").filter((l) => /^Watch/.test(l)).join(" | ") + " || " + withDialsOut.split("\n").filter((l) => /^Watch/.test(l)).join(" | "));
   // The check as the runbook runs it: no argument. The tool and its modules are copied next to a seed configuration
   // and a fleet config of this test's own, so the seeds come from src/agent.mjs and the cross-check RPC is read.
   const box = mkdtempSync(join(tmpdir(), "dno-pre-restart-"));
@@ -268,7 +323,7 @@ else {
   const rpc = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { rpcHits++; return Response.json({ result: 200, response: { block: 1 } }); } });
   try {
     mkdirSync(join(box, "src")); mkdirSync(join(box, "tools"));
-    for (const f of ["tools/pre-restart-check.mjs", "tools/validator-set-probe.mjs", "src/public-safety.mjs", "src/seed-read.mjs", "src/validator-watch.mjs"]) copyFileSync(join(__dir, "..", f), join(box, f));
+    for (const f of ["tools/pre-restart-check.mjs", "tools/validator-set-probe.mjs", "src/public-safety.mjs", "src/seed-read.mjs", "src/status-rule.mjs", "src/validator-watch.mjs", "src/witnesses.mjs"]) copyFileSync(join(__dir, "..", f), join(box, f));
     symlinkSync(join(__dir, "..", "node_modules"), join(box, "node_modules"), "dir");
     writeFileSync(join(box, "src", "agent.mjs"), `const PUBLIC_NODES = {\n  // "seed-off": { url: "http://127.0.0.1:9", identity: "${KEY(7)}" },\n  "seed-a": { url: "${A.url}", identity: "${KEY(9)}" },\n  "seed-b": { url: "${B.url}", identity: "${KEY(8)}" },\n};\n`);
     writeFileSync(join(box, "src", "fleet.config.mjs"), `export const FLEET_CROSS_VALIDATION_RPCS = [{ name: "rpc-name-not-to-print", url: "http://127.0.0.1:${rpc.port}" }];\n`);
@@ -279,13 +334,41 @@ else {
       plain.code === 3 && plain.out.includes("the Demos SDK was loaded first, as in the agent") && /\n  seed-a  answered · names the configured key · its own height\n  seed-b  answered · names the configured key · its own height\n  2 of 2 seeds answered; 2 gave their own height\./.test(plain.out)
       && plain.out.includes("cross-check RPCs (not in status), the agent's capped read: 1 of 1 answered") && hitsPlain === 1 && !/seed-off|rpc-name-not-to-print/.test(plain.out)
       && /AGENT READS FAILED: no validator list was agreed by two seeds\. Do not restart on this\.\s*$/.test(plain.out), "exit " + plain.code + " | hits " + hitsPlain + " | " + plain.out.split("\n").filter((l) => /seed-|cross-check|AGENT|answered;/.test(l)).join(" | "));
-    const given = await tool(["seed-a=" + A.url, "seed-b=" + B.url]);
-    check("R11f with the seeds given as arguments, the same tool next to the same fleet config reads no cross-check RPC", given.code === 3 && rpcHits === hitsPlain && !/cross-check RPCs/.test(given.out), "exit " + given.code + " | hits " + rpcHits);
+    // The same run with dials on and a store of the agent's in this folder (logs, the default LOG_DIR), holding one kept
+    // candidate: with no argument the check reads the kept candidates, as D11 of the runbook runs it.
+    {
+      const { Database } = await import("bun:sqlite"), { createCandidateStore } = await import("./witnesses.mjs");
+      const fill = (dir, key) => { mkdirSync(join(box, dir)); const db = new Database(join(box, dir, "marketplace.db")); createCandidateStore(db).save([{ key, url: "http://203.0.113.77:53550", at: Date.now() - 60000 }], Date.now() - 70000); db.close(); };
+      fill("logs", "c7".repeat(32)); mkdirSync(join(box, "elsewhere"));
+      const spawnIn = async (env) => { const kid = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs"], { cwd: box, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" }); const out = await new Response(kid.stdout).text(); await kid.exited; return out; };
+      const kept = await spawnIn({ VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "" });
+      check("R11g the check with no argument reads the candidates the agent keeps in this folder's store, and says where they are from",
+        /\n  candidates: 1, kept by the agent from the list two seeds agreed on at \d{4}-\d\d-\d\d \d\d:\d\d UTC\n/.test(kept) && !kept.includes("the agent keeps none here"), kept.split("\n").filter((l) => /candidates/.test(l)).join(" | "));
+      // .env of the folder says the dials are off and names the store's folder; the shell says otherwise. The agent
+      // lets .env win (it reads the file itself), and so must the check: the runtime alone would let the shell win.
+      writeFileSync(join(box, ".env"), "OTHER_SETTING=do-not-print-this\nVALIDATOR_WATCH_DIALS=0\nLOG_DIR=logs\n");
+      const off = await spawnIn({ VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "elsewhere" });
+      writeFileSync(join(box, ".env"), "VALIDATOR_WATCH_DIALS=1\nLOG_DIR=logs\n");
+      const on = await spawnIn({ VALIDATOR_WATCH_DIALS: "0", LOG_DIR: "elsewhere" });
+      // With the seeds given as arguments the run is not about this host's configuration: the check does not apply the
+      // folder's .env, and the variable the process was started with stands (the suites run the check so).
+      writeFileSync(join(box, ".env"), "VALIDATOR_WATCH_DIALS=0\nLOG_DIR=logs\n");
+      const kidGiven = Bun.spawn([process.execPath, "tools/pre-restart-check.mjs", "seed-a=" + A.url, "seed-b=" + B.url], { cwd: box, env: { ...process.env, VALIDATOR_WATCH_DIALS: "1", LOG_DIR: "elsewhere" }, stdout: "pipe", stderr: "pipe" });
+      const givenOn = await new Response(kidGiven.stdout).text(); await kidGiven.exited;
+      rmSync(join(box, ".env"));
+      check("R11h the dial switch and the store's folder are read as the agent reads them: a line in this folder's .env wins over the shell's variable, both ways, and the value of another line of .env is not printed",
+        off.includes("Watch (one round: the list only, no dials)") && !off.includes("Watch (one round, --dial)") && !off.includes("do-not-print-this")
+        && !on.includes("the list only, no dials") && on.includes("Watch (one round, --dial)") && /\n  candidates: 1, kept by the agent /.test(on), [off, on].map((o) => o.split("\n").filter((l) => /^Watch|candidates/.test(l)).join(" | ")).join(" || "));
+      check("R11i with the seeds given as arguments the check's own reading of this folder's .env is skipped: the switch the process was started with stands",
+        !givenOn.includes("the list only, no dials") && givenOn.includes("Watch (one round, --dial)"), givenOn.split("\n").filter((l) => /^Watch/.test(l)).join(" | "));
+    }
+    const hitsBefore = rpcHits, given = await tool(["seed-a=" + A.url, "seed-b=" + B.url]);
+    check("R11f with the seeds given as arguments, the same tool next to the same fleet config reads no cross-check RPC", given.code === 3 && rpcHits === hitsBefore && hitsBefore > hitsPlain && !/cross-check RPCs/.test(given.out), "exit " + given.code + " | hits " + hitsBefore + " -> " + rpcHits);
   } finally { rpc.stop(true); rmSync(box, { recursive: true, force: true }); }
-  check("R11b and it says FAILED, exit 3, when the agent could not publish a status from the reads", badRun.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two; no validator list was agreed by two seeds\. Do not restart on this\.\s*$/.test(badRun.out), brief(badRun));
+  check("R11b and it says FAILED, exit 3, when the agent could not publish a status from the reads", badRun.code === 3 && /AGENT READS FAILED: 1 of 2 seeds answered \/info, and the agent needs two, or validators that stand in \(the agent keeps no candidates here\)\. Do not restart on this\.\s*$/.test(badRun.out), brief(badRun));
 }
 
 A.srv.stop(true); B.srv.stop(true);
 globalThis.fetch = runtimeGlobal;
-console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed" + (skipped ? ", " + skipped + " skipped (R11 to R11f need the Demos SDK: run where the agent's node_modules are)" : ""));
+console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed" + (skipped ? ", " + skipped + " skipped (R11 to R11i need the Demos SDK: run where the agent's node_modules are)" : ""));
 process.exit(failed ? 1 : 0);

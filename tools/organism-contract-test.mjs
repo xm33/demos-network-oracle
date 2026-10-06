@@ -42,5 +42,7 @@ if (!validate(data)) {
   console.error("FAIL: contract violations:\n" + ajv.errorsText(validate.errors, { separator: "\n" }));
   process.exit(1);
 }
-const v = (schema["x-changelog"] && schema["x-changelog"][0].version) || "?";
+// The contract's version is its newest changelog entry (the first entry is 1.0, the initial contract).
+const changes = Array.isArray(schema["x-changelog"]) ? schema["x-changelog"] : [];
+const v = (changes.length && changes[changes.length - 1].version) || "?";
 console.log("PASS: " + base + "/organism conforms to contract v" + v + " (" + (schema.required || []).length + " required fields, enums, types, non-null verified)");
