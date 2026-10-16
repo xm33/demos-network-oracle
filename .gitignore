@@ -27,6 +27,8 @@ demos-phase*.md
 demos-runbook*.md
 demos-session*.md
 dno-*.md
+# gitignore globs are case-sensitive. DNO-*.md is the same rule for the other case.
+DNO-*.md
 apply-*.py
 phase-*.patch
 fleet.config.mjs

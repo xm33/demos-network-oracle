@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { cycleLead } from "./home-cycle.mjs";
+import { BANNED_PUBLIC_LANGUAGE, CHARACTERIZATION } from "./banned-public-language.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, "..");
@@ -27,7 +28,7 @@ const count = (hay, needle) => hay.split(needle).length - 1;
 const FULL_ID = /0x[0-9a-fA-F]{64}/;
 const IPV4 = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
 const HOSTPORT = /[a-z0-9.-]+:\d{4,5}\b/i;
-const BANNED = /\b(approved|certified|trusted|recommended|safe|best|scores?|ranking|ranked|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i;
+const BANNED = BANNED_PUBLIC_LANGUAGE;
 const ALLOWED = ["Neither is a score or a go/no-go.", "DNO informs context; it does not advise, predict, score, certify, or decide action."];
 function withoutAllowed(s) { for (const a of ALLOWED) s = s.split(a).join(""); return s; }
 function keysDeep(v, out = []) {
@@ -69,6 +70,7 @@ check("H14 homepage references the mark asset path", HOME.includes('href="/asset
 check("H15 homepage reads the same origin", HOME.includes("const SERVED_BY_AGENT = true;"));
 const homeText = withoutAllowed(HOME);
 check("H16 homepage: no banned word", !BANNED.test(homeText), (homeText.match(BANNED) || [])[0]);
+check("H16b homepage: no adoption, demand, settled-commerce, or rail-reality claim", !CHARACTERIZATION.test(homeText), (homeText.match(CHARACTERIZATION) || [])[0]);
 check("H17 homepage: no IPv4 literal, no full identity, no Demos violet", !IPV4.test(HOME) && !FULL_ID.test(HOME) && !/#2B36D9/i.test(HOME));
 check("H18 homepage: no old seed sentence (DNO dials more than the seeds)", !HOME.includes("only endpoints DNO dials"));
 check("H19 lookup is requested in one place, inside the explicit button's handler", count(HOME, "getJSON('/catalog/lookup") === 1
