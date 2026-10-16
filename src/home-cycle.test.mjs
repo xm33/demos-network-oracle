@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { leadCount, cycleLead, cycleSeeds, seedsParts, readbarText, cycleDoor } from "./home-cycle.mjs";
+import { BANNED_PUBLIC_LANGUAGE } from "./banned-public-language.mjs";
 
 const TAG = "HOME_CYCLE";
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -149,7 +150,7 @@ const STATES = [
 ];
 const all = STATES.flatMap((r) => [cycleSeeds(r, 35), readbarText(r)]).concat([cycleLead({ state: "agreed", active: 35, seeds_agreed: 2 }), cycleLead({ state: "stale", reason: "x" }), cycleDoor(46)]).join(" ");
 check("C21 no 'nodes aligned', and no live / synced / producing / running / reachable in any state", !/nodes aligned|\blive\b|\bsynced\b|producing|running|reachable/i.test(all), all.slice(0, 300));
-check("C22 no banned word in any state", !/\b(approved|certified|trusted|recommended|safe|best|scores?|ranking|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i.test(all));
+check("C22 no banned word in any state", !BANNED_PUBLIC_LANGUAGE.test(all));
 check("C23 'align' is said only for strong agreement", STATES.every((r) => !/\balign\b/.test(cycleSeeds(r, 35)) || seedsParts(r, 35).heights.endsWith("align.") && /strong/.test(JSON.stringify(r && r.agreement))));
 
 console.log("\n[" + TAG + "] one source");

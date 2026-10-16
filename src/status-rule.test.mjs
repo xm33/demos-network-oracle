@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { RULE, MODES, VALIDATORS_SOURCE, agreementOf, upperMedian, lowerMedian, seedReasonOf, selectWitnesses, clockRound, newHeightClock, stepHeightClock, heightMovementOf, assess, stepConditionRecords } from "./status-rule.mjs";
+import { BANNED_PUBLIC_LANGUAGE as BANNED } from "./banned-public-language.mjs";
 
 const TAG = "STATUS_RULE";
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -515,7 +516,6 @@ console.log("\n[" + TAG + "] condition records follow status: open after 3 round
 
 console.log("\n[" + TAG + "] words");
 {
-  const BANNED = /\b(approved|certified|trusted|recommended|safe|best|scores?|scoring|ranking|ranked|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i;
   const LOOSE = /\b(live|synced|producing|running|reachable|healthy|offline|down)\b/i;
   const cases = [round(2, [H, H], null), round(3, [H - 300, H, H], null), round(2, [H - 30, H], null), round(1, [H], null), round(2, [H], null), round(2, [H, H], null, { timeReason: "stale" }),
     round(1, [H], [H, H - 1]), round(1, [H], [H + 22]), round(1, [H], [H + 400]), round(0, [], [H, H, H]), round(0, [], [H - 24, H, H]), round(0, [], [H]), round(0, [], [H - 900, H - 900, H, H]),
@@ -587,7 +587,6 @@ console.log("\n[" + TAG + "] after a start-over the reading says that DNO follow
     && alone.confidence_reason === "No public seed reported its own height: the reading rests on validators alone" && alone.risk_factors.includes(FACTOR)
     && deg.status === "degraded" && deg.confidence === "uncertain" && deg.confidence_reason.startsWith(FOLLOW) && deg.summary === "Degraded reading of the public seeds: 1 of 3 public nodes did not answer; agreement moderate. " + FOLLOW + "."
     && still.status === "degraded" && still.risk_factors.join("|") === "no new height for 40 min|" + FACTOR, JSON.stringify([far.summary, alone.risk_factors, deg.summary, still.risk_factors]));
-  const BANNED = /\b(approved|certified|trusted|recommended|safe|best|scores?|ranking|ranked|network truth|canonical truth|sanctions-clean|compliant|ready)\b/i;
   check("L5 no banned word in these words", !BANNED.test(r.confidence_reason + r.summary + r.risk_factors.join(" ")));
 }
 
