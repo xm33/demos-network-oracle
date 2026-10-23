@@ -408,19 +408,30 @@ var ART_WEBP = loadKitAsset("assets/dno-planet.webp", "dno-planet", ".webp", "im
 var ART_JPG = loadKitAsset("assets/dno-planet.jpg", "dno-planet", ".jpg", "image/jpeg");
 var KIT_ASSETS = {};
 [SITE_CSS, SITE_JS, SITE_FAVICON, FONT_SANS, FONT_MONO, FONT_LICENSE, ART_AVIF, ART_WEBP, ART_JPG].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
-// The same links, in the same order, as the homepage header (src/public-api-v11.test.mjs compares them).
+// The header: five links, the same, in the same order, as the homepage header (src/public-api-v11.test.mjs H22).
 var SITE_NAV = [
-  ["/methodology", "methodology", "Methodology"],
-  ["/about-demos", "about-demos", "About Demos"],
+  ["/", "home", "Reading"],
   ["/sources", "sources", "Sources"],
-  ["/agent", "agent", "Agent"],
-  ["/reference", "reference", "Reference"],
-  ["/timeline", "timeline", "Timeline"],
-  ["/commerce", "commerce", "Commerce"]
+  ["/methodology", "methodology", "Methodology"],
+  ["/reference", "reference", "Explore"],
+  ["/docs", "docs", "Developers"]
 ];
-function siteNavLinks(active) {
-  return SITE_NAV.map(function(n) { return '<a href="' + n[0] + '"' + (n[1] === active ? ' aria-current="page"' : '') + '>' + n[2] + '</a>'; });
-}
+// Every public page, for the Menu fold-out and the footer: no page is reachable only by its URL (NAV-REACH).
+var SITE_PAGES = [
+  ["/", "home", "Live reading", "read"],
+  ["/sources", "sources", "Sources", "read"],
+  ["/methodology", "methodology", "Methodology", "read"],
+  ["/criteria", "criteria", "Criteria", "read"],
+  ["/reference", "reference", "Reference", "read"],
+  ["/timeline", "timeline", "Timeline", "read"],
+  ["/commerce", "commerce", "Commerce", "read"],
+  ["/about-demos", "about-demos", "About Demos", "about"],
+  ["/agent", "agent", "Agent guide", "about"],
+  ["/docs", "docs", "API", "about"]
+];
+function siteLink(n, active) { return '<a href="' + n[0] + '"' + (n[1] === active ? ' aria-current="page"' : '') + '>' + n[2] + '</a>'; }
+function siteNavLinks(active) { return SITE_NAV.map(function(n) { return siteLink(n, active); }); }
+function sitePageLinks(active, group) { return SITE_PAGES.filter(function(n) { return !group || n[3] === group; }).map(function(n) { return siteLink(n, active); }); }
 function siteHead() {
   return '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#000000">'
@@ -437,13 +448,16 @@ function siteHeader(active) {
     + '<span class="brand-name"><span class="full">Demos Network Oracle</span><span class="short">DNO</span></span></a>'
     + '<nav class="nav" aria-label="Primary">' + links.join("") + '</nav>'
     + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot"></span><span id="live-text">connecting</span></a>'
-    + '<details class="menu"><summary>Menu</summary><ul><li><a href="/">Live reading</a></li>' + links.map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
+    + '<details class="menu"><summary>Menu</summary><ul>' + sitePageLinks(active).map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
     + '</div></header>';
 }
 function siteFooter(active) {
   return '<footer class="site-foot"><div class="wrap">'
-    + '<nav class="foot-nav" aria-label="Site"><a href="/">Live reading</a>' + siteNavLinks(active).join("") + '<a href="/docs"' + (active === "docs" ? ' aria-current="page"' : '') + '>API</a></nav>'
-    + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>'
+    + '<div class="foot-groups">'
+    + '<nav class="foot-nav" aria-label="Read"><p class="foot-k">Read</p>' + sitePageLinks(active, "read").join("") + '</nav>'
+    + '<nav class="foot-nav" aria-label="About"><p class="foot-k">About</p>' + sitePageLinks(active, "about").join("") + '<a href="https://github.com/xm33/demos-network-oracle">GitHub</a></nav>'
+    + '</div>'
+    + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://demos.sh">demos.sh</a></p>'
     + '<p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'
     + '<p class="fine">Built by XM33 · not an official Demos product.</p>'
     + '<p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet. In the public reading it counts like any other validator, and only if it publishes an address on chain.</p>'

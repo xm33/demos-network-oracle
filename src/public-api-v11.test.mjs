@@ -122,9 +122,21 @@ check("H20 no readiness flag in public output (toPublicPeer, catalog rows, valid
 
 check("H21 homepage has no Attest tagline and no /dashboard link", !/Observe\. Attest\. Explain\./.test(HOME) && !/href="\/dashboard"/.test(HOME));
 // The homepage header and the site kit's header list the same links in the same order.
-const navAgent = [...SRC.slice(SRC.indexOf("var SITE_NAV = ["), SRC.indexOf("];", SRC.indexOf("var SITE_NAV = ["))).matchAll(/\["(\/[a-z\/-]+)", "[a-z-]+", "([^"]+)"\]/g)].map((m) => m[1] + " " + m[2]);
-const navHome = [...(HOME.match(/<nav class="nav" aria-label="Primary">([\s\S]*?)<\/nav>/) || ["", ""])[1].matchAll(/<a href="(\/[a-z\/-]+)">([^<]+)<\/a>/g)].map((m) => m[1] + " " + m[2]);
-check("H22 homepage nav = site nav", navAgent.length === 7 && JSON.stringify(navAgent) === JSON.stringify(navHome), navHome.join(", "));
+const listOf = (name) => [...SRC.slice(SRC.indexOf("var " + name + " = ["), SRC.indexOf("];", SRC.indexOf("var " + name + " = ["))).matchAll(/\["(\/[a-z\/-]*)", "[a-z-]+", "([^"]+)"(?:, "([a-z]+)")?\]/g)].map((m) => ({ path: m[1], label: m[2], group: m[3] || null }));
+const navAgent = listOf("SITE_NAV").map((n) => n.path + " " + n.label);
+const hrefs = (html) => [...html.matchAll(/<a href="(\/[a-z\/-]*)"(?: aria-current="page")?>([^<]+)<\/a>/g)].map((m) => m[1] + " " + m[2]);
+const navHome = hrefs((HOME.match(/<nav class="nav" aria-label="Primary">([\s\S]*?)<\/nav>/) || ["", ""])[1]);
+check("H22 homepage nav = site nav: five links (Reading, Sources, Methodology, Explore, Developers)", navAgent.length === 5 && JSON.stringify(navAgent) === JSON.stringify(navHome)
+  && JSON.stringify(navAgent) === JSON.stringify(["/ Reading", "/sources Sources", "/methodology Methodology", "/reference Explore", "/docs Developers"]), navHome.join(", "));
+// NAV-REACH: every HTML page the agent serves is linked from the Menu and the footer of every page, not only by its URL.
+const PAGES = ["/", "/sources", "/methodology", "/criteria", "/reference", "/timeline", "/commerce", "/about-demos", "/agent", "/docs"];
+const pageList = listOf("SITE_PAGES");
+check("NAV-REACH1 each listed page is a route the agent serves", PAGES.every((p) => p === "/" || SRC.includes('reqPath === "' + p + '"')), PAGES.filter((p) => p !== "/" && !SRC.includes('reqPath === "' + p + '"')).join(" "));
+check("NAV-REACH2 SITE_PAGES lists every page, each in the Read or About group", PAGES.every((p) => pageList.some((n) => n.path === p)) && pageList.every((n) => n.group === "read" || n.group === "about"), pageList.map((n) => n.path).join(" "));
+check("NAV-REACH3 the agent's Menu and footer are built from SITE_PAGES (every other page gets every page)", /details class="menu"><summary>Menu<\/summary><ul>' \+ sitePageLinks\(active\)/.test(SRC) && SRC.includes('sitePageLinks(active, "read")') && SRC.includes('sitePageLinks(active, "about")'));
+const homeFoot = HOME.slice(HOME.indexOf('<footer class="site-foot">'), HOME.indexOf("</footer>", HOME.indexOf('<footer class="site-foot">'))), homeMenu = HOME.slice(HOME.indexOf('<details class="menu">'), HOME.indexOf("</details>", HOME.indexOf('<details class="menu">')));
+check("NAV-REACH4 the homepage's footer and Menu link every page", PAGES.every((p) => homeFoot.includes('href="' + p + '"') && homeMenu.includes('href="' + p + '"')), PAGES.filter((p) => !homeFoot.includes('href="' + p + '"') || !homeMenu.includes('href="' + p + '"')).join(" "));
+check("NAV-REACH5 /commerce/methodology is linked from /commerce", readFileSync(join(ROOT, "commerce.html"), "utf8").includes('href="/commerce/methodology"'));
 const kitCss = readFileSync(join(ROOT, "assets", "site.css"), "utf8");
 const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf("/* chrome:end */"));
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
@@ -343,6 +355,19 @@ try {
     if (r.status !== 200 || !t.includes('<header class="site-head">') || !t.includes('src="/assets/dno-mark-' + markSha.slice(0, 8) + '.jpg"') || t.includes("<!--dno:") || /cx="50" cy="19"|class="doc-logo"|href="\/dashboard"/.test(t)) badPages.push(pth);
   }
   check("S38 every page: the site header with the locked mark, markers filled, no old mark, no /dashboard link", badPages.length === 0, badPages.join(", "));
+  // NAV-REACH served: the footer of every page links every page; nothing is sent to a font host.
+  const unreachable = [];
+  for (const pth of ["/"].concat(pages)) {
+    const t = await get(pth).then((r) => (typeof r.body === "string" ? r.body : ""));
+    const fs0 = t.indexOf('<footer class="site-foot">'), foot = fs0 < 0 ? "" : t.slice(fs0, t.indexOf("</footer>", fs0));
+    const missing = PAGES.filter((q) => !foot.includes('href="' + q + '"'));
+    if (missing.length || /fonts\.(googleapis|gstatic)\.com/.test(t)) unreachable.push(pth + " → " + (missing.join(" ") || "font host"));
+  }
+  check("S39 every page's footer links every page, and no page loads a font host", unreachable.length === 0, unreachable.join("; "));
+  const kitFiles = [[fontSans, "font/woff2"], [fontMono, "font/woff2"]];
+  let filesOk = true;
+  for (const [pth, type] of kitFiles) { const r = await fetch(BASE + pth); filesOk = filesOk && r.status === 200 && r.headers.get("content-type") === type && /immutable/.test(r.headers.get("cache-control") || ""); await r.arrayBuffer(); }
+  check("S40 the self-hosted fonts are served by content hash, immutable, with their type", filesOk, kitFiles.map((k) => k[0]).join(", "));
   const docs = await get("/docs");
   const docsHtml = typeof docs.body === "string" ? docs.body : "";
   check("S36 /docs prints no full wallet or identity and no /dashboard link", docs.status === 200 && !FULL_ID.test(docsHtml) && !/0x[0-9a-fA-F]{40}\b/.test(docsHtml) && !/href="\/dashboard"/.test(docsHtml));

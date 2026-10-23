@@ -114,7 +114,9 @@ a.live:hover { color: var(--ink); }
 /* Footer */
 .site-foot { border-top: 1px solid var(--line); padding-block: 40px 56px; }
 .site-foot .wrap { display: grid; gap: 16px; }
-.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; }
+.foot-groups { display: flex; flex-wrap: wrap; gap: 24px 64px; }
+.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; max-width: 40rem; }
+.foot-k { flex-basis: 100%; font: 500 0.75rem/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute); }
 .foot-nav a[aria-current="page"] { color: var(--ink); }
 .foot-line { display: flex; flex-wrap: wrap; gap: 6px 0; color: var(--metal-1); font-size: 0.9375rem; }
 .foot-line > * + *::before { content: "·"; display: inline-block; color: var(--mute); padding-inline: 10px; text-decoration: none; }

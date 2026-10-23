@@ -124,7 +124,9 @@ a.live:hover { color: var(--ink); }
 /* Footer */
 .site-foot { border-top: 1px solid var(--line); padding-block: 40px 56px; }
 .site-foot .wrap { display: grid; gap: 16px; }
-.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; }
+.foot-groups { display: flex; flex-wrap: wrap; gap: 24px 64px; }
+.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; max-width: 40rem; }
+.foot-k { flex-basis: 100%; font: 500 0.75rem/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute); }
 .foot-nav a[aria-current="page"] { color: var(--ink); }
 .foot-line { display: flex; flex-wrap: wrap; gap: 6px 0; color: var(--metal-1); font-size: 0.9375rem; }
 .foot-line > * + *::before { content: "·"; display: inline-block; color: var(--mute); padding-inline: 10px; text-decoration: none; }
@@ -644,20 +646,23 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       <span class="brand-name"><span class="full">Demos Network Oracle</span><span class="short">DNO</span></span>
     </a>
     <nav class="nav" aria-label="Primary">
-      <a href="/methodology">Methodology</a><a href="/about-demos">About Demos</a><a href="/sources">Sources</a><a href="/agent">Agent</a><a href="/reference">Reference</a><a href="/timeline">Timeline</a><a href="/commerce">Commerce</a>
+      <a href="/" aria-current="page">Reading</a><a href="/sources">Sources</a><a href="/methodology">Methodology</a><a href="/reference">Explore</a><a href="/docs">Developers</a>
     </nav>
     <a class="live" id="live" href="#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></a>
     <details class="menu">
       <summary>Menu</summary>
       <ul>
         <li><a href="#catalog">Find a node</a></li>
-        <li><a href="/methodology">Methodology</a></li>
-        <li><a href="/about-demos">About Demos</a></li>
+        <li><a href="/" aria-current="page">Live reading</a></li>
         <li><a href="/sources">Sources</a></li>
-        <li><a href="/agent">Agent</a></li>
+        <li><a href="/methodology">Methodology</a></li>
+        <li><a href="/criteria">Criteria</a></li>
         <li><a href="/reference">Reference</a></li>
         <li><a href="/timeline">Timeline</a></li>
         <li><a href="/commerce">Commerce</a></li>
+        <li><a href="/about-demos">About Demos</a></li>
+        <li><a href="/agent">Agent guide</a></li>
+        <li><a href="/docs">API</a></li>
       </ul>
     </details>
   </div>
@@ -1052,10 +1057,11 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 
 <footer class="site-foot">
   <div class="wrap">
-    <nav class="foot-nav" aria-label="Site">
-      <a href="/" aria-current="page">Live reading</a><a href="/methodology">Methodology</a><a href="/about-demos">About Demos</a><a href="/sources">Sources</a><a href="/agent">Agent</a><a href="/reference">Reference</a><a href="/timeline">Timeline</a><a href="/commerce">Commerce</a><a href="/docs">API</a>
-    </nav>
-    <p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>
+    <div class="foot-groups">
+      <nav class="foot-nav" aria-label="Read"><p class="foot-k">Read</p><a href="/" aria-current="page">Live reading</a><a href="/sources">Sources</a><a href="/methodology">Methodology</a><a href="/criteria">Criteria</a><a href="/reference">Reference</a><a href="/timeline">Timeline</a><a href="/commerce">Commerce</a></nav>
+      <nav class="foot-nav" aria-label="About"><p class="foot-k">About</p><a href="/about-demos">About Demos</a><a href="/agent">Agent guide</a><a href="/docs">API</a><a href="https://github.com/xm33/demos-network-oracle">GitHub</a></nav>
+    </div>
+    <p class="foot-line"><span>Demos Network Oracle</span><a href="https://demos.sh">demos.sh</a></p>
     <p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>
     <p class="fine">Built by XM33 · not an official Demos product.</p>
     <p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet. In the public reading it counts like any other validator, and only if it publishes an address on chain.</p>
