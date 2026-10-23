@@ -2,6 +2,8 @@
    The block between chrome:start and chrome:end is shared with the homepage: the homepage build inlines it,
    so the header, footer, lamps and controls are the same everywhere. Edit it here only. */
 /* chrome:start */
+@font-face { font-family: "Geist"; src: url("/assets/geist-206f01ed.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/assets/geist-mono-55419aa0.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
   --bg: #000000;
   --bg-2: #0A0A0A;
@@ -19,8 +21,8 @@
   --unknown: #6B6B6B;
   --live: #00DAFF; /* telemetry / LIVE-dot only, never a brand fill */
 
-  --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Geist", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --measure: 1100px;
   --gutter: 16px;
   --pad: 24px;

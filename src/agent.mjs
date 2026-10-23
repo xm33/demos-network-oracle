@@ -397,8 +397,17 @@ function loadKitAsset(file, base, ext, type) {
 var SITE_CSS = loadKitAsset("assets/site.css", "site", ".css", "text/css; charset=utf-8");
 var SITE_JS = loadKitAsset("assets/site.js", "site", ".js", "text/javascript; charset=utf-8");
 var SITE_FAVICON = loadKitAsset("assets/dno-favicon.png", "dno-favicon", ".png", "image/png");
+// Self-hosted type (Geist, SIL Open Font License 1.1: assets/fonts/OFL.txt): no visitor's browser calls a font host.
+// The chrome block of assets/site.css and homepage.html name these files by the same content hash (public-api-v11 K1).
+var FONT_SANS = loadKitAsset("assets/fonts/Geist-Variable.woff2", "geist", ".woff2", "font/woff2");
+var FONT_MONO = loadKitAsset("assets/fonts/GeistMono-Variable.woff2", "geist-mono", ".woff2", "font/woff2");
+var FONT_LICENSE = loadKitAsset("assets/fonts/OFL.txt", "geist-ofl", ".txt", "text/plain; charset=utf-8");
+// The homepage's decorative background: a clean artwork with no mark and no lettering. Decoration only, never data.
+var ART_AVIF = loadKitAsset("assets/dno-planet.avif", "dno-planet", ".avif", "image/avif");
+var ART_WEBP = loadKitAsset("assets/dno-planet.webp", "dno-planet", ".webp", "image/webp");
+var ART_JPG = loadKitAsset("assets/dno-planet.jpg", "dno-planet", ".jpg", "image/jpeg");
 var KIT_ASSETS = {};
-[SITE_CSS, SITE_JS, SITE_FAVICON].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
+[SITE_CSS, SITE_JS, SITE_FAVICON, FONT_SANS, FONT_MONO, FONT_LICENSE, ART_AVIF, ART_WEBP, ART_JPG].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
 // The same links, in the same order, as the homepage header (src/public-api-v11.test.mjs compares them).
 var SITE_NAV = [
   ["/methodology", "methodology", "Methodology"],
@@ -416,8 +425,7 @@ function siteHead() {
   return '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#000000">'
     + (SITE_FAVICON ? '<link rel="icon" type="image/png" sizes="64x64" href="' + SITE_FAVICON.path + '">' : '')
-    + '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">'
+    + (FONT_SANS ? '<link rel="preload" href="' + FONT_SANS.path + '" as="font" type="font/woff2" crossorigin>' : '')
     + (SITE_CSS ? '<link rel="stylesheet" href="' + SITE_CSS.path + '">' : '');
 }
 function siteHeader(active) {

@@ -128,6 +128,14 @@ check("H22 homepage nav = site nav", navAgent.length === 7 && JSON.stringify(nav
 const kitCss = readFileSync(join(ROOT, "assets", "site.css"), "utf8");
 const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf("/* chrome:end */"));
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
+// Self-hosted type and the decorative artwork (PR-3 ①): files served by content hash, named by the same hash where used.
+const kitHash = (f) => createHash("sha256").update(readFileSync(join(ROOT, f))).digest("hex").slice(0, 8);
+const fontSans = "/assets/geist-" + kitHash("assets/fonts/Geist-Variable.woff2") + ".woff2", fontMono = "/assets/geist-mono-" + kitHash("assets/fonts/GeistMono-Variable.woff2") + ".woff2";
+check("K1 the chrome's @font-face names the served font files by their content hash", chrome.includes('url("' + fontSans + '")') && chrome.includes('url("' + fontMono + '")'), fontSans + " " + fontMono);
+check("K2 the homepage preloads the same sans file; the site head preloads the served one", HOME.includes('<link rel="preload" href="' + fontSans + '" as="font" type="font/woff2" crossorigin>') && SRC.includes('loadKitAsset("assets/fonts/Geist-Variable.woff2", "geist", ".woff2", "font/woff2")'));
+check("K3 no visitor's browser is sent to a font host: no Google Fonts in the homepage, the kit stylesheet or the agent", !/fonts\.(googleapis|gstatic)\.com/.test(HOME + kitCss + SRC));
+check("K4 the font licence ships beside the fonts and is served", readFileSync(join(ROOT, "assets", "fonts", "OFL.txt"), "utf8").includes("SIL Open Font License, Version 1.1") && SRC.includes('loadKitAsset("assets/fonts/OFL.txt"'));
+check("K5 the artwork is served in three formats from one source, by content hash", ["avif", "webp", "jpg"].every((x) => SRC.includes('loadKitAsset("assets/dno-planet.' + x + '", "dno-planet", ".' + x + '"')));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
 // The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.
