@@ -90,7 +90,8 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       }),
       // Each item of the reading's meta line (its clock, the countdown, the API version) set on one line: "20 / s" split across lines reads as two values.
       metaSplit: [...document.querySelectorAll(".panel-head .meta > span:not(.sep)")].filter((s) => new Set([...s.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size > 1).map((s) => s.textContent),
-      pop4: { oc: t("p4-oc"), ocAt: t("p4-oc-at"), cat: t("p4-cat"), rounds: t("p4-rounds"), move: t("p4-move"), roundsAt: t("p4-rounds-at") } };
+      seedsAt: t("seeds-at"), seedsAnswered: t("gc-answered"), ctxCount: t("ctx-count"), listAt: t("list-at"),
+      pop4: { oc: t("p4-oc"), ocAt: t("p4-oc-at"), cat: t("p4-cat"), catAt: t("p4-cat-at"), rounds: t("p4-rounds"), move: t("p4-move"), roundsAt: t("p4-rounds-at") } };
   });
   if (shot) await page.screenshot({ path: shot, fullPage: /-full\.png$/.test(shot) });
   await page.close();
@@ -170,6 +171,25 @@ console.log("\n[HOMEPAGE_PREVIEW] WATCH: the watch round has its own clock");
   if (w && w.state === "observed" && w.round_at) check("WATCH1 'watch round HH:MM:SS UTC' is shown from validator_watch.round_at", r.vwcap.includes("watch round " + hhmmss(w.round_at)), r.vwcap);
   else check("WATCH1 (watch not observed in this fixture) no watch clock is shown", !/watch round/.test(r.vwcap), r.vwcap);
   if (oc && oc.observed_at) check("WATCH2 'List read HH:MM:SS UTC' is from on_chain_validators.observed_at", r.vwcap.includes("List read " + hhmmss(oc.observed_at)), r.vwcap);
+}
+
+console.log("\n[HOMEPAGE_PREVIEW] MIX: /organism and /health from rounds of different modes (the two operator captures, each way round)");
+{
+  // 21 Oct: seeds_only, the list agreed (35 ACTIVE). 23 Oct: seed_and_validators, no agreed list. A client can read /organism
+  // from one round and /health from the other at a mode flip; the page keeps each source's facts on that source's clock.
+  const stamp = (iso) => { const d = new Date(iso); const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return d.getUTCDate() + " " + M[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", " + String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0") + " UTC"; };
+  const hhmmss = (iso) => iso.slice(11, 19) + " UTC";
+  const pairs = [["A", scen.capture_witnesses[0], scen.capture[1]], ["B", scen.capture[0], scen.capture_witnesses[1]]];
+  for (const [tag, of, hf] of pairs) {
+    const o = load(of), h = load(hf), r = await render(o, h), oc = h.on_chain_validators || {}, ps = (o.witnesses || {}).public_seeds || {};
+    const n = oc.state === "agreed" ? oc.active : null;
+    check(`MIX${tag}1 the first screen counts /organism's seeds (${ps.own_height}), the seeds panel /health's (${h.validator_growth.monitored_online})`,
+      r.ctxCount.startsWith(ps.own_height + " seed") && r.seedsAnswered === String(h.validator_growth.monitored_online), r.ctxCount + " | " + r.seedsAnswered);
+    check(`MIX${tag}2 the seeds panel carries /health's own clock, which differs from the reading's`, r.seedsAt === "as of /health, " + stamp(h.observed_at) && stamp(h.observed_at) !== stamp(o.observed_at), r.seedsAt);
+    check(`MIX${tag}3 the seeds line names no ACTIVE count from the other round`, n === null || !r.seeds.includes("not the " + n), r.seeds);
+    check(`MIX${tag}4 the list strip shows /health's list state with the list's own clock`, r.listAt.includes("List read " + hhmmss(oc.observed_at)) && (n === null ? /not reported/.test(r.lead) : r.lead.includes(n + " ACTIVE")), r.lead + " | " + r.listAt);
+    check(`MIX${tag}5 the on-chain population card carries the list's clock, the catalog card /health's`, r.pop4.ocAt.includes(stamp(oc.observed_at)) && /as of \/health/.test(r.pop4.catAt || "") && r.pop4.catAt.includes(stamp(h.observed_at)), r.pop4.ocAt + " | " + r.pop4.catAt);
+  }
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own fields, in the locked layout");

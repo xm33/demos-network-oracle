@@ -873,6 +873,7 @@ body { background: var(--bg); }
           <div><p class="k">within 100 blocks of the highest seed</p><p class="v none" id="gc-head">reading</p></div>
           <div><p class="k">configured seeds</p><p class="v none" id="gc-seeds">reading</p></div>
         </div>
+        <p class="clock" id="seeds-at"></p>
         <table class="nodes">
           <caption class="sr">Probed seeds: rows with monitored true in GET /health</caption>
           <thead>
@@ -2314,6 +2315,9 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     setVal($('gc-answered'), vg ? num(vg.monitored_online) : why);
     setVal($('gc-head'), vg ? num(vg.monitored_at_head) : why);
     setVal($('gc-seeds'), vg ? num(vg.monitored) : why);
+    // The seeds panel is /health's (D-2): its own clock, which is the reading's only for the same observation.
+    const hAt = h ? parseTime(h.observed_at) : null;
+    setText($('seeds-at'), hAt != null ? `as of /health, ${stamp(hAt)}` : '');
     const fc = vg && vg.first_counted && typeof vg.first_counted === 'object' ? vg.first_counted : null;
     const CW = [['today', 'today'], ['week', 'this week'], ['month', 'this month']];
     setText($('growth-line'), fc ? windowLine(fc, CW) + (typeof fc.reason === 'string' && fc.reason && CW.some(([f]) => !isNum(fc[f])) ? ` (${fc.reason})` : '')
