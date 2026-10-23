@@ -630,8 +630,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 }
 
 /* ---- V7 first screen (operator-locked design, 2026-10-23). Decoration never carries a value: tones stay TONE's. ---- */
-:root { --measure: 1240px; }
-body { background: #03060b; }
+:root { --measure: 1240px; --bg: #03060b; --bg-2: #050a14; --surface: #070c17; --elevated: #0b1322; --line: #1c2740; }   /* homepage only: the existing components take the navy surfaces; tones unchanged */
+body { background: var(--bg); }
 .hero { position: relative; overflow: hidden; isolation: isolate; background: #01040a; }
 .hero .sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; background-repeat: no-repeat; background-size: cover; background-position: 70% center;
   background-image: linear-gradient(90deg, #010307 0%, rgba(1, 3, 7, .97) 18%, rgba(1, 3, 7, .9) 32%, rgba(1, 3, 7, .45) 54%, rgba(1, 3, 7, .06) 84%),
@@ -717,7 +717,6 @@ body { background: #03060b; }
 .twin-p .pop { padding-top: 6px; }
 .twin-p .sub-h { display: none; }
 .twin-p > *, .twin-p .pop > * { min-width: 0; }
-.twin-p .nodes { display: block; overflow-x: auto; max-width: 100%; }
 .twin-p .scards { --cols: 3; }
 .wit-n { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
 .wit-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }

@@ -195,8 +195,8 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
   h.agreement = Object.assign({}, h.agreement, { state: "weak" });
   const r = await render(o, h);
   check("V11 the first-screen agreement card ignores /health.agreement (the Agreement section shows /health's, on its own clock)", !!r.ra && r.ra.val === String(o.agreement), r.ra && r.ra.val);
-  // Widths: no horizontal scroll at the five review widths; phone screenshots for the record.
-  for (const width of [390, 768, 1280, 1440, 1920]) {
+  // Widths: no horizontal scroll at the review widths (960: the narrowest at which the seeds table is a table, not cards); phone screenshots for the record.
+  for (const width of [390, 768, 960, 1280, 1440, 1920]) {
     const rr = await render(load(scen.seed_and_validators[0]), load(scen.seed_and_validators[1]), { width, shot: SHOTS && (width === 390 || width === 1440) ? join(SHOTS, "seed_and_validators-" + width + "-full.png") : null });
     check(`V12 no horizontal overflow at ${width}`, rr.scrollW <= rr.innerW, rr.scrollW + " > " + rr.innerW);
     check(`V12b nothing spills out of its card or panel at ${width}`, rr.spill.length === 0, rr.spill.join("; "));
