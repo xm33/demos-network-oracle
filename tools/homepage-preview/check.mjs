@@ -112,6 +112,15 @@ for (const [name, [, hf]] of Object.entries(scen)) {
   const rows = ((h.validator_growth || {}).validators || []).filter((v) => v && v.monitored === true);
   check(`FX1 ${name}: the seeds table rows (validator_growth, monitored) agree with publicNodes: answered and height`, rows.length === (h.publicNodes || []).length && rows.every((v) => pn[v.display] && v.online === !!pn[v.display].ok && (pn[v.display].ok ? v.block === pn[v.display].block : v.block == null)),
     rows.map((v) => v.display + ":" + v.online + "/" + v.block).join(" "));
+  // The agent's own rules (agent.mjs, validator_growth, Pass 1 and Pass 2). The capture is the agent's own output, so these must hold on it.
+  const vg = h.validator_growth || {}, all = vg.validators || [], cat = all.filter((v) => v && v.monitored !== true);
+  const own = (h.publicNodes || []).filter((n) => n.ok && n.height_source === "self" && Number.isInteger(n.block) && n.block > 0).map((n) => n.block);
+  const head = own.length ? Math.max(...own) : 0, lagOf = (v) => (v.block != null && head > 0 ? head - v.block : null), at = (v) => v.online && lagOf(v) !== null && lagOf(v) < 100;
+  const want = { network_head: head, monitored: rows.length, monitored_online: rows.filter((v) => v.online).length, monitored_at_head: rows.filter(at).length,
+    discovered: cat.length, discovered_online: cat.filter((v) => v.online).length, online: all.filter((v) => v.online).length, synced: all.filter(at).length };
+  const badLag = all.filter((v) => v.lag !== lagOf(v)).map((v) => v.display);
+  check(`FX2 ${name}: network_head, every row's lag and the seed and catalog counts follow from the rows by the agent's rules`, Object.keys(want).every((k) => vg[k] === want[k]) && badLag.length === 0,
+    Object.keys(want).filter((k) => vg[k] !== want[k]).map((k) => k + " " + vg[k] + " want " + want[k]).concat(badLag.length ? ["lag off: " + badLag.slice(0, 3).join(" ")] : []).join(", "));
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] each scenario: values and reasons are /organism's");
