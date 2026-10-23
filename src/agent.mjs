@@ -3783,14 +3783,15 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       var bCanonical = computeCanonicalState();
       var bStatus = bCanonical.status;
       var bColor = bStatus === "stable" ? "#4c1" : bStatus === "degraded" ? "#dfb317" : bStatus === "unstable" ? "#e05d44" : "#999";
-      var bIcon = bStatus === "stable" ? "\u2713" : bStatus === "unknown" ? "?" : "\u26a0";
+      // No tick: a tick reads as approval (§3.1). The word is the whole message when stable.
+      var bIcon = bStatus === "unknown" ? "?" : bStatus === "stable" ? "" : "\u26a0";
       var bLabel = bStatus.toUpperCase();
       var bWidth = bLabel.length * 8 + 20;
       var bSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + (46 + bWidth) + '" height="20" role="img">' +
         '<rect width="46" height="20" fill="#555" rx="3"/><rect x="46" width="' + bWidth + '" height="20" fill="' + bColor + '" rx="3"/>' +
         '<rect x="46" width="4" height="20" fill="' + bColor + '"/>' +
         '<text x="23" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">Oracle</text>' +
-        '<text x="' + (46 + bWidth/2) + '" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + ' ' + bIcon + '</text></svg>';
+        '<text x="' + (46 + bWidth/2) + '" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + (bIcon ? " " + bIcon : "") + '</text></svg>';
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
     } else if (reqPath === "/sentinel") {
