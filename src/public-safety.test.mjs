@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, escHtml, probeErrorCategory,
-  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS, isInternalError
+  adminTokenMatches, isPublicIp, parseProbeOrigin, resolvePublicProbeOrigin, mapWithConcurrency, readJsonCapped, CAPPED_FETCH_OPTIONS, isInternalError, networkCodeOf
 } from "./public-safety.mjs";
 import { gzipSync } from "node:zlib";
 
@@ -43,8 +43,20 @@ check("P5 a fault in DNO's own read is not reported as the peer's connection fai
   // What the runtime's fetch throws for a peer that cannot be reached: a plain Error with a code, never a TypeError.
   const freed = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") }), nobody = "http://127.0.0.1:" + freed.port + "/"; freed.stop(true);   // a port nothing listens on
   let refused = null; try { await Bun.fetch(nobody); } catch (e) { refused = e; }
-  check("P6 a refused connection is 'connection failed'", refused !== null && !(refused instanceof TypeError) && probeErrorCategory(refused) === "connection failed", refused && refused.name + " " + refused.code);
+  // The runtime's class for this error changed in Bun 1.4 (TypeError, code ConnectionRefused); the category must not.
+  check("P6 a refused connection is 'connection failed'", refused !== null && probeErrorCategory(refused) === "connection failed", refused && refused.name + " " + refused.code);
+  check("P6b and it is not DNO's own fault, whatever class the runtime gives it", refused !== null && !isInternalError(refused) && networkCodeOf(refused) === "ConnectionRefused", refused && refused.name + " " + refused.code);
 }
+// R-01: the code decides before the class. A TypeError that names a network condition is the peer's; one without is DNO's.
+const te = (code) => Object.assign(new TypeError("Unable to connect. Is the computer able to access the url?"), { code });
+const withCause = (code) => new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:1"), { code }) });
+check("O7d a TypeError with a network code is 'connection failed': Bun 1.4's refused connection, Node's fetch-failed with the code on the cause, a closed or reset connection, a name that does not resolve", ["ConnectionRefused", "ConnectionClosed", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ETIMEDOUT"].every((c) => probeErrorCategory(te(c)) === "connection failed" && !isInternalError(te(c)) && probeErrorCategory(withCause(c)) === "connection failed" && !isInternalError(withCause(c))));
+check("O7e a TypeError without a network code is still 'internal error': a bare one, one with a non-network code, one whose cause has none, Node's AggregateError of non-network errors", probeErrorCategory(new TypeError("x")) === "internal error" && probeErrorCategory(te("ERR_INVALID_URL")) === "internal error" && isInternalError(te("ERR_INVALID_URL")) && probeErrorCategory(new TypeError("fetch failed", { cause: new Error("x") })) === "internal error" && probeErrorCategory(new TypeError("fetch failed", { cause: new AggregateError([new Error("a"), new Error("b")]) })) === "internal error");
+check("O7f a network code inside Node's AggregateError cause is found (dual-stack connect failures)", probeErrorCategory(new TypeError("fetch failed", { cause: new AggregateError([Object.assign(new Error("a"), { code: "ECONNREFUSED" }), Object.assign(new Error("b"), { code: "ECONNREFUSED" })]) })) === "connection failed");
+check("O7g a ReferenceError and a plain TypeError stay DNO's own; a plain Error with or without a code is never internal", isInternalError(new ReferenceError("x")) && isInternalError(new TypeError("x")) && !isInternalError(new Error("x")) && !isInternalError(Object.assign(new Error("x"), { code: "ECONNREFUSED" })) && !isInternalError(null));
+check("O7h the timeout, abort, too-large and invalid-response categories come before the code", probeErrorCategory(Object.assign(new TypeError("t"), { name: "TimeoutError", code: "ECONNREFUSED" })) === "timeout" && probeErrorCategory(Object.assign(new SyntaxError("j"), { code: "ECONNREFUSED" })) === "invalid response");
+check("O7i the address check reads a lookup error with a network code as a refused address, not a fault, whatever its class", (await (async () => { try { return await resolvePublicProbeOrigin("http://node.example:53550", async () => { throw Object.assign(new TypeError("getaddrinfo ENOTFOUND node.example"), { code: "ENOTFOUND" }); }); } catch (e) { return "threw " + e.constructor.name; } })()) === null);
+
 const TOKEN = "t".repeat(24);
 check("A1 exact token matches", adminTokenMatches(TOKEN, TOKEN));
 check("A2 empty configuration never matches", !adminTokenMatches("", "") && !adminTokenMatches(undefined, undefined) && !adminTokenMatches("", undefined));
