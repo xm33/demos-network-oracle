@@ -108,3 +108,11 @@ export function readbarText(r) {
 export function cycleDoor(discovered) {
   return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
 }
+
+// The trend card's reason: the comparison the agent makes (agent.mjs, the trend block), in words. Backward-looking only.
+// Empty for unknown: the definition on the card says why (fewer than 10 prior cycles, or data quality insufficient).
+export function trendReason(trend) {
+  return trend === "improving" || trend === "stable" || trend === "worsening"
+    ? "This round against the mean of the previous 10\u201315 rounds: seeds answering, agreement, block spread."
+    : "";
+}

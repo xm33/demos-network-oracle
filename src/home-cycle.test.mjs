@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { leadCount, cycleLead, cycleSeeds, seedsParts, readbarText, cycleDoor } from "./home-cycle.mjs";
+import { leadCount, cycleLead, cycleSeeds, seedsParts, readbarText, cycleDoor, trendReason } from "./home-cycle.mjs";
 import { BANNED_PUBLIC_LANGUAGE } from "./banned-public-language.mjs";
 
 const TAG = "HOME_CYCLE";
@@ -153,11 +153,19 @@ check("C21 no 'nodes aligned', and no live / synced / producing / running / reac
 check("C22 no banned word in any state", !BANNED_PUBLIC_LANGUAGE.test(all));
 check("C23 'align' is said only for strong agreement", STATES.every((r) => !/\balign\b/.test(cycleSeeds(r, 35)) || seedsParts(r, 35).heights.endsWith("align.") && /strong/.test(JSON.stringify(r && r.agreement))));
 
+// R-08: the trend card carries its reason (the comparison the agent makes), never an empty line under a word.
+console.log("\n[" + TAG + "] trend reason (R-08)");
+check("T1 improving, stable and worsening carry the same non-empty comparison", ["improving", "stable", "worsening"].every((t) => typeof trendReason(t) === "string" && trendReason(t).length > 20 && trendReason(t) === trendReason("stable")), String(trendReason && trendReason("stable")));
+check("T2 the reason names the comparison: previous rounds, seeds answering, agreement, spread", /previous 10/.test(trendReason("stable")) && /15/.test(trendReason("stable")) && /seeds answering/.test(trendReason("stable")) && /agreement/.test(trendReason("stable")) && /spread/.test(trendReason("stable")));
+check("T3 unknown and nothing give no reason (the definition says why)", trendReason("unknown") === "" && trendReason(null) === "" && trendReason(undefined) === "");
+check("T4 the reason is backward-looking and judgment-free", !BANNED_PUBLIC_LANGUAGE.test(trendReason("stable")) && !/will|predict|forecast|expect/i.test(trendReason("stable")));
+
 console.log("\n[" + TAG + "] one source");
 const MOD = readFileSync(join(__dir, "home-cycle.mjs"), "utf8").replace(/^export /gm, "");
 const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
 check("H1 homepage.html carries this module verbatim (rebuild the page after editing it)", HOME.includes(MOD), "module text not found in homepage.html");
-check("H2 the page calls the shared functions for the card", ["HOME_CYCLE.leadCount(", "HOME_CYCLE.cycleLead(", "HOME_CYCLE.cycleSeeds(", "HOME_CYCLE.readbarText(", "HOME_CYCLE.cycleDoor("].every((s) => HOME.includes(s)));
+check("H2 the page calls the shared functions for the card", ["HOME_CYCLE.leadCount(", "HOME_CYCLE.cycleLead(", "HOME_CYCLE.cycleSeeds(", "HOME_CYCLE.readbarText(", "HOME_CYCLE.cycleDoor(", "HOME_CYCLE.trendReason("].every((s) => HOME.includes(s)));
+check("H3 the agent fills the trend card's reason from the same function (R-08)", readFileSync(join(__dir, "agent.mjs"), "utf8").includes("trend: trendReason(c.trend)"));
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
 if (failed) process.exit(1);
