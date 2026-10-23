@@ -2053,7 +2053,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     } else catFilter = 'all';
     applySearch();
     renderOverlap(vg);
-    $('seen-drop').hidden = !(h && typeof h.api_version === 'string' && /^1\.[1-9]\d*(\.|$)/.test(h.api_version) && vg && isNum(vg.discovered));
+    $('seen-drop').hidden = !(h && h.api_version === '1.1' && vg && isNum(vg.discovered));
 
     const body = $('seeds-body');
     const rows = monitoredRows(h);

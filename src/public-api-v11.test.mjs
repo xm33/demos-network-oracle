@@ -73,6 +73,7 @@ check("H16 homepage: no banned word", !BANNED.test(homeText), (homeText.match(BA
 // Correctness wave 1, "no implied approval" (STUDY-DNO-usefulness-correctness-2026-10-21 §3 c, i; R-05, R-06, R-07).
 check("R05a a zero incident count is not shown in the ok tone (the count is structurally zero: DNO opens no record of that kind)", !/setTone\(\$\('inc-ind'\), 'ok'\)/.test(HOME), "ok tone on inc-ind");
 check("R05b the zero says so", HOME.includes("No active public incidents. DNO currently opens no record of this kind; condition records are listed below."));
+check("R06 the 'After the 1.1 update' note shows under API 1.1 only, not under every later version", HOME.includes("h.api_version === '1.1'") && !/\/\^1\\\.\[1-9\]\\d\*\(\\\.\|\$\)\//.test(HOME.slice(HOME.indexOf("'seen-drop'"), HOME.indexOf("'seen-drop'") + 400)), "regex still present");
 check("H16b homepage: no adoption, demand, settled-commerce, or rail-reality claim", !CHARACTERIZATION.test(homeText), (homeText.match(CHARACTERIZATION) || [])[0]);
 check("H17 homepage: no IPv4 literal, no full identity, no Demos violet", !IPV4.test(HOME) && !FULL_ID.test(HOME) && !/#2B36D9/i.test(HOME));
 check("H18 homepage: no old seed sentence (DNO dials more than the seeds)", !HOME.includes("only endpoints DNO dials"));
