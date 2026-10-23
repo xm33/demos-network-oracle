@@ -2,6 +2,8 @@
    The block between chrome:start and chrome:end is shared with the homepage: the homepage build inlines it,
    so the header, footer, lamps and controls are the same everywhere. Edit it here only. */
 /* chrome:start */
+@font-face { font-family: "Geist"; src: url("/assets/geist-206f01ed.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/assets/geist-mono-55419aa0.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
   --bg: #000000;
   --bg-2: #0A0A0A;
@@ -18,9 +20,15 @@
   --degraded: #C44B4B;
   --unknown: #6B6B6B;
   --live: #00DAFF; /* telemetry / LIVE-dot only, never a brand fill */
+  /* Decoration only (V7): never a tone, never on a value, a lamp or a bar. ΔE > 20 from every tone and from --live. */
+  --navy-line: #223249;
+  --violet: #8B5CF6;
+  --violet-2: #C08BFF;
+  --ice: #8FB8FF;
+  --ice-2: #3E7BFA;
 
-  --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Geist", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --measure: 1100px;
   --gutter: 16px;
   --pad: 24px;
@@ -76,43 +84,51 @@ kbd { font-size: 0.8125em; padding: 1px 5px; border: 1px solid var(--line); bord
 [data-tone="unknown"], [data-tone="pending"] { --tone: var(--unknown); }
 .ind[data-tone="unknown"], .ind[data-tone="pending"] { background: transparent; }
 
-/* Header */
-.site-head { border-bottom: 1px solid var(--line); background: var(--bg); }
-.site-head .wrap { display: flex; align-items: center; gap: 16px; }
-.brand { display: flex; align-items: center; gap: 4px; margin-inline-end: auto; color: var(--metal-2); text-decoration: none; }
+/* Header (V7): mark, wordmark, independence line, five links, the freshness pill, Menu with every page */
+.site-head { position: relative; z-index: 20; border-bottom: 1px solid var(--navy-line); background: rgba(2, 5, 10, .96); }
+.site-head .wrap { display: flex; align-items: center; gap: 20px; min-height: 78px; }
+.brand { display: flex; align-items: center; gap: 12px; flex: none; color: var(--ink); text-decoration: none; }
 .brand:hover { color: var(--ink); }
-.brand-name { font-weight: 500; font-size: 0.9375rem; letter-spacing: 0.01em; }
-.brand-name .short { display: none; }
-.nav { display: flex; align-items: center; gap: 22px; font-size: 0.9375rem; }
-.nav a { color: var(--metal-1); text-decoration: none; white-space: nowrap; }
-.nav a:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--metal-0); }
-.nav a[aria-current="page"] { color: var(--ink); text-decoration: underline; text-decoration-color: var(--metal-1); text-underline-offset: 6px; }
-.live { display: inline-flex; align-items: center; gap: 8px; font: 500 0.8125rem/1 var(--mono); color: var(--mute); white-space: nowrap; letter-spacing: 0.02em; text-decoration: none; }
-a.live:hover { color: var(--ink); }
-.live .dot { position: relative; width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--unknown); }
+.brand .mark--nav { width: 52px; }
+.brand-name b { display: block; font: 600 1.375rem/1 var(--sans); letter-spacing: 0.04em; }
+.brand-name small { display: block; margin-top: 4px; font: 400 0.75rem/1.2 var(--sans); color: var(--metal-1); }
+.indep { flex: none; padding-left: 16px; border-left: 1px solid var(--navy-line); font-size: 0.75rem; line-height: 1.45; color: var(--metal-1); }
+.nav { display: flex; align-items: center; gap: 26px; margin-left: auto; font-size: 0.9375rem; }
+.nav a { color: var(--metal-2); text-decoration: none; white-space: nowrap; padding: 6px 0; }
+.nav a:hover { color: var(--ink); }
+.nav a[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--violet-2); }
+/* The pill is DNO's own freshness, never a statement about the network. LIVE only under the freshness rule; cyan, never the ok tone. */
+.live { display: inline-flex; align-items: center; gap: 8px; flex: none; padding: 9px 14px; border: 1px solid #657084; border-radius: 999px; background: #0d111a; font: 500 0.75rem/1 var(--sans); letter-spacing: 0.08em; color: #ced6de; white-space: nowrap; text-decoration: none; }
+a.live:hover { color: var(--ink); border-color: var(--metal-1); }
+.live .dot { position: relative; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--metal-0); }
 .live .dot::after { content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 1px solid var(--live); opacity: 0; }
+.live[data-state="live"] { border-color: rgba(0, 218, 255, .45); color: var(--ink); }
 .live[data-state="live"] .dot { background: var(--live); border-color: var(--live); }
-.live[data-state="live"] { color: var(--metal-1); }
-.menu { display: none; position: relative; }
-.menu > summary { list-style: none; cursor: pointer; font-size: 0.9375rem; color: var(--metal-1); padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.menu { position: relative; flex: none; }
+.menu > summary { list-style: none; cursor: pointer; font-size: 0.875rem; color: var(--metal-1); padding: 9px 12px; border: 1px solid var(--navy-line); border-radius: 4px; }
 .menu > summary::-webkit-details-marker { display: none; }
-.menu[open] > summary { color: var(--ink); border-color: var(--metal-0); }
-.menu ul { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 0; z-index: 25; }
-.menu li a { display: block; padding: 10px 16px; color: var(--metal-1); text-decoration: none; }
-.menu li a:hover, .menu li a[aria-current="page"] { color: var(--ink); background: var(--elevated); }
-@media (max-width: 1099px) { .nav { display: none; } .menu { display: block; } }
+.menu > summary::after { content: " \25BE"; color: var(--violet-2); }
+.menu[open] > summary { color: var(--ink); border-color: var(--violet-2); }
+.menu ul { position: absolute; right: 0; top: calc(100% + 8px); width: 240px; max-height: 70vh; overflow-y: auto; background: #08101d; border: 1px solid #32435c; border-radius: 8px; padding: 8px; z-index: 25; box-shadow: 0 15px 40px rgba(0, 0, 0, .7); }
+.menu li a { display: block; padding: 8px 10px; color: var(--metal-2); text-decoration: none; border-radius: 3px; font-size: 0.875rem; }
+.menu li a:hover, .menu li a[aria-current="page"] { color: var(--ink); background: #18233a; }
+@media (max-width: 1279px) { .indep { display: none; } }
+@media (max-width: 1099px) { .nav { display: none; } .live { margin-left: auto; } }
 @media (max-width: 719px) {
   :root { --pad: 16px; }
-  .live { font-size: 0.75rem; }
-  .brand-name .full { display: none; }
-  .brand-name .short { display: inline; font-size: 1rem; }
+  .site-head .wrap { gap: 10px; min-height: 64px; }
+  .brand .mark--nav { width: 40px; }
+  .brand-name small { display: none; }
+  .live { padding: 7px 10px; font-size: 0.6875rem; }
 }
-@media (max-width: 359px) { .brand-name { display: none; } .site-head .wrap { gap: 12px; } }
+@media (max-width: 359px) { .brand-name { display: none; } }
 
 /* Footer */
-.site-foot { border-top: 1px solid var(--line); padding-block: 40px 56px; }
+.site-foot { border-top: 1px solid var(--navy-line); background: #02050a; padding-block: 40px 56px; }
 .site-foot .wrap { display: grid; gap: 16px; }
-.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; }
+.foot-groups { display: flex; flex-wrap: wrap; gap: 24px 64px; }
+.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; max-width: 40rem; }
+.foot-k { flex-basis: 100%; font: 500 0.75rem/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute); }
 .foot-nav a[aria-current="page"] { color: var(--ink); }
 .foot-line { display: flex; flex-wrap: wrap; gap: 6px 0; color: var(--metal-1); font-size: 0.9375rem; }
 .foot-line > * + *::before { content: "·"; display: inline-block; color: var(--mute); padding-inline: 10px; text-decoration: none; }

@@ -54,14 +54,16 @@ const MARKERS = [
   '<p class="insufficient" id="insufficient" hidden>',
   '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   '<span id="live-text">connecting</span>',
-  card("trend", "trend"), card("risk", "risk"), card("confidence", "confidence"), card("data_quality", "data quality")
+  card("trend", "trend"), card("risk", "risk"), card("confidence", "confidence"), card("data_quality", "data quality"),
+  // V7 first screen (PR-3 ④): the reading's sentence, its clock and version, and its own agreement card.
+  '<p class="summary" id="summary" data-src="api">reading</p>', '<span id="obs-at">not read yet</span>', '<span id="api-v">reading</span>', card("reading_agreement", "agreement")
 ];
 const VW_MARKER = '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>';
 MARKERS.forEach((m, i) => check("H" + (i + 1) + " fill marker present once: " + m.slice(0, 48), count(HOME, m) === 1, "count " + count(HOME, m)));
 check("H25 validators line: marker present once, and the agent fills it from the same text", count(HOME, VW_MARKER) === 1 && SRC.includes("validators: '" + VW_MARKER + "'"), "count " + count(HOME, VW_MARKER));
 const DOOR_MARKER = '<span id="door-n"></span>';
 check("H26 This cycle door: the peer-listed count marker present once, and the agent fills it", count(HOME, DOOR_MARKER) === 1 && SRC.includes("door: '" + DOOR_MARKER + "'"), "count " + count(HOME, DOOR_MARKER));
-check("H27 This cycle card: no 'nodes aligned' and no calm or status-reason line in the page", !/nodes aligned/.test(HOME.slice(HOME.indexOf('id="panel"'), HOME.indexOf('id="cards"'))) && !HOME.includes('id="calm"') && !HOME.includes('id="status-reason"'));
+check("H27 This cycle card: no 'nodes aligned' and no calm or status-reason line in the page", !/nodes aligned/.test(HOME.slice(HOME.indexOf('id="panel"'), HOME.indexOf('<p class="bound">', HOME.indexOf('id="panel"')))) && !HOME.includes('id="calm"') && !HOME.includes('id="status-reason"'));
 check("H12 agent builds the same markers", MARKERS.slice(0, 7).every((m) => SRC.includes(JSON.stringify(m).slice(1, -1).replace(/\\"/g, '"')) || SRC.includes("'" + m + "'")));
 const markSha = createHash("sha256").update(readFileSync(join(ROOT, "assets", "dno-mark.jpg"))).digest("hex");
 const shaInSrc = (SRC.match(/MARK_ASSET_SHA256 = "([0-9a-f]{64})"/) || [])[1];
@@ -79,7 +81,7 @@ check("R07b the badge text is the status word alone when stable", SRC.includes('
 // Reading integrity (PR-2; SPEC-DNO-V7 D-1, D-2, D-5, D-6): one observation, no retained count, each /health part on its own clock.
 check("D1a the reading's reasons are /organism's: no same-label substitution from /health", !/same\('risk'\)|same\('confidence'\)/.test(HOME) && HOME.includes("const rf = o.risk_factors;") && HOME.includes("const cr = o.confidence_reason;"));
 check("D1b /health joins the seeds line on observation identity only (equal observed_at), never on alike labels", !HOME.includes("statusAlike") && HOME.includes("h.observed_at === o.observed_at") && HOME.includes("function seedsReading(o, h) {\n    if (sameObservation(h, o)) {"));
-check("D5a no stored or historical ACTIVE count in the page: ONE_READ and the oneread mode are gone", !/ONE_READ|oneread|one read/.test(HOME), (HOME.match(/.{20}(ONE_READ|oneread|one read).{20}/) || [])[0]);
+check("D5a no stored or historical ACTIVE count in the page: ONE_READ and the oneread mode are gone", !/ONE_READ|oneread|\bone read\b/.test(HOME), (HOME.match(/.{20}(ONE_READ|oneread|\bone read\b).{20}/) || [])[0]);
 check("D5b a /health without on_chain_validators is 'unpublished': not reported, nothing retained", HOME.includes("oc ? 'live' : 'unpublished'") && HOME.includes("'ACTIVE on chain: not reported (this server does not publish on_chain_validators).'"));
 check("D2 the watch round shows its own clock beside the list-read clock", HOME.includes("`watch round ${clock(parseTime(w.round_at))}`") && HOME.includes("`List read ${clock(parseTime(oc.observed_at))}`"));
 check("H16b homepage: no adoption, demand, settled-commerce, or rail-reality claim", !CHARACTERIZATION.test(homeText), (homeText.match(CHARACTERIZATION) || [])[0]);
@@ -122,12 +124,55 @@ check("H20 no readiness flag in public output (toPublicPeer, catalog rows, valid
 
 check("H21 homepage has no Attest tagline and no /dashboard link", !/Observe\. Attest\. Explain\./.test(HOME) && !/href="\/dashboard"/.test(HOME));
 // The homepage header and the site kit's header list the same links in the same order.
-const navAgent = [...SRC.slice(SRC.indexOf("var SITE_NAV = ["), SRC.indexOf("];", SRC.indexOf("var SITE_NAV = ["))).matchAll(/\["(\/[a-z\/-]+)", "[a-z-]+", "([^"]+)"\]/g)].map((m) => m[1] + " " + m[2]);
-const navHome = [...(HOME.match(/<nav class="nav" aria-label="Primary">([\s\S]*?)<\/nav>/) || ["", ""])[1].matchAll(/<a href="(\/[a-z\/-]+)">([^<]+)<\/a>/g)].map((m) => m[1] + " " + m[2]);
-check("H22 homepage nav = site nav", navAgent.length === 7 && JSON.stringify(navAgent) === JSON.stringify(navHome), navHome.join(", "));
+const listOf = (name) => [...SRC.slice(SRC.indexOf("var " + name + " = ["), SRC.indexOf("];", SRC.indexOf("var " + name + " = ["))).matchAll(/\["(\/[a-z\/-]*)", "[a-z-]+", "([^"]+)"(?:, "([a-z]+)")?\]/g)].map((m) => ({ path: m[1], label: m[2], group: m[3] || null }));
+const navAgent = listOf("SITE_NAV").map((n) => n.path + " " + n.label);
+const hrefs = (html) => [...html.matchAll(/<a href="(\/[a-z\/-]*)"(?: aria-current="page")?>([^<]+)<\/a>/g)].map((m) => m[1] + " " + m[2]);
+const navHome = hrefs((HOME.match(/<nav class="nav" aria-label="Primary">([\s\S]*?)<\/nav>/) || ["", ""])[1]);
+check("H22 homepage nav = site nav: five links (Reading, Sources, Methodology, Explore, Developers)", navAgent.length === 5 && JSON.stringify(navAgent) === JSON.stringify(navHome)
+  && JSON.stringify(navAgent) === JSON.stringify(["/ Reading", "/sources Sources", "/methodology Methodology", "/reference Explore", "/docs Developers"]), navHome.join(", "));
+// NAV-REACH: every HTML page the agent serves is linked from the Menu and the footer of every page, not only by its URL.
+const PAGES = ["/", "/sources", "/methodology", "/criteria", "/reference", "/timeline", "/commerce", "/about-demos", "/agent", "/docs"];
+const pageList = listOf("SITE_PAGES");
+check("NAV-REACH1 each listed page is a route the agent serves", PAGES.every((p) => p === "/" || SRC.includes('reqPath === "' + p + '"')), PAGES.filter((p) => p !== "/" && !SRC.includes('reqPath === "' + p + '"')).join(" "));
+check("NAV-REACH2 SITE_PAGES lists every page, each in the Read or About group", PAGES.every((p) => pageList.some((n) => n.path === p)) && pageList.every((n) => n.group === "read" || n.group === "about"), pageList.map((n) => n.path).join(" "));
+check("NAV-REACH3 the agent's Menu and footer are built from SITE_PAGES (every other page gets every page)", /details class="menu"><summary>Menu<\/summary><ul>' \+ sitePageLinks\(active\)/.test(SRC) && SRC.includes('sitePageLinks(active, "read")') && SRC.includes('sitePageLinks(active, "about")'));
+const homeFoot = HOME.slice(HOME.indexOf('<footer class="site-foot">'), HOME.indexOf("</footer>", HOME.indexOf('<footer class="site-foot">'))), homeMenu = HOME.slice(HOME.indexOf('<details class="menu">'), HOME.indexOf("</details>", HOME.indexOf('<details class="menu">')));
+check("NAV-REACH4 the homepage's footer and Menu link every page", PAGES.every((p) => homeFoot.includes('href="' + p + '"') && homeMenu.includes('href="' + p + '"')), PAGES.filter((p) => !homeFoot.includes('href="' + p + '"') || !homeMenu.includes('href="' + p + '"')).join(" "));
+check("NAV-REACH5 /commerce/methodology is linked from /commerce", readFileSync(join(ROOT, "commerce.html"), "utf8").includes('href="/commerce/methodology"'));
 const kitCss = readFileSync(join(ROOT, "assets", "site.css"), "utf8");
 const chrome = kitCss.slice(kitCss.indexOf("/* chrome:start */"), kitCss.indexOf("/* chrome:end */"));
 check("H23 homepage inlines the site kit's chrome CSS verbatim", chrome.length > 1000 && HOME.includes(chrome));
+// Self-hosted type and the decorative artwork (PR-3 ①): files served by content hash, named by the same hash where used.
+const kitHash = (f) => createHash("sha256").update(readFileSync(join(ROOT, f))).digest("hex").slice(0, 8);
+const fontSans = "/assets/geist-" + kitHash("assets/fonts/Geist-Variable.woff2") + ".woff2", fontMono = "/assets/geist-mono-" + kitHash("assets/fonts/GeistMono-Variable.woff2") + ".woff2";
+check("K1 the chrome's @font-face names the served font files by their content hash", chrome.includes('url("' + fontSans + '")') && chrome.includes('url("' + fontMono + '")'), fontSans + " " + fontMono);
+check("K2 the homepage preloads the same sans file; the site head preloads the served one", HOME.includes('<link rel="preload" href="' + fontSans + '" as="font" type="font/woff2" crossorigin>') && SRC.includes('loadKitAsset("assets/fonts/Geist-Variable.woff2", "geist", ".woff2", "font/woff2")'));
+check("K3 no visitor's browser is sent to a font host: no Google Fonts in the homepage, the kit stylesheet or the agent", !/fonts\.(googleapis|gstatic)\.com/.test(HOME + kitCss + SRC));
+check("K4 the font licence ships beside the fonts and is served", readFileSync(join(ROOT, "assets", "fonts", "OFL.txt"), "utf8").includes("SIL Open Font License, Version 1.1") && SRC.includes('loadKitAsset("assets/fonts/OFL.txt"'));
+check("K5 the artwork is served in three formats from one source, by content hash", ["avif", "webp", "jpg"].every((x) => SRC.includes('loadKitAsset("assets/dno-planet.' + x + '", "dno-planet", ".' + x + '"')));
+// V7 palette (PR-3 ③): decorative colours are declared once, in the chrome, far from every tone and from LIVE cyan.
+const tok = (name) => (chrome.match(new RegExp("--" + name + ":\\s*(#[0-9A-Fa-f]{6})")) || [])[1];
+const lab = (hex) => { const c = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const X = (c[0] * 0.4124 + c[1] * 0.3576 + c[2] * 0.1805) / 0.95047, Y = c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722, Z = (c[0] * 0.0193 + c[1] * 0.1192 + c[2] * 0.9505) / 1.08883;
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116); return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))]; };
+const dE = (a, b) => Math.hypot(...lab(a).map((v, k) => v - lab(b)[k]));
+const DECOR = ["navy-line", "violet", "violet-2", "ice", "ice-2"], TONES = ["operable", "elevated-risk", "degraded", "unknown", "metal-0", "live"];
+check("PAL1 each decorative colour is ΔE > 20 (CIE76) from every tone colour and from LIVE cyan", DECOR.every((d) => tok(d) && TONES.every((t) => tok(t) && dE(tok(d), tok(t)) > 20)),
+  DECOR.map((d) => d + " " + Math.min(...TONES.map((t) => (tok(d) && tok(t) ? dE(tok(d), tok(t)) : 0))).toFixed(1)).join(", "));
+check("PAL2 no tone or lamp rule uses a decorative colour", ![...(kitCss + HOME).matchAll(/\[data-tone[^{]*\{[^}]*\}|\.ind(?![\w-])[^{]*\{[^}]*\}/g)].some((m) => /--(navy-line|violet|ice)/.test(m[0])));
+check("H35 the agent fills the V7 first-screen markers from the same strings", SRC.includes("summary: '<p class=\"summary\" id=\"summary\" data-src=\"api\">reading</p>'") && SRC.includes("observedAt: '<span id=\"obs-at\">not read yet</span>'") && SRC.includes("apiVersion: '<span id=\"api-v\">reading</span>'") && SRC.includes('reading_agreement: homeCardMarker("reading_agreement")'));
+const artRef = (x) => "/assets/dno-planet-" + kitHash("assets/dno-planet." + x) + "." + x;
+check("K6 the hero names the served artwork files by their content hash (AVIF, WebP, JPEG)", ["avif", "webp", "jpg"].every((x) => HOME.includes('url("' + artRef(x) + '")')), ["avif", "webp", "jpg"].map(artRef).join(" "));
+const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
+check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
+check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
+const seedUrls = [...SRC.slice(SRC.indexOf("const PUBLIC_NODES = {"), SRC.indexOf("};", SRC.indexOf("const PUBLIC_NODES = {"))).matchAll(/url: "(https?:\/\/[^"]+)"/g)].map((m) => new URL(m[1]));
+const seedOps = new Set([...SRC.slice(SRC.indexOf("const PUBLIC_NODES = {"), SRC.indexOf("};", SRC.indexOf("const PUBLIC_NODES = {"))).matchAll(/operator: "([^"]+)"/g)].map((m) => m[1]));
+const WORD = ["no", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+const seedHead = (HOME.match(/<p class="ek">Configured public seeds<\/p>\s*<h3 class="twin-h">([^<]+)<\/h3>/) || [])[1];
+check("H38 the seeds panel counts what the agent dials: its URLs, their hostnames and one operator, from PUBLIC_NODES", seedUrls.length > 0 && seedOps.size === 1 && seedHead === WORD[seedUrls.length] + " URLs. " + WORD[new Set(seedUrls.map((u) => u.hostname)).size] + " hostnames. One organization." && HOME.includes("The " + WORD[seedUrls.length].toLowerCase() + " seeds are public URLs of one organization."), seedHead + " | " + seedUrls.length + " URLs");
+const persp = [...HOME.matchAll(/<a class="persp-c" href="([^"]+)">([\s\S]*?)<\/a>/g)];
+check("H39 the three perspective cards each link a page of the site and say so in an action line", persp.length === 3 && persp.every((m) => listOf("SITE_PAGES").some((pg) => pg.path === m[1]) && /<span class="persp-go">[^<]+ →<\/span>$/.test(m[2])), persp.map((m) => m[1]).join(" "));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
 // The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.
@@ -335,6 +380,22 @@ try {
     if (r.status !== 200 || !t.includes('<header class="site-head">') || !t.includes('src="/assets/dno-mark-' + markSha.slice(0, 8) + '.jpg"') || t.includes("<!--dno:") || /cx="50" cy="19"|class="doc-logo"|href="\/dashboard"/.test(t)) badPages.push(pth);
   }
   check("S38 every page: the site header with the locked mark, markers filled, no old mark, no /dashboard link", badPages.length === 0, badPages.join(", "));
+  // NAV-REACH served: the footer of every page links every page; nothing is sent to a font host.
+  const unreachable = [];
+  for (const pth of ["/"].concat(pages)) {
+    const t = await get(pth).then((r) => (typeof r.body === "string" ? r.body : ""));
+    const fs0 = t.indexOf('<footer class="site-foot">'), foot = fs0 < 0 ? "" : t.slice(fs0, t.indexOf("</footer>", fs0));
+    const missing = PAGES.filter((q) => !foot.includes('href="' + q + '"'));
+    if (missing.length || /fonts\.(googleapis|gstatic)\.com/.test(t)) unreachable.push(pth + " → " + (missing.join(" ") || "font host"));
+  }
+  { const t = await get("/").then((r) => (typeof r.body === "string" ? r.body : ""));
+    check("S41 / for readers without JavaScript: the summary, its clock and the reading's agreement are filled once an observation exists", !o.observed_at
+      || (t.includes('<p class="summary" id="summary" data-src="api">') && !t.includes('<p class="summary" id="summary" data-src="api">reading</p>') && !t.includes('<span id="obs-at">not read yet</span>') && !/<div data-card="reading_agreement"><p class="k">agreement<\/p><p class="v"><span class="ind" data-tone="pending">/.test(t))); }
+  check("S39 every page's footer links every page, and no page loads a font host", unreachable.length === 0, unreachable.join("; "));
+  const kitFiles = [[fontSans, "font/woff2"], [fontMono, "font/woff2"]];
+  let filesOk = true;
+  for (const [pth, type] of kitFiles) { const r = await fetch(BASE + pth); filesOk = filesOk && r.status === 200 && r.headers.get("content-type") === type && /immutable/.test(r.headers.get("cache-control") || ""); await r.arrayBuffer(); }
+  check("S40 the self-hosted fonts are served by content hash, immutable, with their type", filesOk, kitFiles.map((k) => k[0]).join(", "));
   const docs = await get("/docs");
   const docsHtml = typeof docs.body === "string" ? docs.body : "";
   check("S36 /docs prints no full wallet or identity and no /dashboard link", docs.status === 200 && !FULL_ID.test(docsHtml) && !/0x[0-9a-fA-F]{40}\b/.test(docsHtml) && !/href="\/dashboard"/.test(docsHtml));
@@ -347,14 +408,15 @@ try {
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
-  const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('id="cards"'));
+  // The whole reading panel: since V7 the ACTIVE line sits below the six cards (the on-chain list strip), not above them.
+  const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('<p class="bound">', html.indexOf('id="panel"')));
   const ocH = health.on_chain_validators;
   // The card's second line says what status is made of in this observation (1.2): the seeds; one seed and the validators
   // standing in; validators alone; or, when validators were read and gave no reading, that status is unknown. The page
   // and /organism may be a round apart, so any of the endings the two rounds' modes allow is accepted.
   const hw = (await get("/health")).body.witnesses || {};
   const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
-    : w.mode === "insufficient" && w.validators ? "Status is unknown" : "Status is those seeds");
+    : w.mode === "insufficient" ? "Status is unknown" : "Status is those seeds");   // insufficient is never compared: unknown, whether or not validators were read
   const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
   check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then what status is made of in this observation; no 'nodes aligned'",
     !o.observed_at || (/<p class="cycle-lead" id="cycle-lead" data-src="api">([\d,]+ ACTIVE on chain as \w+ public seeds list them\.|ACTIVE on chain: (reading|not reported this cycle[^<]*)\.)<\/p>/.test(cardHtml)

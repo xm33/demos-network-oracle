@@ -315,7 +315,9 @@ var HOME_DQ_REASON = {
   too_few_answers: "fewer than 2 seeds answered",
   too_few_heights: "fewer than 2 seeds reported their own height"
 };
-var HOME_CARD_LABEL = { trend: "trend", risk: "risk", confidence: "confidence", data_quality: "data quality" };
+// reading_agreement is the reading's own agreement (/organism), on the first screen; the Agreement section further down
+// keeps /health's agreement object and its own marker.
+var HOME_CARD_LABEL = { trend: "trend", risk: "risk", confidence: "confidence", data_quality: "data quality", reading_agreement: "agreement" };
 function homeTone(key, value) { return (HOME_TONE[key] && HOME_TONE[key][value]) || (value ? "neutral" : "unknown"); }
 function homeCardMarker(key) {
   return '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p>';
@@ -330,7 +332,10 @@ var HOME_MARKERS = {
   agreement: '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   live: '<span id="live-text">connecting</span>',
   validators: '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>',
-  cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality") }
+  summary: '<p class="summary" id="summary" data-src="api">reading</p>',
+  observedAt: '<span id="obs-at">not read yet</span>',
+  apiVersion: '<span id="api-v">reading</span>',
+  cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality"), reading_agreement: homeCardMarker("reading_agreement") }
 };
 function renderHomepageNoJs(html) {
   try {
@@ -353,15 +358,22 @@ function renderHomepageNoJs(html) {
     try { door = cycleDoor(getValidatorGrowth().discovered); } catch (ignore) {}
     if (door) html = html.replace(HOME_MARKERS.door, '<span id="door-n">' + e(door) + ' · </span>');
     if (c.data_quality === "insufficient") html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
+    // The reading's sentence, verbatim, and its clock and API version: the first screen's own fields (V7).
+    if (typeof c.summary === "string" && c.summary) html = html.replace(HOME_MARKERS.summary, '<p class="summary" id="summary" data-src="api">' + e(c.summary) + '</p>');
+    html = html.replace(HOME_MARKERS.observedAt, '<span id="obs-at">' + e(c.observed_at.slice(0, 10) + " " + c.observed_at.slice(11, 19)) + ' UTC</span>');
+    if (typeof c.api_version === "string") html = html.replace(HOME_MARKERS.apiVersion, '<span id="api-v">' + e(c.api_version) + '</span>');
+    var readingAg = (c.agreement && c.agreement.state) || "unknown";
     var subs = {
+      reading_agreement: typeof c.agreement_reason === "string" ? c.agreement_reason : "",
       trend: trendReason(c.trend),
       risk: (c.risk_factors || []).join(" · "),
       confidence: c.confidence_reason || "",
       data_quality: c.data_quality_reason ? (HOME_DQ_REASON[c.data_quality_reason] || "") : ""
     };
     for (var key in HOME_MARKERS.cards) {
-      var val = c[key] || "unknown";
-      html = html.replace(HOME_MARKERS.cards[key], '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="' + homeTone(key, c[key]) + '"></span><span class="val">' + e(val) + '</span></p><p class="s" data-src="api"' + (subs[key] ? '' : ' hidden') + '>' + e(subs[key]) + '</p>');
+      var raw = key === "reading_agreement" ? readingAg : c[key];
+      var val = raw || "unknown";
+      html = html.replace(HOME_MARKERS.cards[key], '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="' + homeTone(key === "reading_agreement" ? "agreement" : key, raw) + '"></span><span class="val">' + e(val) + '</span></p><p class="s" data-src="api"' + (subs[key] ? '' : ' hidden') + '>' + e(subs[key]) + '</p>');
     }
     var ag = (c.agreement && c.agreement.state) || "unknown";
     html = html.replace(HOME_MARKERS.agreement, '<span class="ind" id="ag-ind" data-tone="' + homeTone("agreement", ag) + '"></span><span id="ag-state">' + e(ag) + '</span>');
@@ -397,27 +409,46 @@ function loadKitAsset(file, base, ext, type) {
 var SITE_CSS = loadKitAsset("assets/site.css", "site", ".css", "text/css; charset=utf-8");
 var SITE_JS = loadKitAsset("assets/site.js", "site", ".js", "text/javascript; charset=utf-8");
 var SITE_FAVICON = loadKitAsset("assets/dno-favicon.png", "dno-favicon", ".png", "image/png");
+// Self-hosted type (Geist, SIL Open Font License 1.1: assets/fonts/OFL.txt): no visitor's browser calls a font host.
+// The chrome block of assets/site.css and homepage.html name these files by the same content hash (public-api-v11 K1).
+var FONT_SANS = loadKitAsset("assets/fonts/Geist-Variable.woff2", "geist", ".woff2", "font/woff2");
+var FONT_MONO = loadKitAsset("assets/fonts/GeistMono-Variable.woff2", "geist-mono", ".woff2", "font/woff2");
+var FONT_LICENSE = loadKitAsset("assets/fonts/OFL.txt", "geist-ofl", ".txt", "text/plain; charset=utf-8");
+// The homepage's decorative background: a clean artwork with no mark and no lettering. Decoration only, never data.
+var ART_AVIF = loadKitAsset("assets/dno-planet.avif", "dno-planet", ".avif", "image/avif");
+var ART_WEBP = loadKitAsset("assets/dno-planet.webp", "dno-planet", ".webp", "image/webp");
+var ART_JPG = loadKitAsset("assets/dno-planet.jpg", "dno-planet", ".jpg", "image/jpeg");
 var KIT_ASSETS = {};
-[SITE_CSS, SITE_JS, SITE_FAVICON].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
-// The same links, in the same order, as the homepage header (src/public-api-v11.test.mjs compares them).
+[SITE_CSS, SITE_JS, SITE_FAVICON, FONT_SANS, FONT_MONO, FONT_LICENSE, ART_AVIF, ART_WEBP, ART_JPG].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
+// The header: five links, the same, in the same order, as the homepage header (src/public-api-v11.test.mjs H22).
 var SITE_NAV = [
-  ["/methodology", "methodology", "Methodology"],
-  ["/about-demos", "about-demos", "About Demos"],
+  ["/", "home", "Reading"],
   ["/sources", "sources", "Sources"],
-  ["/agent", "agent", "Agent"],
-  ["/reference", "reference", "Reference"],
-  ["/timeline", "timeline", "Timeline"],
-  ["/commerce", "commerce", "Commerce"]
+  ["/methodology", "methodology", "Methodology"],
+  ["/reference", "reference", "Explore"],
+  ["/docs", "docs", "Developers"]
 ];
-function siteNavLinks(active) {
-  return SITE_NAV.map(function(n) { return '<a href="' + n[0] + '"' + (n[1] === active ? ' aria-current="page"' : '') + '>' + n[2] + '</a>'; });
-}
+// Every public page, for the Menu fold-out and the footer: no page is reachable only by its URL (NAV-REACH).
+var SITE_PAGES = [
+  ["/", "home", "Live reading", "read"],
+  ["/sources", "sources", "Sources", "read"],
+  ["/methodology", "methodology", "Methodology", "read"],
+  ["/criteria", "criteria", "Criteria", "read"],
+  ["/reference", "reference", "Reference", "read"],
+  ["/timeline", "timeline", "Timeline", "read"],
+  ["/commerce", "commerce", "Commerce", "read"],
+  ["/about-demos", "about-demos", "About Demos", "about"],
+  ["/agent", "agent", "Agent guide", "about"],
+  ["/docs", "docs", "API", "about"]
+];
+function siteLink(n, active) { return '<a href="' + n[0] + '"' + (n[1] === active ? ' aria-current="page"' : '') + '>' + n[2] + '</a>'; }
+function siteNavLinks(active) { return SITE_NAV.map(function(n) { return siteLink(n, active); }); }
+function sitePageLinks(active, group) { return SITE_PAGES.filter(function(n) { return !group || n[3] === group; }).map(function(n) { return siteLink(n, active); }); }
 function siteHead() {
   return '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#000000">'
     + (SITE_FAVICON ? '<link rel="icon" type="image/png" sizes="64x64" href="' + SITE_FAVICON.path + '">' : '')
-    + '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">'
+    + (FONT_SANS ? '<link rel="preload" href="' + FONT_SANS.path + '" as="font" type="font/woff2" crossorigin>' : '')
     + (SITE_CSS ? '<link rel="stylesheet" href="' + SITE_CSS.path + '">' : '');
 }
 function siteHeader(active) {
@@ -426,16 +457,20 @@ function siteHeader(active) {
     + '<header class="site-head"><div class="wrap">'
     + '<a class="brand" href="/" aria-label="Demos Network Oracle, home">'
     + (MARK_ASSET ? '<img class="mark mark--nav" src="' + MARK_ASSET_PATH + '" width="92" height="92" alt="" decoding="async">' : '')
-    + '<span class="brand-name"><span class="full">Demos Network Oracle</span><span class="short">DNO</span></span></a>'
+    + '<span class="brand-name"><b>DNO</b><small>Demos Network Oracle</small></span></a>'
+    + '<span class="indep">Independent observability ·<br>not an official Demos product.</span>'
     + '<nav class="nav" aria-label="Primary">' + links.join("") + '</nav>'
     + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot"></span><span id="live-text">connecting</span></a>'
-    + '<details class="menu"><summary>Menu</summary><ul><li><a href="/">Live reading</a></li>' + links.map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
+    + '<details class="menu"><summary>Menu</summary><ul>' + sitePageLinks(active).map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
     + '</div></header>';
 }
 function siteFooter(active) {
   return '<footer class="site-foot"><div class="wrap">'
-    + '<nav class="foot-nav" aria-label="Site"><a href="/">Live reading</a>' + siteNavLinks(active).join("") + '<a href="/docs"' + (active === "docs" ? ' aria-current="page"' : '') + '>API</a></nav>'
-    + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://github.com/xm33/demos-network-oracle">GitHub</a><a href="https://demos.sh">demos.sh</a></p>'
+    + '<div class="foot-groups">'
+    + '<nav class="foot-nav" aria-label="Read"><p class="foot-k">Read</p>' + sitePageLinks(active, "read").join("") + '</nav>'
+    + '<nav class="foot-nav" aria-label="About"><p class="foot-k">About</p>' + sitePageLinks(active, "about").join("") + '<a href="https://github.com/xm33/demos-network-oracle">GitHub</a></nav>'
+    + '</div>'
+    + '<p class="foot-line"><span>Demos Network Oracle</span><a href="https://demos.sh">demos.sh</a></p>'
     + '<p class="fine">DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'
     + '<p class="fine">Built by XM33 · not an official Demos product.</p>'
     + '<p class="fine">DNO does not validate. XM33 runs a validator on the public Demos testnet. In the public reading it counts like any other validator, and only if it publishes an address on chain.</p>'
