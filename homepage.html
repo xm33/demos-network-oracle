@@ -737,6 +737,8 @@ body { background: var(--bg); }
 .persp-c { display: grid; gap: 8px; align-content: start; padding: 22px; border: 1px solid #1c2740; border-radius: 12px; background: rgba(6, 11, 21, .9); color: var(--ink); text-decoration: none; }
 .persp-c:hover { color: var(--ink); border-color: var(--violet-2); }
 .persp-h { font-size: 1.25rem; font-weight: 500; }
+.persp-go { margin-top: 6px; font-size: .9375rem; color: var(--ice); }
+.persp-c:hover .persp-go { text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 1099px) { .pop4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .branch ol, .persp { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 719px) { .pop4, .wit-facts { grid-template-columns: minmax(0, 1fr); } .section-head { grid-template-columns: minmax(0, 1fr); } .section-head .meta { justify-self: start; } }
 @media (forced-colors: active) { .hero h1 .o, .hero h1 .e { background: none; color: CanvasText; } }
@@ -1144,9 +1146,9 @@ body { background: var(--bg); }
         <h2 id="persp-title">One observatory. Three perspectives.</h2>
       </div>
       <div class="persp">
-        <a class="persp-c" href="/about-demos"><p class="ek">Start here</p><p class="persp-h">New to Demos</p><p class="fine">What Demos is, what a validator and a shard are in its own docs, and what DNO can and cannot see of them.</p></a>
-        <a class="persp-c" href="/reference"><p class="ek">Explore</p><p class="persp-h">Inspect the observations</p><p class="fine">The reference tables, the timeline of records, the criteria and the commerce observations, each with its own clock.</p></a>
-        <a class="persp-c" href="/docs"><p class="ek">Developers</p><p class="persp-h">Use the read-only API</p><p class="fine">Every endpoint, its fields and its limits; the agent guide shows how software should read <code>unknown</code>.</p></a>
+        <a class="persp-c" href="/about-demos"><p class="ek">Start here</p><p class="persp-h">New to Demos</p><p class="fine">What Demos is, what a validator and a shard are in its own docs, and what DNO can and cannot see of them.</p><span class="persp-go">Learn the basics →</span></a>
+        <a class="persp-c" href="/reference"><p class="ek">Explore</p><p class="persp-h">Inspect the observations</p><p class="fine">The reference tables, the timeline of records, the criteria and the commerce observations, each with its own clock.</p><span class="persp-go">Open the reference →</span></a>
+        <a class="persp-c" href="/docs"><p class="ek">Developers</p><p class="persp-h">Use the read-only API</p><p class="fine">Every endpoint, its fields and its limits; the agent guide shows how software should read <code>unknown</code>.</p><span class="persp-go">Open the API docs →</span></a>
       </div>
     </div>
   </section>
