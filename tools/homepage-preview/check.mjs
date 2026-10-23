@@ -92,6 +92,11 @@ console.log("\n[HOMEPAGE_PREVIEW] ADJ: adjacent cycles with identical labels are
   check("ADJ2 the seeds line is built from /organism alone (no 'k of N configured seeds answered' from /health)", !/of \d configured seeds answered/.test(r.seeds), r.seeds);
   const same = await render(o, h);
   check("ADJ3 with equal observed_at the seeds line may carry /health's seed detail", /configured seeds/.test(same.seeds), same.seeds);
+  // The ACTIVE count is /health's (its list read). From another round it is not the reading's, so the seeds line, which
+  // is the reading's, does not name it ("Status is those seeds, not the 35"): the strip beside it shows it with its own clock.
+  const n = h.on_chain_validators && h.on_chain_validators.state === "agreed" ? h.on_chain_validators.active : null;
+  check("ADJ4 the seeds line names no ACTIVE count from /health of another round", n !== null && !r.seeds.includes("not the " + n), "health active " + n + " | " + r.seeds);
+  check("ADJ5 with equal observed_at the seeds line may name it", n !== null && same.seeds.includes("not the " + n), same.seeds);
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] NOOC: a /health without on_chain_validators retains nothing");

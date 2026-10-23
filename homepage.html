@@ -1449,7 +1449,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     setTone($('status-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
     setText($('status-value'), st ? st.toUpperCase() : 'UNKNOWN');
     const r = seedsReading(o, h);
-    setText($('seeds-line'), HOME_CYCLE.cycleSeeds(r, active));
+    // The ACTIVE count is the list read's, carried by /health: named in the reading's line only for the same observation.
+    setText($('seeds-line'), HOME_CYCLE.cycleSeeds(r, sameObservation(h, o) ? active : null));
     $('insufficient').hidden = lower(o.data_quality) !== 'insufficient';
 
     const card = (key, subText) => { const v = lower(o[key]); setCard(key, v ? (TONE[key][v] || 'neutral') : 'unknown', v || 'unknown', subText); };
