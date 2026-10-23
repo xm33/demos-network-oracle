@@ -1399,7 +1399,16 @@ function readbarText(r) {
 function cycleDoor(discovered) {
   return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
 }
-return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
+
+// The trend card's reason: the comparison the agent makes (agent.mjs, the trend block), in words. Backward-looking only.
+// Empty for unknown: the definition on the card says why (fewer than 10 prior cycles, or data quality insufficient).
+function trendReason(trend) {
+  return trend === "improving" || trend === "stable" || trend === "worsening"
+    ? "This round against the mean of the previous 10\u201315 rounds: seeds answering, agreement, block spread."
+    : "";
+}
+
+return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, trendReason };
 })();
   function leadLine(vm) {
     if (vm.mode === 'oneread') return `${fmtInt(ONE_READ.active)} ACTIVE on chain in one read on ${stamp(Date.parse(ONE_READ.at))}, as two public seeds listed them. Not this cycle.`;
@@ -1448,7 +1457,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     $('insufficient').hidden = lower(o.data_quality) !== 'insufficient';
 
     const card = (key, subText) => { const v = lower(o[key]); setCard(key, v ? (TONE[key][v] || 'neutral') : 'unknown', v || 'unknown', subText); };
-    card('trend', '');
+    card('trend', HOME_CYCLE.trendReason(lower(o.trend)));
     const same = (key) => !!h && lower(h[key]) === lower(o[key]);
     const rf = same('risk') && Array.isArray(h.risk_factors) ? h.risk_factors : o.risk_factors;
     card('risk', Array.isArray(rf) && rf.length ? rf.map(String).join(' · ') : '');
@@ -2053,7 +2062,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
     } else catFilter = 'all';
     applySearch();
     renderOverlap(vg);
-    $('seen-drop').hidden = !(h && typeof h.api_version === 'string' && /^1\.[1-9]\d*(\.|$)/.test(h.api_version) && vg && isNum(vg.discovered));
+    $('seen-drop').hidden = !(h && h.api_version === '1.1' && vg && isNum(vg.discovered));
 
     const body = $('seeds-body');
     const rows = monitoredRows(h);
@@ -2382,7 +2391,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       list.replaceChildren(); return;
     }
     const n = o.active_incidents, count = $('inc-count');
-    if (n === 0) { setTone($('inc-ind'), 'ok'); count.dataset.n = '0'; setText(count, 'No active public incidents.'); list.replaceChildren(); return; }
+    if (n === 0) { setTone($('inc-ind'), 'neutral'); count.dataset.n = '0'; setText(count, 'No active public incidents. DNO currently opens no record of this kind; condition records are listed below.'); list.replaceChildren(); return; }
     setTone($('inc-ind'), 'warn');
     if (count.dataset.n !== String(n)) { count.dataset.n = String(n); count.replaceChildren(el('span', { text: 'active incidents' }), el('strong', { text: String(n) })); }
     if (!reads.incidents.data) { list.replaceChildren(el('li', { text: reads.incidents.error ? 'Active incident rows could not be read from this browser.' : 'Reading active incident rows.' })); return; }

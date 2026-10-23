@@ -34,7 +34,7 @@ import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from ".
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, versionOf, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
-import { leadCount, cycleLead, cycleSeeds, cycleDoor } from "./home-cycle.mjs";
+import { leadCount, cycleLead, cycleSeeds, cycleDoor, trendReason } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
 import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
@@ -354,7 +354,7 @@ function renderHomepageNoJs(html) {
     if (door) html = html.replace(HOME_MARKERS.door, '<span id="door-n">' + e(door) + ' · </span>');
     if (c.data_quality === "insufficient") html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
     var subs = {
-      trend: "",
+      trend: trendReason(c.trend),
       risk: (c.risk_factors || []).join(" · "),
       confidence: c.confidence_reason || "",
       data_quality: c.data_quality_reason ? (HOME_DQ_REASON[c.data_quality_reason] || "") : ""
@@ -3783,14 +3783,15 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       var bCanonical = computeCanonicalState();
       var bStatus = bCanonical.status;
       var bColor = bStatus === "stable" ? "#4c1" : bStatus === "degraded" ? "#dfb317" : bStatus === "unstable" ? "#e05d44" : "#999";
-      var bIcon = bStatus === "stable" ? "\u2713" : bStatus === "unknown" ? "?" : "\u26a0";
+      // No tick: a tick reads as approval (§3.1). The word is the whole message when stable.
+      var bIcon = bStatus === "unknown" ? "?" : bStatus === "stable" ? "" : "\u26a0";
       var bLabel = bStatus.toUpperCase();
       var bWidth = bLabel.length * 8 + 20;
       var bSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + (46 + bWidth) + '" height="20" role="img">' +
         '<rect width="46" height="20" fill="#555" rx="3"/><rect x="46" width="' + bWidth + '" height="20" fill="' + bColor + '" rx="3"/>' +
         '<rect x="46" width="4" height="20" fill="' + bColor + '"/>' +
         '<text x="23" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">Oracle</text>' +
-        '<text x="' + (46 + bWidth/2) + '" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + ' ' + bIcon + '</text></svg>';
+        '<text x="' + (46 + bWidth/2) + '" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">' + bLabel + (bIcon ? " " + bIcon : "") + '</text></svg>';
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
       res.end(bSvg);
     } else if (reqPath === "/sentinel") {
