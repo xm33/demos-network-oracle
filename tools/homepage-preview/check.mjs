@@ -14,7 +14,8 @@
 //   NOOC /health without on_chain_validators → "not reported", and no retained count (the digits 35 appear nowhere)
 //   WATCH the watch round's own clock is shown beside the list-read clock when the watch is observed
 import { createServer } from "node:http";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +25,18 @@ const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
 const FX = join(here, "fixtures");
 const load = (n) => JSON.parse(readFileSync(join(FX, n), "utf8"));
 const { chromium } = await import("playwright");
+const SHOTS = (process.argv.find((a) => a.startsWith("--shots=")) || "").slice(8) || null;   // optional: write screenshots here
+if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+
+// The agent serves kit files under /assets/<base>-<first 8 hex of sha256>.<ext> (src/agent.mjs loadKitAsset); the mark
+// under /assets/dno-mark-<8>.jpg. The same names are served here, from the working tree.
+const TYPES = { ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".avif": "image/avif", ".woff2": "font/woff2", ".txt": "text/plain" };
+const ASSETS = {};
+const KIT = [["assets/site.css", "site"], ["assets/site.js", "site"], ["assets/dno-favicon.png", "dno-favicon"], ["assets/fonts/Geist-Variable.woff2", "geist"], ["assets/fonts/GeistMono-Variable.woff2", "geist-mono"],
+  ["assets/dno-planet.avif", "dno-planet"], ["assets/dno-planet.webp", "dno-planet"], ["assets/dno-planet.jpg", "dno-planet"], ["assets/dno-mark.jpg", "dno-mark"]];
+for (const [f, base] of KIT) {
+  try { const b = readFileSync(join(ROOT, f)), ext = f.slice(f.lastIndexOf(".")); ASSETS["/assets/" + base + "-" + createHash("sha256").update(b).digest("hex").slice(0, 8) + ext] = { b, type: TYPES[ext] }; } catch (e) {}
+}
 
 let passed = 0, failed = 0;
 const check = (name, cond, detail) => { if (cond) { passed++; console.log("  ok   " + name); } else { failed++; console.log("  FAIL " + name + (detail ? "  — " + String(detail).slice(0, 300) : "")); } };
@@ -33,6 +46,7 @@ let current = { organism: null, health: null };
 const server = createServer((req, res) => {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(HOME); }
+  if (ASSETS[p]) { res.writeHead(200, { "Content-Type": ASSETS[p].type }); return res.end(ASSETS[p].b); }
   if (p === "/organism" || p === "/health") {
     const d = current[p.slice(1)];
     if (d === null) { res.writeHead(503, { "Content-Type": "application/json" }); return res.end('{"error":"unavailable"}'); }
@@ -44,22 +58,36 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const BASE = "http://127.0.0.1:" + server.address().port;
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
-async function render(organism, health, { width = 1280 } = {}) {
+async function render(organism, health, { width = 1280, shot = null, reduced = false } = {}) {
   current = { organism, health };
-  const page = await browser.newPage({ viewport: { width, height: 900 } });
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: reduced ? "reduce" : "no-preference" });
+  const failedAssets = [], external = [];
+  page.on("response", (r) => { const u = new URL(r.url()); if (u.pathname.startsWith("/assets/") && r.status() !== 200) failedAssets.push(u.pathname + " " + r.status()); });
+  page.on("request", (r) => { const u = new URL(r.url()); if (u.host !== new URL(BASE).host && u.protocol.startsWith("http")) external.push(u.host); });
   await page.goto(BASE + "/");
   await page.waitForFunction(() => document.getElementById("panel").dataset.state !== "pending", null, { timeout: 10000 });
   await page.waitForTimeout(150);
   const out = await page.evaluate(() => {
     const t = (id) => (document.getElementById(id) || {}).textContent || "";
+    const shown = (id) => { const n = document.getElementById(id); return n && !n.hidden ? n : null; };   // null when missing or hidden: a missing element fails its check, it does not crash the run
     const card = (k) => { const c = document.querySelector(`[data-card="${k}"]`); return c ? { val: c.querySelector(".val").textContent, sub: c.querySelector(".s").textContent, tone: c.querySelector(".ind").dataset.tone } : null; };
     return { state: document.getElementById("panel").dataset.state, status: t("status-value"), lead: t("cycle-lead"), seeds: t("seeds-line"),
       cards: { trend: card("trend"), risk: card("risk"), confidence: card("confidence"), data_quality: card("data_quality") },
       vwcap: t("vw-cap"), vnActive: t("vn-active"), plValidators: t("pl-validators"), growthHidden: document.getElementById("vw-growth").hidden,
-      body: document.body.innerText, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth };
+      body: document.body.innerText, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth,
+      // V7 first screen
+      summary: t("summary"), obsAt: t("obs-at"), apiV: t("api-v"), head: (document.querySelector(".panel-head .rkick") || {}).textContent || "",
+      cardOrder: [...document.querySelectorAll("#cards > [data-card]")].map((c) => c.dataset.card),
+      ra: card("reading_agreement"), ctxCount: t("ctx-count"), ctxCap: shown("ctx-cap") ? t("ctx-cap") : null,
+      why: shown("whybox") ? { q: t("why-q"), a: t("why-a") } : null,
+      h1: (document.querySelector("#hero-title") || {}).textContent || "", h1Img: !!document.querySelector("#hero-title img, #hero-title svg"),
+      live: { state: (document.getElementById("live") || { dataset: {} }).dataset.state, text: t("live-text") },
+      sweepShown: !!document.getElementById("sweep-fill") && getComputedStyle(document.getElementById("sweep-fill")).display !== "none",
+      heroBg: document.querySelector(".hero .sky") ? getComputedStyle(document.querySelector(".hero .sky")).backgroundImage : "" };
   });
+  if (shot) await page.screenshot({ path: shot, fullPage: /-full\.png$/.test(shot) });
   await page.close();
+  out.failedAssets = failedAssets; out.external = [...new Set(external)];
   return out;
 }
 
@@ -120,6 +148,47 @@ console.log("\n[HOMEPAGE_PREVIEW] WATCH: the watch round has its own clock");
   if (w && w.state === "observed" && w.round_at) check("WATCH1 'watch round HH:MM:SS UTC' is shown from validator_watch.round_at", r.vwcap.includes("watch round " + hhmmss(w.round_at)), r.vwcap);
   else check("WATCH1 (watch not observed in this fixture) no watch clock is shown", !/watch round/.test(r.vwcap), r.vwcap);
   if (oc && oc.observed_at) check("WATCH2 'List read HH:MM:SS UTC' is from on_chain_validators.observed_at", r.vwcap.includes("List read " + hhmmss(oc.observed_at)), r.vwcap);
+}
+
+console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own fields, in the locked layout");
+{
+  const TONE = { status: { stable: "ok", degraded: "warn", unstable: "bad", unknown: "unknown" }, risk: { low: "ok", elevated: "warn", high: "bad" } };
+  const expectCount = (o) => { const w = o.witnesses || {}, ps = w.public_seeds || {}, v = w.validators || {}, n = v.counted || 0, sd = (k) => k + (k === 1 ? " seed" : " seeds"), wt = (k) => k + (k === 1 ? " validator witness" : " validator witnesses");
+    return w.mode === "seeds_only" ? sd(ps.own_height) : w.mode === "seed_and_validators" ? sd(ps.own_height) + " + " + wt(n) : w.mode === "validators_only" ? wt(n) : "too few for a reading"; };
+  for (const [name, [of, hf]] of Object.entries(scen)) {
+    const o = load(of), h = load(hf);
+    const r = await render(o, h, { width: 1440, shot: SHOTS ? join(SHOTS, name + "-1440.png") : null });
+    check(`V1 ${name}: the summary is /organism.summary, verbatim`, r.summary === o.summary, r.summary);
+    check(`V2 ${name}: the observation's own clock and API version`, r.obsAt === o.observed_at.slice(0, 10) + " " + o.observed_at.slice(11, 19) + " UTC" && r.apiV === o.api_version, r.obsAt + " | " + r.apiV);
+    check(`V3 ${name}: the reading names its network`, /Demos public testnet/.test(r.head), r.head);
+    check(`V4 ${name}: six cards in the locked order`, JSON.stringify(r.cardOrder) === JSON.stringify(["status", "confidence", "risk", "data_quality", "reading_agreement", "trend"]), r.cardOrder.join(","));
+    check(`V5 ${name}: the agreement card is /organism.agreement with its reason`, !!r.ra && r.ra.val === String(o.agreement) && r.ra.sub === (o.agreement_reason || ""), JSON.stringify(r.ra));
+    check(`V6 ${name}: heights counted this round, from /organism.witnesses`, r.ctxCount === expectCount(o), r.ctxCount + " vs " + expectCount(o));
+    const counted = o.witnesses && o.witnesses.validators && o.witnesses.validators.counted > 0;
+    check(`V7 ${name}: the witnesses caption appears iff validators were counted, and says they are not the population`, counted ? /not the total validator population/.test(r.ctxCap || "") : r.ctxCap === null, r.ctxCap);
+    const differ = TONE.status[o.status] !== TONE.risk[o.risk];
+    check(`V8 ${name}: the why-box appears iff status and risk tones differ, and quotes every risk factor`, differ ? !!r.why && r.why.q.includes(o.status) && r.why.q.includes(o.risk) && (o.risk_factors || []).every((f) => r.why.a.includes(f)) : r.why === null, JSON.stringify(r.why).slice(0, 200));
+    check(`V9 ${name}: the hero is 'Observe. Explain.' in type, no mark inside the heading`, r.h1.replace(/\s+/g, " ").trim() === "Observe. Explain." && !r.h1Img, r.h1);
+    check(`V10 ${name}: the background artwork and every asset load (no 404), and nothing is fetched from another host`, r.failedAssets.length === 0 && r.external.length === 0 && /dno-planet-[0-9a-f]{8}\.(avif|webp|jpg)/.test(r.heroBg), r.failedAssets.concat(r.external).join(" ") || r.heroBg.slice(0, 120));
+  }
+  // The panel's agreement is the reading's even when /health (same observation) says otherwise in its own object.
+  const o = load(scen.seeds_only[0]), h = JSON.parse(JSON.stringify(load(scen.seeds_only[1])));
+  h.agreement = Object.assign({}, h.agreement, { state: "weak" });
+  const r = await render(o, h);
+  check("V11 the first-screen agreement card ignores /health.agreement (the Agreement section shows /health's, on its own clock)", !!r.ra && r.ra.val === String(o.agreement), r.ra && r.ra.val);
+  // Widths: no horizontal scroll at the five review widths; phone screenshots for the record.
+  for (const width of [390, 768, 1280, 1440, 1920]) {
+    const rr = await render(load(scen.seed_and_validators[0]), load(scen.seed_and_validators[1]), { width, shot: SHOTS && (width === 390 || width === 1440) ? join(SHOTS, "seed_and_validators-" + width + "-full.png") : null });
+    check(`V12 no horizontal overflow at ${width}`, rr.scrollW <= rr.innerW, rr.scrollW + " > " + rr.innerW);
+  }
+  // Freshness: LIVE only under the rule (staleness ≤ 300 s); a stale reading never shows LIVE.
+  const stale = JSON.parse(JSON.stringify(o)); stale.staleness_seconds = 301;
+  const rs = await render(stale, load(scen.seeds_only[1]));
+  check("V13 a reading older than 300 s shows no LIVE", rs.live.state !== "live" && !/^LIVE\b/.test(rs.live.text), JSON.stringify(rs.live));
+  const rf = await render(o, load(scen.seeds_only[1]));
+  check("V14 a fresh reading shows LIVE with its age", rf.live.state === "live" && /^LIVE · \d+ s$/.test(rf.live.text), JSON.stringify(rf.live));
+  const rm = await render(o, load(scen.seeds_only[1]), { reduced: true });
+  check("V15 reduced motion stops the sweep", rm.sweepShown === false);
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] FAIL: a failed /organism read is said as a failure to read");

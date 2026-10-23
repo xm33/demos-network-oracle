@@ -315,7 +315,9 @@ var HOME_DQ_REASON = {
   too_few_answers: "fewer than 2 seeds answered",
   too_few_heights: "fewer than 2 seeds reported their own height"
 };
-var HOME_CARD_LABEL = { trend: "trend", risk: "risk", confidence: "confidence", data_quality: "data quality" };
+// reading_agreement is the reading's own agreement (/organism), on the first screen; the Agreement section further down
+// keeps /health's agreement object and its own marker.
+var HOME_CARD_LABEL = { trend: "trend", risk: "risk", confidence: "confidence", data_quality: "data quality", reading_agreement: "agreement" };
 function homeTone(key, value) { return (HOME_TONE[key] && HOME_TONE[key][value]) || (value ? "neutral" : "unknown"); }
 function homeCardMarker(key) {
   return '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p>';
@@ -330,7 +332,10 @@ var HOME_MARKERS = {
   agreement: '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   live: '<span id="live-text">connecting</span>',
   validators: '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>',
-  cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality") }
+  summary: '<p class="summary" id="summary" data-src="api">reading</p>',
+  observedAt: '<span id="obs-at">not read yet</span>',
+  apiVersion: '<span id="api-v">reading</span>',
+  cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality"), reading_agreement: homeCardMarker("reading_agreement") }
 };
 function renderHomepageNoJs(html) {
   try {
@@ -353,15 +358,22 @@ function renderHomepageNoJs(html) {
     try { door = cycleDoor(getValidatorGrowth().discovered); } catch (ignore) {}
     if (door) html = html.replace(HOME_MARKERS.door, '<span id="door-n">' + e(door) + ' · </span>');
     if (c.data_quality === "insufficient") html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
+    // The reading's sentence, verbatim, and its clock and API version: the first screen's own fields (V7).
+    if (typeof c.summary === "string" && c.summary) html = html.replace(HOME_MARKERS.summary, '<p class="summary" id="summary" data-src="api">' + e(c.summary) + '</p>');
+    html = html.replace(HOME_MARKERS.observedAt, '<span id="obs-at">' + e(c.observed_at.slice(0, 10) + " " + c.observed_at.slice(11, 19)) + ' UTC</span>');
+    if (typeof c.api_version === "string") html = html.replace(HOME_MARKERS.apiVersion, '<span id="api-v">' + e(c.api_version) + '</span>');
+    var readingAg = (c.agreement && c.agreement.state) || "unknown";
     var subs = {
+      reading_agreement: typeof c.agreement_reason === "string" ? c.agreement_reason : "",
       trend: trendReason(c.trend),
       risk: (c.risk_factors || []).join(" · "),
       confidence: c.confidence_reason || "",
       data_quality: c.data_quality_reason ? (HOME_DQ_REASON[c.data_quality_reason] || "") : ""
     };
     for (var key in HOME_MARKERS.cards) {
-      var val = c[key] || "unknown";
-      html = html.replace(HOME_MARKERS.cards[key], '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="' + homeTone(key, c[key]) + '"></span><span class="val">' + e(val) + '</span></p><p class="s" data-src="api"' + (subs[key] ? '' : ' hidden') + '>' + e(subs[key]) + '</p>');
+      var raw = key === "reading_agreement" ? readingAg : c[key];
+      var val = raw || "unknown";
+      html = html.replace(HOME_MARKERS.cards[key], '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="' + homeTone(key === "reading_agreement" ? "agreement" : key, raw) + '"></span><span class="val">' + e(val) + '</span></p><p class="s" data-src="api"' + (subs[key] ? '' : ' hidden') + '>' + e(subs[key]) + '</p>');
     }
     var ag = (c.agreement && c.agreement.state) || "unknown";
     html = html.replace(HOME_MARKERS.agreement, '<span class="ind" id="ag-ind" data-tone="' + homeTone("agreement", ag) + '"></span><span id="ag-state">' + e(ag) + '</span>');

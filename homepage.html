@@ -152,12 +152,6 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
 /* chrome:end */
 
 /* ---------- First screen ---------- */
-.hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 32px; padding-block: 40px 32px; }
-.hero-copy { display: grid; gap: 16px; max-width: 34rem; }
-.hero h1 { font-size: clamp(2rem, 4.2vw, 3.125rem); line-height: 1.06; font-weight: 500; letter-spacing: 0.01em; color: var(--metal-2); }
-.independence { font-size: 0.9375rem; color: var(--mute); }
-.tagline { font-size: 1.3125rem; line-height: 1.35; color: var(--ink); font-weight: 500; letter-spacing: 0.005em; }
-.lede { font-size: 1.1875rem; line-height: 1.45; color: var(--metal-1); }
 
 /* ---------- Sections ---------- */
 .section { padding-block: 64px; border-top: 1px solid var(--line); }
@@ -521,7 +515,6 @@ svg text { font-family: var(--sans); }
 
 /* ---------- Motion: every movement is caused by a read or a user action ---------- */
 @media (prefers-reduced-motion: no-preference) {
-  .mark--hero { transform-origin: 50.8% 48.2%; animation: settle 1500ms var(--ease) both; }
   @keyframes settle {
     0%   { opacity: 0; transform: rotate(-16deg); }
     45%  { opacity: 1; transform: rotate(2.2deg); }
@@ -586,12 +579,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   .cat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 719px) {
-  .hero .wrap { grid-template-columns: minmax(0, 1fr); gap: 4px; padding-block: 0 12px; }
-  .hero-mark { order: -1; justify-self: center; }
-  .hero-copy { gap: 10px; }
-  .hero h1 { font-size: 1.875rem; }
-  .tagline { font-size: 1.1875rem; }
-  .lede { font-size: 1.0625rem; }
   .wide { display: none; }
   .section { padding-block: 44px; }
   .assessment { padding-block: 0 44px; }
@@ -641,6 +628,82 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   .snippet { width: 100%; }
   #copy-btn { align-self: flex-start; }
 }
+
+/* ---- V7 first screen (operator-locked design, 2026-10-23). Decoration never carries a value: tones stay TONE's. ---- */
+:root { --measure: 1240px; }
+body { background: #03060b; }
+.hero { position: relative; overflow: hidden; isolation: isolate; background: #01040a; }
+.hero .sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; background-repeat: no-repeat; background-size: cover; background-position: 70% center;
+  background-image: linear-gradient(90deg, #010307 0%, rgba(1, 3, 7, .97) 18%, rgba(1, 3, 7, .9) 32%, rgba(1, 3, 7, .45) 54%, rgba(1, 3, 7, .06) 84%),
+    image-set(url("/assets/dno-planet-608a8e2e.avif") type("image/avif"), url("/assets/dno-planet-fd1608ca.webp") type("image/webp"), url("/assets/dno-planet-3ea6a6b6.jpg") type("image/jpeg")); }
+.hero .wrap { display: flex; align-items: center; min-height: 520px; padding-block: 48px 64px; }
+.hero-copy { max-width: 600px; }
+.kicker { display: flex; align-items: center; gap: 18px; font: 500 0.75rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--metal-1); }
+.kicker::before { content: ""; flex: none; width: 44px; height: 1px; background: var(--metal-1); }
+.kicker .sl, .rkick .sl { color: var(--metal-0); }
+.hero h1 { margin-top: 22px; line-height: 1.04; }
+.hero h1 .o, .hero h1 .e { display: block; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero h1 .o { font-weight: 300; letter-spacing: -0.055em; font-size: clamp(3.25rem, 7.2vw, 5.6rem); background-image: linear-gradient(180deg, #f8f9fa 0%, #d1d4d8 59%, #a0a6ae 100%); }
+.hero h1 .e { font-style: italic; font-weight: 400; letter-spacing: -0.055em; font-size: clamp(3.45rem, 7.2vw, 5.75rem); padding-bottom: 0.08em; background-image: linear-gradient(98deg, var(--violet) 0%, var(--violet-2) 60%, var(--ice) 120%); }
+.lead { margin-top: 22px; max-width: 50ch; font-size: 1.0625rem; line-height: 1.55; color: #bac9d9; }
+.ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.cta { display: inline-flex; align-items: center; gap: 16px; padding: 15px 22px; border: 1px solid var(--metal-1); border-radius: 4px; font: 500 0.8125rem/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); text-decoration: none; }
+.cta::after { content: "\2192"; font-size: 1.1rem; letter-spacing: 0; }
+.cta:hover { color: var(--ink); border-color: var(--ink); }
+.cta--primary, .cta--primary:hover { color: #03060b; background: linear-gradient(120deg, #e7edf8, var(--ice)); border-color: #cce6ff; box-shadow: 0 5px 28px -12px var(--ice-2); }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-top: 24px; font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; }
+.facts a { color: #a9b8cc; text-decoration: none; }
+.facts a:hover { color: var(--ink); text-decoration: underline; }
+
+.assessment { position: relative; z-index: 2; margin-top: -28px; padding-block: 0 64px; }
+.panel { display: block; border: 1px solid #1d2a44; border-radius: 14px; background: linear-gradient(180deg, rgba(10, 17, 32, .96), rgba(5, 9, 18, .98)); box-shadow: 0 20px 60px -20px rgba(0, 0, 0, .8); overflow: hidden; }
+.panel .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 20px var(--pad) 16px; border-bottom: 1px solid var(--navy-line); }
+.rkick { display: flex; align-items: center; gap: 12px; font: 500 0.75rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink); }
+.rdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--violet-2); box-shadow: 0 0 10px var(--violet); }
+.panel .panel-head .meta { margin-left: auto; font: 400 0.8125rem/1.5 var(--mono); color: var(--metal-1); }
+.panel .panel-head .meta .sep { color: var(--metal-0); padding-inline: 8px; }
+.panel .panel-tools { display: flex; gap: 8px; padding: 0; }
+.rhead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem); gap: 24px 40px; padding: 28px var(--pad) 8px; }
+.summary { font-size: clamp(1.5rem, 2.6vw, 2.25rem); line-height: 1.22; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); }
+.summary .s2 { color: #9aa6cc; }
+.six { margin-top: 14px; font-size: 0.9375rem; color: var(--metal-1); }
+.srcctx { display: grid; gap: 6px; align-content: start; padding-left: 24px; border-left: 1px solid var(--navy-line); }
+.ek { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--metal-0); }
+.srcctx-h { font-size: 0.875rem; color: var(--metal-1); }
+.srcctx-n { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
+.srcctx .seeds, .srcctx-cap { font-size: 0.875rem; color: var(--metal-1); }
+.panel .cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 20px var(--pad) 12px; border: 0; counter-reset: card; }
+.panel .cards > div:nth-child(n) { counter-increment: card; display: grid; gap: 8px; align-content: start; padding: 14px 16px 16px; min-width: 0; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 9, 18, .9); }
+.panel .cards .k { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-0); }
+.panel .cards .k::before { content: counter(card, decimal-leading-zero) " / "; }
+.panel .cards .v { font-size: 1.25rem; font-weight: 500; }
+.panel #status-value { text-transform: lowercase; }
+.panel .cards .s { font: 400 0.8125rem/1.45 var(--sans); color: var(--metal-1); }
+.whybox { margin: 4px var(--pad) 0; padding: 12px 16px; border: 1px solid #2a3654; border-radius: 8px; background: rgba(14, 24, 48, .5); }
+.whybox[hidden] { display: none; }
+.whybox summary { cursor: pointer; font-weight: 500; color: var(--ink); }
+.whybox ul { margin: 10px 0 0 20px; list-style: disc; color: var(--metal-1); }
+.whybox p { margin-top: 8px; color: var(--metal-1); }
+.ctxstrip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px var(--pad); }
+.ctxstrip > div { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 9, 18, .6); }
+.ctxstrip .cycle-lead { font-size: 1rem; color: var(--ink); }
+.clock { font: 400 0.75rem/1.45 var(--mono); color: var(--metal-0); }
+.panel .insufficient { margin: 0 var(--pad) 12px; border: 1px solid #3a3215; border-radius: 8px; }
+.panel .under, .panel .bound { border-top: 1px solid var(--navy-line); border-bottom: 0; }
+@media (max-width: 1099px) {
+  .panel .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rhead { grid-template-columns: minmax(0, 1fr); }
+  .srcctx { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--navy-line); }
+}
+@media (max-width: 719px) {
+  .hero .wrap { min-height: 0; padding-block: 36px 52px; }
+  .hero .sky { background-position: 75% center; opacity: .8; }
+  .panel .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ctxstrip { grid-template-columns: minmax(0, 1fr); }
+  .panel .panel-head .meta { margin-left: 0; }
+  .cta { flex: 1 1 100%; justify-content: space-between; }
+}
+@media (forced-colors: active) { .hero h1 .o, .hero h1 .e { background: none; color: CanvasText; } }
 </style>
 </head>
 <body>
@@ -689,15 +752,14 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 
 <main>
   <section class="hero" aria-labelledby="hero-title">
+    <div class="sky" aria-hidden="true"></div>
     <div class="wrap">
       <div class="hero-copy">
-        <h1 id="hero-title">DEMOS NETWORK ORACLE</h1>
-        <p class="independence">Independent · not an official Demos product</p>
-        <p class="tagline">Observe. Explain.</p>
-        <p class="lede">A watch-only public observability layer.</p>
-      </div>
-      <div class="hero-mark">
-        <svg class="mark mark--hero" viewBox="0 0 1408 1408" role="img" aria-labelledby="mark-title"><title id="mark-title">DNO mark: a broken metal ring, two nodes and a needle</title><use href="#dno-mark"/></svg>
+        <p class="kicker"><span>Demos Network Oracle <span class="sl">/</span> Demos testnet</span></p>
+        <h1 id="hero-title"><span class="o">Observe.</span> <span class="e">Explain.</span></h1>
+        <p class="lead">An independent window into Demos. See what public sources reported, what shaped the reading, and where its limits begin.</p>
+        <div class="ctas"><a class="cta cta--primary" href="/about-demos">New to Demos</a><a class="cta" href="#this-cycle">Explore the reading</a></div>
+        <ul class="facts"><li><a href="/sources">Public sources</a></li><li><a href="/methodology">Disclosed method</a></li><li><a href="/docs">Read-only API</a></li></ul>
       </div>
     </div>
   </section>
@@ -706,34 +768,42 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     <div class="wrap">
       <div class="panel" id="panel" data-state="pending">
         <header class="panel-head">
-          <h2 id="cycle-title">This cycle</h2>
-          <p class="meta"><span>GET /organism, GET /health</span><span class="wide"><span class="sep">/</span><span id="countdown">first read in progress</span></span></p>
+          <h2 id="cycle-title" class="rkick"><span class="rdot" aria-hidden="true"></span><span>Public observation <span class="sl">/</span> <span data-network="demos-testnet">Demos public testnet</span></span></h2>
+          <p class="meta"><span id="obs-at">not read yet</span><span class="sep">·</span><span id="countdown">first read in progress</span><span class="sep">·</span><span>api <span id="api-v">reading</span></span></p>
+          <div class="panel-tools" role="group" aria-label="Update controls">
+            <button type="button" class="btn" id="btn-pause" aria-pressed="false">Pause</button>
+            <button type="button" class="btn" id="btn-refresh" title="Reads again now. Disabled for 5 s after a read.">Refresh now</button>
+          </div>
         </header>
-        <div class="panel-tools" role="group" aria-label="Update controls">
-          <button type="button" class="btn" id="btn-pause" aria-pressed="false">Pause</button>
-          <button type="button" class="btn" id="btn-refresh" title="Reads again now. Disabled for 5 s after a read.">Refresh now</button>
-        </div>
         <div class="ruler" aria-hidden="true"><span class="sweep-fill" id="sweep-fill"></span><span class="sweep-mark" id="sweep-mark"></span></div>
-        <div class="status-block">
-          <div class="status-main">
-            <p class="status-label">Status</p>
-            <p class="status-value"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p>
-            <p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain status</button></p>
+        <div class="rhead">
+          <div class="rsum">
+            <p class="summary" id="summary" data-src="api">reading</p>
+            <p class="six">Six separate measures. A word in one does not soften or confirm another; each has its own reason.</p>
           </div>
-          <div class="status-text">
-            <p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p>
+          <aside class="srcctx" aria-label="Source context">
+            <p class="ek">Source context</p>
+            <p class="srcctx-h">Heights counted this round</p>
+            <p class="srcctx-n" id="ctx-count">reading</p>
             <p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>
-            <p class="door"><span id="door-n"></span><a href="#catalog" id="door">find a node</a></p>
-          </div>
+            <p class="srcctx-cap" id="ctx-cap" hidden></p>
+          </aside>
         </div>
-        <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale or not made yet. Public assessment is unknown. Peer-listed identities do not enter status.</p>
         <div class="strip cards" id="cards">
-          <div data-card="trend"><p class="k">trend</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="trend" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> trend</span></button></div>
-          <div data-card="risk"><p class="k">risk</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="risk" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> risk</span></button></div>
+          <div data-card="status"><p class="k">status</p><p class="v"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> status</span></button></div>
           <div data-card="confidence"><p class="k">confidence</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="confidence" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> confidence</span></button></div>
+          <div data-card="risk"><p class="k">risk</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="risk" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> risk</span></button></div>
           <div data-card="data_quality"><p class="k">data quality</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="data_quality" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> data quality</span></button></div>
+          <div data-card="reading_agreement"><p class="k">agreement</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="agreement" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> agreement</span></button></div>
+          <div data-card="trend"><p class="k">trend</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="trend" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> trend</span></button></div>
         </div>
         <div class="xpanel-host" id="x-cycle" hidden></div>
+        <details class="whybox" id="whybox" hidden><summary id="why-q">Why can these two differ?</summary><div id="why-a"></div></details>
+        <div class="ctxstrip">
+          <div><p class="ek">On-chain validators list</p><p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p><p class="clock" id="list-at"></p></div>
+          <div><p class="ek">Peer-listed identities</p><p class="door"><span id="door-n"></span><a href="#catalog" id="door">find a node</a></p><p class="clock">A retained catalog from seed peerlists: not a census, not status input.</p></div>
+        </div>
+        <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale or not made yet. Public assessment is unknown. Peer-listed identities do not enter status.</p>
         <p class="under">Not operated by Kynesys. Path A is three public Kynesys /info URLs, one org. Anyone can read those URLs; the rules that turn their answers into status are on <a href="/methodology">/methodology</a>.</p>
         <div class="notices" id="notices" hidden></div>
         <p class="bound">LIVE is DNO's own freshness. Status is what the public endpoints showed this cycle. Neither is a score or a go/no-go.</p>
@@ -1253,7 +1323,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     too_few_answers: 'fewer than 2 seeds answered',
     too_few_heights: 'fewer than 2 seeds reported their own height',
   };
-  function currentValue(key) {
+  function currentValue(key, hostId) {
+    if (key === 'agreement' && hostId === 'x-cycle') { const o = reads.organism.data; return o && typeof o.agreement === 'string' ? o.agreement : null; }
     if (key === 'agreement') { const a = reads.health.data && reads.health.data.agreement; return a && typeof a.state === 'string' ? a.state : null; }
     const o = reads.organism.data;
     return o && typeof o[key] === 'string' ? o[key] : null;
@@ -1262,7 +1333,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   function renderExplain(hostId) {
     const host = $(hostId), key = openX[hostId];
     if (!host || !key) return;
-    const def = DEFS[key], cur = currentValue(key), tones = TONE[key], alt = (API10 && DEFS10[key]) || {};
+    const def = DEFS[key], cur = currentValue(key, hostId), tones = TONE[key], alt = (API10 && DEFS10[key]) || {};
     const sig = `${key}|${cur}|${API10}`;
     if (host.dataset.sig === sig) return;
     host.dataset.sig = sig;
@@ -1443,11 +1514,52 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     return { agreement: Object.assign({}, d, { state: o.agreement }), data_quality_reason: o.data_quality_reason, staleness_seconds: o.staleness_seconds,
       height_static_seconds: o.height_static_seconds, active_incidents: o.active_incidents, witnesses: o.witnesses, height_standstill_after_seconds: o.height_standstill_after_seconds };
   }
+  // The summary verbatim in two tones (the design's): the first clause in ink, the rest dimmer. The words are untouched;
+  // the split is at the first sentence end, else the first comma, else none.
+  function renderSummary(text) {
+    const node = $('summary');
+    if (node.dataset.text === text) return;
+    node.dataset.text = text;
+    let i = text.indexOf('. '); if (i < 0) i = text.indexOf(', ');
+    node.replaceChildren(...(i < 0 ? [text] : [el('span', { class: 's1', text: text.slice(0, i + 1) }), el('span', { class: 's2', text: text.slice(i + 1) })]));
+  }
+  // Heights counted this round: from /organism.witnesses alone. Validators that stand in are not the validator population.
+  function renderSourceContext(o) {
+    const w = o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null, ps = w && w.public_seeds, v = w && w.validators;
+    const seeds = ps && isNum(ps.own_height) ? ps.own_height : null, counted = v && isNum(v.counted) ? v.counted : 0, read = v && isNum(v.read) ? v.read : null;
+    const seedWord = (n) => `${fmtInt(n)} ${n === 1 ? 'seed' : 'seeds'}`, witWord = (n) => `${fmtInt(n)} validator ${n === 1 ? 'witness' : 'witnesses'}`;
+    const mode = w && typeof w.mode === 'string' ? w.mode : null;
+    setText($('ctx-count'), !w ? 'not reported in this reading'
+      : mode === 'seeds_only' && seeds != null ? seedWord(seeds)
+      : mode === 'seed_and_validators' && seeds != null ? `${seedWord(seeds)} + ${witWord(counted)}`
+      : mode === 'validators_only' ? witWord(counted)
+      : 'too few for a reading');
+    const cap = counted > 0 && read != null ? `${fmtInt(read)} ${read === 1 ? 'validator was' : 'validators were'} read; ${fmtInt(counted)} ${counted === 1 ? 'was' : 'were'} counted for this reading. The validators counted here are not the total validator population.` : '';
+    setText($('ctx-cap'), cap); $('ctx-cap').hidden = !cap;
+  }
+  // Status and risk are separate measures; when their tones differ the reader is told why, from the reading's own reasons.
+  function renderWhy(o) {
+    const st = lower(o.status), rk = lower(o.risk), box = $('whybox');
+    const ts = st ? TONE.status[st] : null, tr = rk ? TONE.risk[rk] : null;
+    if (!st || !rk || !ts || !tr || ts === tr) { box.hidden = true; return; }
+    box.hidden = false;
+    setText($('why-q'), `Why can status be ${st} while risk is ${rk}?`);
+    const rf = Array.isArray(o.risk_factors) ? o.risk_factors.map(String) : [];
+    const sig = JSON.stringify([st, rk, rf, o.confidence_reason || '']);
+    const a = $('why-a');
+    if (a.dataset.sig === sig) return;
+    a.dataset.sig = sig;
+    a.replaceChildren(
+      el('p', { text: 'They answer different questions. Status is what the heights showed this round; risk lists the conditions that leave less margin. Neither softens or confirms the other.' }),
+      rf.length ? el('ul', {}, rf.map((t) => el('li', { text: t }))) : el('p', { text: 'No risk factors are listed in this reading.' }),
+      typeof o.confidence_reason === 'string' && o.confidence_reason ? el('p', { class: 'fine', text: `Confidence: ${o.confidence_reason}` }) : null);
+  }
   function renderCycle() {
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
     const vm = validatorModel();
     const active = vm.mode === 'live' ? HOME_CYCLE.leadCount(vm.oc) : null;
     setText($('cycle-lead'), leadLine(vm));
+    setText($('list-at'), vm.mode === 'live' && parseTime(vm.oc.observed_at) != null ? `List read ${clock(parseTime(vm.oc.observed_at))}, its own clock: not the reading's.` : '');
     const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
     setText($('door-n'), vg && isNum(vg.discovered) ? `${API10 ? `${fmtInt(vg.discovered)} recorded from peerlists` : HOME_CYCLE.cycleDoor(vg.discovered)} · ` : '');
 
@@ -1458,8 +1570,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
       setText($('status-value'), failed ? 'UNKNOWN' : 'READING');
       const why = failed ? `No reading: ${reads.organism.error}.${reads.organism.expired ? ' The last reading received is more than 300 s old and is no longer shown.' : ''} This is a failure to read, not an observation about the network.` : 'The first request to /organism is in flight.';
       setText($('seeds-line'), why);
+      setText($('summary'), failed ? 'No reading.' : 'reading');
+      setText($('ctx-count'), failed ? 'not read' : 'reading'); $('ctx-cap').hidden = true; $('whybox').hidden = true;
       $('insufficient').hidden = true;
-      for (const k of ['trend', 'risk', 'confidence', 'data_quality']) setCard(k, failed ? 'unknown' : 'pending', failed ? 'unknown' : 'reading', failed ? 'not read' : '');
+      for (const k of ['trend', 'risk', 'confidence', 'data_quality', 'reading_agreement']) setCard(k, failed ? 'unknown' : 'pending', failed ? 'unknown' : 'reading', failed ? 'not read' : '');
       renderNotices(); renderReadbar(failed ? `No reading: ${reads.organism.error}.` : '');
       return;
     }
@@ -1470,6 +1584,12 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const r = seedsReading(o, h);
     // The ACTIVE count is the list read's, carried by /health: named in the reading's line only for the same observation.
     setText($('seeds-line'), HOME_CYCLE.cycleSeeds(r, sameObservation(h, o) ? active : null));
+    // The reading's sentence, verbatim (D-3), and its own clock and version (D-1: all from this /organism).
+    renderSummary(typeof o.summary === 'string' && o.summary ? o.summary : 'No summary in this reading.');
+    const oAt = parseTime(o.observed_at);
+    setText($('obs-at'), oAt != null ? `${new Date(oAt).toISOString().slice(0, 10)} ${clock(oAt)}` : 'not reported');
+    setText($('api-v'), typeof o.api_version === 'string' ? o.api_version : 'not reported');
+    renderSourceContext(o);
     $('insufficient').hidden = lower(o.data_quality) !== 'insufficient';
 
     const card = (key, subText) => { const v = lower(o[key]); setCard(key, v ? (TONE[key][v] || 'neutral') : 'unknown', v || 'unknown', subText); };
@@ -1481,6 +1601,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     card('confidence', typeof cr === 'string' && cr ? cr : '');
     const dqr = lower(o.data_quality) === 'insufficient' && typeof o.data_quality_reason === 'string' ? DQ_REASON[o.data_quality_reason] : '';
     card('data_quality', dqr || '');
+    // The reading's own agreement (/organism), not /health's: the Agreement section below shows /health's, on its clock.
+    const ra = lower(o.agreement);
+    setCard('reading_agreement', ra ? (TONE.agreement[ra] || 'neutral') : 'unknown', ra || 'unknown', typeof o.agreement_reason === 'string' ? o.agreement_reason : '');
+    renderWhy(o);
     renderExplain('x-cycle');
     renderNotices(); renderReadbar(HOME_CYCLE.readbarText(r));
   }

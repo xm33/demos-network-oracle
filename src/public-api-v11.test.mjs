@@ -54,14 +54,16 @@ const MARKERS = [
   '<p class="insufficient" id="insufficient" hidden>',
   '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
   '<span id="live-text">connecting</span>',
-  card("trend", "trend"), card("risk", "risk"), card("confidence", "confidence"), card("data_quality", "data quality")
+  card("trend", "trend"), card("risk", "risk"), card("confidence", "confidence"), card("data_quality", "data quality"),
+  // V7 first screen (PR-3 ④): the reading's sentence, its clock and version, and its own agreement card.
+  '<p class="summary" id="summary" data-src="api">reading</p>', '<span id="obs-at">not read yet</span>', '<span id="api-v">reading</span>', card("reading_agreement", "agreement")
 ];
 const VW_MARKER = '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>';
 MARKERS.forEach((m, i) => check("H" + (i + 1) + " fill marker present once: " + m.slice(0, 48), count(HOME, m) === 1, "count " + count(HOME, m)));
 check("H25 validators line: marker present once, and the agent fills it from the same text", count(HOME, VW_MARKER) === 1 && SRC.includes("validators: '" + VW_MARKER + "'"), "count " + count(HOME, VW_MARKER));
 const DOOR_MARKER = '<span id="door-n"></span>';
 check("H26 This cycle door: the peer-listed count marker present once, and the agent fills it", count(HOME, DOOR_MARKER) === 1 && SRC.includes("door: '" + DOOR_MARKER + "'"), "count " + count(HOME, DOOR_MARKER));
-check("H27 This cycle card: no 'nodes aligned' and no calm or status-reason line in the page", !/nodes aligned/.test(HOME.slice(HOME.indexOf('id="panel"'), HOME.indexOf('id="cards"'))) && !HOME.includes('id="calm"') && !HOME.includes('id="status-reason"'));
+check("H27 This cycle card: no 'nodes aligned' and no calm or status-reason line in the page", !/nodes aligned/.test(HOME.slice(HOME.indexOf('id="panel"'), HOME.indexOf('<p class="bound">', HOME.indexOf('id="panel"')))) && !HOME.includes('id="calm"') && !HOME.includes('id="status-reason"'));
 check("H12 agent builds the same markers", MARKERS.slice(0, 7).every((m) => SRC.includes(JSON.stringify(m).slice(1, -1).replace(/\\"/g, '"')) || SRC.includes("'" + m + "'")));
 const markSha = createHash("sha256").update(readFileSync(join(ROOT, "assets", "dno-mark.jpg"))).digest("hex");
 const shaInSrc = (SRC.match(/MARK_ASSET_SHA256 = "([0-9a-f]{64})"/) || [])[1];
@@ -158,6 +160,12 @@ const DECOR = ["navy-line", "violet", "violet-2", "ice", "ice-2"], TONES = ["ope
 check("PAL1 each decorative colour is ΔE > 20 (CIE76) from every tone colour and from LIVE cyan", DECOR.every((d) => tok(d) && TONES.every((t) => tok(t) && dE(tok(d), tok(t)) > 20)),
   DECOR.map((d) => d + " " + Math.min(...TONES.map((t) => (tok(d) && tok(t) ? dE(tok(d), tok(t)) : 0))).toFixed(1)).join(", "));
 check("PAL2 no tone or lamp rule uses a decorative colour", ![...(kitCss + HOME).matchAll(/\[data-tone[^{]*\{[^}]*\}|\.ind(?![\w-])[^{]*\{[^}]*\}/g)].some((m) => /--(navy-line|violet|ice)/.test(m[0])));
+check("H28 the agent fills the V7 first-screen markers from the same strings", SRC.includes("summary: '<p class=\"summary\" id=\"summary\" data-src=\"api\">reading</p>'") && SRC.includes("observedAt: '<span id=\"obs-at\">not read yet</span>'") && SRC.includes("apiVersion: '<span id=\"api-v\">reading</span>'") && SRC.includes('reading_agreement: homeCardMarker("reading_agreement")'));
+const artRef = (x) => "/assets/dno-planet-" + kitHash("assets/dno-planet." + x) + "." + x;
+check("K6 the hero names the served artwork files by their content hash (AVIF, WebP, JPEG)", ["avif", "webp", "jpg"].every((x) => HOME.includes('url("' + artRef(x) + '")')), ["avif", "webp", "jpg"].map(artRef).join(" "));
+const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
+check("H29 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
+check("H30 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
 // The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.
@@ -373,6 +381,9 @@ try {
     const missing = PAGES.filter((q) => !foot.includes('href="' + q + '"'));
     if (missing.length || /fonts\.(googleapis|gstatic)\.com/.test(t)) unreachable.push(pth + " → " + (missing.join(" ") || "font host"));
   }
+  { const t = await get("/").then((r) => (typeof r.body === "string" ? r.body : ""));
+    check("S41 / for readers without JavaScript: the summary, its clock and the reading's agreement are filled once an observation exists", !o.observed_at
+      || (t.includes('<p class="summary" id="summary" data-src="api">') && !t.includes('<p class="summary" id="summary" data-src="api">reading</p>') && !t.includes('<span id="obs-at">not read yet</span>') && !/<div data-card="reading_agreement"><p class="k">agreement<\/p><p class="v"><span class="ind" data-tone="pending">/.test(t))); }
   check("S39 every page's footer links every page, and no page loads a font host", unreachable.length === 0, unreachable.join("; "));
   const kitFiles = [[fontSans, "font/woff2"], [fontMono, "font/woff2"]];
   let filesOk = true;
@@ -390,14 +401,15 @@ try {
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
-  const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('id="cards"'));
+  // The whole reading panel: since V7 the ACTIVE line sits below the six cards (the on-chain list strip), not above them.
+  const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('<p class="bound">', html.indexOf('id="panel"')));
   const ocH = health.on_chain_validators;
   // The card's second line says what status is made of in this observation (1.2): the seeds; one seed and the validators
   // standing in; validators alone; or, when validators were read and gave no reading, that status is unknown. The page
   // and /organism may be a round apart, so any of the endings the two rounds' modes allow is accepted.
   const hw = (await get("/health")).body.witnesses || {};
   const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
-    : w.mode === "insufficient" && w.validators ? "Status is unknown" : "Status is those seeds");
+    : w.mode === "insufficient" ? "Status is unknown" : "Status is those seeds");   // insufficient is never compared: unknown, whether or not validators were read
   const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
   check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then what status is made of in this observation; no 'nodes aligned'",
     !o.observed_at || (/<p class="cycle-lead" id="cycle-lead" data-src="api">([\d,]+ ACTIVE on chain as \w+ public seeds list them\.|ACTIVE on chain: (reading|not reported this cycle[^<]*)\.)<\/p>/.test(cardHtml)
