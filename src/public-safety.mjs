@@ -75,7 +75,22 @@ export function probeErrorCategory(err, httpStatus) {
 }
 // A fault in DNO's own code, as against anything a peer or the network can cause. The address check has the same line:
 // a name that does not resolve is the peer's address; a TypeError or ReferenceError while checking it is not.
-export function isInternalError(err) { return err instanceof TypeError || err instanceof ReferenceError; }
+// The code comes first, the class second: since Bun 1.4 the runtime's fetch throws a TypeError for a peer that cannot be
+// reached (code "ConnectionRefused"), and Node's throws TypeError("fetch failed") with the code on err.cause. An error
+// that names a network condition is the peer's or the network's, whatever its class; a TypeError or ReferenceError
+// without one is DNO's own (an invalid configured URL carries ERR_INVALID_URL, which is not a network code).
+var NETWORK_CODE = /^(E(CONN[A-Z]+|HOST[A-Z]+|NET[A-Z]+|AI_[A-Z]+|NOTFOUND|TIMEDOUT|PIPE|ADDRNOTAVAIL|ADDRINUSE|PROTO|ACCES)|Connection(Refused|Reset|Closed|TimedOut)|FailedToOpenSocket|UnexpectedEOF|CERT_[A-Z_]+|DEPTH_ZERO_SELF_SIGNED_CERT|SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_[A-Z_]+|ERR_TLS_[A-Z_]+|ERR_SOCKET_[A-Z_]+)$/;
+export function networkCodeOf(err) {
+  for (var e = err, depth = 0; e && typeof e === "object" && depth < 4; e = e.cause, depth++) {
+    if (typeof e.code === "string" && NETWORK_CODE.test(e.code)) return e.code;
+    if (Array.isArray(e.errors)) for (var i = 0; i < e.errors.length; i++) { var c = networkCodeOf(e.errors[i]); if (c) return c; }
+  }
+  return null;
+}
+export function isInternalError(err) {
+  if (!(err instanceof TypeError || err instanceof ReferenceError)) return false;
+  return networkCodeOf(err) === null;
+}
 
 // ---- admin token -------------------------------------------------------------------------------------
 // An admin route is open only when a token of at least 16 characters is configured and the presented
