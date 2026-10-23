@@ -83,7 +83,12 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       h1: (document.querySelector("#hero-title") || {}).textContent || "", h1Img: !!document.querySelector("#hero-title img, #hero-title svg"),
       live: { state: (document.getElementById("live") || { dataset: {} }).dataset.state, text: t("live-text") },
       sweepShown: !!document.getElementById("sweep-fill") && getComputedStyle(document.getElementById("sweep-fill")).display !== "none",
-      heroBg: document.querySelector(".hero .sky") ? getComputedStyle(document.querySelector(".hero .sky")).backgroundImage : "" };
+      heroBg: document.querySelector(".hero .sky") ? getComputedStyle(document.querySelector(".hero .sky")).backgroundImage : "",
+      // V7 sections below the reading
+      sections: [...document.querySelectorAll("main > section")].map((x) => x.id),
+      wit: { n: t("wit-n"), read: t("wit-read"), own: t("wit-own"), counted: t("wit-counted") },
+      branchOn: [...document.querySelectorAll("#branch li")].filter((li) => li.dataset.on === "true").map((li) => li.dataset.mode),
+      pop4: { oc: t("p4-oc"), ocAt: t("p4-oc-at"), cat: t("p4-cat"), rounds: t("p4-rounds"), move: t("p4-move"), roundsAt: t("p4-rounds-at") } };
   });
   if (shot) await page.screenshot({ path: shot, fullPage: /-full\.png$/.test(shot) });
   await page.close();
@@ -134,7 +139,7 @@ console.log("\n[HOMEPAGE_PREVIEW] NOOC: a /health without on_chain_validators re
   const r = await render(o, h);
   check("NOOC1 the lead says not reported", /ACTIVE on chain: not reported/.test(r.lead), r.lead);
   check("NOOC2 the ACTIVE rung has no number", r.vnActive.trim() === "not reported", r.vnActive);
-  check("NOOC3 no 35 anywhere, no 'one read'", !/\b35\b/.test(r.body) && !/one read/i.test(r.body), (r.body.match(/.{30}(\b35\b|one read).{30}/i) || [])[0]);
+  check("NOOC3 no 35 anywhere, no 'one read'", !/\b35\b/.test(r.body) && !/\bone read\b/i.test(r.body), (r.body.match(/.{30}(\b35\b|\bone read\b).{30}/i) || [])[0]);
   check("NOOC4 the caption says why", /does not publish on_chain_validators/.test(r.vwcap), r.vwcap);
   check("NOOC5 the growth box is hidden", r.growthHidden === true);
 }
@@ -189,6 +194,25 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
   check("V14 a fresh reading shows LIVE with its age", rf.live.state === "live" && /^LIVE · \d+ s$/.test(rf.live.text), JSON.stringify(rf.live));
   const rm = await render(o, load(scen.seeds_only[1]), { reduced: true });
   check("V15 reduced motion stops the sweep", rm.sweepShown === false);
+}
+
+console.log("\n[HOMEPAGE_PREVIEW] S: the sections below the reading, in the locked order, each from its own source");
+{
+  const fmt = (n) => n.toLocaleString("en-US");
+  for (const [name, [of, hf]] of Object.entries(scen)) {
+    const o = load(of), h = load(hf), r = await render(o, h), w = o.witnesses || {}, v = w.validators;
+    const ORDER = ["this-cycle", "sources-now", "populations", "validators", "formed", "agreement", "find-node", "last-24h", "incidents", "perspectives", "api", "limits"];
+    check(`S1 ${name}: sections in the locked order (hero, reading, then 01–07 with their detail sections)`, JSON.stringify(r.sections.filter(Boolean)) === JSON.stringify(ORDER), r.sections.filter(Boolean).join(","));
+    check(`S2 ${name}: witness counts are /organism.witnesses.validators (read, own height, counted)`, v ? r.wit.read === fmt(v.read) && r.wit.own === fmt(v.own_height) && r.wit.counted === fmt(v.counted) : r.wit.read === "none read" && r.wit.counted === "0", JSON.stringify(r.wit));
+    check(`S3 ${name}: witnesses are said to be unused when two seeds decide`, w.mode === "seeds_only" ? /not used this round/.test(r.wit.n) : !/not used/.test(r.wit.n), r.wit.n);
+    check(`S4 ${name}: the branch figure marks exactly the path this reading took`, r.branchOn.length === 1 && r.branchOn[0].split(" ").includes(w.mode), r.branchOn.join("|"));
+    const oc = h.on_chain_validators, agreed = oc && oc.state === "agreed" && typeof oc.active === "number" && typeof oc.seeds_agreed === "number";
+    check(`S5 ${name}: the on-chain population shows a count only when the list is agreed, with the list's own clock`, agreed ? r.pop4.oc === fmt(oc.active) + " ACTIVE" && /^list read /.test(r.pop4.ocAt) : r.pop4.oc === "not reported", r.pop4.oc + " | " + r.pop4.ocAt);
+    const l = o.last_24h || {};
+    check(`S6 ${name}: DNO's own rounds are /organism.last_24h, on the window's clock`, typeof l.observed_cycles === "number" ? r.pop4.rounds === fmt(l.observed_cycles) + " / " + fmt(l.expected_cycles) && /^window computed /.test(r.pop4.roundsAt) : r.pop4.rounds === "not reported", r.pop4.rounds + " | " + r.pop4.roundsAt);
+    const vg = h.validator_growth || {};
+    check(`S7 ${name}: the catalog count is /health.validator_growth.discovered, called kept, never added to another count`, typeof vg.discovered === "number" ? r.pop4.cat === fmt(vg.discovered) + " kept" : r.pop4.cat === "not reported", r.pop4.cat);
+  }
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] FAIL: a failed /organism read is said as a failure to read");

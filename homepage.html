@@ -703,6 +703,41 @@ body { background: #03060b; }
   .panel .panel-head .meta { margin-left: 0; }
   .cta { flex: 1 1 100%; justify-content: space-between; }
 }
+
+/* ---- V7 sections below the reading: numbered heads, equal source panels, four populations, branch, perspectives ---- */
+.section { border-top: 1px solid var(--navy-line); }
+.section-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 24px; margin-bottom: 16px; }
+.section-head .ek { grid-column: 1 / -1; }
+.section-head h2 { font-size: clamp(1.75rem, 3.2vw, 2.5rem); line-height: 1.12; font-weight: 400; letter-spacing: -0.02em; color: var(--ink); }
+.section-head .meta { justify-self: end; }
+.twin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.twin-p { display: grid; gap: 10px; align-content: start; padding: 22px 22px 18px; border: 1px solid #1c2740; border-radius: 12px; background: rgba(6, 11, 21, .9); min-width: 0; }
+.twin-h { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
+.twin-p .pop { padding-top: 6px; }
+.twin-p .sub-h { display: none; }
+.twin-p .nodes { display: block; overflow-x: auto; }
+.wit-n { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
+.wit-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.wit-facts > div { padding: 10px 12px; border: 1px solid #1c2740; border-radius: 8px; }
+.wit-facts dt { font-size: 0.75rem; color: var(--metal-0); }
+.wit-facts dd { margin: 4px 0 0; font: 500 1.125rem/1.2 var(--sans); color: var(--ink); }
+.pop4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.pop4 > div { display: grid; gap: 8px; align-content: start; padding: 18px; border: 1px solid #1c2740; border-radius: 12px; background: rgba(6, 11, 21, .9); min-width: 0; }
+.p4-n { font-size: 1.5rem; font-weight: 500; color: var(--ink); }
+.branch { margin: 20px 0 28px; }
+.branch ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 10px; counter-reset: b; }
+.branch li { position: relative; counter-increment: b; padding: 16px 18px; border: 1px solid #1c2740; border-radius: 10px; background: rgba(6, 11, 21, .9); }
+.branch li::before { content: counter(b) " · "; font: 500 0.75rem/1 var(--mono); color: var(--metal-0); }
+.branch li[data-on="true"] { border-color: var(--violet-2); box-shadow: inset 0 0 0 1px rgba(192, 139, 255, .35); }
+.branch .b-k { display: inline; font-weight: 500; color: var(--ink); }
+.branch .b-v { margin-top: 6px; font-size: 0.875rem; color: var(--metal-1); }
+.persp { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.persp-c { display: grid; gap: 8px; align-content: start; padding: 22px; border: 1px solid #1c2740; border-radius: 12px; background: rgba(6, 11, 21, .9); color: var(--ink); text-decoration: none; }
+.persp-c:hover { color: var(--ink); border-color: var(--violet-2); }
+.persp-h { font-size: 1.25rem; font-weight: 500; }
+@media (max-width: 1099px) { .pop4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .branch ol, .persp { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 859px) { .twin { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 719px) { .pop4, .wit-facts { grid-template-columns: minmax(0, 1fr); } .section-head { grid-template-columns: minmax(0, 1fr); } .section-head .meta { justify-self: start; } }
 @media (forced-colors: active) { .hero h1 .o, .hero h1 .e { background: none; color: CanvasText; } }
 </style>
 </head>
@@ -812,10 +847,85 @@ body { background: #03060b; }
     </div>
   </section>
 
+  <section class="section" id="sources-now" aria-labelledby="src-title" tabindex="-1">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="ek">01 / public observation inputs</p>
+        <h2 id="src-title">Read the sources.</h2>
+        <p class="meta">GET /health, GET /organism</p>
+      </div>
+      <p class="note">Two kinds of input can enter a reading, and they carry equal weight on this page. The public seeds come first; validators that answer as listed are read only in a seed's place.</p>
+      <div class="twin">
+        <div class="twin-p">
+          <p class="ek">Configured public seeds</p>
+          <h3 class="twin-h">Three endpoints. Two hosts. One operator.</h3>
+          <p class="fine">Public /info URLs of one organization; one is a second port on another's host. Their own heights decide while two of them give one.</p>
+<div class="pop" id="seeds" tabindex="-1">
+        <h3 class="sub-h">Probed seeds<span class="tag">dialed every cycle</span></h3>
+        <div class="pop-notes"><p class="fine">The endpoints status is made of. When fewer than two give their own height, validators that answer as listed stand in for the missing one. Status does not use the catalog. Names are the Kynesys URLs DNO dials.</p></div>
+        <div class="strip scards" id="scards">
+          <div><p class="k">seeds answered</p><p class="v none" id="gc-answered">reading</p></div>
+          <div><p class="k">within 100 blocks of the highest seed</p><p class="v none" id="gc-head">reading</p></div>
+          <div><p class="k">configured seeds</p><p class="v none" id="gc-seeds">reading</p></div>
+        </div>
+        <table class="nodes">
+          <caption class="sr">Probed seeds: rows with monitored true in GET /health</caption>
+          <thead>
+            <tr>
+              <th scope="col">Seed</th>
+              <th scope="col">Source</th>
+              <th scope="col">Probe</th>
+              <th scope="col">Identity</th>
+              <th scope="col" class="num">Block</th>
+              <th scope="col" class="num">Latency</th>
+              <th scope="col" class="num">Uptime (obs.)</th>
+            </tr>
+          </thead>
+          <tbody id="seeds-body"><tr class="empty"><td colspan="7">Awaiting first reading of /health.</td></tr></tbody>
+        </table>
+        <p class="versions" id="versions" hidden></p>
+        <p class="fine" style="margin-top:10px">Uptime (obs.) is DNO's own observation over seven days, not a promise. Latency is this cycle's probe. Identity compares the key a seed reports about itself with the key DNO has configured for that URL.</p>
+      </div>
+        </div>
+        <div class="twin-p" id="witnesses">
+          <p class="ek">Validator witnesses</p>
+          <h3 class="twin-h">Up to eight, only in a seed's place.</h3>
+          <p class="fine">Validators that answered as their listed key at the seeds' height, kept as candidates for 24 hours and renewed only in rounds where the seeds agree.</p>
+          <p class="wit-n" id="wit-n">reading</p>
+          <dl class="wit-facts">
+            <div><dt>read this round</dt><dd id="wit-read">reading</dd></div>
+            <div><dt>with their own height</dt><dd id="wit-own">reading</dd></div>
+            <div><dt>counted in the reading</dt><dd id="wit-counted">reading</dd></div>
+          </dl>
+          <p class="clock" id="wit-at"></p>
+          <p class="fine">Witnesses are not the validator population, and a count of them is not a count of operators.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="populations" aria-labelledby="pop-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="ek">02 / distinct counted populations</p>
+        <h2 id="pop-title">Different sources. Different limits.</h2>
+        <p class="meta">GET /health, GET /organism</p>
+      </div>
+      <p class="note">Four counts, each from its own source and on its own clock. They are never added together.</p>
+      <div class="pop4" id="pop4">
+        <div><p class="ek">On-chain validators</p><p class="p4-n" id="p4-oc">reading</p><p class="fine">ACTIVE rows of the getValidators list, only when two public seeds return the same list.</p><p class="clock" id="p4-oc-at"></p><a href="#validators">in detail</a></div>
+        <div><p class="ek">Peer-listed identities</p><p class="p4-n" id="p4-cat">reading</p><p class="fine">A retained catalog from the seeds' peerlists. Not a census, never dialed, never status input.</p><p class="clock" id="p4-cat-at"></p><a href="#catalog">find a node</a></div>
+        <div><p class="ek">DNO's own rounds</p><p class="p4-n" id="p4-rounds">reading</p><p class="fine">Rounds DNO completed in the last 24 hours. A measure of DNO, not of the network.</p><p class="clock" id="p4-rounds-at"></p></div>
+        <div><p class="ek">Seed-median movement</p><p class="p4-n" id="p4-move">reading</p><p class="fine">How the seeds' median height moved over 24 hours. Not block production, not a cause.</p><p class="clock" id="p4-move-at"></p></div>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="validators" aria-labelledby="val-title" tabindex="-1">
     <div class="wrap">
       <div class="section-head">
-        <h2 id="val-title">Validators on chain</h2>
+        <p class="ek">02 · in detail</p>
+        <h2 id="val-title">On-chain validators, in detail</h2>
         <p class="meta">GET /health</p>
       </div>
       <p class="note">The on-chain validators table as the public seeds list it, and what DNO saw when it dialed the address each ACTIVE validator published on chain. Four counts, each inside the one above. Never added to the seed or peer-listed counts. In status only when fewer than two seeds give their own height: up to 8 of them, kept as candidates, are then read in a seed's place.</p>
@@ -870,10 +980,20 @@ body { background: #03060b; }
   <section class="section" id="formed" aria-labelledby="formed-title">
     <div class="wrap">
       <div class="section-head">
-        <h2 id="formed-title">How the reading is formed</h2>
+        <p class="ek">03 / disclosed process</p>
+        <h2 id="formed-title">How the reading is formed.</h2>
         <p class="meta">GET /health, GET /organism</p>
       </div>
       <p class="note">DNO reads five kinds of input. Status is made of the public seeds. When fewer than two of them give their own height, validators that answer as listed stand in.<span class="js-only"> Select a path.</span></p>
+      <figure class="branch" id="branch" aria-labelledby="branch-cap">
+        <figcaption id="branch-cap" class="ek">Which heights the reading uses, in order</figcaption>
+        <ol>
+          <li data-mode="seeds_only"><p class="b-k">Two or more public seeds give their own height</p><p class="b-v">The seeds alone decide. No validator enters the reading.</p></li>
+          <li data-mode="seed_and_validators validators_only"><p class="b-k">Fewer than two do</p><p class="b-v">Kept validators that answer as listed stand in: beside one seed, those within 25 blocks of it; with no seed, two or more within 25 blocks of each other.</p></li>
+          <li data-mode="insufficient"><p class="b-k">Still fewer than two heights</p><p class="b-v">No reading: data quality is insufficient and status is unknown.</p></li>
+        </ol>
+        <p class="fine" id="branch-now"></p>
+      </figure>
       <div class="paths" id="paths" role="tablist" aria-label="What DNO reads">
         <button type="button" class="path path--status" role="tab" id="tab-seeds" data-path="seeds" aria-selected="true" aria-controls="path-panel">
           <span class="path-k"><span class="path-name">Public seeds</span><span class="tag">enters status</span></span>
@@ -914,7 +1034,8 @@ body { background: #03060b; }
   <section class="section" id="agreement" aria-labelledby="agreement-title">
     <div class="wrap">
       <div class="section-head">
-        <h2 id="agreement-title">Agreement</h2>
+        <p class="ek">03 · in detail</p>
+        <h2 id="agreement-title">Agreement, in detail</h2>
         <p class="meta">GET /health</p>
       </div>
       <p class="note">Agreement among the heights DNO compared this cycle: the seeds' own; when validators stand in, one seed's and its closest validator's, or the validators' alone. Not a count of the network.</p>
@@ -934,27 +1055,14 @@ body { background: #03060b; }
     </div>
   </section>
 
-  <section class="section" id="last-24h" aria-labelledby="h24-title">
+  <section class="section" id="find-node" aria-labelledby="find-title">
     <div class="wrap">
       <div class="section-head">
-        <h2 id="h24-title">Last 24 hours</h2>
-        <p class="meta">GET /organism</p>
+        <p class="ek">04 / existing public lookup</p>
+        <h2 id="find-title">Find a node.</h2>
+        <p class="meta">GET /health, GET /catalog/lookup</p>
       </div>
-      <p class="note">Aggregate observation from the most recent 24 hours of probe cycles. Public-network only.</p>
-      <div class="strip h24" id="h24" data-n="1"><div><p class="k">last 24 hours</p><p class="v">reading</p></div></div>
-      <p class="fine h24-note">A height that stops is reported as observed. Cause is not known from here.</p>
-    </div>
-  </section>
-
-  <section class="section" id="populations" aria-labelledby="pop-title">
-    <div class="wrap">
-      <div class="section-head">
-        <h2 id="pop-title">Two populations</h2>
-        <p class="meta">GET /health</p>
-      </div>
-      <p class="note">Peer-listed identities and probed seeds are separate populations. Their counts are never added together.</p>
-
-      <div class="pop" id="catalog" tabindex="-1">
+<div class="pop" id="catalog" tabindex="-1">
         <h3 class="sub-h">Peer-listed identities<span class="tag">not dialed</span></h3>
         <div class="pop-notes">
           <p class="fine" data-v10="Identities DNO recorded from peerlists, the public seeds' and its own node's, with when each was first seen.">Identities listed on the public seeds' peerlists. DNO keeps one after two public peerlists have listed it, and records when it was first counted and last listed.</p>
@@ -993,40 +1101,27 @@ body { background: #03060b; }
         <ul class="cat-grid" id="cat-grid" aria-label="Peer-listed identities"><li class="cat-empty">Awaiting first reading of /health.</li></ul>
         <p class="owner-line">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta.</p>
       </div>
+    </div>
+  </section>
 
-      <div class="pop" id="seeds" tabindex="-1">
-        <h3 class="sub-h">Probed seeds<span class="tag">dialed every cycle</span></h3>
-        <div class="pop-notes"><p class="fine">The endpoints status is made of. When fewer than two give their own height, validators that answer as listed stand in for the missing one. Status does not use the catalog. Names are the Kynesys URLs DNO dials.</p></div>
-        <div class="strip scards" id="scards">
-          <div><p class="k">seeds answered</p><p class="v none" id="gc-answered">reading</p></div>
-          <div><p class="k">within 100 blocks of the highest seed</p><p class="v none" id="gc-head">reading</p></div>
-          <div><p class="k">configured seeds</p><p class="v none" id="gc-seeds">reading</p></div>
-        </div>
-        <table class="nodes">
-          <caption class="sr">Probed seeds: rows with monitored true in GET /health</caption>
-          <thead>
-            <tr>
-              <th scope="col">Seed</th>
-              <th scope="col">Source</th>
-              <th scope="col">Probe</th>
-              <th scope="col">Identity</th>
-              <th scope="col" class="num">Block</th>
-              <th scope="col" class="num">Latency</th>
-              <th scope="col" class="num">Uptime (obs.)</th>
-            </tr>
-          </thead>
-          <tbody id="seeds-body"><tr class="empty"><td colspan="7">Awaiting first reading of /health.</td></tr></tbody>
-        </table>
-        <p class="versions" id="versions" hidden></p>
-        <p class="fine" style="margin-top:10px">Uptime (obs.) is DNO's own observation over seven days, not a promise. Latency is this cycle's probe. Identity compares the key a seed reports about itself with the key DNO has configured for that URL.</p>
+  <section class="section" id="last-24h" aria-labelledby="h24-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="ek">05 / observation record</p>
+        <h2 id="h24-title">Context over time.</h2>
+        <p class="meta">GET /organism</p>
       </div>
+      <p class="note">Aggregate observation from the most recent 24 hours of probe cycles. Public-network only.</p>
+      <div class="strip h24" id="h24" data-n="1"><div><p class="k">last 24 hours</p><p class="v">reading</p></div></div>
+      <p class="fine h24-note">A height that stops is reported as observed. Cause is not known from here.</p>
     </div>
   </section>
 
   <section class="section" id="incidents" aria-labelledby="inc-title">
     <div class="wrap">
       <div class="section-head">
-        <h2 id="inc-title">Incidents</h2>
+        <p class="ek">05 · records</p>
+        <h2 id="inc-title">Recent condition records</h2>
         <p class="meta">GET /organism, GET /incidents?scope=public&amp;status=active</p>
       </div>
       <p class="inc-count"><span class="ind" id="inc-ind" data-tone="pending"></span><span class="lv" id="inc-count">reading</span></p>
@@ -1041,10 +1136,25 @@ body { background: #03060b; }
     </div>
   </section>
 
+  <section class="section" id="perspectives" aria-labelledby="persp-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="ek">06 / three ways to explore</p>
+        <h2 id="persp-title">One observatory. Three perspectives.</h2>
+      </div>
+      <div class="persp">
+        <a class="persp-c" href="/about-demos"><p class="ek">Start here</p><p class="persp-h">New to Demos</p><p class="fine">What Demos is, what a validator and a shard are in its own docs, and what DNO can and cannot see of them.</p></a>
+        <a class="persp-c" href="/reference"><p class="ek">Explore</p><p class="persp-h">Inspect the observations</p><p class="fine">The reference tables, the timeline of records, the criteria and the commerce observations, each with its own clock.</p></a>
+        <a class="persp-c" href="/docs"><p class="ek">Developers</p><p class="persp-h">Use the read-only API</p><p class="fine">Every endpoint, its fields and its limits; the agent guide shows how software should read <code>unknown</code>.</p></a>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="api" aria-labelledby="api-title">
     <div class="wrap">
       <div class="section-head">
-        <h2 id="api-title">API</h2>
+        <p class="ek">07 / read-only public interface</p>
+        <h2 id="api-title">Evidence, in your workflow.</h2>
       </div>
       <p class="note">Every endpoint is public, read-only JSON, served with CORS for any origin. Pick one: the snippet and the request follow it.</p>
       <div class="console">
@@ -1553,6 +1663,40 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
       el('p', { text: 'They answer different questions. Status is what the heights showed this round; risk lists the conditions that leave less margin. Neither softens or confirms the other.' }),
       rf.length ? el('ul', {}, rf.map((t) => el('li', { text: t }))) : el('p', { text: 'No risk factors are listed in this reading.' }),
       typeof o.confidence_reason === 'string' && o.confidence_reason ? el('p', { class: 'fine', text: `Confidence: ${o.confidence_reason}` }) : null);
+  }
+  // 01 Read the sources: the witnesses panel, from /organism.witnesses (the reading's own); the branch figure marks the
+  // path this reading took. Nothing here is a count of the network.
+  function renderSources() {
+    const o = reads.organism.data, w = o && o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null;
+    const v = w && w.validators && typeof w.validators === 'object' ? w.validators : null;
+    const num = (x) => (isNum(x) ? fmtInt(x) : null);
+    const mode = w && typeof w.mode === 'string' ? w.mode : null;
+    setText($('wit-n'), !o ? (reads.organism.error ? 'not read' : 'reading') : !w ? 'not reported in this reading'
+      : mode === 'seeds_only' ? 'not used this round: two seeds gave their own height'
+      : v && isNum(v.counted) && v.counted > 0 ? `${fmtInt(v.counted)} counted in this reading` : 'none counted in this reading');
+    setText($('wit-read'), v && num(v.read) != null ? num(v.read) : (w ? 'none read' : 'not reported'));
+    setText($('wit-own'), v && num(v.own_height) != null ? num(v.own_height) : (w ? '—' : 'not reported'));
+    setText($('wit-counted'), v && num(v.counted) != null ? num(v.counted) : (w ? '0' : 'not reported'));
+    const la = v ? parseTime(v.list_agreed_at) : null;
+    setText($('wit-at'), la != null ? `Candidates from the list two seeds agreed on at ${stamp(la)}: that list's clock, not this reading's.` : '');
+    document.querySelectorAll('#branch li').forEach((li) => { li.dataset.on = String(!!mode && li.dataset.mode.split(' ').includes(mode)); });
+    setText($('branch-now'), mode ? `This reading: ${mode.replace(/_/g, ' ')}.` : '');
+  }
+  // 02 Four populations, each on its own clock (D-2): never added, never one snapshot.
+  function renderPop4() {
+    const o = reads.organism.data, h = reads.health.data, vm = validatorModel();
+    const at = (ms, what) => (ms != null ? `${what} ${stamp(ms)}` : '');
+    setText($('p4-oc'), vm.mode === 'live' && HOME_CYCLE.leadCount(vm.oc) != null ? `${fmtInt(vm.oc.active)} ACTIVE` : vm.mode === 'pending' ? 'reading' : 'not reported');
+    setText($('p4-oc-at'), vm.mode === 'live' ? at(parseTime(vm.oc.observed_at), 'list read') : '');
+    const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
+    setText($('p4-cat'), vg && isNum(vg.discovered) ? `${fmtInt(vg.discovered)} kept` : h ? 'not reported' : (reads.health.error ? 'not read' : 'reading'));
+    setText($('p4-cat-at'), vg ? at(parseTime(h.observed_at), 'as of /health,') : '');
+    const l = o && o.last_24h && typeof o.last_24h === 'object' ? o.last_24h : null;
+    setText($('p4-rounds'), l && isNum(l.observed_cycles) && isNum(l.expected_cycles) ? `${fmtInt(l.observed_cycles)} / ${fmtInt(l.expected_cycles)}` : o ? 'not reported' : 'reading');
+    const cm = l && l.chain_movement && typeof l.chain_movement === 'object' ? l.chain_movement : null;
+    setText($('p4-move'), cm && typeof cm.state === 'string' ? cm.state + (isNum(cm.longest_static_minutes) ? `, longest standstill ${fmtInt(cm.longest_static_minutes)} min` : '') : o ? 'not reported' : 'reading');
+    const lc = l ? parseTime(l.computed_at) : null;
+    setText($('p4-rounds-at'), at(lc, 'window computed')); setText($('p4-move-at'), at(lc, 'window computed'));
   }
   function renderCycle() {
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
@@ -2690,7 +2834,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
       if (o && ((isNum(o.active_incidents) && o.active_incidents > 0) || (isNum(o.active_public_conditions) && o.active_public_conditions > 0))) await refresh('incidents');
       else { reads.incidents.data = null; reads.incidents.error = null; }
       applyVersion();
-      renderLive(); renderCycle(); renderValidators(); renderPaths(); renderAgreement(); render24h(); renderPopulations(); renderIncidents(); renderConsole(); renderDahr();
+      renderLive(); renderCycle(); renderSources(); renderPop4(); renderValidators(); renderPaths(); renderAgreement(); render24h(); renderPopulations(); renderIncidents(); renderConsole(); renderDahr();
       if (okO) blip();
       if (okO || okH) pulse();
     } finally { inFlight = false; schedule(); renderCountdown(); }
