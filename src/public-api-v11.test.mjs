@@ -166,6 +166,11 @@ check("K6 the hero names the served artwork files by their content hash (AVIF, W
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
+const seedUrls = [...SRC.slice(SRC.indexOf("const PUBLIC_NODES = {"), SRC.indexOf("};", SRC.indexOf("const PUBLIC_NODES = {"))).matchAll(/url: "(https?:\/\/[^"]+)"/g)].map((m) => new URL(m[1]));
+const seedOps = new Set([...SRC.slice(SRC.indexOf("const PUBLIC_NODES = {"), SRC.indexOf("};", SRC.indexOf("const PUBLIC_NODES = {"))).matchAll(/operator: "([^"]+)"/g)].map((m) => m[1]));
+const WORD = ["no", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+const seedHead = (HOME.match(/<p class="ek">Configured public seeds<\/p>\s*<h3 class="twin-h">([^<]+)<\/h3>/) || [])[1];
+check("H38 the seeds panel counts what the agent dials: its URLs, their hostnames and one operator, from PUBLIC_NODES", seedUrls.length > 0 && seedOps.size === 1 && seedHead === WORD[seedUrls.length] + " URLs. " + WORD[new Set(seedUrls.map((u) => u.hostname)).size] + " hostnames. One organization." && HOME.includes("The " + WORD[seedUrls.length].toLowerCase() + " seeds are public URLs of one organization."), seedHead + " | " + seedUrls.length + " URLs");
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
 // The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.
