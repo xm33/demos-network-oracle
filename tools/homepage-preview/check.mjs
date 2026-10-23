@@ -88,6 +88,12 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       sections: [...document.querySelectorAll("main > section")].map((x) => x.id),
       wit: { n: t("wit-n"), read: t("wit-read"), own: t("wit-own"), counted: t("wit-counted") },
       branchOn: [...document.querySelectorAll("#branch li")].filter((li) => li.dataset.on === "true").map((li) => li.dataset.mode),
+      // Contained: nothing inside a card or panel extends past its box (a page-width check cannot see this).
+      spill: [...document.querySelectorAll(".twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .ctxstrip > div, .srcctx")].flatMap((box) => {
+        const b = box.getBoundingClientRect();
+        return [...box.querySelectorAll("*")].filter((n) => { if (n.closest(".nodes") && box.querySelector(".nodes")) return false; const r = n.getBoundingClientRect(); return r.width > 0 && (r.right > b.right + 1 || r.left < b.left - 1); })
+          .slice(0, 1).map((n) => (box.id || box.className) + " > " + n.tagName.toLowerCase() + "." + n.className);
+      }),
       pop4: { oc: t("p4-oc"), ocAt: t("p4-oc-at"), cat: t("p4-cat"), rounds: t("p4-rounds"), move: t("p4-move"), roundsAt: t("p4-rounds-at") } };
   });
   if (shot) await page.screenshot({ path: shot, fullPage: /-full\.png$/.test(shot) });
@@ -99,6 +105,14 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
 const scen = { capture: ["organism-capture-20261021T072727Z.json", "health-capture-20261021T072727Z.json"],
   seeds_only: ["organism-seeds_only.json", "health-seeds_only.json"], seed_and_validators: ["organism-seed_and_validators.json", "health-seed_and_validators.json"],
   validators_only: ["organism-validators_only.json", "health-validators_only.json"], insufficient: ["organism-insufficient.json", "health-insufficient.json"] };
+
+console.log("\n[HOMEPAGE_PREVIEW] fixtures agree with themselves");
+for (const [name, [, hf]] of Object.entries(scen)) {
+  const h = load(hf), pn = Object.fromEntries((h.publicNodes || []).map((n) => [n.name, n]));
+  const rows = ((h.validator_growth || {}).validators || []).filter((v) => v && v.monitored === true);
+  check(`FX1 ${name}: the seeds table rows (validator_growth, monitored) agree with publicNodes: answered and height`, rows.length === (h.publicNodes || []).length && rows.every((v) => pn[v.display] && v.online === !!pn[v.display].ok && (pn[v.display].ok ? v.block === pn[v.display].block : v.block == null)),
+    rows.map((v) => v.display + ":" + v.online + "/" + v.block).join(" "));
+}
 
 console.log("\n[HOMEPAGE_PREVIEW] each scenario: values and reasons are /organism's");
 for (const [name, [of, hf]] of Object.entries(scen)) {
@@ -185,6 +199,7 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
   for (const width of [390, 768, 1280, 1440, 1920]) {
     const rr = await render(load(scen.seed_and_validators[0]), load(scen.seed_and_validators[1]), { width, shot: SHOTS && (width === 390 || width === 1440) ? join(SHOTS, "seed_and_validators-" + width + "-full.png") : null });
     check(`V12 no horizontal overflow at ${width}`, rr.scrollW <= rr.innerW, rr.scrollW + " > " + rr.innerW);
+    check(`V12b nothing spills out of its card or panel at ${width}`, rr.spill.length === 0, rr.spill.join("; "));
   }
   // Freshness: LIVE only under the rule (staleness ≤ 300 s); a stale reading never shows LIVE.
   const stale = JSON.parse(JSON.stringify(o)); stale.staleness_seconds = 301;

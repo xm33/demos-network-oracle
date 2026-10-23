@@ -710,12 +710,15 @@ body { background: #03060b; }
 .section-head .ek { grid-column: 1 / -1; }
 .section-head h2 { font-size: clamp(1.75rem, 3.2vw, 2.5rem); line-height: 1.12; font-weight: 400; letter-spacing: -0.02em; color: var(--ink); }
 .section-head .meta { justify-self: end; }
-.twin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
-.twin-p { display: grid; gap: 10px; align-content: start; padding: 22px 22px 18px; border: 1px solid #1c2740; border-radius: 12px; background: rgba(6, 11, 21, .9); min-width: 0; }
+/* The two inputs, stacked at equal width: the seeds table needs the full measure, and neither input is drawn smaller. */
+.twin { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 20px; }
+.twin-p { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; padding: 22px 22px 18px; border: 1px solid #1c2740; border-radius: 12px; background: rgba(6, 11, 21, .9); min-width: 0; }
 .twin-h { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
 .twin-p .pop { padding-top: 6px; }
 .twin-p .sub-h { display: none; }
-.twin-p .nodes { display: block; overflow-x: auto; }
+.twin-p > *, .twin-p .pop > * { min-width: 0; }
+.twin-p .nodes { display: block; overflow-x: auto; max-width: 100%; }
+.twin-p .scards { --cols: 3; }
 .wit-n { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
 .wit-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
 .wit-facts > div { padding: 10px 12px; border: 1px solid #1c2740; border-radius: 8px; }
@@ -736,7 +739,6 @@ body { background: #03060b; }
 .persp-c:hover { color: var(--ink); border-color: var(--violet-2); }
 .persp-h { font-size: 1.25rem; font-weight: 500; }
 @media (max-width: 1099px) { .pop4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .branch ol, .persp { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 859px) { .twin { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 719px) { .pop4, .wit-facts { grid-template-columns: minmax(0, 1fr); } .section-head { grid-template-columns: minmax(0, 1fr); } .section-head .meta { justify-self: start; } }
 @media (forced-colors: active) { .hero h1 .o, .hero h1 .e { background: none; color: CanvasText; } }
 </style>
