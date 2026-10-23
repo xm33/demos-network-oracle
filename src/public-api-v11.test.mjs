@@ -148,6 +148,16 @@ check("K2 the homepage preloads the same sans file; the site head preloads the s
 check("K3 no visitor's browser is sent to a font host: no Google Fonts in the homepage, the kit stylesheet or the agent", !/fonts\.(googleapis|gstatic)\.com/.test(HOME + kitCss + SRC));
 check("K4 the font licence ships beside the fonts and is served", readFileSync(join(ROOT, "assets", "fonts", "OFL.txt"), "utf8").includes("SIL Open Font License, Version 1.1") && SRC.includes('loadKitAsset("assets/fonts/OFL.txt"'));
 check("K5 the artwork is served in three formats from one source, by content hash", ["avif", "webp", "jpg"].every((x) => SRC.includes('loadKitAsset("assets/dno-planet.' + x + '", "dno-planet", ".' + x + '"')));
+// V7 palette (PR-3 ③): decorative colours are declared once, in the chrome, far from every tone and from LIVE cyan.
+const tok = (name) => (chrome.match(new RegExp("--" + name + ":\\s*(#[0-9A-Fa-f]{6})")) || [])[1];
+const lab = (hex) => { const c = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const X = (c[0] * 0.4124 + c[1] * 0.3576 + c[2] * 0.1805) / 0.95047, Y = c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722, Z = (c[0] * 0.0193 + c[1] * 0.1192 + c[2] * 0.9505) / 1.08883;
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116); return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))]; };
+const dE = (a, b) => Math.hypot(...lab(a).map((v, k) => v - lab(b)[k]));
+const DECOR = ["navy-line", "violet", "violet-2", "ice", "ice-2"], TONES = ["operable", "elevated-risk", "degraded", "unknown", "metal-0", "live"];
+check("PAL1 each decorative colour is ΔE > 20 (CIE76) from every tone colour and from LIVE cyan", DECOR.every((d) => tok(d) && TONES.every((t) => tok(t) && dE(tok(d), tok(t)) > 20)),
+  DECOR.map((d) => d + " " + Math.min(...TONES.map((t) => (tok(d) && tok(t) ? dE(tok(d), tok(t)) : 0))).toFixed(1)).join(", "));
+check("PAL2 no tone or lamp rule uses a decorative colour", ![...(kitCss + HOME).matchAll(/\[data-tone[^{]*\{[^}]*\}|\.ind(?![\w-])[^{]*\{[^}]*\}/g)].some((m) => /--(navy-line|violet|ice)/.test(m[0])));
 // Owner ruling of 2026-09-29: last_count counts relays that returned a transaction hash; the reading is never posted.
 check("H24 the DAHR sentence is conditional and exact", HOME.includes("This cycle, DAHR was attempted on the cross-check RPCs, not on the seeds whose answers enter status. last_count is how many of those relays returned a transaction hash.") && HOME.includes("' DNO\\'s own on-chain posts are disabled; the reading is never posted.'") && HOME.includes("' The reading is never posted.'") && HOME.includes("'DAHR attestation unavailable.'") && !HOME.includes("returned an attestation object"));
 // The API version the agent serves is the newest one the schema's changelog describes, and the schema's own version.

@@ -445,7 +445,8 @@ function siteHeader(active) {
     + '<header class="site-head"><div class="wrap">'
     + '<a class="brand" href="/" aria-label="Demos Network Oracle, home">'
     + (MARK_ASSET ? '<img class="mark mark--nav" src="' + MARK_ASSET_PATH + '" width="92" height="92" alt="" decoding="async">' : '')
-    + '<span class="brand-name"><span class="full">Demos Network Oracle</span><span class="short">DNO</span></span></a>'
+    + '<span class="brand-name"><b>DNO</b><small>Demos Network Oracle</small></span></a>'
+    + '<span class="indep">Independent observability ·<br>not an official Demos product.</span>'
     + '<nav class="nav" aria-label="Primary">' + links.join("") + '</nav>'
     + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot"></span><span id="live-text">connecting</span></a>'
     + '<details class="menu"><summary>Menu</summary><ul>' + sitePageLinks(active).map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
