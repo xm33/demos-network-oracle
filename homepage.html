@@ -662,6 +662,8 @@ body { background: var(--bg); }
 .rdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--violet-2); box-shadow: 0 0 10px var(--violet); }
 .panel .panel-head .meta { margin-left: auto; font: 400 0.8125rem/1.5 var(--mono); color: var(--metal-1); }
 .panel .panel-head .meta .sep { color: var(--metal-0); padding-inline: 8px; }
+.panel .panel-head .meta { display: flex; flex-wrap: wrap; align-items: baseline; }   /* the line breaks between items, */
+.panel .panel-head .meta > span:not(.sep) { white-space: nowrap; }   /* never inside one: a value stays with its unit */
 .panel .panel-tools { display: flex; gap: 8px; padding: 0; }
 .rhead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem); gap: 24px 40px; padding: 28px var(--pad) 8px; }
 .summary { font-size: clamp(1.5rem, 2.6vw, 2.25rem); line-height: 1.22; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); }

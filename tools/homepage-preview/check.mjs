@@ -89,11 +89,13 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       wit: { n: t("wit-n"), read: t("wit-read"), own: t("wit-own"), counted: t("wit-counted") },
       branchOn: [...document.querySelectorAll("#branch li")].filter((li) => li.dataset.on === "true").map((li) => li.dataset.mode),
       // Contained: nothing inside a card or panel extends past its box (a page-width check cannot see this).
-      spill: [...document.querySelectorAll(".twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .ctxstrip > div, .srcctx")].flatMap((box) => {
+      spill: [...document.querySelectorAll(".panel .panel-head, .twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .ctxstrip > div, .srcctx")].flatMap((box) => {
         const b = box.getBoundingClientRect();
         return [...box.querySelectorAll("*")].filter((n) => { if (n.closest(".nodes") && box.querySelector(".nodes")) return false; const r = n.getBoundingClientRect(); return r.width > 0 && (r.right > b.right + 1 || r.left < b.left - 1); })
           .slice(0, 1).map((n) => (box.id || box.className) + " > " + n.tagName.toLowerCase() + "." + n.className);
       }),
+      // Each item of the reading's meta line (its clock, the countdown, the API version) set on one line: "20 / s" split across lines reads as two values.
+      metaSplit: [...document.querySelectorAll(".panel-head .meta > span:not(.sep)")].filter((s) => new Set([...s.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size > 1).map((s) => s.textContent),
       pop4: { oc: t("p4-oc"), ocAt: t("p4-oc-at"), cat: t("p4-cat"), rounds: t("p4-rounds"), move: t("p4-move"), roundsAt: t("p4-rounds-at") } };
   });
   if (shot) await page.screenshot({ path: shot, fullPage: /-full\.png$/.test(shot) });
@@ -209,6 +211,7 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
     const rr = await render(load(scen.seed_and_validators[0]), load(scen.seed_and_validators[1]), { width, shot: SHOTS && (width === 390 || width === 1440) ? join(SHOTS, "seed_and_validators-" + width + "-full.png") : null });
     check(`V12 no horizontal overflow at ${width}`, rr.scrollW <= rr.innerW, rr.scrollW + " > " + rr.innerW);
     check(`V12b nothing spills out of its card or panel at ${width}`, rr.spill.length === 0, rr.spill.join("; "));
+    check(`V12c the reading's clock, countdown and API version each stay on one line at ${width}`, rr.metaSplit.length === 0, rr.metaSplit.join(" | "));
   }
   // Freshness: LIVE only under the rule (staleness ≤ 300 s); a stale reading never shows LIVE.
   const stale = JSON.parse(JSON.stringify(o)); stale.staleness_seconds = 301;
