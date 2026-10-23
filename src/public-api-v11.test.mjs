@@ -70,6 +70,9 @@ check("H14 homepage references the mark asset path", HOME.includes('href="/asset
 check("H15 homepage reads the same origin", HOME.includes("const SERVED_BY_AGENT = true;"));
 const homeText = withoutAllowed(HOME);
 check("H16 homepage: no banned word", !BANNED.test(homeText), (homeText.match(BANNED) || [])[0]);
+// Correctness wave 1, "no implied approval" (STUDY-DNO-usefulness-correctness-2026-10-21 §3 c, i; R-05, R-06, R-07).
+check("R05a a zero incident count is not shown in the ok tone (the count is structurally zero: DNO opens no record of that kind)", !/setTone\(\$\('inc-ind'\), 'ok'\)/.test(HOME), "ok tone on inc-ind");
+check("R05b the zero says so", HOME.includes("No active public incidents. DNO currently opens no record of this kind; condition records are listed below."));
 check("H16b homepage: no adoption, demand, settled-commerce, or rail-reality claim", !CHARACTERIZATION.test(homeText), (homeText.match(CHARACTERIZATION) || [])[0]);
 check("H17 homepage: no IPv4 literal, no full identity, no Demos violet", !IPV4.test(HOME) && !FULL_ID.test(HOME) && !/#2B36D9/i.test(HOME));
 check("H18 homepage: no old seed sentence (DNO dials more than the seeds)", !HOME.includes("only endpoints DNO dials"));

@@ -2382,7 +2382,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor };
       list.replaceChildren(); return;
     }
     const n = o.active_incidents, count = $('inc-count');
-    if (n === 0) { setTone($('inc-ind'), 'ok'); count.dataset.n = '0'; setText(count, 'No active public incidents.'); list.replaceChildren(); return; }
+    if (n === 0) { setTone($('inc-ind'), 'neutral'); count.dataset.n = '0'; setText(count, 'No active public incidents. DNO currently opens no record of this kind; condition records are listed below.'); list.replaceChildren(); return; }
     setTone($('inc-ind'), 'warn');
     if (count.dataset.n !== String(n)) { count.dataset.n = String(n); count.replaceChildren(el('span', { text: 'active incidents' }), el('strong', { text: String(n) })); }
     if (!reads.incidents.data) { list.replaceChildren(el('li', { text: reads.incidents.error ? 'Active incident rows could not be read from this browser.' : 'Reading active incident rows.' })); return; }
