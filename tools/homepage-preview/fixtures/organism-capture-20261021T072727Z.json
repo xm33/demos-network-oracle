@@ -1,0 +1,60 @@
+{
+  "status": "stable",
+  "trend": "stable",
+  "risk": "elevated",
+  "data_quality": "sufficient",
+  "confidence": "uncertain",
+  "agreement": "strong",
+  "active_incidents": 0,
+  "max_incident_severity": "none",
+  "summary": "2 of 3 public seeds answered and their reported heights agree. DNO has been following heights below a height it read earlier.",
+  "status_reason": "Public nodes aligned",
+  "risk_factors": [
+    "following heights below a height read earlier"
+  ],
+  "confidence_reason": "DNO has been following heights below a height it read earlier, and cannot tell why from here: a chain restarted lower, nodes catching up, and one answer far above the others look the same",
+  "agreement_reason": "2 of 2 public nodes with a height within ±25 blocks of the median (spread: 0 blocks)",
+  "staleness_seconds": 14,
+  "last_updated": "2026-10-21T07:27:13.407Z",
+  "api_version": "1.2",
+  "last_24h": {
+    "sufficient": true,
+    "coverage_pct": 100,
+    "observed_cycles": 4319,
+    "expected_cycles": 4320,
+    "typical_set_size": 2,
+    "peak_set": null,
+    "chain_movement": {
+      "state": "interrupted",
+      "longest_static_minutes": 90,
+      "pct_advancing": 0.93,
+      "blocks_advanced": null
+    },
+    "longest_non_stable_minutes": 55,
+    "active_critical_public_incidents": 0,
+    "critical_public_incidents_in_window": 0,
+    "computed_at": "2026-10-21T07:27:27.439Z"
+  },
+  "data_quality_reason": null,
+  "observed_at": "2026-10-21T07:27:13.407Z",
+  "height_last_advanced_at": null,
+  "height_static_seconds": 0,
+  "active_public_conditions": 0,
+  "agreement_detail": {
+    "aligned_nodes": 2,
+    "total_nodes": 2,
+    "median_block": 6675,
+    "block_spread": 0
+  },
+  "witnesses": {
+    "mode": "seeds_only",
+    "counted": 2,
+    "public_seeds": {
+      "configured": 3,
+      "answered": 2,
+      "own_height": 2
+    },
+    "validators": null
+  },
+  "height_standstill_after_seconds": 1800
+}

@@ -328,8 +328,6 @@ svg text { font-family: var(--sans); }
 .rung-d { grid-column: 3; grid-row: 2; font-size: 0.875rem; line-height: 1.45; color: var(--mute); }
 .rung-s { grid-column: 3; grid-row: 3; font: 400 0.8125rem/1.45 var(--mono); color: var(--metal-1); }
 .rung-s[hidden] { display: none; }
-.ladder[data-mode="oneread"] .rung[data-rung="active"] .rung-n { color: var(--metal-1); }
-.ladder[data-mode="oneread"] .rung[data-rung="active"] .rung-bar > span { background: var(--metal-0); }
 /* Each ACTIVE row, this round: one bar, every row in exactly one part, most observed first (an ordinal metal ramp) */
 .acct { display: grid; grid-template-columns: 13rem 6rem minmax(0, 1fr); column-gap: 24px; row-gap: 10px; align-items: start; padding: 18px 0; }
 .acct[hidden] { display: none; }
@@ -358,7 +356,6 @@ svg text { font-family: var(--sans); }
 .acct-legend li.hl { color: var(--ink); }
 .vw-growth { margin-top: 26px; }
 .vw-growth[hidden] { display: none; }
-.vw-growth[data-mode="oneread"] .n { color: var(--metal-1); }
 .vg-note { flex-basis: 100%; margin: 0; }
 .vg-note[hidden] { display: none; }
 .vw-facts { --cols: 3; margin-top: 18px; }
@@ -736,7 +733,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
       <p class="note">The on-chain validators table as the public seeds list it, and what DNO saw when it dialed the address each ACTIVE validator published on chain. Four counts, each inside the one above. Never added to the seed or peer-listed counts. In status only when fewer than two seeds give their own height: up to 8 of them, kept as candidates, are then read in a seed's place.</p>
       <ol class="ladder" id="ladder" data-mode="pending" aria-label="Validators on chain, each count inside the one above">
         <li class="rung" data-rung="active">
-          <p class="rung-k">ACTIVE on chain<span class="tag" id="vt-active" hidden>one read</span></p>
+          <p class="rung-k">ACTIVE on chain</p>
           <p class="rung-n none" id="vn-active">reading</p>
           <span class="rung-bar" aria-hidden="true"><span id="vb-active"></span></span>
           <p class="rung-d" id="vd-active">Rows with status ACTIVE, when at least two public seeds return the same list.</p>
@@ -1411,17 +1408,16 @@ function trendReason(trend) {
 return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, trendReason };
 })();
   function leadLine(vm) {
-    if (vm.mode === 'oneread') return `${fmtInt(ONE_READ.active)} ACTIVE on chain in one read on ${stamp(Date.parse(ONE_READ.at))}, as two public seeds listed them. Not this cycle.`;
+    if (vm.mode === 'unpublished') return 'ACTIVE on chain: not reported (this server does not publish on_chain_validators).';
     if (vm.mode === 'unread') return 'ACTIVE on chain: not read.';
     if (vm.mode === 'pending') return 'ACTIVE on chain: reading.';
     return HOME_CYCLE.cycleLead(vm.oc);
   }
-  const agWord = (a) => lower(a && typeof a === 'object' ? a.state : a);
-  const restsOn = (x) => (x && x.witnesses && typeof x.witnesses === 'object' ? x.witnesses.mode || null : null);
-  const statusAlike = (h, o) => lower(h.status) === lower(o.status) && agWord(h.agreement) === agWord(o.agreement)
-    && (h.data_quality_reason || null) === (o.data_quality_reason || null) && h.active_incidents === o.active_incidents && restsOn(h) === restsOn(o);
+  // One observation: /health joins the seeds line only when it is the same observation as /organism (equal observed_at).
+  // Matching labels are not identity: two rounds can carry the same words over different heights and lists.
+  const sameObservation = (h, o) => !!h && !!o && typeof h.observed_at === 'string' && h.observed_at === o.observed_at;
   function seedsReading(o, h) {
-    if (h && (h.observed_at === o.observed_at || (!reads.health.error && statusAlike(h, o)))) {
+    if (sameObservation(h, o)) {
       return API10 ? Object.assign({}, h, { agreement: { state: h.agreement && typeof h.agreement === 'object' ? h.agreement.state : h.agreement } }) : h;
     }
     const d = !API10 && o.agreement_detail && typeof o.agreement_detail === 'object' ? o.agreement_detail : {};
@@ -1431,7 +1427,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
   function renderCycle() {
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
     const vm = validatorModel();
-    const active = vm.mode === 'live' ? HOME_CYCLE.leadCount(vm.oc) : vm.mode === 'oneread' ? ONE_READ.active : null;
+    const active = vm.mode === 'live' ? HOME_CYCLE.leadCount(vm.oc) : null;
     setText($('cycle-lead'), leadLine(vm));
     const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
     setText($('door-n'), vg && isNum(vg.discovered) ? `${API10 ? `${fmtInt(vg.discovered)} recorded from peerlists` : HOME_CYCLE.cycleDoor(vg.discovered)} · ` : '');
@@ -1458,10 +1454,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
 
     const card = (key, subText) => { const v = lower(o[key]); setCard(key, v ? (TONE[key][v] || 'neutral') : 'unknown', v || 'unknown', subText); };
     card('trend', HOME_CYCLE.trendReason(lower(o.trend)));
-    const same = (key) => !!h && lower(h[key]) === lower(o[key]);
-    const rf = same('risk') && Array.isArray(h.risk_factors) ? h.risk_factors : o.risk_factors;
+    // The reasons are the reading's own: /organism carries risk_factors and confidence_reason for this observation.
+    const rf = o.risk_factors;
     card('risk', Array.isArray(rf) && rf.length ? rf.map(String).join(' · ') : '');
-    const cr = same('confidence') && typeof h.confidence_reason === 'string' ? h.confidence_reason : o.confidence_reason;
+    const cr = o.confidence_reason;
     card('confidence', typeof cr === 'string' && cr ? cr : '');
     const dqr = lower(o.data_quality) === 'insufficient' && typeof o.data_quality_reason === 'string' ? DQ_REASON[o.data_quality_reason] : '';
     card('data_quality', dqr || '');
@@ -1527,7 +1523,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
       setText($('pl-catalog'), `${fmtInt(vg.discovered)} ${API10 ? 'recorded' : 'kept'}${detail ? ` · ${fmtInt(rows.filter((v) => v.listed_this_cycle === true).length)} listed now` : ''}`);
     } else setText($('pl-catalog'), h ? 'not reported' : reads.health.error ? 'not read' : 'reading');
     const vm = validatorModel();
-    setText($('pl-validators'), vm.mode === 'oneread' ? `${ONE_READ.active} ACTIVE in one read` : vm.mode === 'live'
+    setText($('pl-validators'), vm.mode === 'unpublished' ? 'not reported' : vm.mode === 'live'
       ? (vm.R.active.n != null ? `${fmtInt(vm.R.active.n)} ACTIVE${vm.R.answered.n != null ? ` · ${fmtInt(vm.R.answered.n)} answered as that key` : ''}` : vm.R.active.text)
       : vm.mode === 'unread' ? 'not read' : 'reading');
     const inStatus = standingIn(o);
@@ -1597,17 +1593,17 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
       const every = live && vm.w && isNum(vm.w.interval_seconds) ? (vm.w.interval_seconds === 60 ? 'Each minute' : `Every ${vm.w.interval_seconds} s`) : 'Each minute';
       const shown = (r) => (r.n != null ? fmtInt(r.n) : dim(r.text));
       text = [el('h3', { text: 'On-chain validators: counted, and stand-ins for a seed' }),
-        el('p', { text: vm.mode === 'oneread'
-          ? `This server does not read the validators table yet. One read with DNO's probe tool on ${stamp(Date.parse(ONE_READ.at))}: two of three public seeds returned the same ${ONE_READ.listed} rows, all ACTIVE.`
+        el('p', { text: vm.mode === 'unpublished'
+          ? 'This server does not publish on_chain_validators: no count is reported, and none is retained from an earlier read.'
           : `${every} DNO sends two read-only calls to the three public seeds: getValidators, the on-chain validators table, and getNetworkParameters. A count is published only when at least two seeds return the same answer.` }),
-        el('p', { text: `${vm.mode === 'oneread' ? 'A server that publishes on_chain_validators also dials' : 'DNO dials'} GET /info once at the address each ACTIVE validator published on chain, only when it is a public http origin: the probe connects to the address it checked, does not follow redirects and reads at most 2 MB. An address that several keys publish is dialed once, and its answer names one key. /health publishes counts, never an address.` }),
+        el('p', { text: `${vm.mode === 'unpublished' ? 'A server that publishes on_chain_validators also dials' : 'DNO dials'} GET /info once at the address each ACTIVE validator published on chain, only when it is a public http origin: the probe connects to the address it checked, does not follow redirects and reads at most 2 MB. An address that several keys publish is dialed once, and its answer names one key. /health publishes counts, never an address.` }),
         el('p', { text: 'While two seeds give their own height, none of this enters status. When fewer do, DNO reads up to 8 validators it keeps as candidates: each answered as listed, at the seeds\' height, within the last 24 hours. Beside one seed, a validator within 25 blocks of it counts with it. With no seed, a reading needs at least two validators, more than half of those that gave a height, within 25 blocks of their median, and confidence is uncertain.' }),
         links(['#validators', 'validators on chain'], ['/methodology#validators', 'methodology'])];
       facts = [
-        ['ACTIVE', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : vm.mode === 'oneread' ? dim(`${ONE_READ.active} in one read`) : shown(vm.R.active)],
+        ['ACTIVE', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : shown(vm.R.active)],
         ['answered as that key', vm.mode === 'pending' || vm.mode === 'unread' ? wait() : shown(vm.R.answered)],
         ['seeds agreeing', live && vm.oc.state === 'agreed' ? `${vm.oc.seeds_agreed} of ${vm.oc.seeds_configured}` : live ? dim({ pending: 'reading', stale: 'not reported: the last read is older than 300 s' }[vm.oc.state] || 'fewer than two')
-          : vm.mode === 'oneread' ? dim('2 of 3 in one read') : wait()],
+          : vm.mode === 'unpublished' ? dim('not reported') : wait()],
         ['enters status', (() => { const w = o && o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null, v = w && w.validators, n = standingIn(o);
           return n ? `this cycle: ${n} of ${v.read} read` : !w || typeof w.mode !== 'string' ? 'only in a seed\'s place' : w.mode === 'seeds_only' ? 'not this cycle'
             : v && isNum(v.read) ? `not this cycle: ${v.read} read, none counted` : 'only in a seed\'s place'; })()],
@@ -1813,22 +1809,20 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     box.replaceChildren(...items);
   }
 
-  const ONE_READ = { at: '2026-09-29T11:31:45Z', listed: 35, active: 35, stake: '1000000000000' };
   const RUNGS = ['active', 'answered', 'height', 'hour'];
   function validatorModel() {
     const h = reads.health.data;
     const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : null);
     const oc = h ? obj(h.on_chain_validators) : null, w = h ? obj(h.validator_watch) : null;
-    const mode = !h ? (reads.health.error ? 'unread' : 'pending') : oc ? 'live' : 'oneread';
+    const mode = !h ? (reads.health.error ? 'unread' : 'pending') : oc ? 'live' : 'unpublished';   // unpublished: this /health carries no on_chain_validators object; nothing stored stands in
     const R = {};
     const put = (k, n, text, note) => { R[k] = isNum(n) ? { n, text: null, note: note || null } : { n: null, text, note: note || null }; };
     let base = null;
     if (mode === 'pending' || mode === 'unread') RUNGS.forEach((k) => put(k, null, mode === 'pending' ? 'reading' : 'not read'));
-    else if (mode === 'oneread') {
-      put('active', ONE_READ.active, null, `One read with DNO's probe tool, ${stamp(Date.parse(ONE_READ.at))}: two of three public seeds returned the same ${ONE_READ.listed} rows, all ACTIVE. Not this cycle.`);
-      put('answered', null, 'not observed', 'This server does not dial validators yet.');
+    else if (mode === 'unpublished') {
+      put('active', null, 'not reported', 'This server does not publish on_chain_validators.');
+      put('answered', null, 'not observed', 'This server does not publish validator_watch.');
       put('height', null, 'not observed'); put('hour', null, 'not observed');
-      base = ONE_READ.active;
     } else {
       if (oc.state === 'agreed' && isNum(oc.active)) { put('active', oc.active); base = oc.active; }
       else put('active', null, oc.state === 'pending' ? 'reading' : 'unknown', oc.state === 'pending' ? null : oc.reason);
@@ -1915,14 +1909,11 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
   }
   function renderGrowth(vm) {
     const box = $('vw-growth'), { mode, oc } = vm;
-    if (mode === 'pending' || mode === 'unread') { box.hidden = true; return; }
+    if (mode !== 'live') { box.hidden = true; return; }
     const W = [['first_agreed_today', 'today'], ['first_agreed_week', 'this week'], ['first_agreed_month', 'this month']];
     const line = (src) => windowLine(src, W);
     let n = null, text, why = null;
-    if (mode === 'oneread') {
-      n = ONE_READ.active; text = line(null);
-      why = `This server does not record first agreed times yet. ${fmtInt(ONE_READ.active)} is the one read of ${stamp(Date.parse(ONE_READ.at))}.`;
-    } else {
+    {
       const has = 'first_agreed_today' in oc;
       if (oc.state === 'agreed' && isNum(oc.active)) n = oc.active;
       text = oc.state === 'pending' ? '' : line(has && oc.state === 'agreed' ? oc : null);
@@ -1945,7 +1936,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
   function renderValidators() {
     const vm = validatorModel(), { mode, oc, w, R, base } = vm;
     $('ladder').dataset.mode = mode;
-    $('vt-active').hidden = mode !== 'oneread';
     RUNGS.forEach((k) => {
       const r = R[k], nEl = $(`vn-${k}`), sEl = $(`vs-${k}`);
       setText(nEl, r.n != null ? fmtInt(r.n) : r.text);
@@ -1965,8 +1955,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const box = $('vw-facts');
     const mono = (t) => el('span', { class: 'mono', text: t }), plain = (t) => el('span', { text: t });
     let facts = null;
-    if (mode === 'oneread') facts = [['minValidatorStake', [mono(ONE_READ.stake), dim('raw, as reported, same read')]], ['UNSTAKING', [plain('none listed'), dim('same read')]], ['versions answered', [dim('not observed')]]];
-    else if (mode === 'live') {
+    if (mode === 'live') {
       const vers = observed && Array.isArray(w.versions) && w.versions.length
         ? w.versions.map((g) => `${typeof g.version === 'string' && g.version ? g.version : 'no release version'} (${fmtInt(g.count)})`).join(' · ') + (w.versions_other > 0 ? ` · other (${fmtInt(w.versions_other)})` : '') : null;
       const pend = oc.state === 'pending', ws = w ? w.state : null;
@@ -1986,9 +1975,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     }
     box.hidden = !facts;
 
-    const cap = mode === 'oneread' ? 'One read · not this cycle · this server does not publish on_chain_validators yet'
+    const cap = mode === 'unpublished' ? 'Not reported · this server does not publish on_chain_validators · nothing is retained from an earlier read'
       : mode === 'unread' ? `Validators not read: ${reads.health.error}. Their state is unknown from here.`
       : mode === 'live' ? [parseTime(oc.observed_at) != null ? `List read ${clock(parseTime(oc.observed_at))}` : null,
+          w && w.state === 'observed' && parseTime(w.round_at) != null ? `watch round ${clock(parseTime(w.round_at))}` : null,   // the watch has its own clock: it is not the list read, nor the reading
           oc.state === 'agreed' && isNum(oc.seeds_agreed) ? `${oc.seeds_agreed} of ${oc.seeds_configured} public seeds returned the same list` : null,
           w && isNum(w.interval_seconds) ? `a round every ${w.interval_seconds} s` : null, 'in status only in a seed\'s place', 'counts only, never an address'].filter(Boolean).join(' · ')
       : '';

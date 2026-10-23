@@ -76,6 +76,12 @@ check("R05b the zero says so", HOME.includes("No active public incidents. DNO cu
 check("R06 the 'After the 1.1 update' note shows under API 1.1 only, not under every later version", HOME.includes("h.api_version === '1.1'") && !/\/\^1\\\.\[1-9\]\\d\*\(\\\.\|\$\)\//.test(HOME.slice(HOME.indexOf("'seen-drop'"), HOME.indexOf("'seen-drop'") + 400)), "regex still present");
 check("R07a /badge carries no tick (an approval glyph) for any status", !/\\u2713|\u2713|✓/.test(SRC.slice(SRC.indexOf('reqPath === "/badge"'), SRC.indexOf('reqPath === "/badge"') + 1600)), "tick in the badge route");
 check("R07b the badge text is the status word alone when stable", SRC.includes('bLabel + (bIcon ? " " + bIcon : "")'));
+// Reading integrity (PR-2; SPEC-DNO-V7 D-1, D-2, D-5, D-6): one observation, no retained count, each /health part on its own clock.
+check("D1a the reading's reasons are /organism's: no same-label substitution from /health", !/same\('risk'\)|same\('confidence'\)/.test(HOME) && HOME.includes("const rf = o.risk_factors;") && HOME.includes("const cr = o.confidence_reason;"));
+check("D1b /health joins the seeds line on observation identity only (equal observed_at), never on alike labels", !HOME.includes("statusAlike") && HOME.includes("h.observed_at === o.observed_at") && HOME.includes("function seedsReading(o, h) {\n    if (sameObservation(h, o)) {"));
+check("D5a no stored or historical ACTIVE count in the page: ONE_READ and the oneread mode are gone", !/ONE_READ|oneread|one read/.test(HOME), (HOME.match(/.{20}(ONE_READ|oneread|one read).{20}/) || [])[0]);
+check("D5b a /health without on_chain_validators is 'unpublished': not reported, nothing retained", HOME.includes("oc ? 'live' : 'unpublished'") && HOME.includes("'ACTIVE on chain: not reported (this server does not publish on_chain_validators).'"));
+check("D2 the watch round shows its own clock beside the list-read clock", HOME.includes("`watch round ${clock(parseTime(w.round_at))}`") && HOME.includes("`List read ${clock(parseTime(oc.observed_at))}`"));
 check("H16b homepage: no adoption, demand, settled-commerce, or rail-reality claim", !CHARACTERIZATION.test(homeText), (homeText.match(CHARACTERIZATION) || [])[0]);
 check("H17 homepage: no IPv4 literal, no full identity, no Demos violet", !IPV4.test(HOME) && !FULL_ID.test(HOME) && !/#2B36D9/i.test(HOME));
 check("H18 homepage: no old seed sentence (DNO dials more than the seeds)", !HOME.includes("only endpoints DNO dials"));
