@@ -206,6 +206,11 @@ const ruleBody = (sel) => ([...kitCss.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(
 check("SB12 an outcome reflows at large text sizes: its one column can shrink and a mode name may break", /grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(ruleBody(".decision .outcome")) && /overflow-wrap:\s*anywhere/.test(ruleBody(".decision .outcome code")),
   ruleBody(".decision .outcome").trim() + " | " + ruleBody(".decision .outcome code").trim());
 check("SK4 the homepage loads no stylesheet: only the chrome is shared, inline, so no subpage rule can reach it", !/<link[^>]*rel="stylesheet"/.test(HOME) && !HOME.includes("<!--dno:head-->") && !/\/assets\/site-[0-9a-f]{8}\.css/.test(HOME));
+const kitRules = [...kitCss.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].split(",").map((x) => x.trim()), body: m[2] }));
+const stackTdRules = kitRules.filter((r) => r.sel.includes(".tbl.stack td")), stackLabel = kitRules.filter((r) => r.sel.includes(".tbl.stack td::before"));
+check("SK5 on phones a stacked cell keeps its text in one flow beside its label (no grid item per word), and the last row draws one rule", stackTdRules.length >= 2 && stackTdRules.every((r) => !/display\s*:\s*(grid|flex)/.test(r.body))
+  && stackLabel.length === 1 && /position\s*:\s*absolute/.test(stackLabel[0].body) && kitRules.some((r) => r.sel.includes(".tbl.stack tr:last-child td") && /border-bottom:\s*0/.test(r.body)),
+  stackTdRules.map((r) => r.body.trim()).join(" | "));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));

@@ -292,8 +292,11 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
   .tbl.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .tbl.stack, .tbl.stack tbody, .tbl.stack tr, .tbl.stack td { display: block; width: 100%; }
   .tbl.stack tr { border-top: 1px solid var(--line); padding: 10px 0; }
-  .tbl.stack td { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 10px; border: 0; padding: 3px 0; }
-  .tbl.stack td::before { content: attr(data-label); color: var(--mute); font-size: 0.8125rem; }
+  /* A cell holds running text with inline code: one flow beside its label, never one grid item per word. */
+  .tbl.stack td { position: relative; min-height: 1.6em; border: 0; padding: 3px 0 3px calc(7.5rem + 10px); }
+  .tbl.stack td::before { content: attr(data-label); position: absolute; left: 0; top: 5px; width: 7.5rem; color: var(--mute); font-size: 0.8125rem; line-height: 1.4; }
+  .tbl.stack tr:last-child { border-bottom: 1px solid var(--line); }
+  .tbl.stack tr:last-child td { border-bottom: 0; }
   .tbl.stack code { white-space: normal; }
 }
 /* A page's slogan under its name (D7: the name is the h1). */
