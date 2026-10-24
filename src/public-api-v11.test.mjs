@@ -198,6 +198,11 @@ check("SB8 one h1 on Sources, the page's name; the slogan sits under it", count(
 check("SB9 the locked sentence is not in the Sources text: the shared footer carries it once", count(SOURCES, "DNO informs context; it does not advise") === 0 && count(SRC, "DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'") === 1);
 const srcOrient = textOf(SOURCES.slice(SOURCES.indexOf('<p class="doc-kicker">'), srcArticleAt)).split(/(?<=[.!?])\s+/).filter(publicLanguageHit);
 check("SB10 the new Sources text (title band and orientation) passes the public-language ban", srcArticleAt > 0 && srcOrient.length === 0, srcOrient.join(" | "));
+const s2Classes = /\.(branch|branches|outcome|outcomes|fork|enters)\b/;
+const kitSelectors = [...kitCss.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).filter((sel) => !sel.startsWith("@")).flatMap((sel) => sel.split(",")).map((sel) => sel.trim());
+const unscoped = kitSelectors.filter((sel) => s2Classes.test(sel) && !/^\.(decision|orient)\s/.test(sel));
+check("SB11 the Sources figure's styles are scoped under .decision or .orient (the homepage has a .branch figure of its own)", unscoped.length === 0, unscoped.join(" | "));
+check("SK4 the homepage loads no stylesheet: only the chrome is shared, inline, so no subpage rule can reach it", !/<link[^>]*rel="stylesheet"/.test(HOME) && !HOME.includes("<!--dno:head-->") && !/\/assets\/site-[0-9a-f]{8}\.css/.test(HOME));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
