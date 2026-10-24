@@ -101,6 +101,14 @@
   .wall span { white-space: normal; text-align: center; width: max-content; max-width: 80%; }
 }
 @media (prefers-reduced-motion: reduce) { .sm-moves tr { transition: none; } }
+/* About Demos: the orientation above the article (S2a). Every rule is scoped under .orient. */
+.orient .orient-example { max-width: 46rem; margin: 20px 0 0; }
+.orient .lenses { margin-top: 22px; }
+.orient .lenses p + p { margin-top: 10px; }
+.orient .lens-note { font-size: 0.9375rem; color: var(--mute); }
+.orient .terms { margin-top: 18px; }
+.orient .terms code { color: var(--metal-2); }
+.orient .terms th:first-child { width: 16%; }
 </style>
 </head>
 <body>
@@ -111,7 +119,8 @@
       <div>
         <p class="doc-kicker">Context for the reading</p>
         <h1>About Demos</h1>
-        <p class="doc-lede">Demos is the network DNO watches. This page sets out what the Demos documentation says about validators, shards, node health and DAHR, and which of those DNO can see from outside. Every protocol statement links to the page it comes from.</p>
+        <p class="doc-tagline">The network, from outside.</p>
+        <p class="doc-lede">Demos is the network DNO watches. This page sets out what the Demos documentation says about it, and what DNO can and cannot see from outside. Every protocol statement links to the page it comes from.</p>
       </div>
       <div class="doc-facts">
         <span>Source <b>docs.kynesys.xyz</b></span>
@@ -121,6 +130,59 @@
     </div>
   </header>
 
+  <section class="orient" id="plain" aria-labelledby="plain-h">
+    <div class="wrap">
+      <p class="orient-k">01 / In plain words</p>
+      <h2 id="plain-h">What is Demos?</h2>
+      <p class="orient-lede">Its docs describe Demos as “an interconnectivity layer across chains and web contexts”: a network for connecting activity across blockchains and the web. It has two parts: the nodes that make up the network, and developer kits (SDKs) that applications use to work with it (<a href="https://docs.kynesys.xyz/introduction/demos-network-architecture">architecture</a>).</p>
+      <div class="aside orient-example">
+        <span class="aside-k">A documented example: a request to the web</span>
+        <p>An application can ask a Demos node to make a web request for it. With DAHR, the Data Agnostic HTTPS Relay, the node forwards the request, returns the response, and hashes it; each call creates one on-chain transaction that stores only those hashes, not the response (<a href="https://docs.kynesys.xyz/sdk/web2/dahr-api-reference/overview">DAHR API reference</a>).</p>
+        <p>This is a capability the docs describe. It does not show that any application used it, that the content returned was correct, or that a given transaction was included.</p>
+      </div>
+      <p class="orient-more">The docs' own description, part by part: <a href="#what">What Demos is</a>. One DAHR call, step by step: <a href="#dahr">DAHR</a>.</p>
+    </div>
+  </section>
+  <section class="orient" id="fits" aria-labelledby="fits-h">
+    <div class="wrap">
+      <p class="orient-k">02 / Where DNO fits</p>
+      <h2 id="fits-h">Inside the protocol. Outside the observation.</h2>
+      <p class="orient-lede">Two sources answer two different questions. A mechanism the docs describe is not evidence that it ran in a given block, and a public answer does not show what happened inside.</p>
+      <div class="compare lenses">
+        <div data-lens="inside">
+          <h3>Inside: the Demos docs</h3>
+          <p class="who">the protocol as documented · read 28 Sep 2026</p>
+          <p>How validators join and leave, how a shard is drawn for each block, how consensus runs, and what a node reports about its own health.</p>
+          <p class="lens-note">A description of the design, not a live observation.</p>
+        </div>
+        <div data-lens="outside">
+          <h3>Outside: DNO</h3>
+          <p class="who">an independent observer · every 20 s</p>
+          <p>DNO is not an official Demos product. Its reading uses the heights that three configured public seeds report for themselves. When fewer than two seeds give their own height, validators that answer as listed can stand in, under <a href="/methodology#witnesses">the published rules</a>.</p>
+          <p class="lens-note">DNO reports what those sources answered. It does not read consensus: shard composition, votes, or which validators took part in a round. Some nodes publish their own view of their shard; DNO neither reads nor checks it.</p>
+        </div>
+      </div>
+      <p class="orient-more">Both side by side, in detail: <a href="#two-mechanisms">Two mechanisms</a>.</p>
+    </div>
+  </section>
+  <section class="orient" id="terms" aria-labelledby="terms-h">
+    <div class="wrap">
+      <p class="orient-k">03 / Words</p>
+      <h2 id="terms-h">Similar words. Different evidence.</h2>
+      <div class="tbl-wrap">
+        <table class="tbl stack terms">
+          <thead><tr><th scope="col">Word</th><th scope="col">In Demos</th><th scope="col">In DNO</th></tr></thead>
+          <tbody>
+            <tr data-term="health"><td data-label="Word"><code>/health</code></td><td data-label="In Demos">A Demos node's own <code>GET /health</code>, its word for itself: <code>ok</code>, <code>degraded</code>, <code>dormant</code> or <code>failing</code>.</td><td data-label="In DNO">DNO's own <code>/health</code>, a different service: DNO's observation details and counts. DNO does not read a node's <code>/health</code>.</td></tr>
+            <tr data-term="status"><td data-label="Word"><code>ACTIVE</code>, <code>stable</code></td><td data-label="In Demos"><code>ACTIVE</code>: a validator row's status on chain, eligible for shard selection.</td><td data-label="In DNO"><code>stable</code>: DNO's status for one cycle's reading of public answers. It is not <code>ACTIVE</code>, and it is not <code>ok</code>.</td></tr>
+            <tr data-term="shards"><td data-label="Word">shard, consensus</td><td data-label="In Demos">For each block, a shard drawn from the eligible validators runs consensus for that block.</td><td data-label="In DNO">A node may publish its own view of its shard; DNO neither reads nor checks it. DNO reads a height that moves, or does not, and never says why it stopped.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="orient-more">Every word, and what DNO sees of it: <a href="#words">Words that must not share a label</a>. Next: <a href="/sources">Sources</a>, which public answers form the reading and which stay separate; <a href="/methodology">Methodology</a>, the exact rules behind the published measures.</p>
+    </div>
+  </section>
+  <div class="wrap orient-full" id="full"><p class="orient-k">04 / The documentation, in full</p></div>
   <div class="wrap doc-grid">
     <details class="toc" open>
       <summary>On this page</summary>

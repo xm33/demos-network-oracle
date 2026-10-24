@@ -211,6 +211,55 @@ const stackTdRules = kitRules.filter((r) => r.sel.includes(".tbl.stack td")), st
 check("SK5 on phones a stacked cell keeps its text in one flow beside its label (no grid item per word), and the last row draws one rule", stackTdRules.length >= 2 && stackTdRules.every((r) => !/display\s*:\s*(grid|flex)/.test(r.body))
   && stackLabel.length === 1 && /position\s*:\s*absolute/.test(stackLabel[0].body) && kitRules.some((r) => r.sel.includes(".tbl.stack tr:last-child td") && /border-bottom:\s*0/.test(r.body)),
   stackTdRules.map((r) => r.body.trim()).join(" | "));
+// About Demos (S2a): plain words, then the two views, then the words, above the unchanged article.
+const ABOUT = readFileSync(join(ROOT, "about-demos.html"), "utf8");
+const abArticleAt = ABOUT.indexOf('<div class="wrap doc-grid">'), abArticle = abArticleAt < 0 ? "" : ABOUT.slice(abArticleAt, ABOUT.indexOf("</article>") + "</article>".length);
+const abSection = (id) => (ABOUT.match(new RegExp('<section class="orient" id="' + id + '"[\\s\\S]*?</section>')) || [""])[0];
+const abPlain = abSection("plain"), abFits = abSection("fits"), abTerms = abSection("terms");
+const abNew = ABOUT.slice(ABOUT.indexOf('<p class="doc-kicker">'), abArticleAt), abNewText = textOf(abNew.replace(/<code>[\s\S]*?<\/code>/g, " "));
+const abAt = (h) => (h ? ABOUT.indexOf(h) : -1), abFull = ABOUT.indexOf('<div class="wrap orient-full" id="full">');
+check("SA1 the order is plain words, where DNO fits, then the words straight after, then the full text, numbered 01 to 04", abAt(abPlain) > 0 && abAt(abPlain) < abAt(abFits) && abAt(abFits) < abAt(abTerms) && abAt(abTerms) < abFull && abFull < abArticleAt
+  && ABOUT.slice(abAt(abFits) + abFits.length, abAt(abTerms)).trim() === "" && JSON.stringify([...abNew.matchAll(/<p class="orient-k">(\d\d) \//g)].map((m) => m[1])) === '["01","02","03","04"]');
+const ABOUT_IDS = "cannot-see dahr dno-dahr h-cannot h-dahr h-dno-dahr h-health h-inside h-shards h-sources h-two h-val h-what h-words inside lanes-cap lifecycle main node-health phase-1 sd-block sd-cap sd-hashes sd-next sd-order sd-seed sd-set sd-shard shard-demo shards sm-cap sm-meaning sm-moves sources two-mechanisms validator-reads validators what words words-table".split(" ");
+const abIdList = [...ABOUT.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+check("SA2 the published About Demos text is byte for byte the text before S2a; every id it had is still there, once", createHash("sha256").update(abArticle).digest("hex") === "4306dde95e033b1d01a0529db270358b9097a52584ce0eae9ebe6ae2e7920ff6"
+  && ABOUT_IDS.every((id) => abIdList.filter((x) => x === id).length === 1) && new Set(abIdList).size === abIdList.length, ABOUT_IDS.filter((id) => abIdList.filter((x) => x === id).length !== 1).join(" "));
+check("SA3 one h1 on About Demos, the page's name; the slogan sits under it", count(ABOUT, "<h1") === 1 && ABOUT.includes("<h1>About Demos</h1>\n        <p class=\"doc-tagline\">The network, from outside.</p>"));
+const monitorS = Number((SRC.match(/const MONITOR_INTERVAL_MS = parseInt\(process\.env\.MONITOR_INTERVAL_MS \|\| "(\d+)"\)/) || [])[1]) / 1000;
+const readOn = abArticle.match(/read on (\d{1,2}) ([A-Z][a-z]+) (\d{4})/) || [], readShort = readOn.length ? readOn[1] + " " + readOn[2].slice(0, 3) + " " + readOn[3] : "?";
+const healthTable = (abArticle.match(/<section id="node-health"[\s\S]*?<\/table>/) || [""])[0], healthRow = (abTerms.match(/<tr data-term="health">[\s\S]*?<\/tr>/) || [""])[0];
+const tableWords = [...healthTable.matchAll(/<td data-label="Status"><code>([a-z]+)<\/code>/g)].map((m) => m[1]), rowWords = [...((healthRow.match(/<td data-label="In Demos">[\s\S]*?<\/td>/) || [""])[0]).matchAll(/<code>([a-z]+)<\/code>/g)].map((m) => m[1]);
+const dahrName = (abArticle.match(/DAHR is the ([A-Z][A-Za-z ]+?) \(/) || [])[1];
+check("SA4 what the new text repeats is the source's: the 20 s cycle, the docs' reading date, a node's four words, DAHR's name, the docs' phrase",
+  monitorS > 0 && abFits.includes("every " + monitorS + " s") && abArticle.includes("every " + monitorS + " s")
+  && abFits.includes("read " + readShort) && ABOUT.includes("<span>Read <b>" + readShort + "</b></span>")
+  && tableWords.length === 4 && JSON.stringify(rowWords) === JSON.stringify(tableWords)
+  && !!dahrName && abPlain.includes("With DAHR, the " + dahrName + ", the node")
+  && abPlain.includes("“an interconnectivity layer across chains and web contexts”") && abArticle.includes("as an interconnectivity layer across chains and web contexts")
+  && abPlain.includes("stores only those hashes, not the response") && abArticle.includes("stores only hashes of the response"),
+  [monitorS, readShort, tableWords.join(","), rowWords.join(","), dahrName].join(" | "));
+const abHrefs = [...abNew.matchAll(/href="([^"]+)"/g)].map((m) => m[1]), abArticleHrefs = new Set([...abArticle.matchAll(/href="(https?:[^"]+)"/g)].map((m) => m[1]));
+const abDead = abHrefs.filter((h) => h.startsWith("#") ? !abIdList.includes(h.slice(1)) : h.startsWith("/methodology#") ? !methIds.has(h.split("#")[1]) : h.startsWith("http") ? !abArticleHrefs.has(h) : !["/sources", "/methodology"].includes(h));
+check("SA5 every link in the new text lands: anchors on ids that exist, and no outside source the article does not already cite", abHrefs.length >= 8 && abDead.length === 0, abDead.join(" "));
+check("SA6 the locked sentence is not in the About Demos text: the shared footer carries it once", count(ABOUT, "DNO informs context; it does not advise") === 0);
+const abBanned = textOf(abNew).split(/(?<=[.!?])\s+/).filter(publicLanguageHit);
+check("SA7 the new About Demos text (title band and orientation) passes the public-language ban", abArticleAt > 0 && abBanned.length === 0, abBanned.join(" | "));
+const abProse = textOf(abNew.replace(/<code>[\s\S]*?<\/code>/g, " ").replace(/<a href="https?:[^"]*">[^<]*<\/a>/g, " "));   // a cited page's title is its own, not the page's prose
+const abBand = textOf((ABOUT.match(/<header class="doc-head">[\s\S]*?<\/header>/) || [""])[0]), abBandAcr = [...abBand.matchAll(/\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*s?\b/g)].map((m) => m[0]).filter((a) => a !== "DNO");
+const abAcr = [...new Set([...abProse.matchAll(/\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*s?\b/g)].map((m) => m[0]))];
+check("SA8 the title band names no acronym but DNO; the new prose none but DAHR (named at first use, as the article names it) and SDKs (introduced as developer kits)", abBand.length > 100 && abBandAcr.length === 0 && abAcr.every((a) => ["DNO", "DAHR", "HTTPS", "SDKs"].includes(a))
+  && abNewText.indexOf("DAHR") === abNewText.indexOf("DAHR, the " + dahrName) && abNewText.indexOf("SDKs") === abNewText.indexOf("developer kits (SDKs)") + "developer kits (".length, "band: " + abBandAcr.join(" ") + " | prose: " + abAcr.join(" "));
+const abOutside = textOf((abFits.match(/<div data-lens="outside">[\s\S]*?<\/div>/) || [""])[0]);
+check("SA9 'where DNO fits' names the validators that stand in, not only the three seeds", /three configured public seeds/.test(abOutside) && /When fewer than two seeds give their own height, validators that answer as listed can stand in/.test(abOutside), abOutside);
+const abExample = textOf(abPlain);
+check("SA10 the DAHR example keeps its limits and does not say who records the hashes (the docs do not)", abExample.includes("It does not show that any application used it, that the content returned was correct, or that a given transaction was included.")
+  && !/node (records|stores|writes|posts|signs)/.test(abExample) && abArticle.includes("the pages linked here do not say which party signs and broadcasts it"));
+const abStyle = (ABOUT.match(/\/\* About Demos: the orientation above the article \(S2a\)\.[^*]*\*\/([\s\S]*?)<\/style>/) || ["", ""])[1];
+const abSel = [...abStyle.matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).flatMap((s) => s.split(",")).map((s) => s.trim());
+check("SA11 the S2a styles in the page are scoped under .orient", abSel.length >= 5 && abSel.every((s) => /^\.orient\s/.test(s)), abSel.filter((s) => !/^\.orient\s/.test(s)).join(" | "));
+// A node's own /info can list its shard and name the secretary (seed read 2026-10-24, A35): the limit is that DNO does not read or check it, not that it cannot be seen.
+const abSeeClaims = abNewText.split(/(?<=[.!?])\s+/).filter((x) => /\b(cannot|can't|does not|never|not) (see|sees|seen)\b/i.test(x) && /shard|consensus|secretary|vote/i.test(x));
+check("SA12 the new text says DNO does not read or check consensus data, never that it cannot see it", abSeeClaims.length === 0 && (abNewText.match(/neither reads nor checks it/g) || []).length === 2, abSeeClaims.join(" | "));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
