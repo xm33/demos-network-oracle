@@ -12,11 +12,62 @@
   <header class="doc-head">
     <div class="wrap">
       <div>
+        <p class="doc-kicker">Public sources</p>
         <h1>Sources</h1>
+        <p class="doc-tagline">Follow the evidence.</p>
         <p class="doc-lede">Path A is three public Kynesys /info URLs, one org. Anyone can read the same URLs, and the rules that turn their answers into status are published. That is the independence that matters. When fewer than two of them give their own height, validators that answer as listed stand in for the missing one.</p>
       </div>
     </div>
   </header>
+  <section class="orient" id="path" aria-labelledby="path-h">
+    <div class="wrap">
+      <p class="orient-k">01 / The public observation path</p>
+      <h2 id="path-h">One reading, one decision each round.</h2>
+      <p class="orient-lede">Which reported heights the reading rests on. A decision about DNO's inputs, not a picture of Demos consensus.</p>
+      <figure class="decision" aria-labelledby="decision-q">
+        <p class="decision-k">Decision · each DNO round</p>
+        <p class="decision-q" id="decision-q">Did at least two configured public seeds report their own height?</p>
+        <svg class="fork" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M50 0 V12 M19 12 H69 M19 12 V28 M69 12 V28" vector-effect="non-scaling-stroke"/></svg>
+        <div class="branches">
+          <div class="branch" data-branch="yes">
+            <p class="branch-k">Yes</p>
+            <p class="branch-h">The seeds decide</p>
+            <p>Status uses those seeds' own heights. No validator is read.</p>
+            <ul class="outcomes">
+              <li class="outcome" data-mode="seeds_only"><code>seeds_only</code><span>Two or more seeds gave their own height.</span></li>
+            </ul>
+          </div>
+          <div class="branch" data-branch="no">
+            <p class="branch-k">No</p>
+            <p class="branch-h">The witness rule applies</p>
+            <p>Up to 8 validators are read in the same round: candidates that answered as listed, at the seeds' height, within the last 24 hours. A reading is not guaranteed.</p>
+            <ul class="outcomes">
+              <li class="outcome" data-mode="seed_and_validators"><code>seed_and_validators</code><span>One seed, and at least one validator within ±25 blocks of it.</span></li>
+              <li class="outcome" data-mode="validators_only"><code>validators_only</code><span>No seed: at least two validators, more than half of those that gave a height, within ±25 blocks of their median.</span></li>
+              <li class="outcome outcome--none" data-mode="insufficient"><code>insufficient</code><span>Anything else. DNO still publishes the reading: data quality insufficient, status unknown.</span></li>
+            </ul>
+          </div>
+        </div>
+        <figcaption>A reading that is too old is also published as <code>insufficient</code> (<code>data_quality_reason</code> stale), whatever the seeds gave. The full rule is in the <a href="#resolution">resolution model</a> below and in the <a href="/methodology#witnesses">methodology</a>.</figcaption>
+      </figure>
+    </div>
+  </section>
+  <section class="orient" id="enters" aria-labelledby="enters-h">
+    <div class="wrap">
+      <p class="orient-k">02 / What enters status</p>
+      <h2 id="enters-h">Not every count enters status.</h2>
+      <p class="orient-key">Members of the on-chain list can stand in as witnesses under the rule above; the list's ACTIVE count never enters status.</p>
+      <ul class="enters">
+        <li><span>Public seeds</span><b>yes</b></li>
+        <li><span>Peer-listed identities</span><b>no</b></li>
+        <li><span>On-chain validators</span><b>only in a seed's place, when fewer than two seeds give their own height</b></li>
+        <li><span>Cross-check RPCs</span><b>no</b></li>
+        <li><span>Fixnet (reference)</span><b>no</b></li>
+      </ul>
+      <p class="orient-more">What DNO reads from each: <a href="#layers">Source layers</a>. Where each is published: <a href="#endpoints">Public endpoints</a>.</p>
+    </div>
+  </section>
+  <div class="wrap orient-full" id="full"><p class="orient-k">03 / The published sources, in full</p></div>
   <div class="wrap doc-grid">
     <details class="toc" open>
       <summary>On this page</summary>

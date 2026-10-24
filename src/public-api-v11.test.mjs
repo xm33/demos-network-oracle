@@ -10,7 +10,8 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { cycleLead } from "./home-cycle.mjs";
-import { BANNED_PUBLIC_LANGUAGE, CHARACTERIZATION } from "./banned-public-language.mjs";
+import { BANNED_PUBLIC_LANGUAGE, CHARACTERIZATION, publicLanguageHit } from "./banned-public-language.mjs";
+import { RULE, MODES } from "./status-rule.mjs";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, "..");
@@ -168,6 +169,35 @@ const homeOwn = HOME.split(chrome).join(""), homeOwnTokens = homeOwn.match(/--(?
 check("SK1 one width and one surface on every page: the homepage sets the width and the surfaces only through the shared chrome", chrome.length > 1000 && HOME.includes(chrome) && homeOwnTokens.length === 0, homeOwnTokens.join("; "));
 check("SK2 the subpages' title band names the served artwork files by their content hash (AVIF, WebP, JPEG)", ["avif", "webp", "jpg"].every((x) => kitCss.includes('url("' + artRef(x) + '")')), ["avif", "webp", "jpg"].map(artRef).join(" "));
 check("SK3 notes are styled on the subpages, not only on the homepage", /(^|[\s,}])\.note\s*\{/m.test(kitCss));
+// Sources (S2b): the decision figure states status-rule.mjs's witness rule, and the published text below it is unchanged.
+const SOURCES = readFileSync(join(ROOT, "sources.html"), "utf8");
+const srcFig = (SOURCES.match(/<figure class="decision"[\s\S]*?<\/figure>/) || [""])[0];
+const srcBranch = (b) => (srcFig.match(new RegExp('<div class="branch" data-branch="' + b + '">[\\s\\S]*?</ul>')) || [""])[0];
+const modesOf = (h) => [...h.matchAll(/data-mode="([a-z_]+)"/g)].map((m) => m[1]);
+const textOf = (h) => h.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+check("SB1 the Sources figure names the published witness modes, each once, in the rule's order", JSON.stringify(modesOf(srcFig)) === JSON.stringify(MODES), modesOf(srcFig).join(" "));
+check("SB2 YES (two seed heights) leads only to seeds_only; NO leads to the three other modes", JSON.stringify(modesOf(srcBranch("yes"))) === JSON.stringify(["seeds_only"]) && JSON.stringify(modesOf(srcBranch("no"))) === JSON.stringify(MODES.slice(1))
+  && /two configured public seeds report their own height/.test(textOf(srcFig)), "yes: " + modesOf(srcBranch("yes")).join(" ") + " / no: " + modesOf(srcBranch("no")).join(" "));
+check("SB3 the ACTIVE count is never drawn as an input: absent from the figure, and the page says it never enters status", !/ACTIVE/.test(srcFig) && SOURCES.includes("the list's ACTIVE count never enters status."));
+const srcFigText = textOf(srcFig), candHours = RULE.candidateMaxAgeMs / 3600000;
+const figBands = [...srcFigText.matchAll(/±\s*(\d+)/g)].map((m) => +m[1]);
+check("SB4 the figure's numbers are status-rule.mjs's (band, validators read, candidate age)", figBands.length === 2 && figBands.every((b) => b === RULE.bandBlocks) && srcFigText.includes("Up to " + RULE.witnessMax + " validators") && srcFigText.includes("last " + candHours + " hours"),
+  "bands " + figBands.join(",") + " vs " + RULE.bandBlocks + ", max " + RULE.witnessMax + ", " + candHours + " h");
+const layerRows = [...((SOURCES.match(/<section id="layers">[\s\S]*?<\/section>/) || [""])[0]).matchAll(/<td data-label="Layer">([^<]+)<\/td>[\s\S]*?<td data-label="Enters status">([^<]+)<\/td>/g)].map((m) => m[1] + " = " + m[2]);
+const entersRows = [...((SOURCES.match(/<ul class="enters">[\s\S]*?<\/ul>/) || [""])[0]).matchAll(/<li><span>([^<]+)<\/span><b>([^<]+)<\/b><\/li>/g)].map((m) => m[1] + " = " + m[2]);
+check("SB5 'What enters status' repeats the Source layers table row for row", layerRows.length === 5 && JSON.stringify(entersRows) === JSON.stringify(layerRows), entersRows.join("; "));
+const srcArticleAt = SOURCES.indexOf('<div class="wrap doc-grid">'), srcArticle = srcArticleAt < 0 ? "" : SOURCES.slice(srcArticleAt, SOURCES.indexOf("</article>") + "</article>".length);
+check("SB6 the published Sources text (section list and article) is byte for byte the text before S2b", createHash("sha256").update(srcArticle).digest("hex") === "7ca9c3a53ab8d20a8f6f3308c8129451490fcb3f84a47267ac06d8d959882981"
+  && ["resolution", "layers", "separation", "endpoints", "dahr", "limits"].every((id) => count(SOURCES, 'id="' + id + '"') === 1));
+const idsIn = (h) => new Set([...h.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+const srcIds = idsIn(SOURCES), methIds = idsIn(readFileSync(join(ROOT, "methodology.html"), "utf8")), aboutIds = idsIn(readFileSync(join(ROOT, "about-demos.html"), "utf8"));
+const srcLinks = [...SOURCES.matchAll(/href="(\/methodology|\/about-demos)?#([^"]+)"/g)].map((m) => [m[1] || "", m[2]]);
+const deadLinks = srcLinks.filter(([pg, id]) => !(pg === "" ? srcIds : pg === "/methodology" ? methIds : aboutIds).has(id)).map(([pg, id]) => pg + "#" + id);
+check("SB7 every in-page and cross-page anchor on Sources lands on an id that exists", srcLinks.length >= 10 && deadLinks.length === 0, deadLinks.join(" "));
+check("SB8 one h1 on Sources, the page's name; the slogan sits under it", count(SOURCES, "<h1") === 1 && SOURCES.includes("<h1>Sources</h1>\n        <p class=\"doc-tagline\">Follow the evidence.</p>"));
+check("SB9 the locked sentence is not in the Sources text: the shared footer carries it once", count(SOURCES, "DNO informs context; it does not advise") === 0 && count(SRC, "DNO informs context; it does not advise, predict, score, certify, or decide action.</p>'") === 1);
+const srcOrient = textOf(SOURCES.slice(SOURCES.indexOf('<p class="doc-kicker">'), srcArticleAt)).split(/(?<=[.!?])\s+/).filter(publicLanguageHit);
+check("SB10 the new Sources text (title band and orientation) passes the public-language ban", srcArticleAt > 0 && srcOrient.length === 0, srcOrient.join(" | "));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
