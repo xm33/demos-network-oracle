@@ -318,9 +318,9 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
 .decision .branch-h { margin-top: 6px; font-size: 1.125rem; color: var(--ink); }
 .decision .branch > p:not([class]) { margin-top: 6px; font-size: 0.9375rem; color: var(--metal-1); }
 .decision .outcomes { display: grid; gap: 10px; margin: 14px 0 0; padding: 0; list-style: none; }
-.decision .outcome { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); }
+.decision .outcome { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); }
 .decision .outcome--none { border-style: dashed; border-color: var(--metal-0); }   /* no reading formed: said in words and by the dashed edge, never by a tone */
-.decision .outcome code { font: 500 0.9375rem/1.3 var(--mono); color: var(--ink); background: none; border: 0; padding: 0; }
+.decision .outcome code { font: 500 0.9375rem/1.3 var(--mono); color: var(--ink); background: none; border: 0; padding: 0; overflow-wrap: anywhere; }   /* a mode name may break at large text sizes rather than push the figure off a phone */
 .decision .outcome span { font-size: 0.875rem; color: var(--metal-1); }
 .decision figcaption { margin-top: 16px; font: 400 0.8125rem/1.6 var(--mono); color: var(--mute); }
 .orient .enters { display: grid; max-width: 56rem; margin: 18px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }

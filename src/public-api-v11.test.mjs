@@ -202,6 +202,9 @@ const s2Classes = /\.(branch|branches|outcome|outcomes|fork|enters)\b/;
 const kitSelectors = [...kitCss.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).filter((sel) => !sel.startsWith("@")).flatMap((sel) => sel.split(",")).map((sel) => sel.trim());
 const unscoped = kitSelectors.filter((sel) => s2Classes.test(sel) && !/^\.(decision|orient)\s/.test(sel));
 check("SB11 the Sources figure's styles are scoped under .decision or .orient (the homepage has a .branch figure of its own)", unscoped.length === 0, unscoped.join(" | "));
+const ruleBody = (sel) => ([...kitCss.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}@]+)\{([^{}]*)\}/g)].find((m) => m[1].split(",").map((x) => x.trim()).includes(sel)) || ["", "", ""])[2];
+check("SB12 an outcome reflows at large text sizes: its one column can shrink and a mode name may break", /grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(ruleBody(".decision .outcome")) && /overflow-wrap:\s*anywhere/.test(ruleBody(".decision .outcome code")),
+  ruleBody(".decision .outcome").trim() + " | " + ruleBody(".decision .outcome code").trim());
 check("SK4 the homepage loads no stylesheet: only the chrome is shared, inline, so no subpage rule can reach it", !/<link[^>]*rel="stylesheet"/.test(HOME) && !HOME.includes("<!--dno:head-->") && !/\/assets\/site-[0-9a-f]{8}\.css/.test(HOME));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
