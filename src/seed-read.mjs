@@ -13,7 +13,7 @@ export const SEED_INFO_TIMEOUT_MS = 5000;
 export const SEED_INFO_MAX_BYTES = 2 * 1024 * 1024;   // a real /info is tens of KB
 
 // node: { url, identity } as configured. Resolves, never throws:
-//   answered:     { ok: true, latencyMs, block, height_source, version, peers, identityMatch, peerlist, answeredId }
+//   answered:     { ok: true, latencyMs, block, height_source, version, peers, identityMatch, peerlist, answeredId, block_hash }
 //   not answered: { ok: false, error, status? }   error is a category (probeErrorCategory), never runtime text or a host
 // A seed's height is its own peerlist entry (height_source "self"). The first listed peer's height is used only when the
 // seed does not list itself, and height_source says so ("first_peer"); it is counted nowhere.
@@ -23,6 +23,10 @@ export const SEED_INFO_MAX_BYTES = 2 * 1024 * 1024;   // a real /info is tens of
 // not "as listed" for one of them and "another key" for the other.
 // peerlist and answeredId are for the catalog intake (one node answering two URLs is one peerlist); the agent does not
 // publish them.
+// block_hash: the hash the seed's own entry names beside its own height (sync.block_hash), normalized to 64 lower-case hex
+// without 0x — only when the height is the seed's own (height_source "self") and the answer names the configured identity
+// (identityMatch true); otherwise null. A first_peer height carries no hash. The agent keeps it in the round's evidence,
+// not on the published seed row (block-identity.mjs); the height rule above is unchanged by it.
 export async function readSeedInfo(node, opts) {
   var o = opts || {};
   try {
@@ -30,20 +34,32 @@ export async function readSeedInfo(node, opts) {
     if (!res.ok) return { ok: false, error: probeErrorCategory(null, res.status), status: res.status };
     var data = res.data;
     var peerlist = data && Array.isArray(data.peerlist) ? data.peerlist : [];
-    var block = null, heightSource = null;
+    var block = null, heightSource = null, blockHash = null;
     var nodeKey = keyOf(node.identity), answeredKey = data ? keyOf(data.identity) : null;
     var answeredId = data && typeof data.identity === "string" && isValidIdentity(data.identity) ? data.identity.toLowerCase() : null;
     var identityMatch = answeredKey === null ? null : answeredKey === nodeKey;
     if (identityMatch !== false) {
       var selfEntry = nodeKey === null ? null : peerlist.find(function(p) { return p && keyOf(p.identity) === nodeKey; });
-      if (selfEntry && selfEntry.sync) { block = sanitizeHeight(selfEntry.sync.block); if (block !== null) heightSource = "self"; }
+      if (selfEntry && selfEntry.sync) {
+        block = sanitizeHeight(selfEntry.sync.block);
+        if (block !== null) { heightSource = "self"; if (identityMatch === true) blockHash = normalizeBlockHash(selfEntry.sync.block_hash); }
+      }
       if (block === null && peerlist[0] && peerlist[0].sync) { block = sanitizeHeight(peerlist[0].sync.block); if (block !== null) heightSource = "first_peer"; }
     }
     return { ok: true, latencyMs: res.headersMs, block: block, height_source: heightSource, version: versionOf(data && data.version) || "?",   // a release version, or none: a seed's free text is not published
-      peers: peerlist.length, identityMatch: identityMatch, peerlist: peerlist, answeredId: answeredId };
+      peers: peerlist.length, identityMatch: identityMatch, peerlist: peerlist, answeredId: answeredId, block_hash: blockHash };
   } catch (err) {
     return { ok: false, error: probeErrorCategory(err) };
   }
+}
+
+// A block hash as a node publishes it: 64 hex characters, 0x or not, any case. Anything else is not a hash and is dropped
+// (null), never compared. Returned without 0x, lower case, so two nodes' spellings of one hash compare equal.
+export function normalizeBlockHash(v) {
+  if (typeof v !== "string") return null;
+  var t = v.trim().toLowerCase();
+  if (t.slice(0, 2) === "0x") t = t.slice(2);
+  return /^[0-9a-f]{64}$/.test(t) ? t : null;
 }
 
 // Whether a set of seed readings is enough for the agent to publish a status: at least two seeds answered and at least

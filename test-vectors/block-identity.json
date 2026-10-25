@@ -1,0 +1,539 @@
+{
+  "description": "DNO block identity (A1): the seeds' own block hashes compared within one round. Input: the round's seed rows (name, ok, block, height_source, latencyMs) and the evidence map (name → 64-hex hash or null). Expected: compareBlockIdentity() output. Hashes are synthetic.",
+  "version": 1,
+  "vectors": [
+    {
+      "name": "BLOCK-ID-1 two seeds, same height, same hash → same_block",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "same_block",
+        "height": 10,
+        "seeds_with_valid_hash": 2,
+        "seeds_compared": 2,
+        "seeds_other_height": 0,
+        "distinct_hashes": 1,
+        "largest_group": 2,
+        "pairs_same": 1,
+        "pairs_different": 0,
+        "hash_prefix": "1111111111111111",
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-2 two seeds, same height, hashes equal on 16 hex and different in the tail → different_block (full-value test)",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "111111111111111111111111111111111111111111111111111111111111111a",
+          "b": "111111111111111111111111111111111111111111111111111111111111111b"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "different_block",
+        "height": 10,
+        "seeds_with_valid_hash": 2,
+        "seeds_compared": 2,
+        "seeds_other_height": 0,
+        "distinct_hashes": 2,
+        "largest_group": 1,
+        "pairs_same": 0,
+        "pairs_different": 1,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-3 heights differ this round → no_shared_height, even when the hashes are equal",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 11,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "no_shared_height",
+        "height": null,
+        "seeds_with_valid_hash": 2,
+        "seeds_compared": 0,
+        "seeds_other_height": 2,
+        "distinct_hashes": null,
+        "largest_group": null,
+        "pairs_same": 0,
+        "pairs_different": 0,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": null,
+        "reason": "heights_differ_this_round"
+      }
+    },
+    {
+      "name": "BLOCK-ID-4 one qualifying seed → insufficient",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": false,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "insufficient",
+        "height": null,
+        "seeds_with_valid_hash": 1,
+        "seeds_compared": 0,
+        "seeds_other_height": 0,
+        "distinct_hashes": null,
+        "largest_group": null,
+        "pairs_same": 0,
+        "pairs_different": 0,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": null,
+        "reason": "fewer_than_two_seeds_with_hash"
+      }
+    },
+    {
+      "name": "BLOCK-ID-6 three seeds, two equal and one different at the same height → mixed, never same_block",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "c",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "1111111111111111111111111111111111111111111111111111111111111111",
+          "c": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "mixed",
+        "height": 10,
+        "seeds_with_valid_hash": 3,
+        "seeds_compared": 3,
+        "seeds_other_height": 0,
+        "distinct_hashes": 2,
+        "largest_group": 2,
+        "pairs_same": 1,
+        "pairs_different": 2,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-7 three seeds, three distinct hashes → different_block",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "c",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "2222222222222222222222222222222222222222222222222222222222222222",
+          "c": "3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "different_block",
+        "height": 10,
+        "seeds_with_valid_hash": 3,
+        "seeds_compared": 3,
+        "seeds_other_height": 0,
+        "distinct_hashes": 3,
+        "largest_group": 1,
+        "pairs_same": 0,
+        "pairs_different": 3,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-7b three seeds, one hash → same_block from three",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "c",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "1111111111111111111111111111111111111111111111111111111111111111",
+          "c": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "same_block",
+        "height": 10,
+        "seeds_with_valid_hash": 3,
+        "seeds_compared": 3,
+        "seeds_other_height": 0,
+        "distinct_hashes": 1,
+        "largest_group": 3,
+        "pairs_same": 3,
+        "pairs_different": 0,
+        "hash_prefix": "1111111111111111",
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-8 two seeds at h, one at h+1 → the pair is compared; seeds_other_height 1",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 11,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "c",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "1111111111111111111111111111111111111111111111111111111111111111",
+          "c": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "same_block",
+        "height": 10,
+        "seeds_with_valid_hash": 3,
+        "seeds_compared": 2,
+        "seeds_other_height": 1,
+        "distinct_hashes": 1,
+        "largest_group": 2,
+        "pairs_same": 1,
+        "pairs_different": 0,
+        "hash_prefix": "1111111111111111",
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-9 a seed with no hash in the evidence (another identity answered, or malformed) is not qualifying; the remaining pair is evaluated",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "c",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "2222222222222222222222222222222222222222222222222222222222222222",
+          "c": null
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "different_block",
+        "height": 10,
+        "seeds_with_valid_hash": 2,
+        "seeds_compared": 2,
+        "seeds_other_height": 0,
+        "distinct_hashes": 2,
+        "largest_group": 1,
+        "pairs_same": 0,
+        "pairs_different": 1,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": 0,
+        "reason": null
+      }
+    },
+    {
+      "name": "BLOCK-ID-10 a first_peer height carries no comparison, whatever the evidence says",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "first_peer",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "1111111111111111111111111111111111111111111111111111111111111111",
+          "b": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "insufficient",
+        "height": null,
+        "seeds_with_valid_hash": 1,
+        "seeds_compared": 0,
+        "seeds_other_height": 0,
+        "distinct_hashes": null,
+        "largest_group": null,
+        "pairs_same": 0,
+        "pairs_different": 0,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": null,
+        "reason": "fewer_than_two_seeds_with_hash"
+      }
+    },
+    {
+      "name": "BLOCK-ID-11 a malformed hash in the evidence (0x, upper case, short) does not qualify",
+      "input": {
+        "seeds": [
+          {
+            "name": "a",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "b",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          },
+          {
+            "name": "c",
+            "ok": true,
+            "block": 10,
+            "height_source": "self",
+            "latencyMs": 100
+          }
+        ],
+        "hashes": {
+          "a": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "b": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "c": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "insufficient",
+        "height": null,
+        "seeds_with_valid_hash": 1,
+        "seeds_compared": 0,
+        "seeds_other_height": 0,
+        "distinct_hashes": null,
+        "largest_group": null,
+        "pairs_same": 0,
+        "pairs_different": 0,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": null,
+        "reason": "fewer_than_two_seeds_with_hash"
+      }
+    },
+    {
+      "name": "BLOCK-ID-12 no seeds → insufficient",
+      "input": {
+        "seeds": [],
+        "hashes": {},
+        "observed_at": "2026-10-25T12:00:00.000Z"
+      },
+      "expected": {
+        "version": 1,
+        "state": "insufficient",
+        "height": null,
+        "seeds_with_valid_hash": 0,
+        "seeds_compared": 0,
+        "seeds_other_height": 0,
+        "distinct_hashes": null,
+        "largest_group": null,
+        "pairs_same": 0,
+        "pairs_different": 0,
+        "hash_prefix": null,
+        "observed_at": "2026-10-25T12:00:00.000Z",
+        "spread_ms": null,
+        "reason": "fewer_than_two_seeds_with_hash"
+      }
+    }
+  ]
+}

@@ -22,6 +22,7 @@ import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
 import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, roundLogLine, dialsEnabled } from "./validator-watch.mjs";
+import { compareBlockIdentity, createBlockIdentityTracker } from "./block-identity.mjs";
 
 const TAG = "ROUND_WIRING";
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -47,7 +48,7 @@ const DECLARATIONS = ["var CHAIN_STATIC_RUN_MIN_24H = ", "var API_VERSION = ", "
   "var publicIncidentCounters = ", "var publicBackfillChecked = ", "let activeIncidents = ", "let incidentCounter = ", "const INCIDENT_RECONCILIATION_START_AT = ",
   "let lastPublicObservedAt = ", "const AGENT_STARTED_AT = ", "var heightClock = ", "var heightClockHadReading = ", "var heightClockRow = ", "const CLOCK_REPLAY_MAX_ROWS = ", "var OWN_HEIGHT_SINCE = ", "const PUBLIC_STALE_AFTER_SECONDS = ",
   "const INFO_BODY_MAX_BYTES = ", "function envMs(", "const VALIDATOR_WATCH_INTERVAL_MS = ", "const VALIDATOR_WATCH_WINDOW_MS = ", "const VALIDATOR_WATCH_DIALS = ", "var VALIDATOR_ORIGIN_RESOLVER = ", "var validatorRoundNumber = ",
-  "var validatorHistory = ", "var validatorFirstAgreed = ", "const SEED_KEYS = ", "var latestValidatorRound = ", "var witnessCandidates = ", "let latestWitnesses = ", "let latestPublicNodes = ",
+  "var validatorHistory = ", "var validatorFirstAgreed = ", "const SEED_KEYS = ", "var latestValidatorRound = ", "var witnessCandidates = ", "let latestWitnesses = ", "let latestPublicNodes = ", "let roundSeedHashes = ", "let latestBlockIdentity = ", "const blockIdentityTracker = ",
   "function ownHeight(", "function isFleetName("];
 const FUNCTIONS = ["function isPublicConditionMarker(inc) {", "function incidentScope(", "function countActivePublicConditions() {", "function getNextIncidentId() {", "function openIncident(", "function resolveIncident(",
   "function evaluatePublicIncidents() {", "function loadIncidentCounter() {", "function ownHeightSince(db) {", "function computeCanonicalState() {", "function recordPublicNodeHistory() {", "async function probePublicNodes() {",
@@ -67,11 +68,11 @@ const CODE = '"use strict";\nvar FLEET_NODE_NAMES = [], FLEET_NODES_24H = new Se
     canonical: function() { return computeCanonicalState(); }, clock: function() { return heightClock; }, restored: function() { return heightClockRestored; },
     openIncident: openIncident, resolveIncident: resolveIncident,
     active: function() { return activeIncidents; }, kept: function() { return witnessCandidates.load(Date.now()); }, round: function() { return latestValidatorRound; },
-    witnesses: function() { return latestWitnesses; }, observedAt: function() { return lastPublicObservedAt; }, ownSince: function() { return OWN_HEIGHT_SINCE; },
+    witnesses: function() { return latestWitnesses; }, observedAt: function() { return lastPublicObservedAt; }, blockIdentity: function() { return latestBlockIdentity; }, publicNodes: function() { return latestPublicNodes; }, ownSince: function() { return OWN_HEIGHT_SINCE; },
     dials: function() { return VALIDATOR_WATCH_DIALS; }, growth: function() { return validatorFirstAgreed; } };`;
 const NAMES = ["Date", "process", "setTimeout", "sharedDb", "log", "logError", "PUBLIC_NODES", "sanitizeHeight", "keyOf", "resolvePublicProbeOrigin", "readSeedInfo", "seedsSufficient",
   "RULE", "assess", "stepConditionRecords", "clockRound", "newHeightClock", "stepHeightClock", "heightMovementOf", "VALIDATORS_SOURCE", "createCandidateStore", "nextCandidates", "readWitnesses", "witnessSnapshot",
-  "runValidatorRound", "createWatchHistory", "createFirstAgreedStore", "roundLogLine", "dialsEnabled", "catalogBeginCrawl", "catalogIngestPeerlist", "catalogFinishCrawl", "recordObservationHistory", "refreshValidatorUptimeCache"];
+  "runValidatorRound", "createWatchHistory", "createFirstAgreedStore", "roundLogLine", "dialsEnabled", "catalogBeginCrawl", "catalogIngestPeerlist", "catalogFinishCrawl", "recordObservationHistory", "refreshValidatorUptimeCache", "compareBlockIdentity", "createBlockIdentityTracker"];
 const BUILD = new Function(...NAMES, CODE);
 
 // ---- the world the agent reads ----------------------------------------------------------------------------------------
@@ -89,7 +90,7 @@ function makeWorld() {
   w.set = (heights) => { SEED_NAMES.forEach((n, i) => { const x = heights[i], s = w.seeds[n]; s.up = x !== "down"; s.own = typeof x === "number"; if (typeof x === "number") s.h = x; }); return w; };
   w.vset = (heights) => { [...w.vals.values()].forEach((v, i) => { const x = heights[i]; if (x === undefined) return; v.up = x !== "down"; v.own = typeof x === "number"; if (typeof x === "number") v.h = x; }); return w; };
   w.asked = (what, to) => w.requests.filter((r) => r.what === what && (to === undefined || r.to === to)).length;
-  const info = (identity, own, h) => Response.json({ identity: identity, version: "0.9.9", peerlist: [{ identity: ID(0xee), sync: { block: h + 500 } }].concat(own ? [{ identity: own, sync: { block: h } }] : []) });
+  const info = (identity, own, h, hash) => Response.json({ identity: identity, version: "0.9.9", peerlist: [{ identity: ID(0xee), sync: { block: h + 500, block_hash: "0x" + "e".repeat(64) } }].concat(own ? [{ identity: own, sync: Object.assign({ block: h }, hash ? { block_hash: hash } : {}) }] : []) });
   // Every read the modules make arrives here, through cappedJson.
   // w.fault(u, method): when it says so, the read itself throws a TypeError, as a fault in DNO's own read path does.
   w.transport = async (url, init) => {
@@ -100,7 +101,7 @@ function makeWorld() {
       const s = w.seeds[name], what = method === "GET" && u.pathname === "/info" ? "info" : JSON.parse(init.body).params[0].message;
       w.requests.push({ to: name, what });
       if (!s.up) throw new Error("connection refused");
-      if (what === "info") return info(s.names, s.own ? SEEDS[name].identity : null, s.h);
+      if (what === "info") return info(s.names, s.own ? SEEDS[name].identity : null, s.h, s.hash);
       if (what === "getValidators") return Response.json({ result: 200, response: s.rows ? s.rows(w.rows()) : w.rows() });
       return Response.json({ result: 200, response: { minValidatorStake: "1000" } });
     }
@@ -132,7 +133,7 @@ async function startAgent(db, w, time, env, hooks) {
     RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE, createCandidateStore, nextCandidates,
     (c, o) => readWitnesses(c, Object.assign({}, o, { fetch: w.transport })), witnessSnapshot,
     (o) => runValidatorRound(Object.assign({}, o, { fetch: w.transport, now: () => time.t })), createWatchHistory, createFirstAgreedStore, roundLogLine, dialsEnabled,
-    () => h.beginCrawl(), (source, peerlist) => a.ingested.push({ source, peers: peerlist.length }), () => h.finishCrawl(), () => {}, () => {});
+    () => h.beginCrawl(), (source, peerlist) => a.ingested.push({ source, peers: peerlist.length }), () => h.finishCrawl(), () => {}, () => {}, compareBlockIdentity, createBlockIdentityTracker);
   Object.assign(a, api);
   // One turn of a loop: its tick runs to the point where it arms its next timer. A loop that does not arm one has
   // stopped: that is an error here, not a wait without end.
@@ -810,6 +811,39 @@ console.log("\n[" + TAG + "] the condition records");
   const tb = { t: T0 + 60 * S }, later = await startAgent(dbb, wb, tb, {}, { finishCrawl: () => { tb.t += 1500; } }), rb = later.records();
   check("I5 the same on a store that holds readings before it: the record starts at that round's observation and does not say 'since the earliest retained observation' (the store shows readings before it)",
     rb.length === 1 && rb[0].description === "Insufficient public visibility: fewer than 2 public nodes answered." && rb[0].started_at === iso(T0 + 60 * S) && later.rows().length === 4, brief(rb));
+}
+
+
+console.log("\n[" + TAG + "] block identity: the round compares the seeds' own hashes, and the reading does not change");
+{
+  const HX = "0x" + "a".repeat(64), HY = "0x" + "b".repeat(64);
+  // Three seeds at one height, one hash: same_block from three; the reading is the same as with no hashes at all.
+  const wa = makeWorld(), ta = { t: T0 }; wa.set([1000, 1000, 1000]); SEED_NAMES.forEach((n) => { wa.seeds[n].hash = HX; });
+  const A = await startAgent(newDb(), wa, ta, {});
+  const wn = makeWorld(), tn = { t: T0 }; wn.set([1000, 1000, 1000]);
+  const N = await startAgent(newDb(), wn, tn, {});
+  const bi = A.blockIdentity();
+  check("B1 the first round's block identity: same_block, three compared, three with a hash, the round's observed_at, a 16-hex prefix, no full hash",
+    bi && bi.state === "same_block" && bi.seeds_compared === 3 && bi.seeds_with_valid_hash === 3 && bi.observed_at === new Date(T0).toISOString() && bi.hash_prefix === "a".repeat(16) && !/[0-9a-f]{64}/.test(J(bi)), brief(bi));
+  check("B2 with no hashes in the seeds' answers: insufficient, fewer_than_two_seeds_with_hash", N.blockIdentity().state === "insufficient" && N.blockIdentity().reason === "fewer_than_two_seeds_with_hash", brief(N.blockIdentity()));
+  check("A1-COMPATIBILITY-3 the reading is byte-identical with and without hashes, on the same inputs and clock", J(A.canonical()) === J(N.canonical()), brief([A.canonical().status, N.canonical().status]));
+  // Two rounds on: seed-c moves to another hash at the same height → mixed; the reading still does not move.
+  wa.seeds["seed-c"].hash = HY; wn.set([1000, 1000, 1000]);
+  ta.t += 20 * S; tn.t += 20 * S; await A.publicRound(); await N.publicRound();
+  const m = A.blockIdentity();
+  check("B3 two equal and one different at the same height → mixed, counts say 2 and 1; never same_block", m.state === "mixed" && m.largest_group === 2 && m.distinct_hashes === 2 && m.seeds_compared === 3, brief(m));
+  check("A1-COMPATIBILITY-4 the mixed round leaves the reading as the hash-less twin's", J(A.canonical()) === J(N.canonical()));
+  // Heights differ: nothing compared, even though the previous round held the height.
+  wa.set([1001, 1000, 1000]); wa.seeds["seed-a"].hash = HX; wn.set([1001, 1000, 1000]);
+  ta.t += 20 * S; tn.t += 20 * S; await A.publicRound(); await N.publicRound();
+  const d = A.blockIdentity();
+  check("B4 seed-a a block ahead: the pair at 1000 is compared (mixed → now the two at 1000 differ: different_block), seeds_other_height 1", d.state === "different_block" && d.seeds_compared === 2 && d.seeds_other_height === 1, brief(d));
+  wa.set([1002, 1001, 1000]); wn.set([1002, 1001, 1000]);
+  ta.t += 20 * S; tn.t += 20 * S; await A.publicRound(); await N.publicRound();
+  check("B5 three heights: no_shared_height, nothing compared, no memory of the round before", A.blockIdentity().state === "no_shared_height" && A.blockIdentity().seeds_compared === 0 && A.blockIdentity().height === null, brief(A.blockIdentity()));
+  check("A1-COMPATIBILITY-5 after four rounds the two readings are still identical", J(A.canonical()) === J(N.canonical()));
+  // The published seed rows carry no hash key.
+  check("A1-PUBLIC-PROJECTION-4 the published seed rows (what /health copies) have no block_hash key", A.publicNodes().length === 3 && A.publicNodes().every((r) => !("block_hash" in r) && !/[0-9a-f]{64}/.test(J(Object.assign({}, r, { identity: null })))));
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
