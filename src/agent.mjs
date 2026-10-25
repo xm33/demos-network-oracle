@@ -36,6 +36,7 @@ import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleLead, cycleSeeds, cycleDoor, trendReason } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
+import { compareBlockIdentity, createBlockIdentityTracker, describeBlockIdentity } from "./block-identity.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
 import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { sentinelStatePath } from "./sentinel-state.mjs";
@@ -259,7 +260,7 @@ var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><tit
 '<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
 docsEntry('GET /organism', 'Default context. The compact public reading: 17 required fields plus the additive 1.1 fields (observed_at, data_quality_reason, height_last_advanced_at, height_static_seconds, active_public_conditions, agreement_detail, last_24h.critical_public_incidents_in_window, last_24h.chain_movement.blocks_advanced) and the additive 1.2 fields (witnesses: what the reading rests on, as counts; height_standstill_after_seconds: after this long without a new height a reading that would be stable is degraded). No fleet data. ETag / 304 between observations.') +
 docsEntry('GET /organism/schema', 'The JSON Schema contract: stability policy, enums, changelog.') +
-docsEntry('GET /health', 'The same labels and reasons without the summary sentence, and their parts: publicNodes (each seed, with height_source), witnesses, signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields; first_counted has the identities first counted in the last 24 h, 7 days and 30 days, null for a window the count does not cover or that a gap in the count crosses), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). While two seeds give their own height neither of the last two enters status; when fewer do, validators that answered as listed stand in, and witnesses says so. Neither object is in /organism.') +
+docsEntry('GET /health', 'The same labels and reasons without the summary sentence, and their parts: publicNodes (each seed, with height_source), witnesses, signals, validator_growth (seed counts and peer-listed identities; online and synced are listed in mixed_fields; first_counted has the identities first counted in the last 24 h, 7 days and 30 days, null for a window the count does not cover or that a gap in the count crosses), attestation (DAHR attempted on the cross-check RPCs, not on the seeds whose answers enter status: available, last_count, last_ok_at), on_chain_publication (currently "disabled"), on_chain_validators (the on-chain validators table as the public seeds list it: counts by status and minValidatorStake, each only when at least two seeds return the same answer, and how many ACTIVE keys DNO first counted in the last 24 h, 7 days and 30 days) and validator_watch (what DNO saw when it dialed the address each ACTIVE validator published on chain: counts only, never an address). While two seeds give their own height neither of the last two enters status; when fewer do, validators that answered as listed stand in, and witnesses says so. Neither object is in /organism. block_identity: whether the seeds that reported the same height in this round reported the same block hash (state same_block / different_block / mixed / no_shared_height / insufficient, the height, how many seeds had a hash and how many were compared, distinct_hashes, a 16-character hash_prefix when they agree, the round\'s observed_at, spread_ms between the compared answers, a sentence, and last_hour counts of rounds); the seeds\' own hashes, read in the same /info as their heights, compared within one round only; it enters no status field.') +
 docsEntry('GET /incidents', 'Public records. ?status=active|resolved, ?limit=1–500. Condition records carry kind=condition and are counted in active_public_conditions; /organism active_incidents does not count them. A record may carry note, a dated note DNO added later; the stored record is never edited.') +
 '</dl></section>' +
 '<section id="identities"><h2>Peer-listed identities</h2><dl class="kv docs-kv">' +
@@ -800,6 +801,17 @@ var FLEET_NODE_NAMES = NODE_NAMES;
 function heightCell(value) {
   var h = sanitizeHeight(value);
   return h === null ? "not reported" : h.toLocaleString("en-US");   // words, not a dash: a value that is not known is said to be so
+}
+// The block-identity object /health publishes: the last round's result, its sentence, and the last hour's counts. Before
+// the first round: insufficient, with the reason.
+function publicBlockIdentity(nowMs) {
+  var r = latestBlockIdentity || { version: 1, state: "insufficient", height: null, seeds_with_valid_hash: 0, seeds_compared: 0, seeds_other_height: 0, distinct_hashes: null, largest_group: null, pairs_same: 0, pairs_different: 0, hash_prefix: null, observed_at: null, spread_ms: null, reason: "no_observation" };
+  var o = {};
+  for (var k in r) o[k] = r[k];
+  o.sentence = describeBlockIdentity(r);
+  o.last_hour = blockIdentityTracker.lastHour(nowMs);
+  o.enters_status = false;
+  return o;
 }
 function truncId(id) {
   if (!id || id.length < 12) return id || "not reported";
@@ -2252,6 +2264,7 @@ async function probePublicRPCs(demos) {
 async function probePublicNodes() {
   // All seeds are dialed in parallel (5 s timeout each), so one slow seed cannot delay the others.
   var names = Object.keys(PUBLIC_NODES);
+  roundSeedHashes = {};
   var results = await Promise.all(names.map(async function(name) {
     var node = PUBLIC_NODES[name];
     var base = { name: name, identity: node.identity, source_type: node.source_type || "public", trust_tier: node.trust_tier || "verified", operator: node.operator || "Unknown" };
@@ -2265,6 +2278,7 @@ async function probePublicNodes() {
     }
     // The peerlist counts as the answering node's peerlist for the two-peerlist rule (one node answering two URLs is one).
     catalogIngestPeerlist(r.answeredId || ("seed:" + name), r.peerlist);
+    roundSeedHashes[name] = r.block_hash || null;   // evidence for the round's block identity; not a key of the published row
     log("  PublicNode " + name + ": OK " + r.latencyMs + "ms block=" + (r.block === null ? "?" : r.block) + " (" + (r.height_source || "none") + ") peers=" + r.peers);
     return Object.assign(base, { ok: true, latencyMs: r.latencyMs, block: r.block, height_source: r.height_source, version: r.version, peers: r.peers, identityMatch: r.identityMatch });
   }));
@@ -2339,6 +2353,9 @@ async function publicObservationCycle() {
   latestPublicNodes = publicNodeResults;
   latestWitnesses = roundWitnesses;
   lastPublicObservedAt = Date.now();
+  // Block identity: this round's seeds only, from the round's evidence. Published on /health; enters nothing below.
+  latestBlockIdentity = compareBlockIdentity(publicNodeResults, roundSeedHashes, lastPublicObservedAt);
+  blockIdentityTracker.record(latestBlockIdentity, lastPublicObservedAt);
   // The catalog is not part of the reading: if it fails, the clock, the history row and the condition records still run.
   try { catalogFinishCrawl(publicNodeResults, lastPublicObservedAt); }
   catch (eCat) { logError("[catalog] the crawl could not be finished: " + (eCat && eCat.message ? eCat.message : String(eCat))); }
@@ -3090,6 +3107,11 @@ function catalogPublicRow(dbRow, nowMs) {
 // --- HTTP Health Endpoint ---
 let latestHealthData = null; // updated each cycle
 let latestPublicNodes = []; // updated each cycle
+// Block identity (block-identity.mjs). The seeds' full hashes stay in this round evidence, never on the publicNodes rows:
+// /health copies every key of those rows. latestBlockIdentity is the public result; the tracker keeps states and times.
+let roundSeedHashes = {};            // seed name -> normalized hash or null, for the round in hand
+let latestBlockIdentity = null;      // compareBlockIdentity() of the last round
+const blockIdentityTracker = createBlockIdentityTracker();
 let latestVersionData = { running: AGENT_VERSION, latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
 let latestAttestationState = { available: false, lastCount: 0, lastOkAt: null, lastAttemptAt: null }; // honest DAHR attestation state; drives metric + /health (never hardcoded)
 let latestPublicRpcObservations = null; // null = no public-RPC observation yet; sanitized snapshot refreshed after each completed public-RPC probe; stale snapshots are not served
@@ -3420,6 +3442,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         on_chain_publication: SUPERCOLONY_ENABLED ? "unavailable" : "disabled",
         on_chain_validators: publicOnChainValidators(latestValidatorRound, Date.now(), validatorPublishConfig()),
         validator_watch: publicValidatorWatch(latestValidatorRound, Date.now(), validatorPublishConfig()),
+        block_identity: publicBlockIdentity(Date.now()),
       };
       var healthHdrs = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=5", "Access-Control-Allow-Origin": "*" };
       healthHdrs["ETag"] = healthV.etag;

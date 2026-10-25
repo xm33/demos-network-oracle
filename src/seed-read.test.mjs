@@ -18,7 +18,7 @@ function check(name, cond, detail) {
 
 const runtimeGlobal = globalThis.fetch;
 globalThis.fetch = () => { throw new Error("the global fetch must not be used for a seed read"); };
-const { readSeedInfo, seedsSufficient } = await import("./seed-read.mjs");
+const { readSeedInfo, seedsSufficient, normalizeBlockHash } = await import("./seed-read.mjs");
 
 const KEY = (n) => "0x" + n.toString(16).padStart(2, "0").repeat(32);
 const SEED = KEY(0xa2), OTHER = KEY(0xb7), PEER = KEY(0x11);
@@ -162,6 +162,33 @@ console.log("\n[" + TAG + "] the sources: the agent and the pre-restart check us
   check("D1b the agent hands the catalog the answering node's peerlist under the identity that answer named (one node answering two URLs is one peerlist)",
     /catalogIngestPeerlist\(r\.answeredId \|\| \("seed:" \+ name\), r\.peerlist\);/.test(AGENT));
   check("D2 the pre-restart check reads with readSeedInfo and judges with seedsSufficient", /readSeedInfo\(/.test(PROBE) && /seedsSufficient\(/.test(PROBE) && !/cappedJson\(seed\.url/.test(PROBE));
+}
+
+
+console.log("\n[" + TAG + "] the seed's own block hash (block identity, A1)");
+{
+  const HX = "a".repeat(64), HY = "b".repeat(64);
+  const own = s(info({ identity: SEED, peerlist: [{ identity: PEER, sync: { block: 4960, block_hash: "0x" + HY } }, { identity: SEED, sync: { block: 5000, block_hash: "0x" + HX.toUpperCase() } }] }));
+  const r = await readSeedInfo(own.node);
+  check("H1 the hash comes from the seed's own entry, normalized (no 0x, lower case); the peer's hash is not read; the height is as before",
+    r.block_hash === HX && r.block === 5000 && r.height_source === "self", JSON.stringify([r.block_hash, r.block, r.height_source]));
+  const fp = s(info({ identity: SEED, peerlist: [{ identity: PEER, sync: { block: 4960, block_hash: "0x" + HY } }] }));
+  const f = await readSeedInfo(fp.node);
+  check("H2 a first_peer height carries no hash, and the height rule is unchanged", f.block_hash === null && f.block === 4960 && f.height_source === "first_peer", JSON.stringify([f.block_hash, f.block, f.height_source]));
+  const noid = s(info({ peerlist: [{ identity: SEED, sync: { block: 5000, block_hash: "0x" + HX } }] }));
+  const n = await readSeedInfo(noid.node);
+  check("H3 an answer that names no identity: the own height is read as before (identityMatch null) but no hash is admitted", n.block === 5000 && n.height_source === "self" && n.identityMatch === null && n.block_hash === null, JSON.stringify([n.block, n.identityMatch, n.block_hash]));
+  const other = s(info({ identity: OTHER, peerlist: [{ identity: SEED, sync: { block: 5000, block_hash: "0x" + HX } }] }));
+  const o = await readSeedInfo(other.node);
+  check("H4 another node's answer gives no height and no hash", o.block === null && o.block_hash === null && o.identityMatch === false, JSON.stringify([o.block, o.block_hash, o.identityMatch]));
+  const bad = [];
+  for (const v of ["0x" + "a".repeat(63), "a".repeat(65), "0x" + "g".repeat(64), "", null, 7, { h: HX }, "0x" + HX + " "]) {
+    const srv = s(info({ identity: SEED, peerlist: [{ identity: SEED, sync: { block: 5000, block_hash: v } }] }));
+    bad.push((await readSeedInfo(srv.node)).block_hash);
+  }
+  check("H5 a malformed hash is dropped (null), never compared — length, characters, type; a trailing space is trimmed and accepted",
+    JSON.stringify(bad) === JSON.stringify([null, null, null, null, null, null, null, HX]), JSON.stringify(bad));
+  check("H6 normalizeBlockHash: 0x or not, any case, trimmed; nothing else", normalizeBlockHash("0X" + HX.toUpperCase()) === HX && normalizeBlockHash(" " + HX + "\n") === HX && normalizeBlockHash("0x" + HX.slice(1)) === null && normalizeBlockHash(undefined) === null);
 }
 
 all.forEach((x) => x.stop(true));
