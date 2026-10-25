@@ -1097,7 +1097,7 @@ function getValidatorGrowth() {
 // Public catalog (GET /catalog): retained identities, sanitized, with what peerlists reported this round.
 function getPublicCatalog() {
   var out = { scope: "retained_catalog", crawl: { completed_at: catalogLatest.completedAt ? new Date(catalogLatest.completedAt).toISOString() : null, public_peerlists_read: catalogLatest.peerlistsRead, listed_this_cycle: catalogLatest.listedCount }, notes: [
-    "Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta.",
+    "Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of the public Demos testnet.",
     "An identity is kept after two public peerlists have listed it; first_seen is the first of those listings DNO counted. The count is kept in memory, so a restart starts it again. One peerlist brings at most " + CATALOG_MAX_NEW_PER_PEERLIST + " new identities into the count per crawl.",
     "Reported fields are what the listing peerlists reported in the latest crawl. DNO does not dial these identities."
   ], rows: [] };
@@ -3803,7 +3803,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       } catch(e) { discoveredList = []; }
       h += '<section class="ref-sec" id="peer-listed">';
       h += '<h2>Peer-listed identities</h2>';
-      h += '<p class="ref-note">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta. Kept after two public peerlists have listed them; what is shown is what those peerlists reported, not a probe.</p>';
+      h += '<p class="ref-note">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of the public Demos testnet. Kept after two public peerlists have listed them; what is shown is what those peerlists reported, not a probe.</p>';
       if (discoveredList.length === 0) {
         h += '<p class="ref-empty">None in this set.</p>';
       } else {
@@ -4181,7 +4181,7 @@ async function refresh(){
       function card(label,val){return '<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">'+label+'</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+escD(val)+'</div></div>';}
       gh+=card('seen',vg.discovered)+card('seeds answered',vg.monitored_online)+card('at head',vg.monitored_at_head)+card('configured seeds',vg.monitored);
       gh+='</div>';
-      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:8px">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta.</div>';
+      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:8px">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of the public Demos testnet.</div>';
       // New identities: a window the count does not cover is "not reported", with the reason, never +0.
       var fc=vg.first_counted;
       var gl=[['today','today'],['week','this week'],['month','this month']].map(function(w){var n=fc?fc[w[0]]:vg[w[0]];return typeof n==='number'?'+'+n+' '+w[1]:w[1]+': not reported';}).join(' \u00b7 ')+(fc&&fc.reason?' ('+fc.reason+')':'');
