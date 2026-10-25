@@ -1,15 +1,16 @@
-/* DNO site kit: one stylesheet for every public page. Tokens are DESIGN.md's (binding).
+/* DNO site kit: one stylesheet for every public page. Surfaces and width are the V7 look's (operator-selected 2026-10-23),
+   the same on every page; the tone colours carry the published states and change only with them.
    The block between chrome:start and chrome:end is shared with the homepage: the homepage build inlines it,
    so the header, footer, lamps and controls are the same everywhere. Edit it here only. */
 /* chrome:start */
 @font-face { font-family: "Geist"; src: url("/assets/geist-206f01ed.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 @font-face { font-family: "Geist Mono"; src: url("/assets/geist-mono-55419aa0.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root {
-  --bg: #000000;
-  --bg-2: #0A0A0A;
-  --surface: #111111;
-  --elevated: #161616;
-  --line: #2A2A2A;
+  --bg: #03060b;
+  --bg-2: #050a14;
+  --surface: #070c17;
+  --elevated: #0b1322;
+  --line: #1c2740;
   --metal-0: #8A8A8A;
   --metal-1: #C8C8C8;
   --metal-2: #E8E8E8;
@@ -29,7 +30,7 @@
 
   --sans: "Geist", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --measure: 1100px;
+  --measure: 1240px;
   --gutter: 16px;
   --pad: 24px;
   --radius: 2px;
@@ -142,24 +143,31 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
 /* chrome:end */
 
 /* ---------- Document pages ---------- */
-.doc-head { padding-block: 48px 36px; border-bottom: 1px solid var(--line); }
+/* Title band: the homepage's artwork cropped to its horizon and faded from the left. Decoration only: it depicts no network,
+   no location and no connection, and nothing on the page refers to it. The files are the homepage's, named by content hash. */
+.doc-head { position: relative; isolation: isolate; overflow: hidden; padding-block: 64px 52px; border-bottom: 1px solid var(--navy-line); background: #01040a; }
+.doc-head::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 360px; z-index: -1; pointer-events: none; background-repeat: no-repeat; background-size: cover; background-position: 70% 78%;
+  background-image: linear-gradient(180deg, transparent 55%, #01040a 100%), linear-gradient(90deg, #010307 0%, rgba(1, 3, 7, .97) 30%, rgba(1, 3, 7, .82) 50%, rgba(1, 3, 7, .35) 78%, rgba(1, 3, 7, .2) 100%),
+    image-set(url("/assets/dno-planet-608a8e2e.avif") type("image/avif"), url("/assets/dno-planet-fd1608ca.webp") type("image/webp"), url("/assets/dno-planet-3ea6a6b6.jpg") type("image/jpeg")); }
 .doc-head .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px 48px; align-items: end; }
-.doc-kicker { font: 400 0.8125rem/1.4 var(--mono); color: var(--mute); margin-bottom: 14px; }
-.doc-kicker a { color: var(--mute); }
-.doc-head h1 { font-size: clamp(2rem, 4.4vw, 3rem); line-height: 1.06; font-weight: 500; letter-spacing: 0.005em; color: var(--metal-2); }
-.doc-lede { margin-top: 16px; font-size: 1.1875rem; line-height: 1.5; color: var(--metal-1); max-width: 42rem; }
-.doc-facts { display: grid; gap: 6px; font: 400 0.8125rem/1.5 var(--mono); color: var(--mute); text-align: right; }
+.doc-kicker { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; font: 500 0.75rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--metal-1); }
+.doc-kicker::before { content: ""; flex: none; width: 44px; height: 1px; background: var(--metal-1); }
+.doc-kicker a { color: var(--metal-1); }
+.doc-head h1 { font-size: clamp(2.375rem, 5vw, 3.75rem); line-height: 1.04; font-weight: 300; letter-spacing: -0.03em; padding-bottom: 0.04em;
+  background-image: linear-gradient(180deg, #f8f9fa 0%, #d1d4d8 59%, #a0a6ae 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.doc-lede { margin-top: 20px; font-size: 1.125rem; line-height: 1.55; color: #bac9d9; max-width: 46rem; }
+.doc-facts { display: grid; gap: 6px; padding: 14px 18px; border: 1px solid var(--navy-line); border-radius: 10px; background: rgba(5, 10, 20, .72); font: 400 0.8125rem/1.5 var(--mono); color: var(--mute); }
 .doc-facts b { font-weight: 500; color: var(--metal-1); }
 
 .doc-grid { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 56px; padding-block: 40px 72px; align-items: start; }
 .doc-grid > * { min-width: 0; }
 .toc { position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow: auto; font-size: 0.875rem; }
-.toc summary { list-style: none; cursor: default; font: 500 0.8125rem/1.4 var(--sans); color: var(--mute); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.toc summary { list-style: none; cursor: default; font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-0); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .toc summary::-webkit-details-marker { display: none; }
 .toc ol { display: grid; margin-top: 8px; counter-reset: none; }
-.toc a { display: block; padding: 6px 0 6px 12px; border-left: 1px solid var(--line); color: var(--mute); text-decoration: none; line-height: 1.35; }
+.toc a { display: block; padding: 6px 0 6px 12px; border-left: 1px solid var(--navy-line); color: var(--mute); text-decoration: none; line-height: 1.35; }
 .toc a:hover { color: var(--ink); border-left-color: var(--metal-0); }
-.toc a[aria-current="true"] { color: var(--ink); border-left: 2px solid var(--metal-2); padding-left: 11px; }
+.toc a[aria-current="true"] { color: var(--ink); border-left: 2px solid var(--violet-2); padding-left: 11px; }   /* navigation, not a tone */
 .toc .toc-sub a { padding-left: 24px; font-size: 0.8125rem; }
 .toc .toc-sub a[aria-current="true"] { padding-left: 23px; }
 
@@ -270,10 +278,10 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
   .prose { max-width: none; }
 }
 @media (max-width: 719px) {
-  .doc-head { padding-block: 28px 24px; }
+  .doc-head { padding-block: 40px 32px; }
+  .doc-head::before { height: 300px; opacity: .55; }   /* on a phone the text spans the artwork: keep it a hint */
   .doc-head .wrap { grid-template-columns: minmax(0, 1fr); }
-  .doc-facts { text-align: left; }
-  .doc-head h1 { font-size: 1.875rem; }
+  .doc-head h1 { font-size: 2.25rem; }
   .doc-lede { font-size: 1.0625rem; }
   .compare { grid-template-columns: minmax(0, 1fr); }
   .compare > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
@@ -295,4 +303,7 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
 .doc-intro .doc-lede { margin-top: 0; }
 .doc-intro code { font-size: 0.875em; color: var(--metal-2); }
 .aside-warn { border-color: #5A4A1A; }
+.note { margin: 0 0 14px; padding: 16px 20px; border: 1px solid var(--navy-line); border-radius: 10px; background: rgba(5, 10, 20, .72); color: var(--metal-1); }
+.doc-intro .note { margin: 0; }
+.prose > .note:last-of-type { margin-bottom: 44px; }
 .prose .aside ul { margin: 8px 0 0; }

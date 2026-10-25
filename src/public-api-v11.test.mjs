@@ -163,6 +163,11 @@ check("PAL2 no tone or lamp rule uses a decorative colour", ![...(kitCss + HOME)
 check("H35 the agent fills the V7 first-screen markers from the same strings", SRC.includes("summary: '<p class=\"summary\" id=\"summary\" data-src=\"api\">reading</p>'") && SRC.includes("observedAt: '<span id=\"obs-at\">not read yet</span>'") && SRC.includes("apiVersion: '<span id=\"api-v\">reading</span>'") && SRC.includes('reading_agreement: homeCardMarker("reading_agreement")'));
 const artRef = (x) => "/assets/dno-planet-" + kitHash("assets/dno-planet." + x) + "." + x;
 check("K6 the hero names the served artwork files by their content hash (AVIF, WebP, JPEG)", ["avif", "webp", "jpg"].every((x) => HOME.includes('url("' + artRef(x) + '")')), ["avif", "webp", "jpg"].map(artRef).join(" "));
+// The subpages in the V7 shell: one width and one surface on every page, the title band's artwork by content hash, notes styled.
+const homeOwn = HOME.split(chrome).join(""), homeOwnTokens = homeOwn.match(/--(?:measure|bg|bg-2|surface|elevated|line)\s*:[^;]*/g) || [];
+check("SK1 one width and one surface on every page: the homepage sets the width and the surfaces only through the shared chrome", chrome.length > 1000 && HOME.includes(chrome) && homeOwnTokens.length === 0, homeOwnTokens.join("; "));
+check("SK2 the subpages' title band names the served artwork files by their content hash (AVIF, WebP, JPEG)", ["avif", "webp", "jpg"].every((x) => kitCss.includes('url("' + artRef(x) + '")')), ["avif", "webp", "jpg"].map(artRef).join(" "));
+check("SK3 notes are styled on the subpages, not only on the homepage", /(^|[\s,}])\.note\s*\{/m.test(kitCss));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
