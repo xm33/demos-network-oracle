@@ -52,7 +52,7 @@
 </section>
 <section id="what-it-measures">
 <h2>What It Measures</h2>
-<p>Every reading is published as seven values. Each answers one question about what DNO observed. Some are built from others: status uses data quality, agreement, public incidents and how long DNO has counted without a new height; risk combines status, incidents, confidence, agreement, how many seeds answered and whether validators stood in for one.</p>
+<p>Every reading is published as six fields — status, trend, risk, data quality, confidence, agreement — with the incident and condition records beside them. Each answers one question about what DNO observed. Some are built from others: status uses data quality, agreement, public incidents and how long DNO has counted without a new height; risk combines status, incidents, confidence, agreement, how many seeds answered and whether validators stood in for one.</p>
 <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Concept</th><th>Question</th><th>Possible values</th></tr></thead><tbody>
 <tr><td><b>Status</b></td><td>What did the heights DNO read show this cycle?</td><td><span class="val">stable · degraded · unstable · unknown</span></td></tr>
 <tr><td><b>Trend</b></td><td>Is the condition changing?</td><td><span class="val">improving · stable · worsening · unknown</span></td></tr>
@@ -131,12 +131,12 @@
 <p>1. Fetches each configured public seed's /info in parallel — whether it answered, its own block height, software version and peer count. The same peerlists feed the catalog of peer-listed identities, which are never dialed; a new identity is kept only after two public peerlists have listed it, and one peerlist brings at most 50 new identities into that count per crawl.<br>
 2. When fewer than two seeds gave their own height, reads the witness candidates' /info in the same round (see <a href="#witnesses">Witnesses</a>).<br>
 3. Computes agreement from the heights compared.<br>
-4. Runs the public state computation, which derives the seven values.<br>
+4. Runs the public state computation, which derives the six fields and the incident counts.<br>
 5. Opens or closes DNO's condition records (see Incidents).<br>
 6. Updates the endpoints with the new reading.</p>
 <p>DAHR (the Demos Data Agnostic HTTPS Relay) is attempted on the cross-check RPCs, not on the seeds whose answers enter status. <code>/health</code> reports it in <code>attestation</code> (<code>available</code>, <code>last_count</code>, <code>last_ok_at</code>); <code>last_count</code> is how many of those relays returned a transaction hash, and <code>/organism</code> carries no attestation. Per the Demos docs, each relay call creates an on-chain <code>web2Request</code> transaction; DNO counts a relay when a transaction hash comes back and does not check that the transaction was included. <code>on_chain_publication</code> covers DNO's own posts: fleet alerts, recoveries and daily summaries, never the public reading. While it is <span class="val">disabled</span>, DNO posts none of them. What one DAHR call records is on <a href="/about-demos#dahr">About Demos</a>.</p>
-<p>On a separate loop, once a minute, DNO also reads the on-chain validators table from the same seeds and dials the address each ACTIVE validator published. Those counts are published on <code>/health</code>. While two seeds give their own height they enter none of the seven values; the same round names the validators that can stand in for a seed: see <a href="#validators">On-chain Validators</a> and <a href="#witnesses">Witnesses</a>.</p>
-<p>The public state computation is a single function that takes public node observations as input and produces all seven values as output. Fleet records are filtered out inside it and never shape a public value. The computation is deterministic: the same observations, history, open records and observation age give the same values. The rule itself is one file of the source, <code>src/status-rule.mjs</code>.</p>
+<p>On a separate loop, once a minute, DNO also reads the on-chain validators table from the same seeds and dials the address each ACTIVE validator published. Those counts are published on <code>/health</code>. While two seeds give their own height they enter none of the six fields; the same round names the validators that can stand in for a seed: see <a href="#validators">On-chain Validators</a> and <a href="#witnesses">Witnesses</a>.</p>
+<p>The public state computation is a single function that takes public node observations as input and produces all six fields, and the incident counts beside them, as output. Fleet records are filtered out inside it and never shape a public value. The computation is deterministic: the same observations, history, open records and observation age give the same values. The rule itself is one file of the source, <code>src/status-rule.mjs</code>.</p>
 </section>
 <section id="public-vs-reference-separation">
 <h2>Public vs Reference Separation</h2>
