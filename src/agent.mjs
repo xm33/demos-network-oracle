@@ -3625,7 +3625,17 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(SOURCES_HTML);
     } else if (reqPath === "/reference") {
-      if (!sharedDb) { res.writeHead(200, {"Content-Type":"text/html"}); res.end("<h1>No data</h1>"); return; }
+      // The store is not open (the server starts after main() opens it, and a store that cannot open ends the process, so
+      // this is a guard, not a path in normal running): say so in the site's shell, with 503, never a 200 that reads as an
+      // empty page.
+      if (!sharedDb) {
+        res.writeHead(503, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "30" });
+        res.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead() + '</head><body>'
+          + siteHeader("reference") + '<main id="main"><header class="doc-head"><div class="wrap"><div><h1>Reference</h1>'
+          + '<p class="doc-lede" id="ref-unavailable">The reference tables are unavailable: DNO\'s store is not open. This says nothing about the network. The public reading is at <a href="/organism">/organism</a>.</p>'
+          + '</div></div></header></main>' + siteFooter("reference") + '</body></html>');
+        return;
+      }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
       var h = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead();
       h += '<style>.ref-body{padding-block:32px 72px}.ref-sec + .ref-sec{margin-top:48px;padding-top:32px;border-top:1px solid var(--line)}'

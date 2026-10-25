@@ -309,6 +309,14 @@ check("FR7 full values decide equality; a prefix only recognises", /Compare the 
 check("FR8 no banned public language or verdict words in the recipe", !publicLanguageHit(frText) && !/\b(healthy|verified|certif|synced|majority|canonical)\b/i.test(frText));
 check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-the-method">repeat it yourself<\/a>/.test(METHP));
 
+
+// ---- FR-REF-503: an unavailable state is said, never a 200 that reads empty ------------------------------------------------
+{
+  const refBranch = (AGENTSRC.match(/reqPath === "\/reference"\) \{\s*([\s\S]*?)\n      function esc\(/) || ["", ""])[1];
+  check("REF1 /reference without the store answers 503 in the site's shell (head, header, footer), says the tables are unavailable and that this says nothing about the network — never 200 'No data'",
+    /res\.writeHead\(503,/.test(refBranch) && /siteHead\(\)/.test(refBranch) && /siteHeader\("reference"\)/.test(refBranch) && /siteFooter\("reference"\)/.test(refBranch) && /says nothing about the network/.test(refBranch) && !/No data/.test(refBranch) && !/writeHead\(200/.test(refBranch), refBranch.slice(0, 160));
+}
+
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
