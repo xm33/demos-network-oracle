@@ -4,133 +4,104 @@
 <meta charset="utf-8">
 <title>Commerce Methodology · Demos Network Oracle</title>
 <!--dno:head-->
-<style>
-:root { --text: var(--ink); --text-primary: var(--ink); --text-secondary: var(--mute); --border: var(--line); --improving: var(--metal-1); }
-.container{max-width:1100px;margin:0 auto;padding:0 24px;}
-
-.hero{padding:48px 0 36px;border-bottom:1px solid var(--border);}
-.page-kicker{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:12px;}
-.page-title{font-family:var(--sans);font-size:28px;font-weight:600;margin-bottom:14px;}
-.page-intro{font-family:var(--mono);font-size:13px;color:var(--text-secondary);max-width:72ch;line-height:1.7;}
-.section{padding:32px 0;border-bottom:1px solid var(--border);}
-.section-title{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:18px;}
-.content{font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:1.8;max-width:72ch;}
-.content p{margin-bottom:16px;}
-.content strong{color:var(--text);font-weight:500;}
-.state-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin:16px 0;}
-.state-table th{text-align:left;padding:8px 12px;color:var(--text-secondary);font-size:10px;letter-spacing:0.08em;border-bottom:1px solid var(--border);}
-.state-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
-.disclaimer{font-family:var(--mono);font-size:11px;color:var(--text-secondary);padding:20px;border:1px solid var(--border);border-radius:8px;margin-top:24px;line-height:1.7;background:var(--surface);}
-@media(max-width:640px){ .page-title{font-size:22px;} }
-
-.page-kicker, .section-title, .status-card .label, .authority-table th, .state-table th { letter-spacing: 0; text-transform: none; font-family: var(--sans); font-size: 0.8125rem; }
-.page-title { font-weight: 500; color: var(--metal-2); }
-.page-intro, .content { font-family: var(--sans); font-size: 0.9375rem; color: var(--metal-1); }
-.disclaimer { font-family: var(--sans); font-size: 0.875rem; border-radius: var(--radius); }
-.status-card { border-radius: var(--radius); background: var(--bg-2); }
-.testnet-badge { border-radius: var(--radius); }
-</style>
 </head>
 <body>
 <!--dno:header:commerce-->
 <main id="main">
-<div class="container">
-
-  <section class="hero">
-    <div class="page-kicker">Commerce methodology</div>
-    <h1 class="page-title">How Commerce Observation Works</h1>
-    <p class="page-intro">
-      The Demos agent commerce protocol uses a set of public attestation authorities — independent third-party services like GLEIF, FINRA, and the ECB — for credential verification and reference data. The Oracle monitors whether these authority endpoints are reachable.
-    </p>
-  </section>
-
-  <section class="section">
-    <div class="section-title">What the oracle observes</div>
-    <div class="content">
-      <p>The Oracle runs a dedicated probe service that periodically contacts public API endpoints operated by independent attestation authorities. For each authority, it records whether the endpoint responded, how quickly it responded, and whether the response matched the expected format.</p>
-      <p>These authorities include organizations like the Global Legal Entity Identifier Foundation (GLEIF), the Financial Industry Regulatory Authority (FINRA), the European Central Bank (ECB), and the Federal Risk and Authorization Management Program (FedRAMP), among others. All probed endpoints are publicly accessible APIs operated by these independent organizations — the Oracle does not require special access.</p>
-      <p>The probe runs every 5 minutes as a separate service from the Oracle's network monitoring. Commerce observation results never influence the Oracle's core network assessments (status, trend, risk, agreement, confidence, or data quality as reported on the homepage and through /organism).</p>
+  <header class="doc-head">
+    <div class="wrap">
+      <div>
+        <p class="doc-kicker">Layer 2 · Method</p>
+        <h1>How Commerce Observation Works</h1>
+        <p class="doc-lede">The Demos agent commerce protocol uses a set of public attestation authorities — independent third-party services like GLEIF, FINRA, and the ECB — for credential verification and reference data. The Oracle monitors whether these authority endpoints are reachable.</p>
+      </div>
+      <div class="doc-facts">
+        <span>Layer <b>2</b> · separate from the reading</span>
+        <span>Probe runner <b>v0.1.0</b>, every <b>5 min</b></span>
+        <span>JSON <a href="/commerce/observations">/commerce/observations</a></span>
+      </div>
     </div>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Reachability states</div>
-    <div class="content">
-      <p>Each authority endpoint is classified into one of these states after every probe cycle:</p>
-    </div>
-    <table class="state-table">
-      <thead><tr><th>State</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td style="color:var(--operable);">healthy</td><td>Endpoint responded within timeout with expected status code and data format.</td></tr>
-        <tr><td style="color:var(--elevated-risk);">degraded</td><td>Endpoint responded but with concerning signals — rate-limited, slow, or partial data.</td></tr>
-        <tr><td style="color:var(--degraded);">unavailable</td><td>Endpoint did not respond or returned server errors.</td></tr>
-        <tr><td style="color:var(--text-secondary);">unknown</td><td>Probe has not yet run or results are stale.</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Freshness</div>
-    <div class="content">
-      <p>Some authorities publish data on known cadences. The Oracle tracks whether the last observation is within the authority's expected update window.</p>
-    </div>
-    <table class="state-table">
-      <thead><tr><th>State</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td>fresh</td><td>Last observation is within the authority's expected update window.</td></tr>
-        <tr><td>stale</td><td>Last observation exceeds the expected update window.</td></tr>
-        <tr><td>unknown</td><td>No observation exists yet.</td></tr>
-        <tr><td>not applicable</td><td>Authority has no defined update cadence.</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Overall assessment</div>
-    <div class="content">
-      <p>The Oracle derives an overall commerce observability state from the individual probe results:</p>
-    </div>
-    <table class="state-table">
-      <thead><tr><th>State</th><th>Condition</th></tr></thead>
-      <tbody>
-        <tr><td style="color:var(--operable);">healthy</td><td>90% or more of probed authorities are reachable.</td></tr>
-        <tr><td style="color:var(--elevated-risk);">degraded</td><td>70% or more are responding, but some with issues.</td></tr>
-        <tr><td style="color:var(--elevated-risk);">partial</td><td>40–69% are responding.</td></tr>
-        <tr><td style="color:var(--degraded);">unavailable</td><td>Fewer than 40% are responding.</td></tr>
-        <tr><td style="color:var(--text-secondary);">unknown</td><td>No probes have been executed yet.</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Layer separation</div>
-    <div class="content">
-      <p><strong>Commerce observation is Layer 2.</strong> It is completely separate from the Oracle's core network assessment (Layer 1). The Oracle's homepage status, trend, risk, agreement, confidence, and data quality assessments are derived from the public seeds, and from validators that stand in when fewer than two seeds give their own height. Commerce probe data has no influence on these assessments.</p>
-      <p>This separation is architectural, not cosmetic. The commerce probe runner is a separate process from the network monitoring agent. Different code, different cycle, different output file, different failure domain.</p>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="section-title">What the oracle does not do</div>
-    <div class="content">
-      <p>The Oracle does not certify that any counterparty, transaction, or commerce flow is safe, legal, or compliant. It does not perform sanctions screening. It does not verify individual commerce claims. It does not recommend transactions.</p>
-      <p>The Oracle observes whether the public infrastructure that the Demos commerce protocol depends on is reachable. That is the beginning and the end of its commerce observation mandate.</p>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Testnet context</div>
-    <div class="content">
-      <p>The Demos agent commerce protocol is currently in development on testnet. The authority endpoints probed by the Oracle are production public APIs operated by independent third parties — they are not testnet infrastructure. The Oracle bridges both contexts: it probes real-world infrastructure while being transparent that the commerce protocol using that infrastructure is not yet on mainnet.</p>
-    </div>
-  </section>
-
-  <div class="disclaimer">
-    <strong>Disclaimer:</strong> The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification. The Oracle does not verify commerce claims, certify legal compliance, or recommend transactions. Commerce observation does not influence core network assessment.
-    <br><br>
-    <a href="/commerce" style="color:var(--text-secondary);">← Back to Commerce Overview</a>
+  </header>
+  <div class="wrap doc-grid">
+    <details class="toc" open>
+      <summary>On this page</summary>
+      <ol>
+        <li><a href="#observes">What the Oracle observes</a></li>
+        <li><a href="#reachability">Reachability states</a></li>
+        <li><a href="#freshness">Freshness</a></li>
+        <li><a href="#overall">Overall assessment</a></li>
+        <li><a href="#quality">Data quality and confidence (Layer 2)</a></li>
+        <li><a href="#layers">Layer separation</a></li>
+        <li><a href="#does-not">What the Oracle does not do</a></li>
+        <li><a href="#testnet">Testnet context</a></li>
+      </ol>
+    </details>
+    <article class="prose">
+<section id="observes">
+<h2>What the Oracle observes</h2>
+<p>The Oracle runs a dedicated probe service that periodically contacts public API endpoints operated by independent attestation authorities. For each authority, it records whether the endpoint responded, how quickly it responded, and whether the response matched the expected format.</p>
+<p>These authorities include organizations like the Global Legal Entity Identifier Foundation (GLEIF), the Financial Industry Regulatory Authority (FINRA), the European Central Bank (ECB), and the Federal Risk and Authorization Management Program (FedRAMP), among others. Most probed endpoints are public APIs operated by the authority itself. A few are public services that carry an authority's data: the ECB's reference rates are read through Frankfurter, a service that republishes them, and the DNS check goes through Cloudflare's public DNS resolver. Where that is so, the state says whether that service answered, not the authority. Most probes need no key; a probe that needs an API key or an RPC address runs only where the probe runner has one (see <code>unsupported</code> below).</p>
+<p>The probe runs about every 5 minutes (±30 s) as a separate service from the Oracle's network monitoring. A cycle allows 60 seconds in total; a probe not reached in that time is left out of that cycle's results. Commerce observation results never influence the Oracle's core network assessments (status, trend, risk, agreement, confidence, or data quality as reported on the homepage and through /organism).</p>
+</section>
+<section id="reachability">
+<h2>Reachability states</h2>
+<p>Each authority endpoint is classified into one of these states after every probe cycle. A probe allows 5 seconds.</p>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>State</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>healthy</code></td><td>The endpoint answered within the timeout with a status code the probe expects (for some authorities a 404 or a named 4xx is the expected answer to a probe without input) and, where the probe checks the body, a JSON body of the expected form. A body that is not JSON is not checked.</td></tr>
+<tr><td><code>degraded</code></td><td>The endpoint answered, but rate-limited (HTTP 429), with an unexpected status code, or with a body that failed the probe's check.</td></tr>
+<tr><td><code>unavailable</code></td><td>The endpoint did not answer within the timeout, failed DNS, TLS or another network step, answered HTTP 401 or 403 (authentication refused), or returned a server error (5xx).</td></tr>
+<tr><td><code>unknown</code></td><td>The probe stopped on an error in the probe itself; nothing was observed. It still counts as an active probe that did not answer.</td></tr>
+<tr><td><code>unsupported</code></td><td>The probe needs an API key or an RPC address the probe runner does not have, or the authority has no endpoint the Oracle can reach (for example a vendor-side session). Such an authority is not probed, not counted, and not listed in <a href="/commerce/observations">/commerce/observations</a>.</td></tr>
+</tbody></table></div>
+<p>The probe runner also records each response time as a latency class — <code>fast</code> under 0.5 s, <code>normal</code> under 2 s, <code>slow</code> under 5 s. The latency class does not change the state, and /commerce/observations does not publish it.</p>
+</section>
+<section id="freshness">
+<h2>Freshness</h2>
+<p>Some authorities publish data on known cadences. The Oracle tracks whether the last observation is within the authority's expected update window.</p>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>State</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>fresh</code></td><td>Last observation is within the authority's expected update window.</td></tr>
+<tr><td><code>stale</code></td><td>Last observation exceeds the expected update window.</td></tr>
+<tr><td><code>unknown</code></td><td>The authority was not probed, so there is nothing to measure.</td></tr>
+<tr><td><code>not_applicable</code></td><td>Authority has no defined update cadence.</td></tr>
+</tbody></table></div>
+<p id="freshness-limit"><b>Known limitation.</b> At this version the window is measured from the probe's own time, so an authority with a cadence reads <code>fresh</code> after every probe, whatever it answered. Read freshness as "has a cadence", not as the age of anything; the state column says whether the endpoint answered.</p>
+</section>
+<section id="overall">
+<h2>Overall assessment</h2>
+<p>The Oracle derives an overall commerce observability state from the active probes (authorities marked <code>unsupported</code> are not counted). "Answered" means <code>healthy</code> or <code>degraded</code>.</p>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>State</th><th>Condition</th></tr></thead><tbody>
+<tr><td><code>healthy</code></td><td>90% or more of the active probes are <code>healthy</code>.</td></tr>
+<tr><td><code>degraded</code></td><td>Otherwise, 70% or more answered.</td></tr>
+<tr><td><code>partial</code></td><td>Otherwise, 40% or more answered.</td></tr>
+<tr><td><code>unavailable</code></td><td>Under 40% answered.</td></tr>
+<tr><td><code>unknown</code></td><td>No active probe is configured, or the probe runner's file could not be read.</td></tr>
+</tbody></table></div>
+</section>
+<section id="quality">
+<h2>Data quality and confidence (Layer 2)</h2>
+<p>The commerce page shows two values that share names with the reading's fields and mean something else. They are computed from the probes alone and never enter the reading.</p>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Value</th><th>Rule</th></tr></thead><tbody>
+<tr><td><code>data_quality</code></td><td><code>sufficient</code> when 70% or more of the active probes answered; <code>partial</code> from 40%; <code>insufficient</code> below, or when the probe runner's file could not be read.</td></tr>
+<tr><td><code>confidence</code></td><td><code>uncertain</code> when, in one cycle, some probes are <code>healthy</code> and some <code>unavailable</code>, or when the probe runner's file could not be read; otherwise <code>clear</code>.</td></tr>
+</tbody></table></div>
+</section>
+<section id="layers">
+<h2>Layer separation</h2>
+<p><strong>Commerce observation is Layer 2.</strong> It is completely separate from the Oracle's core network assessment (Layer 1). The Oracle's homepage status, trend, risk, agreement, confidence, and data quality assessments are derived from the public seeds, and from validators that stand in when fewer than two seeds give their own height. Commerce probe data has no influence on these assessments.</p>
+<p>This separation is architectural, not cosmetic. The commerce probe runner is a separate process from the network monitoring agent. Different code, different cycle, different output file, different failure domain.</p>
+</section>
+<section id="does-not">
+<h2>What the Oracle does not do</h2>
+<p>The Oracle does not certify any counterparty, transaction, or commerce flow, and does not judge whether one is lawful or meets a regulation. It does not perform sanctions screening. It does not verify individual commerce claims. It does not recommend transactions.</p>
+<p>The Oracle observes whether the public infrastructure that the Demos commerce protocol depends on is reachable. That is the beginning and the end of its commerce observation mandate.</p>
+</section>
+<section id="testnet">
+<h2>Testnet context</h2>
+<p>The Demos agent commerce protocol is currently in development on testnet. Most authority endpoints probed by the Oracle are production public APIs operated by independent third parties — they are not testnet infrastructure. The exception is the on-chain check, which reads a contract on Base Sepolia, a public testnet, where the probe runner has an RPC address for it. The Oracle bridges both contexts: it probes real-world infrastructure while being transparent that the commerce protocol using that infrastructure is not yet on mainnet.</p>
+<p class="note" id="com-disclaimer">The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification. The Oracle does not verify commerce claims, certify legal compliance, or recommend transactions. Commerce observation does not influence core network assessment. <a href="/commerce">Back to the commerce overview</a>.</p>
+</section>
+    </article>
   </div>
-</div>
 </main>
 <!--dno:footer-->
 

@@ -5,122 +5,79 @@
 <title>Commerce Infrastructure · Demos Network Oracle</title>
 <!--dno:head-->
 <style>
-:root { --text: var(--ink); --text-primary: var(--ink); --text-secondary: var(--mute); --border: var(--line); --improving: var(--metal-1); }
-.container{max-width:1100px;margin:0 auto;padding:0 24px;}
-
-
-
-/* Content */
-.hero{padding:48px 0 36px;border-bottom:1px solid var(--border);}
-.page-kicker{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:12px;}
-.page-title{font-family:var(--sans);font-size:28px;font-weight:600;margin-bottom:14px;}
-.page-intro{font-family:var(--mono);font-size:13px;color:var(--text-secondary);max-width:72ch;line-height:1.7;}
-.testnet-badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:3px 10px;border:1px solid #5A4A1A;border-radius:999px;color:var(--elevated-risk);margin-top:14px;letter-spacing:0.06em;}
-
-.section{padding:32px 0;border-bottom:1px solid var(--border);}
-.section-title{font-family:var(--mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.1em;margin-bottom:18px;}
-
-/* Status cards */
-.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
-.status-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;}
-.status-card .label{font-family:var(--mono);font-size:10px;color:var(--text-secondary);letter-spacing:0.08em;margin-bottom:6px;}
-.status-card .value{font-family:var(--mono);font-size:16px;font-weight:500;}
-
-/* Authority list */
-.authority-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;}
-.authority-table th{text-align:left;padding:8px 12px;color:var(--text-secondary);font-size:10px;letter-spacing:0.08em;border-bottom:1px solid var(--border);}
-.authority-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
-.authority-table .state-healthy{color:var(--operable);}
-.authority-table .state-degraded{color:var(--elevated-risk);}
-.authority-table .state-unavailable{color:var(--degraded);}
-.authority-table .state-unknown{color:var(--text-secondary);}
-
-/* Disclaimer */
-.disclaimer{font-family:var(--mono);font-size:11px;color:var(--text-secondary);padding:20px;border:1px solid var(--border);border-radius:8px;margin-top:24px;line-height:1.7;background:var(--surface);}
-
-/* Footer */
-
-.loading{opacity:0.4;font-style:italic;}
-
-@media(max-width:640px){
-  .page-title{font-size:22px;}
-  .status-grid{grid-template-columns:1fr;}
-  .authority-table{font-size:11px;}
+/* Commerce: the four cards. Tokens and type come from the site kit; no colour carries a state. */
+.orient .com-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 56rem; margin-top: 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.orient .com-cards > div { display: grid; gap: 6px; padding: 14px 16px 16px 0; min-width: 0; }
+.orient .com-cards > div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+.orient .com-cards .k { font-size: 0.8125rem; color: var(--mute); }
+.orient .com-cards .v { font: 500 1rem/1.3 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.orient .com-updated { margin-top: 10px; font: 400 0.8125rem/1.4 var(--mono); color: var(--mute); }
+.orient .loading { opacity: 0.6; font-style: italic; }
+@media (max-width: 719px) {
+  .orient .com-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orient .com-cards > div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .orient .com-cards > div:nth-child(n+3) { border-top: 1px solid var(--line); }
 }
-
-.page-kicker, .section-title, .status-card .label, .authority-table th, .state-table th { letter-spacing: 0; text-transform: none; font-family: var(--sans); font-size: 0.8125rem; }
-.page-title { font-weight: 500; color: var(--metal-2); }
-.page-intro, .content { font-family: var(--sans); font-size: 0.9375rem; color: var(--metal-1); }
-.disclaimer { font-family: var(--sans); font-size: 0.875rem; border-radius: var(--radius); }
-.status-card { border-radius: var(--radius); background: var(--bg-2); }
-.testnet-badge { border-radius: var(--radius); }
 </style>
 </head>
 <body>
 <!--dno:header:commerce-->
 <main id="main">
-<div class="container">
-
-  <section class="hero">
-    <div class="page-kicker">Commerce infrastructure observability</div>
-    <h1 class="page-title">Attestation Authority Reachability</h1>
-    <p class="page-intro">
-      The Oracle monitors the public endpoints of attestation authorities used by the Demos agent commerce protocol. It probes these endpoints every 5 minutes and reports whether they are reachable, responsive, and returning expected data.
-    </p>
-    <div class="testnet-badge">Testnet observation</div>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Overall state</div>
-    <div class="status-grid">
-      <div class="status-card">
-        <div class="label">Observability</div>
-        <div class="value loading" id="obs-state">not read yet</div>
+  <header class="doc-head">
+    <div class="wrap">
+      <div>
+        <p class="doc-kicker">Layer 2 · Commerce observation</p>
+        <h1>Attestation Authority Reachability</h1>
+        <p class="doc-lede">The Oracle monitors the public endpoints of attestation authorities used by the Demos agent commerce protocol. It probes these endpoints every 5 minutes and reports whether they are reachable, responsive, and returning expected data.</p>
       </div>
-      <div class="status-card">
-        <div class="label">Data quality</div>
-        <div class="value loading" id="obs-dq">not read yet</div>
-      </div>
-      <div class="status-card">
-        <div class="label">Confidence</div>
-        <div class="value loading" id="obs-conf">not read yet</div>
-      </div>
-      <div class="status-card">
-        <div class="label">Authorities observed</div>
-        <div class="value loading" id="obs-count">not read yet</div>
+      <div class="doc-facts">
+        <span>Layer <b>2</b> · separate from the reading</span>
+        <span>Probed every <b>5 min</b></span>
+        <span>Testnet observation</span>
       </div>
     </div>
-    <div style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.7;" id="obs-updated"></div>
-    <noscript><p class="note" id="com-noscript">This page reads its values with JavaScript. The same observations are available as JSON at <a href="/commerce/observations">/commerce/observations</a>.</p></noscript>
-  </section>
-
-  <section class="section">
-    <div class="section-title">Authority reachability</div>
-    <div class="tbl-wrap">
-    <table class="authority-table">
-      <thead>
-        <tr><th>Authority</th><th>Category</th><th>State</th><th>Freshness</th><th>Observed</th></tr>
-      </thead>
-      <tbody id="auth-table-body">
-        <tr><td colspan="5" class="loading">Not read yet.</td></tr>
-      </tbody>
-    </table>
+  </header>
+  <section class="orient" id="overall" aria-labelledby="overall-h">
+    <div class="wrap">
+      <p class="orient-k">01 / Overall state</p>
+      <h2 id="overall-h">What the last probe cycle found.</h2>
+      <div class="com-cards">
+        <div><span class="k">Observability</span><span class="v loading" id="obs-state">not read yet</span></div>
+        <div><span class="k">Data quality (Layer 2)</span><span class="v loading" id="obs-dq">not read yet</span></div>
+        <div><span class="k">Confidence (Layer 2)</span><span class="v loading" id="obs-conf">not read yet</span></div>
+        <div><span class="k">Authorities in state <code>healthy</code></span><span class="v loading" id="obs-count">not read yet</span></div>
+      </div>
+      <p class="com-updated" id="obs-updated"></p>
+      <noscript><p class="note" id="com-noscript">This page reads its values with JavaScript. The same observations are available as JSON at <a href="/commerce/observations">/commerce/observations</a>.</p></noscript>
+      <p class="orient-more">Each value is the probe runner's own word, defined on <a href="/commerce/methodology">How commerce observation works</a>. Data quality and confidence here are Layer 2's, computed from the probes; they are not the reading's.</p>
     </div>
   </section>
-
-  <section class="section">
-    <div class="section-title">What this is not</div>
-    <p style="font-family:var(--mono);font-size:12px;color:var(--text-secondary);line-height:1.7;max-width:72ch;">
-      This page shows infrastructure reachability — whether the public API endpoints that the Demos commerce protocol depends on are responding. It does not certify counterparties, verify commerce claims, provide legal advice, or recommend transactions. The commerce protocol is in development on testnet. Commerce observations do not influence the Oracle's core network assessments.
-    </p>
+  <section class="orient" id="authorities" aria-labelledby="authorities-h">
+    <div class="wrap">
+      <p class="orient-k">02 / Authority reachability</p>
+      <h2 id="authorities-h">Each authority, as probed.</h2>
+      <div class="tbl-wrap">
+      <table class="tbl stack authority-table">
+        <thead>
+          <tr><th>Authority</th><th>Category</th><th>State</th><th>Freshness</th><th>Observed</th></tr>
+        </thead>
+        <tbody id="auth-table-body">
+          <tr><td colspan="5" class="loading">Not read yet.</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="orient-more" id="freshness-note">Freshness, at this version, says only whether an authority has an update cadence; it is not the age of anything. The State column says whether the endpoint answered. <a href="/commerce/methodology#freshness-limit">The known limitation</a>.</p>
+    </div>
   </section>
-
-  <div class="disclaimer">
-    <strong>Disclaimer:</strong> The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification. The Oracle does not verify commerce claims, certify legal compliance, or recommend transactions. Commerce observation is Layer 2 — it does not influence Layer 1 core network assessment (<a href="/" style="color:var(--text-secondary);">/organism</a>).
-    <br><br>
-    <a href="/commerce/methodology" style="color:var(--text-secondary);">How commerce observation works →</a>
-  </div>
-</div>
+  <section class="orient" id="not" aria-labelledby="not-h">
+    <div class="wrap">
+      <p class="orient-k">03 / What this is not</p>
+      <h2 id="not-h">Reachability, not certification.</h2>
+      <p class="orient-lede">This page shows infrastructure reachability — whether the public API endpoints that the Demos commerce protocol depends on are responding. It does not certify counterparties, verify commerce claims, provide legal advice, or recommend transactions. The commerce protocol is in development on testnet. Commerce observations do not influence the Oracle's core network assessments.</p>
+      <p class="orient-key" id="com-disclaimer">The Demos Network Oracle observes whether attestation authority endpoints are reachable. This is infrastructure observability, not certification. The Oracle does not verify commerce claims, certify legal compliance, or recommend transactions. Commerce observation is Layer 2 — it does not influence Layer 1 core network assessment (<a href="/organism">/organism</a>).</p>
+      <p class="orient-more"><a href="/commerce/methodology">How commerce observation works</a></p>
+    </div>
+  </section>
 </main>
 <!--dno:footer-->
 <script>
@@ -135,12 +92,8 @@ function setTableNote(text) {
 
     // Overall state
     var stateEl = document.getElementById('obs-state');
-    stateEl.textContent = (d.commerce_observability_state || 'unknown').toUpperCase();
+    stateEl.textContent = d.commerce_observability_state || 'unknown';
     stateEl.classList.remove('loading');
-    if (d.commerce_observability_state === 'healthy') stateEl.style.color = 'var(--operable)';
-    else if (d.commerce_observability_state === 'degraded') stateEl.style.color = 'var(--elevated-risk)';
-    else if (d.commerce_observability_state === 'unavailable') stateEl.style.color = 'var(--degraded)';
-    else stateEl.style.color = 'var(--text-secondary)';
 
     var dqEl = document.getElementById('obs-dq');
     dqEl.textContent = d.data_quality || 'not reported';
@@ -151,16 +104,16 @@ function setTableNote(text) {
     confEl.classList.remove('loading');
 
     var countEl = document.getElementById('obs-count');
-    countEl.textContent = (d.authorities_healthy || 0) + ' / ' + (d.authorities_observed || 0) + ' healthy';
+    countEl.textContent = (d.authorities_healthy || 0) + ' of ' + (d.authorities_observed || 0);
     countEl.classList.remove('loading');
 
     if (d.generated_at) {
-      var ago = Math.round((Date.now() - new Date(d.generated_at).getTime()) / 1000);
+      var ago = Math.max(0, Math.round((Date.now() - new Date(d.generated_at).getTime()) / 1000));
       document.getElementById('obs-updated').textContent = 'Updated ' + ago + 's ago';
     }
 
     // Authority table. With none observed, say so: the placeholder row never stays.
-    if (!d.authorities || d.authorities.length === 0) setTableNote('No authority observed in this reading.');
+    if (!d.authorities || d.authorities.length === 0) setTableNote(d.error ? 'The probe runner\'s results could not be read; the values above are the fallback.' : 'No authority was observed in the last probe cycle.');
     if (d.authorities && d.authorities.length > 0) {
       var tbody = document.getElementById('auth-table-body');
       tbody.replaceChildren();
@@ -170,7 +123,7 @@ function setTableNote(text) {
         [String(a.name || a.authority_id || 'not reported'), String(a.category || 'not reported'), String(a.reachability || 'unknown'), String(a.freshness || 'not reported'), obsTime].forEach(function(text, i) {
           var td = document.createElement('td');
           td.textContent = text;
-          if (i === 2) td.className = 'state-' + (/^[a-z]+$/.test(text) ? text : 'unknown');
+          td.setAttribute('data-label', ['Authority', 'Category', 'State', 'Freshness', 'Observed'][i]);
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -178,11 +131,9 @@ function setTableNote(text) {
     }
   } catch(e) {
     // The observations could not be read: every placeholder says so, none keeps waiting.
-    document.getElementById('obs-state').textContent = 'UNAVAILABLE';
-    document.getElementById('obs-state').style.color = 'var(--text-secondary)';
     ['obs-state', 'obs-dq', 'obs-conf', 'obs-count'].forEach(function(id) {
       var el = document.getElementById(id);
-      if (id !== 'obs-state') el.textContent = 'not available';
+      el.textContent = 'not available';
       el.classList.remove('loading');
     });
     setTableNote('The observations could not be read. The JSON is at /commerce/observations.');
