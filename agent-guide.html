@@ -33,6 +33,7 @@
         <li><a href="#edge-cases">Edge Cases</a></li>
         <li><a href="#production-python-example">Production Python Example</a></li>
         <li><a href="#combining-endpoints">Combining Endpoints</a></li>
+        <li><a href="#repeat-the-method">Repeat the Method</a></li>
         <li><a href="#commerce-api-layer-2">Commerce API (Layer 2)</a></li>
         <li><a href="#http-status-codes">HTTP Status Codes</a></li>
         <li><a href="#design-principle">Design Principle</a></li>
@@ -350,6 +351,28 @@ GET /incidents →  specific active problems
 GET /commerce/observations  →  authority states (Layer 2, separate from the core network assessment)</pre>
 
 <p><b>Important:</b> <code>/commerce/observations</code> is Layer 2 data. It reports whether attestation authority endpoints are reachable. It does not influence and is not influenced by the network assessment in <code>/organism</code>. These are independent observation layers.</p>
+</section>
+<section id="repeat-the-method">
+<h2>Repeat the Method</h2>
+<p>Everything DNO compares is read from public endpoints with public calls. The steps below repeat DNO's block-identity comparison from your own machine, against the same seeds DNO reads (their URLs are published on <a href="/sources#layers">Sources</a>). Each request is small and read-only; keep a timeout on it. <code>jq</code> is used to pick fields.</p>
+<p><b>1. A seed's own height and block hash.</b> A seed's <code>/info</code> lists its peers; the entry whose <code>identity</code> is the seed's own carries <code>sync.block</code> and <code>sync.block_hash</code>. DNO reads that entry and no other (a first listed peer's height is never compared).</p>
+<pre data-copy>S=http://node2.demos.sh:53550
+curl -sS --max-time 5 "$S/info" | jq -r '.identity as $me | .peerlist[] | select(.identity==$me) | "\(.sync.block) \(.sync.block_hash)"'</pre>
+<p><b>2. The block at that height, from the same seed.</b> <code>getBlockByNumber</code> returns the stored block; its <code>hash</code> should equal the hash the seed named beside its height. This is the check that the hash a seed reports is the hash of the block it serves.</p>
+<pre data-copy>H=&lt;the height from step 1&gt;
+curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' \
+  -d '{"method":"nodeCall","params":[{"type":"nodeCall","message":"getBlockByNumber","sender":null,"receiver":null,"timestamp":null,"data":{"blockNumber":'"$H"'},"extra":""}]}' \
+  "$S/" | jq -r '.response.hash'</pre>
+<p><b>3. The same height on another seed.</b> Run steps 1 and 2 against <code>http://node3.demos.sh:53550</code>. Two seeds that report the same hash at the same height have reported the same block there — and, because a Demos block's hash covers the previous block's hash, the same chain of blocks up to it, as reported. Compare the full 64-character values; a prefix is for recognising a hash, not for deciding equality.</p>
+<p><b>4. Network identity.</b> <code>getGenesisDataHash</code> returns a fingerprint of the normalized genesis data (connection URLs stripped, keys sorted) — the value Demos nodes use to decide whom to peer with. Two seeds on one network return the same value. <code>getNetworkInfo</code> returns <code>chainId</code> and <code>forkScheduleDigest</code>.</p>
+<pre data-copy>for M in getGenesisDataHash getNetworkInfo; do
+  curl -sS --max-time 5 -X POST -H 'Content-Type: application/json' \
+    -d '{"method":"nodeCall","params":[{"type":"nodeCall","message":"'"$M"'","sender":null,"receiver":null,"timestamp":null,"data":{},"extra":""}]}' \
+    "$S/" | jq -c '.response'
+done</pre>
+<p><b>5. What DNO publishes about the same comparison.</b> <code>/health</code> carries <code>block_identity</code>: the state (<code>same_block</code>, <code>different_block</code>, <code>mixed</code>, <code>no_shared_height</code>, <code>insufficient</code>), the height compared, how many seeds had a hash and how many were compared, a 16-character <code>hash_prefix</code> when they agree, and the round's <code>observed_at</code>. DNO compares only seeds read in the same 20-second round that reported the same height. The rule is in the <a href="/methodology#block-identity">Methodology</a>.</p>
+<pre data-copy>curl -sS --max-time 5 https://demos-oracle.com/health | jq -c '.block_identity | {state, height, seeds_compared, hash_prefix, observed_at}'</pre>
+<p><b>What repeating the method shows, and what it does not.</b> Your reads are made at your time, from your vantage; DNO's were made at <code>observed_at</code>, from its own. Running the steps now repeats the method; it does not reproduce an earlier DNO round, whose answers only DNO's record holds. Agreement between the seeds is agreement between two public URLs of one organization: it is not independent corroboration, and it does not show that a block is final, that every validator holds it, or that anyone took part in making it. A seed that gives no hash, or a height the other seed did not report, is a comparison that did not happen — not a disagreement.</p>
 </section>
 <section id="commerce-api-layer-2">
 <h2>Commerce API (Layer 2)</h2>

@@ -17,6 +17,7 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, "..");
 const SRC = readFileSync(join(__dir, "agent.mjs"), "utf8");
 const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
+const AGENTSRC = readFileSync(join(ROOT, "src", "agent.mjs"), "utf8");
 const STATIC_ONLY = process.argv.includes("--static");
 const BASE = process.argv.slice(2).find((a) => !a.startsWith("--")) || "http://localhost:55225";
 const TAG = "PUBLIC_API_V11";
@@ -289,6 +290,24 @@ check("SC8 'outside the reading' links each item to its rule, and every target e
 check("SC9 the version line is kept, once, with the full text", count(METHP, "Methodology v1.2 · 2026-10-05 · aligned with") === 1 && meOrient.includes("not aspirational, not approximate"));
 check("SC10 no banned public language and no verdict words in the orientation", !publicLanguageHit(meText(meOrient)) && !/\b(healthy|health score|verified|certif|same chain|majority)\b/i.test(meText(meOrient)));
 check("SC11 the page CSS is scoped to the orientation (.orient .fields), no bare selectors", [...METHP.matchAll(/^\s*\.[a-z][^{]*\{/gm)].every((m) => /^\s*\.orient[ #.]/.test(m[0])) && /\.orient \.fields \{/.test(METHP));
+
+
+// ---- FR-REPRO: the agent guide tells a reader how to repeat the block-identity method ------------------------------------
+const GUIDE = readFileSync(join(ROOT, "agent-guide.html"), "utf8");
+const frSec = (GUIDE.match(/<section id="repeat-the-method">[\s\S]*?<\/section>/) || [""])[0];
+const frText = frSec.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ");
+check("FR1 the agent guide has 'Repeat the Method', once, listed in its contents, after Combining Endpoints", frSec.length > 0 && count(GUIDE, 'id="repeat-the-method"') === 1 && /<li><a href="#repeat-the-method">Repeat the Method<\/a><\/li>/.test(GUIDE) && GUIDE.indexOf('id="combining-endpoints"') < GUIDE.indexOf('id="repeat-the-method"') && GUIDE.indexOf('id="repeat-the-method"') < GUIDE.indexOf('id="commerce-api-layer-2"'));
+check("FR2 five steps, in order: own height and hash · the block at that height · another seed · network identity · what DNO publishes", ["1. A seed's own height and block hash.", "2. The block at that height, from the same seed.", "3. The same height on another seed.", "4. Network identity.", "5. What DNO publishes about the same comparison."].map((t) => frText.indexOf(t)).every((i, k, a) => i >= 0 && (k === 0 || i > a[k - 1])));
+const frCurls = [...frSec.matchAll(/curl [^\n]*/g)].map((m) => m[0]);
+check("FR3 every request in the recipe is read-only with a timeout, and the calls are the ones DNO's method names", frCurls.length >= 4 && frCurls.every((c) => /--max-time \d/.test(c) && !/-L\b|--location/.test(c)) && ["getBlockByNumber", "getGenesisDataHash", "getNetworkInfo"].every((m) => new RegExp("\\b" + m + "\\b").test(frSec)) && /"method":"nodeCall","params":\[\{"type":"nodeCall","message":/.test(frSec));
+const frSeedUrls = [...AGENTSRC.matchAll(/url: "(http:\/\/[a-z0-9.\-]+:\d+)"/g)].map((m) => m[1]);
+const frUrls = [...frSec.matchAll(/http:\/\/[a-z0-9.\-]+:\d+/g)].map((m) => m[0]);
+check("FR4 the seed URLs in the recipe are configured public seeds (the ones Sources publishes), no other host", frUrls.length >= 2 && frUrls.every((u) => frSeedUrls.includes(u)), frUrls.filter((u) => !frSeedUrls.includes(u)).join(" "));
+check("FR5 the five states are named as /health publishes them, and the rule is linked", ["same_block", "different_block", "mixed", "no_shared_height", "insufficient"].every((st) => frSec.includes("<code>" + st + "</code>")) && /href="\/methodology#block-identity"/.test(frSec) && count(METHP, 'id="block-identity"') === 1);
+check("FR6 the limits are stated: repeating ≠ reproducing an earlier round; one organization; not corroboration, finality, or participation; a missing comparison is not a disagreement", /does not reproduce an earlier DNO round/.test(frText) && /one organization/.test(frText) && /not independent corroboration/.test(frText) && /does not show that a block is final/.test(frText) && /not a disagreement/.test(frText));
+check("FR7 full values decide equality; a prefix only recognises", /Compare the full 64-character values; a prefix is for recognising a hash, not for deciding equality\./.test(frText));
+check("FR8 no banned public language or verdict words in the recipe", !publicLanguageHit(frText) && !/\b(healthy|verified|certif|synced|majority|canonical)\b/i.test(frText));
+check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-the-method">repeat it yourself<\/a>/.test(METHP));
 
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
