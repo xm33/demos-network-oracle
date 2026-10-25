@@ -251,10 +251,10 @@ try { ORGANISM_SCHEMA = readFileSync("organism.schema.json", "utf8"); } catch (e
 function docsEntry(path, text) { return '<div><dt><code>' + path + '</code></dt><dd>' + text + '</dd></div>'; }
 var DOCS_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>API · Demos Network Oracle</title><!--dno:head-->' +
 '<style>.docs-kv dt code{white-space:nowrap}.docs-kv{grid-template-columns:minmax(0,19rem) minmax(0,1fr)}@media(max-width:719px){.docs-kv{grid-template-columns:minmax(0,1fr)}}</style></head><body>' +
-'<!--dno:header:docs--><main id="main"><header class="doc-head"><div class="wrap"><div><h1>API</h1>' +
+'<!--dno:header:docs--><main id="main"><header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Read-only API</p><h1>API</h1>' +
 '<p class="doc-lede">Every route the public site serves, read-only, served with CORS for any origin: JSON unless noted, and the pages are HTML. DNO reads three public Demos seeds and publishes whether their reported heights agree. When fewer than two give their own height, validators that answer as listed stand in for the missing one.</p>' +
-'<div class="doc-intro"><p>Oracle wallet: <code>__AGENT_WALLET__</code> · v' + AGENT_VERSION + ' · API ' + API_VERSION + '. ' + (SUPERCOLONY_ENABLED ? 'On-chain publication of DNO\'s own posts is enabled' : 'On-chain publication of DNO\'s own posts is currently disabled') + '; the public reading is never posted. Observation continues independently, and that says nothing by itself about the Demos network.</p></div>' +
-'</div></div></header><div class="wrap doc-grid"><details class="toc" open><summary>On this page</summary><ol>' +
+'<div class="doc-intro"><p>' + (SUPERCOLONY_ENABLED ? 'On-chain publication of DNO\'s own posts is enabled' : 'On-chain publication of DNO\'s own posts is currently disabled') + '; the public reading is never posted. Observation continues independently, and that says nothing by itself about the Demos network.</p></div>' +
+'</div><div class="doc-facts"><span>Agent <b>v' + AGENT_VERSION + '</b> · API <b>' + API_VERSION + '</b></span><span>Oracle wallet <code>__AGENT_WALLET__</code></span><span>Contract <a href="/organism/schema">/organism/schema</a></span></div></div></header><div class="wrap doc-grid"><details class="toc" open><summary>On this page</summary><ol>' +
 '<li><a href="#reading">The reading</a></li><li><a href="#identities">Peer-listed identities</a></li><li><a href="#pages">Pages</a></li><li><a href="#integration">Integration</a></li><li><a href="#internal">Internal only</a></li></ol></details>' +
 '<article class="prose">' +
 '<section id="reading"><h2>The reading</h2><dl class="kv docs-kv">' +
@@ -1268,7 +1268,8 @@ function renderTimelinePage() {
       else dur = Math.floor(secs/60) + "m";
       var affectedTL = null; try { affectedTL = JSON.parse(r.affected_nodes); } catch (eTL) { affectedTL = null; }
       var isCond = isPublicConditionMarker({ affectedNodes: affectedTL });
-      items += '<div class="tl-item sev-' + sev + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + (isCond ? "condition record" : sev) + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div>'
+      // A condition record's tag says "condition record", not its severity; its dot stays plain, so no colour says what the tag does not.
+      items += '<div class="tl-item' + (isCond ? '' : ' sev-' + sev) + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + (isCond ? "condition record" : sev) + '</span><span class="tl-tag">' + state + (dur ? " · " + dur : "") + '</span><div class="tl-text">Observed: ' + escapeHtmlTL(r.description || r.id) + '</div><div class="tl-meta">' + escapeHtmlTL(r.id) + ' · opened ' + escapeHtmlTL(String(r.started_at).slice(0,16).replace("T"," ")) + ' UTC' + (r.resolved_at ? ' · resolved ' + escapeHtmlTL(String(r.resolved_at).slice(0,16).replace("T"," ")) + ' UTC' : '') + '</div>'
         + (function() { var note = incidentNote(r.id, r.started_at); return note ? '<div class="tl-meta tl-note">Note' + (note.added ? ' added ' + escapeHtmlTL(note.added) : '') + ': ' + escapeHtmlTL(note.text) + '</div>' : ''; })()
         + '</div></div>';
     } else {
@@ -1282,12 +1283,12 @@ function renderTimelinePage() {
     + '.sev-warning::before{background:var(--elevated-risk);border-color:var(--elevated-risk)}.sev-critical::before{background:var(--degraded);border-color:var(--degraded)}.sev-release::before{background:var(--bg);border-color:var(--metal-1)}'
     + '.tl-date{font:400 .8125rem/1.6 var(--mono);color:var(--mute)}.tl-body{min-width:0}.tl-tag{display:inline-block;font:400 .75rem/1.4 var(--mono);color:var(--mute);border:1px solid var(--line);border-radius:var(--radius);padding:1px 6px;margin:0 6px 6px 0}'
     + '.tl-text{color:var(--ink);line-height:1.5}.tl-meta{font-size:.8125rem;color:var(--mute);margin-top:4px}'
-    + '@media(max-width:719px){.tl-item{grid-template-columns:minmax(0,1fr);gap:2px}}</style></head><body>'
+    + '.tl-wrap{padding-block:40px 72px}@media(max-width:719px){.tl-item{grid-template-columns:minmax(0,1fr);gap:2px}}</style></head><body>'
     + siteHeader("timeline")
-    + '<main id="main"><header class="doc-head"><div class="wrap"><div><h1>Observation timeline</h1>'
+    + '<main id="main"><header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Records and releases</p><h1>Observation timeline</h1>'
     + '<p class="doc-lede">Public-scope incidents and condition records from the Oracle’s own record (since the 2026-04-23 incident reconciliation boundary), with Oracle release events, which are maintained in its code.</p>'
     + '<div class="doc-intro"><p>Public incident generation began 2026-06-11; the first observability incident is backdated to the provable start of its condition within retained observations, and the condition may have started earlier. Observability incidents record limits of the Oracle’s own visibility; they are not network-failure claims. Raw data: <a href="/incidents">/incidents</a>.</p></div>'
-    + '</div></div></header><div class="wrap" style="padding-block:40px 72px"><div class="tl">' + items + '</div></div></main>'
+    + '</div></div></header><div class="wrap tl-wrap"><div class="tl">' + items + '</div></div></main>'
     + siteFooter("timeline") + '</body></html>';
 }
 function isFleetIncident_24h(inc) {
@@ -3631,7 +3632,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       if (!sharedDb) {
         res.writeHead(503, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "30" });
         res.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead() + '</head><body>'
-          + siteHeader("reference") + '<main id="main"><header class="doc-head"><div class="wrap"><div><h1>Reference</h1>'
+          + siteHeader("reference") + '<main id="main"><header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Explore</p><h1>Reference</h1>'
           + '<p class="doc-lede" id="ref-unavailable">The reference tables are unavailable: DNO\'s store is not open. This says nothing about the network. The public reading is at <a href="/organism">/organism</a>.</p>'
           + '</div></div></header></main>' + siteFooter("reference") + '</body></html>');
         return;
@@ -3642,10 +3643,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         + '.ref-sec h2{font-size:1.375rem;font-weight:500;color:var(--metal-2);margin-bottom:8px}.ref-note{color:var(--metal-1);max-width:46rem;margin-bottom:6px}'
         + '.ref-meta{font:400 .8125rem/1.5 var(--mono);color:var(--mute);margin:8px 0 14px}.ref-tbl td{font-family:var(--mono);font-size:.875rem}'
         + '.ref-tbl .nm{font-family:var(--sans);color:var(--ink)}.ref-tbl .id{display:block;color:var(--mute);font-size:.75rem;margin-top:2px}'
-        + '.lampt{display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap}.ref-empty{color:var(--mute);padding:12px 0}</style></head><body>';
+        + '.lampt{display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap}.ref-tbl .tag{margin:0}.ref-empty{color:var(--mute);padding:12px 0}</style></head><body>';
       h += siteHeader("reference");
-      h += '<main id="main"><header class="doc-head"><div class="wrap"><div><h1>Reference</h1>'
-        + '<p class="doc-lede">Two tables. Neither enters status, risk or agreement. Neither is a validator list, a stake list or an official-node list.</p></div></div></header>'
+      // The fixnet table is drawn only when a fixnet probe ran, so the lede does not count the tables.
+      h += '<main id="main"><header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Explore</p><h1>Reference</h1>'
+        + '<p class="doc-lede">The tables here enter no status, risk or agreement. None is a validator list, a stake list or an official-node list.</p></div></div></header>'
         + '<div class="wrap ref-body">';
 
       // --- Fleet Fixnet section (v7.2) ---
@@ -3747,7 +3749,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           h += '<tr>';
           // Validator (with identity sub-line)
           h += '<td data-label="Name"><span class="nm">' + esc(nameLabel) + '</span><span class="id">' + esc(truncId(identity)) + '</span></td>';
-          h += '<td data-label="Source"><span class="tag" style="margin:0">' + srcLabel + '</span></td>';
+          h += '<td data-label="Source"><span class="tag">' + srcLabel + '</span></td>';
           h += '<td data-label="Probe"><span class="lampt"><span class="ind" data-tone="' + statusTone + '"></span>' + statusText + '</span></td>';
           h += '<td data-label="Block" class="num">' + heightCell(block) + '</td>';
           h += '<td data-label="Height vs anchor" class="num">' + (vsAnchor === null ? "not reported" : (vsAnchor === 0 ? "same" : (vsAnchor > 0 ? "+" : "") + vsAnchor)) + '</td>';

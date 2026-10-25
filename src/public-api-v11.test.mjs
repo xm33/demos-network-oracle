@@ -413,6 +413,28 @@ check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-
   check("S3-17 no banned public language on either page outside the disclaimer the shared list allows", words.length === 0, words.join(" | "));
 }
 
+// ---- S4: the server-built pages (/docs, /timeline, /reference) take the shared title band; markup only ------------------
+{
+  const docsSrc = (AGENTSRC.match(/var DOCS_HTML = ([\s\S]*?)\n'<\/article><\/div><\/main><!--dno:footer--><\/body><\/html>';/) || ["", ""])[1];
+  const docsHead = docsSrc.slice(docsSrc.indexOf('<header class="doc-head">'), docsSrc.indexOf("</header>"));
+  check("S4-1 /docs: kicker 'Read-only API', one h1, one lede; version, API version, wallet and the contract link in a facts box beside the title; the publication sentence kept, the wallet line not repeated",
+    docsHead.includes('<p class="doc-kicker">Read-only API</p><h1>API</h1>') && count(docsHead, "<h1>") === 1 && count(docsHead, 'class="doc-lede"') === 1
+    && docsHead.includes(`<div class="doc-facts"><span>Agent <b>v' + AGENT_VERSION + '</b> · API <b>' + API_VERSION + '</b></span><span>Oracle wallet <code>__AGENT_WALLET__</code></span><span>Contract <a href="/organism/schema">/organism/schema</a></span></div>`)
+    && docsHead.includes("'<div class=\"doc-intro\"><p>' + (SUPERCOLONY_ENABLED ? 'On-chain publication of DNO\\'s own posts is enabled' : 'On-chain publication of DNO\\'s own posts is currently disabled') + '; the public reading is never posted. Observation continues independently, and that says nothing by itself about the Demos network.</p></div>'")
+    && count(docsSrc, "__AGENT_WALLET__") === 1 && !/Oracle wallet: /.test(docsSrc));
+  const tlSrc = (AGENTSRC.match(/function renderTimelinePage\(\) \{([\s\S]*?)\n\}\n/) || ["", ""])[1];
+  check("S4-2 /timeline: kicker 'Records and releases' (it carries incidents, condition records and releases), one h1; no inline style",
+    tlSrc.includes('<header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Records and releases</p><h1>Observation timeline</h1>') && !/ style="/.test(tlSrc) && /<div class="wrap tl-wrap">/.test(tlSrc) && /\.tl-wrap\{padding-block:40px 72px\}/.test(tlSrc));
+  check("S4-3 /timeline: a condition record's dot carries no severity colour — its tag says 'condition record', not the severity, so no colour may say it either; an incident's dot keeps the colour its tag names",
+    tlSrc.includes(`items += '<div class="tl-item' + (isCond ? '' : ' sev-' + sev) + '"><div class="tl-date">' + day + '</div><div class="tl-body"><span class="tl-tag">' + (isCond ? "condition record" : sev) + '</span>`) && !/class="tl-item sev-' \+ sev/.test(tlSrc));
+  const refSrc = (AGENTSRC.match(/\} else if \(reqPath === "\/reference"\) \{([\s\S]*?)\n    \} else if \(reqPath === "\/agent"\) \{/) || ["", ""])[1];
+  check("S4-4 /reference: kicker 'Explore' on the page and on its 503 shell; no inline style; the lede counts no tables, because the fixnet table is drawn only when a fixnet probe ran",
+    count(refSrc, '<header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Explore</p><h1>Reference</h1>') === 2 && !/ style="/.test(refSrc) && /\.ref-tbl \.tag\{margin:0\}/.test(refSrc)
+    && /if \(fx\.length > 0\) \{/.test(refSrc) && !/Two tables|Neither enters/.test(refSrc) && refSrc.includes('<p class="doc-lede">The tables here enter no status, risk or agreement. None is a validator list, a stake list or an official-node list.</p>'));
+  const s4Words = textOf(docsHead + tlSrc.slice(tlSrc.indexOf("<header"), tlSrc.indexOf("</header>")) + refSrc.slice(refSrc.indexOf('<p class="doc-lede">The tables'), refSrc.indexOf("</header>", refSrc.indexOf('<p class="doc-lede">The tables')))).split(/(?<=[.!?])\s+/).filter(publicLanguageHit);
+  check("S4-5 no banned public language in the three title bands", s4Words.length === 0, s4Words.join(" | "));
+}
+
 // ---- The 2026-10-25 releases are in the methodology changelog; Criteria and the Agent Guide take the shared title band ------
 {
   const cl = (METHP.match(/<section id="methodology-changelog">[\s\S]*?<\/section>/) || [""])[0];
@@ -656,6 +678,16 @@ try {
     check("S41 / for readers without JavaScript: the summary, its clock and the reading's agreement are filled once an observation exists", !o.observed_at
       || (t.includes('<p class="summary" id="summary" data-src="api">') && !t.includes('<p class="summary" id="summary" data-src="api">reading</p>') && !t.includes('<span id="obs-at">not read yet</span>') && !/<div data-card="reading_agreement"><p class="k">agreement<\/p><p class="v"><span class="ind" data-tone="pending">/.test(t))); }
   check("S39 every page's footer links every page, and no page loads a font host", unreachable.length === 0, unreachable.join("; "));
+  // S4 served: every subpage carries one kicker and one h1 as rendered; on /timeline no condition record is drawn in a severity colour.
+  const noKicker = [];
+  for (const pth of pages) {
+    const t = await get(pth).then((r) => (typeof r.body === "string" ? r.body : ""));
+    if (count(t, 'class="doc-kicker"') !== 1 || count(t, "<h1") !== 1) noKicker.push(pth + " kickers " + count(t, 'class="doc-kicker"') + " h1 " + count(t, "<h1"));
+  }
+  check("S4-6 every subpage, as served: exactly one kicker and one h1", noKicker.length === 0, noKicker.join(", "));
+  { const t = await get("/timeline").then((r) => (typeof r.body === "string" ? r.body : ""));
+    const condItems = [...t.matchAll(/<div class="tl-item([^"]*)"><div class="tl-date">[^<]*<\/div><div class="tl-body"><span class="tl-tag">condition record</g)].map((m) => m[1]);
+    check("S4-7 /timeline as served: no condition record carries a severity class (" + condItems.length + " condition records on the page)", condItems.every((c) => !/sev-/.test(c)) && !/ style="/.test(t.slice(t.indexOf("<main"), t.indexOf("</main>")))); }
   const kitFiles = [[fontSans, "font/woff2"], [fontMono, "font/woff2"]];
   let filesOk = true;
   for (const [pth, type] of kitFiles) { const r = await fetch(BASE + pth); filesOk = filesOk && r.status === 200 && r.headers.get("content-type") === type && /immutable/.test(r.headers.get("cache-control") || ""); await r.arrayBuffer(); }
