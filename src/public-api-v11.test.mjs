@@ -185,9 +185,9 @@ check("SB4 the figure's numbers are status-rule.mjs's (band, validators read, ca
   "bands " + figBands.join(",") + " vs " + RULE.bandBlocks + ", max " + RULE.witnessMax + ", " + candHours + " h");
 const layerRows = [...((SOURCES.match(/<section id="layers">[\s\S]*?<\/section>/) || [""])[0]).matchAll(/<td data-label="Layer">([^<]+)<\/td>[\s\S]*?<td data-label="Enters status">([^<]+)<\/td>/g)].map((m) => m[1] + " = " + m[2]);
 const entersRows = [...((SOURCES.match(/<ul class="enters">[\s\S]*?<\/ul>/) || [""])[0]).matchAll(/<li><span>([^<]+)<\/span><b>([^<]+)<\/b><\/li>/g)].map((m) => m[1] + " = " + m[2]);
-check("SB5 'What enters status' repeats the Source layers table row for row", layerRows.length === 5 && JSON.stringify(entersRows) === JSON.stringify(layerRows), entersRows.join("; "));
+check("SB5 'What enters status' repeats the Source layers table row for row (six rows since A1)", layerRows.length === 6 && JSON.stringify(entersRows) === JSON.stringify(layerRows), entersRows.join("; "));
 const srcArticleAt = SOURCES.indexOf('<div class="wrap doc-grid">'), srcArticle = srcArticleAt < 0 ? "" : SOURCES.slice(srcArticleAt, SOURCES.indexOf("</article>") + "</article>".length);
-check("SB6 the published Sources text (section list and article) is byte for byte the text before S2b", createHash("sha256").update(srcArticle).digest("hex") === "7ca9c3a53ab8d20a8f6f3308c8129451490fcb3f84a47267ac06d8d959882981"
+check("SB6 the published Sources text (section list and article) is byte for byte the article as A1 left it on master: S2b adds nothing inside it", createHash("sha256").update(srcArticle).digest("hex") === "dd8bef57162febbb5df8dbcd5a5eaa13e38185a48590168a06afa19585e587a4"
   && ["resolution", "layers", "separation", "endpoints", "dahr", "limits"].every((id) => count(SOURCES, 'id="' + id + '"') === 1));
 const idsIn = (h) => new Set([...h.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
 const srcIds = idsIn(SOURCES), methIds = idsIn(readFileSync(join(ROOT, "methodology.html"), "utf8")), aboutIds = idsIn(readFileSync(join(ROOT, "about-demos.html"), "utf8"));
