@@ -296,6 +296,44 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
   .tbl.stack td::before { content: attr(data-label); color: var(--mute); font-size: 0.8125rem; }
   .tbl.stack code { white-space: normal; }
 }
+/* A page's slogan under its name (D7: the name is the h1). */
+.doc-tagline { margin-top: 10px; font-size: clamp(1.25rem, 2vw, 1.5rem); line-height: 1.3; font-weight: 300; letter-spacing: -0.01em; color: var(--metal-1); }
+/* Orientation sections (S2): full width under the title band; the page's full text follows unchanged.
+   Every rule is scoped under .orient or .decision: the homepage has a .branch figure of its own (it does not load this
+   file, but a later page might share a class name). */
+.orient { padding-block: 48px; border-bottom: 1px solid var(--navy-line); }
+.orient-k { font: 500 0.75rem/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-0); }
+.orient h2 { margin-top: 10px; font-size: clamp(1.625rem, 2.6vw, 2.25rem); line-height: 1.15; font-weight: 400; letter-spacing: -0.02em; color: var(--metal-2); }
+.orient-lede { margin-top: 12px; max-width: 46rem; color: var(--metal-1); }
+.orient-key { margin-top: 16px; max-width: 46rem; padding: 14px 18px; border-left: 2px solid var(--violet-2); background: rgba(5, 10, 20, .72); color: var(--ink); }
+.orient-more { margin-top: 14px; font-size: 0.9375rem; color: var(--mute); }
+.orient-full { padding-top: 36px; }
+.decision { margin: 24px 0 0; padding: 24px; border: 1px solid var(--navy-line); border-radius: 12px; background: linear-gradient(180deg, rgba(10, 17, 32, .96), rgba(5, 9, 18, .98)); }
+.decision-k { text-align: center; font: 500 0.6875rem/1.4 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-0); }
+.decision-q { max-width: 36rem; margin: 8px auto 0; text-align: center; font-size: 1.25rem; line-height: 1.4; color: var(--ink); }
+.decision .fork { display: block; width: 100%; height: 28px; margin-top: 16px; fill: none; stroke: var(--metal-0); stroke-width: 1; }   /* the question splits into the two branches below; 19 and 69 are the columns' centres */
+.decision .branches { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+.decision .branch { padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.decision .branch-k { font: 600 0.75rem/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--metal-1); }
+.decision .branch-h { margin-top: 6px; font-size: 1.125rem; color: var(--ink); }
+.decision .branch > p:not([class]) { margin-top: 6px; font-size: 0.9375rem; color: var(--metal-1); }
+.decision .outcomes { display: grid; gap: 10px; margin: 14px 0 0; padding: 0; list-style: none; }
+.decision .outcome { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); }
+.decision .outcome--none { border-style: dashed; border-color: var(--metal-0); }   /* no reading formed: said in words and by the dashed edge, never by a tone */
+.decision .outcome code { font: 500 0.9375rem/1.3 var(--mono); color: var(--ink); background: none; border: 0; padding: 0; overflow-wrap: anywhere; }   /* a mode name may break at large text sizes rather than push the figure off a phone */
+.decision .outcome span { font-size: 0.875rem; color: var(--metal-1); }
+.decision figcaption { margin-top: 16px; font: 400 0.8125rem/1.6 var(--mono); color: var(--mute); }
+.orient .enters { display: grid; max-width: 56rem; margin: 18px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.orient .enters li { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.orient .enters span { color: var(--metal-1); }
+.orient .enters b { font-weight: 500; color: var(--ink); }
+@media (max-width: 719px) {
+  .orient { padding-block: 36px; }
+  .decision { padding: 16px; }
+  .decision .fork { display: none; }
+  .decision .branches { grid-template-columns: minmax(0, 1fr); margin-top: 20px; }
+  .orient .enters li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
 .copy-bar { display: flex; justify-content: flex-end; margin: 0 0 6px; }
 .doc-intro { display: grid; gap: 10px; margin-top: 14px; max-width: 46rem; color: var(--metal-1); }
 .doc-intro:empty { display: none; }
