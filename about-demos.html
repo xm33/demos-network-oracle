@@ -222,7 +222,7 @@
 
       <section id="two-mechanisms" aria-labelledby="h-two">
         <h2 id="h-two">Two mechanisms, two questions</h2>
-        <p>DNO's cross-check compares public answers. Demos shard composition is a consensus step inside the network. They answer different questions, and DNO never sees the second one.</p>
+        <p>DNO's cross-check compares public answers. Demos shard composition is a consensus step inside the network. They answer different questions. Some nodes publish their own view of the second in <code>/info</code>; DNO does not use or check it, and cannot tell from it who took part.</p>
         <figure class="fig lanes" aria-labelledby="lanes-cap">
           <div class="fig-body">
             <div class="lane">
@@ -266,7 +266,7 @@
               <dt>Question</dt><dd>Which validators form the shard for this block?</dd>
               <dt>Inputs</dt><dd>Validators that are <code>ACTIVE</code> on chain, and the CVSA seed.</dd>
               <dt>Output</dt><dd>The shard that runs consensus for that block.</dd>
-              <dt>What DNO sees of it</dt><dd>Nothing.</dd>
+              <dt>What DNO sees of it</dt><dd>What a node publishes about its own shard, which DNO does not use or check.</dd>
             </dl>
           </div>
         </div>
@@ -472,7 +472,7 @@
       <section id="cannot-see" aria-labelledby="h-cannot">
         <h2 id="h-cannot">What DNO cannot see</h2>
         <ul class="limits">
-          <li>Who is in a shard.</li>
+          <li>Who is in a shard, beyond what a node publishes about its own. DNO does not use or check that, and could not tell from it who actually took part.</li>
           <li>EXITED validators: the list DNO reads holds only rows still active at the block.</li>
           <li>Votes, admission, and the health and sync checks consensus applies.</li>
           <li>A node's own <code>/health</code> status.</li>
