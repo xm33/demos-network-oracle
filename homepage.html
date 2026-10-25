@@ -1206,7 +1206,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <li>What stands behind a published address that several keys share. Its answer names one key.</li>
           <li>Whether the chain stopped, or only the nodes DNO reads did. The three seeds are public URLs of one organization.</li>
           <li>Who runs a validator that stands in for a seed: DNO does not check. One within 25 blocks of the seed's height is enough for a reading; with no seed, two that agree are, when they are more than half of those that gave a height.</li>
-          <li>Whether two nodes at the same height hold the same block. Heights are compared; block hashes are not.</li>
+          <li>Whether a block the seeds agree on is final, or held by every validator. Seeds that report the same height are compared on their block hash; that result is on <a href="/health">/health</a> as <code>block_identity</code>, and does not enter this reading.</li>
           <li>Blocks and transactions are on the chain explorer. This page is the public reading from named seeds, and from validators that stand in for them.</li>
           <li>Why height stopped. A designed pause and a fault look the same from here.</li>
         </ul>
