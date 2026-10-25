@@ -762,7 +762,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     <nav class="nav" aria-label="Primary">
       <a href="/" aria-current="page">Reading</a><a href="/sources">Sources</a><a href="/methodology">Methodology</a><a href="/reference">Explore</a><a href="/docs">Developers</a>
     </nav>
-    <a class="live" id="live" href="#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></a>
+    <a class="live" id="live" href="#this-cycle" data-state="pending" title="Age of the last completed public observation" aria-label="connecting: reading the age of the last completed public observation"><span class="dot" id="live-dot"></span><span id="live-text">connecting</span></a>
     <details class="menu">
       <summary>Menu</summary>
       <ul>
@@ -828,7 +828,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           </aside>
         </div>
         <div class="strip cards" id="cards">
-          <div data-card="status"><p class="k">status</p><p class="v"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> status</span></button></div>
+          <div data-card="status"><p class="k">status</p><p class="v"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> status</span></button><p class="sr" id="status-change" role="status" aria-live="polite"></p></div>
           <div data-card="confidence"><p class="k">confidence</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="confidence" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> confidence</span></button></div>
           <div data-card="risk"><p class="k">risk</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="risk" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> risk</span></button></div>
           <div data-card="data_quality"><p class="k">data quality</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="data_quality" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> data quality</span></button></div>
@@ -1702,6 +1702,13 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const lc = l ? parseTime(l.computed_at) : null;
     setText($('p4-rounds-at'), at(lc, 'window computed')); setText($('p4-move-at'), at(lc, 'window computed'));
   }
+  // A change of status between two readings is said once to screen readers, politely: never on the first reading,
+  // never for a failed read (that is not a reading), and never for the ticking age.
+  let lastStatus = null;
+  function announceStatus(st) {
+    if (st && lastStatus && st !== lastStatus) setText($('status-change'), `Status is now ${st}; it was ${lastStatus}.`);
+    if (st) lastStatus = st;
+  }
   function renderCycle() {
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
     const vm = validatorModel();
@@ -1729,6 +1736,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const st = lower(o.status);
     setTone($('status-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
     setText($('status-value'), st ? st.toUpperCase() : 'UNKNOWN');
+    announceStatus(st);
     const r = seedsReading(o, h);
     // The ACTIVE count is the list read's, carried by /health: named in the reading's line only for the same observation.
     setText($('seeds-line'), HOME_CYCLE.cycleSeeds(r, sameObservation(h, o) ? active : null));
@@ -1782,15 +1790,19 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     box.replaceChildren(...list.map((t) => el('p', null, ind('unknown'), el('span', { text: t }))));
     box.hidden = !list.length;
   }
+  // The pill's name for screen readers: its word and the age in words, set and never announced (it ticks, so no
+  // aria-live). The same words as the subpages' site.js and the agent's no-JavaScript fill.
   function renderLive() {
     const r = reads.organism, live = $('live');
-    let state, text;
-    if (r.error) { state = 'down'; text = 'OFFLINE'; }
-    else if (!r.data) { state = 'pending'; text = 'connecting'; }
-    else if (!isNum(r.data.staleness_seconds)) { state = 'live'; text = 'LIVE'; }
-    else if (r.data.staleness_seconds <= 300) { state = 'live'; text = `LIVE · ${Math.round(r.data.staleness_seconds)} s`; }
-    else { state = 'stale'; text = `STALE · ${Math.round(r.data.staleness_seconds / 60)} min`; }
+    let state, text, label;
+    const n = (v, one, many) => `${v} ${v === 1 ? one : many}`;
+    if (r.error) { state = 'down'; text = 'OFFLINE'; label = 'OFFLINE: this page could not read the age of the last completed public observation'; }
+    else if (!r.data) { state = 'pending'; text = 'connecting'; label = 'connecting: reading the age of the last completed public observation'; }
+    else if (!isNum(r.data.staleness_seconds)) { state = 'live'; text = 'LIVE'; label = 'LIVE: the age of the last completed public observation was not reported'; }
+    else if (r.data.staleness_seconds <= 300) { const s = Math.round(r.data.staleness_seconds); state = 'live'; text = `LIVE · ${s} s`; label = `LIVE: the last completed public observation is ${n(s, 'second', 'seconds')} old`; }
+    else { const m = Math.round(r.data.staleness_seconds / 60); state = 'stale'; text = `STALE · ${m} min`; label = `STALE: the last completed public observation is ${n(m, 'minute', 'minutes')} old`; }
     if (live.dataset.state !== state) live.dataset.state = state;
+    if (live.getAttribute('aria-label') !== label) live.setAttribute('aria-label', label);
     if ($('readbar').dataset.live !== state) $('readbar').dataset.live = state;
     setText($('live-text'), text);
     setText($('rb-live'), text);

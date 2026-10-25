@@ -435,6 +435,37 @@ check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-
   check("S4-5 no banned public language in the three title bands", s4Words.length === 0, s4Words.join(" | "));
 }
 
+// ---- CF: the chrome follow-up (A28, A29; trigger S1 merged): the LIVE pill's name in words, its no-JS time on every
+// page, and a status change said once. The homepage's runtime behaviour is checked in tools/homepage-preview (CF1–CF5).
+{
+  const SITEJS = readFileSync(join(ROOT, "assets", "site.js"), "utf8");
+  const PEND_LABEL = 'aria-label="connecting: reading the age of the last completed public observation"';
+  const homePill = (HOME.match(/<a class="live" id="live"[^>]*>/) || [""])[0];
+  const kitPill = (AGENTSRC.match(/'<a class="live" id="live"[^\n]*/) || [""])[0];
+  check("CF-1 the pill ships with a name in words, the same on the homepage and every subpage, and with no aria-live (its age ticks)",
+    homePill.includes(PEND_LABEL) && AGENTSRC.includes("const LIVE_PENDING_LABEL = '" + PEND_LABEL + "';") && kitPill.includes("' + LIVE_PENDING_LABEL + '") && !/aria-live/.test(homePill + kitPill));
+  const setLiveCalls = [...SITEJS.matchAll(/setLive\(([^;]*)\);/g)].map((m) => m[1]).filter((a) => !/^state, text, label$/.test(a));
+  const words = ["LIVE: the last completed public observation is ", "STALE: the last completed public observation is ", "OFFLINE: this page could not read the age of the last completed public observation"];
+  const homeLive = (HOME.match(/function renderLive\(\) \{([\s\S]*?)\n  \}/) || ["", ""])[1];
+  check("CF-2 site.js names the pill on every update, and in the homepage's words (live, stale, offline)",
+    setLiveCalls.length === 4 && setLiveCalls.every((a) => /, liveLabel\('(live|stale|down|pending)'(, s)?\)$/.test(a)) && /if \(live\.getAttribute\('aria-label'\) !== label\) live\.setAttribute\('aria-label', label\);/.test(SITEJS)
+    && words.every((w) => SITEJS.includes(w) && homeLive.includes(w)) && /live\.setAttribute\('aria-label', label\)/.test(homeLive), setLiveCalls.join(" | "));
+  const fill = (AGENTSRC.match(/function fillLiveNoJs\(html, observedAt\) \{([\s\S]*?)\n\}/) || ["", ""])[1];
+  check("CF-3 without JavaScript the pill gives the time of the last completed public observation, text and name alike, by one function the homepage and every subpage use",
+    /'<span id="live-text">as of ' \+ at \+ '<\/span>'/.test(fill) && /'aria-label="as of ' \+ at \+ ': the time of the last completed public observation"'/.test(fill) && /html = fillLiveNoJs\(html, c\.observed_at\);/.test(AGENTSRC)
+    && /function subpageNoJs\(html\) \{\s*try \{ return fillLiveNoJs\(html, computeCanonicalState\(\)\.observed_at\); \} catch \(e\) \{ return html; \}\s*\}/.test(AGENTSRC));
+  const SUBS = ["/docs", "/sources", "/agent", "/timeline", "/about-demos", "/methodology", "/criteria", "/commerce", "/commerce/methodology"];
+  const notFilled = SUBS.filter((pth) => { const blk = (AGENTSRC.match(new RegExp('reqPath === "' + pth.replace(/\//g, "\\/") + '"\\) \\{\\n([^\\n]*\\n){1,2}')) || [""])[0]; return !/res\.end\(subpageNoJs\(/.test(blk); });
+  const refBlk = (AGENTSRC.match(/\} else if \(reqPath === "\/reference"\) \{([\s\S]*?)\n    \} else if \(reqPath === "\/agent"\) \{/) || ["", ""])[1];
+  check("CF-4 every subpage route sends its page through subpageNoJs (the nine above, and /reference's page and its 503 shell)", notFilled.length === 0 && count(refBlk, "res.end(subpageNoJs(") === 2, notFilled.join(", "));
+  const announce = (HOME.match(/function announceStatus\(st\) \{([\s\S]*?)\n  \}/) || ["", ""])[1];
+  const cycleLive = (HOME.match(/panel\.dataset\.state = 'live';([\s\S]*?)const r = seedsReading/) || ["", ""])[1];
+  const cycleFail = (HOME.match(/if \(!o\) \{([\s\S]*?)\n    \}\n    panel\.dataset\.state = 'live';/) || ["", ""])[1];
+  check("CF-5 the homepage says a status change once, politely, in a hidden status region: only when a reading's status differs from the last reading's, never from a failed read",
+    count(HOME, '<p class="sr" id="status-change" role="status" aria-live="polite"></p>') === 1 && /if \(st && lastStatus && st !== lastStatus\) setText\(\$\('status-change'\), `Status is now \$\{st\}; it was \$\{lastStatus\}\.`\);/.test(announce)
+    && /if \(st\) lastStatus = st;/.test(announce) && /announceStatus\(st\);/.test(cycleLive) && !/announceStatus/.test(cycleFail) && count(HOME, "announceStatus(") === 2);
+}
+
 // ---- The 2026-10-25 releases are in the methodology changelog; Criteria and the Agent Guide take the shared title band ------
 {
   const cl = (METHP.match(/<section id="methodology-changelog">[\s\S]*?<\/section>/) || [""])[0];
@@ -685,6 +716,16 @@ try {
     if (count(t, 'class="doc-kicker"') !== 1 || count(t, "<h1") !== 1) noKicker.push(pth + " kickers " + count(t, 'class="doc-kicker"') + " h1 " + count(t, "<h1"));
   }
   check("S4-6 every subpage, as served: exactly one kicker and one h1", noKicker.length === 0, noKicker.join(", "));
+  // CF served: once an observation exists, no page's pill says "connecting"; each gives a time, in its text and its name.
+  if (o.observed_at) {
+    const pillOff = [];
+    for (const pth of ["/"].concat(pages)) {
+      const t = await get(pth).then((r) => (typeof r.body === "string" ? r.body : ""));
+      const m = t.match(/<a class="live" id="live"[^>]*aria-label="as of (\d\d:\d\d:\d\d) UTC: the time of the last completed public observation"[^>]*>(?:<span class="dot"[^>]*><\/span>)<span id="live-text">as of (\d\d:\d\d:\d\d) UTC<\/span><\/a>/);
+      if (!m || m[1] !== m[2] || t.includes('<span id="live-text">connecting</span>')) pillOff.push(pth);
+    }
+    check("CF-6 every page as served, once an observation exists: the pill says 'as of HH:MM:SS UTC' in its text and its name, never 'connecting'", pillOff.length === 0, pillOff.join(", "));
+  }
   { const t = await get("/timeline").then((r) => (typeof r.body === "string" ? r.body : ""));
     const condItems = [...t.matchAll(/<div class="tl-item([^"]*)"><div class="tl-date">[^<]*<\/div><div class="tl-body"><span class="tl-tag">condition record</g)].map((m) => m[1]);
     check("S4-7 /timeline as served: no condition record carries a severity class (" + condItems.length + " condition records on the page)", condItems.every((c) => !/sev-/.test(c)) && !/ style="/.test(t.slice(t.indexOf("<main"), t.indexOf("</main>")))); }
