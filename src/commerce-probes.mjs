@@ -466,7 +466,11 @@ function assembleAuthorityResult(authorityId, probeResult) {
   // Update state
   previousResults.set(authorityId, { consecutive_failures, last_healthy_at, probe_count });
 
-  const freshness = configured && !isUnsupported ? evaluateFreshness(authorityId, now) : 'unknown';
+  // Freshness: has the endpoint answered healthy within the authority's update window (its freshness_budget)? Measured
+  // from the last healthy answer, not from this probe (which made every authority with a cadence read fresh, whatever
+  // it answered). It is not the age of the authority's data. last_healthy_at is kept in memory: after a restart the
+  // authority reads unknown until its first healthy answer.
+  const freshness = configured && !isUnsupported ? evaluateFreshness(authorityId, last_healthy_at) : 'unknown';
 
   return {
     authority_id: authorityId,

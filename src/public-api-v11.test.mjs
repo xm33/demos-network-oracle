@@ -406,14 +406,20 @@ check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-
   check("S3-14 Layer 2's data quality and confidence rules are the runner's (" + qS + "/" + qP + "%; uncertain = some healthy and some unavailable in one cycle)",
     qS === 70 && qP === 40 && /const confidence = \(unavailable > 0 && healthy > 0\) \? 'uncertain' : 'clear';/.test(derive)
     && quality.includes("<code>sufficient</code> when " + qS + "% or more of the active probes answered; <code>partial</code> from " + qP + "%") && quality.includes("some probes are <code>healthy</code> and some <code>unavailable</code>"));
-  // Freshness: at this version the runner measures the window from the probe's own time (finding F1), so every authority with
-  // a cadence reads fresh. While that is the code, both pages must say so; when the code changes, this check fails until the words do.
-  const fromNow = /evaluateFreshness\(authorityId, now\)/.test(PROBES);
+  // Freshness (F1, decided `last_healthy`): the runner measures the window from the endpoint's last healthy answer. The pages
+  // say that, and that it is not the age of the authority's data; the runtime behaviour is src/commerce-freshness.test.mjs.
+  // If the runner measures from anything else, this check fails until the words change with it.
+  const fromHealthy = /evaluateFreshness\(authorityId, last_healthy_at\)/.test(PROBES) && !/evaluateFreshness\(authorityId, now\)/.test(PROBES);
   const freshStates = [...new Set([...PROBES.matchAll(/return '(fresh|stale|unknown|not_applicable)'|\? 'fresh' : 'stale'|: 'unknown';/g)].map((m) => m[0]))];
   const fresh = sec(CMETH, "freshness");
-  check("S3-15 freshness: a row for each value the runner returns, and — while the window is measured from the probe's own time — the known limitation on the methodology page and a note under the Commerce table linking it",
-    ["fresh", "stale", "unknown", "not_applicable"].every((st) => row(fresh, st).length > 0) && freshStates.length >= 3
-    && fromNow === (fresh.includes('<p id="freshness-limit"><b>Known limitation.</b> At this version the window is measured from the probe\'s own time') && /<p class="orient-more" id="freshness-note">[^<]*it is not the age of anything[^<]*<a href="\/commerce\/methodology#freshness-limit">/.test(COMP)));
+  check("S3-15 freshness: a row for each value the runner returns; measured from the endpoint's last healthy answer, and both pages say so and that it is not the age of the authority's data; the old 'known limitation' is gone",
+    ["fresh", "stale", "unknown", "not_applicable"].every((st) => row(fresh, st).length > 0) && freshStates.length >= 3 && fromHealthy
+    && row(fresh, "fresh") === "The endpoint's last <code>healthy</code> answer is within the authority's update window."
+    && row(fresh, "stale") === "The endpoint has not answered <code>healthy</code> within the authority's update window."
+    && row(fresh, "unknown") === "The authority was not probed, or has not answered <code>healthy</code> since the probe runner last started."
+    && fresh.includes('<p id="freshness-scope">Freshness is about the Oracle\'s own answers from the endpoint, not the age of the authority\'s data')
+    && COMP.includes('<p class="orient-more" id="freshness-note">Freshness says whether the endpoint has answered <code>healthy</code> within the authority\'s update window; it is not the age of the authority\'s data. The State column says what the last probe found. <a href="/commerce/methodology#freshness">How freshness is read</a>.</p>')
+    && !/freshness-limit|Known limitation/.test(COMP + CMETH));
   // Where an authority's data is read through another service, the page says so.
   check("S3-16 the endpoints the runner probes through another service are named (the ECB's rates via Frankfurter, the DNS check via Cloudflare's resolver), and the one testnet endpoint (Base Sepolia) is not called production",
     (!/api\.frankfurter\.dev/.test(PROBES) || sec(CMETH, "observes").includes("the ECB's reference rates are read through Frankfurter")) && (!/cloudflare-dns\.com/.test(PROBES) || sec(CMETH, "observes").includes("Cloudflare's public DNS resolver"))
