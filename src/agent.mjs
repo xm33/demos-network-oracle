@@ -323,6 +323,22 @@ function homeTone(key, value) { return (HOME_TONE[key] && HOME_TONE[key][value])
 function homeCardMarker(key) {
   return '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p>';
 }
+// The header's LIVE pill as the page ships it (homepage.html and siteHeader) and as a reader without JavaScript gets it
+// once an observation exists: the time of the last completed public observation, with the same words as its name for
+// screen readers (A28, A29). Nothing observed yet: the pending words stay, on every page alike. The scripts (the
+// homepage's own, site.js) replace both as before.
+const LIVE_PENDING_TEXT = '<span id="live-text">connecting</span>';
+const LIVE_PENDING_LABEL = 'aria-label="connecting: reading the age of the last completed public observation"';
+function fillLiveNoJs(html, observedAt) {
+  if (typeof observedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(observedAt)) return html;
+  var at = escHtml(observedAt.slice(11, 19)) + " UTC";
+  return html.replace(LIVE_PENDING_TEXT, '<span id="live-text">as of ' + at + '</span>')
+    .replace(LIVE_PENDING_LABEL, 'aria-label="as of ' + at + ': the time of the last completed public observation"');
+}
+// Every subpage goes out through this: its header was built once at start, its pill is filled per request.
+function subpageNoJs(html) {
+  try { return fillLiveNoJs(html, computeCanonicalState().observed_at); } catch (e) { return html; }
+}
 var HOME_MARKERS = {
   panel: '<div class="panel" id="panel" data-state="pending">',
   status: '<span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span>',
@@ -331,7 +347,7 @@ var HOME_MARKERS = {
   door: '<span id="door-n"></span>',
   insufficient: '<p class="insufficient" id="insufficient" hidden>',
   agreement: '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
-  live: '<span id="live-text">connecting</span>',
+  live: LIVE_PENDING_TEXT,
   validators: '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>',
   summary: '<p class="summary" id="summary" data-src="api">reading</p>',
   observedAt: '<span id="obs-at">not read yet</span>',
@@ -378,7 +394,7 @@ function renderHomepageNoJs(html) {
     }
     var ag = (c.agreement && c.agreement.state) || "unknown";
     html = html.replace(HOME_MARKERS.agreement, '<span class="ind" id="ag-ind" data-tone="' + homeTone("agreement", ag) + '"></span><span id="ag-state">' + e(ag) + '</span>');
-    html = html.replace(HOME_MARKERS.live, '<span id="live-text">as of ' + e(c.observed_at.slice(11, 19)) + ' UTC</span>');
+    html = fillLiveNoJs(html, c.observed_at);
     var vline = validatorsNoJsLine();
     if (vline) html = html.replace(HOME_MARKERS.validators, '<p class="note" id="vw-line">' + e(vline) + '</p>');
     return html;
@@ -461,7 +477,7 @@ function siteHeader(active) {
     + '<span class="brand-name"><b>DNO</b><small>Demos Network Oracle</small></span></a>'
     + '<span class="indep">Independent observability ·<br>not an official Demos product.</span>'
     + '<nav class="nav" aria-label="Primary">' + links.join("") + '</nav>'
-    + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation"><span class="dot"></span><span id="live-text">connecting</span></a>'
+    + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation" ' + LIVE_PENDING_LABEL + '><span class="dot"></span>' + LIVE_PENDING_TEXT + '</a>'
     + '<details class="menu"><summary>Menu</summary><ul>' + sitePageLinks(active).map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
     + '</div></header>';
 }
@@ -3607,7 +3623,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(JSON.stringify(latestVersionData, null, 2));
     } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(applySiteKit(DOCS_HTML).replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected"));
+      res.end(subpageNoJs(applySiteKit(DOCS_HTML).replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected")));
     } else if (KIT_ASSETS[reqPath]) {
       var kitAsset = KIT_ASSETS[reqPath];
       res.writeHead(200, { "Content-Type": kitAsset.type, "Content-Length": kitAsset.bytes.length, "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" });
@@ -3624,17 +3640,17 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end();
     } else if (reqPath === "/sources") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(SOURCES_HTML);
+      res.end(subpageNoJs(SOURCES_HTML));
     } else if (reqPath === "/reference") {
       // The store is not open (the server starts after main() opens it, and a store that cannot open ends the process, so
       // this is a guard, not a path in normal running): say so in the site's shell, with 503, never a 200 that reads as an
       // empty page.
       if (!sharedDb) {
         res.writeHead(503, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "30" });
-        res.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead() + '</head><body>'
+        res.end(subpageNoJs('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead() + '</head><body>'
           + siteHeader("reference") + '<main id="main"><header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Explore</p><h1>Reference</h1>'
           + '<p class="doc-lede" id="ref-unavailable">The reference tables are unavailable: DNO\'s store is not open. This says nothing about the network. The public reading is at <a href="/organism">/organism</a>.</p>'
-          + '</div></div></header></main>' + siteFooter("reference") + '</body></html>');
+          + '</div></div></header></main>' + siteFooter("reference") + '</body></html>'));
         return;
       }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
@@ -3808,35 +3824,35 @@ function buildPublicMetrics(snapshot, now, staleBound) {
 
       h += '</section></div></main>' + siteFooter("reference") + '</body></html>';
       res.writeHead(200, {"Content-Type":"text/html; charset=utf-8"});
-      res.end(h);
+      res.end(subpageNoJs(h));
     } else if (reqPath === "/agent") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(AGENT_GUIDE_HTML);
+      res.end(subpageNoJs(AGENT_GUIDE_HTML));
     } else if (reqPath === "/timeline") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(renderTimelinePage());
+      res.end(subpageNoJs(renderTimelinePage()));
     } else if (reqPath === "/about-demos") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(ABOUT_DEMOS_HTML);
+      res.end(subpageNoJs(ABOUT_DEMOS_HTML));
     } else if (reqPath === "/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(METHODOLOGY_HTML);
+      res.end(subpageNoJs(METHODOLOGY_HTML));
     } else if (reqPath === "/criteria") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(CRITERIA_HTML);
+      res.end(subpageNoJs(CRITERIA_HTML));
     } else if (reqPath === "/criteria.json") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" });
       res.end(CRITERIA_JSON);
     } else if (reqPath === "/commerce") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(COMMERCE_HTML);
+      res.end(subpageNoJs(COMMERCE_HTML));
     } else if (reqPath === "/commerce/observations") {
       var pubObs = buildPublicCommerceObservation();
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=30" });
       res.end(JSON.stringify(pubObs, null, 2));
     } else if (reqPath === "/commerce/methodology") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(COMMERCE_METHODOLOGY_HTML);
+      res.end(subpageNoJs(COMMERCE_METHODOLOGY_HTML));
     } else if (reqPath === "/private/commerce/status" || reqPath.indexOf("/private/commerce/status/") === 0) {
       res.removeHeader("Access-Control-Allow-Origin");
       var pcTk = req.headers["x-dno-admin-token"];

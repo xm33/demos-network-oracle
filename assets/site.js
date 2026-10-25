@@ -7,11 +7,20 @@
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
   // ---- LIVE: /organism staleness_seconds, re-read every 30 s ----
+  // The pill's name for screen readers is its word and the age in words. It is set, never announced: the age ticks, so
+  // the pill carries no aria-live. The homepage and the agent's no-JavaScript fill use the same words.
   var live = $('#live'), liveText = $('#live-text');
-  function setLive(state, text) {
+  function liveLabel(state, s) {
+    if (state === 'live') return 'LIVE: the last completed public observation is ' + s + (s === 1 ? ' second' : ' seconds') + ' old';
+    if (state === 'stale') { var m = Math.round(s / 60); return 'STALE: the last completed public observation is ' + m + (m === 1 ? ' minute' : ' minutes') + ' old'; }
+    if (state === 'down') return 'OFFLINE: this page could not read the age of the last completed public observation';
+    return 'no observation yet: DNO has not completed a public observation';
+  }
+  function setLive(state, text, label) {
     if (!live || !liveText) return;
     if (live.getAttribute('data-state') !== state) live.setAttribute('data-state', state);
     if (liveText.textContent !== text) liveText.textContent = text;
+    if (live.getAttribute('aria-label') !== label) live.setAttribute('aria-label', label);
   }
   function readLive() {
     if (!live) return;
@@ -21,11 +30,11 @@
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (o) {
         var s = o && typeof o.staleness_seconds === 'number' && isFinite(o.staleness_seconds) ? Math.max(0, Math.round(o.staleness_seconds)) : null;
-        if (s === null) setLive('pending', 'no observation yet');
-        else if (s <= 300) setLive('live', 'LIVE · ' + s + ' s');
-        else setLive('stale', 'STALE · ' + Math.round(s / 60) + ' min');
+        if (s === null) setLive('pending', 'no observation yet', liveLabel('pending'));
+        else if (s <= 300) setLive('live', 'LIVE · ' + s + ' s', liveLabel('live', s));
+        else setLive('stale', 'STALE · ' + Math.round(s / 60) + ' min', liveLabel('stale', s));
       })
-      .catch(function () { setLive('down', 'OFFLINE'); })
+      .catch(function () { setLive('down', 'OFFLINE', liveLabel('down')); })
       .then(function () { if (timer) clearTimeout(timer); });
   }
   readLive();

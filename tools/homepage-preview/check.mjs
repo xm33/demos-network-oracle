@@ -75,7 +75,8 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       ra: card("reading_agreement"), ctxCount: t("ctx-count"), ctxCap: shown("ctx-cap") ? t("ctx-cap") : null,
       why: shown("whybox") ? { q: t("why-q"), a: t("why-a") } : null,
       h1: (document.querySelector("#hero-title") || {}).textContent || "", h1Img: !!document.querySelector("#hero-title img, #hero-title svg"),
-      live: { state: (document.getElementById("live") || { dataset: {} }).dataset.state, text: t("live-text") },
+      live: { state: (document.getElementById("live") || { dataset: {} }).dataset.state, text: t("live-text"), label: (document.getElementById("live") || { getAttribute: () => null }).getAttribute("aria-label"), ariaLive: (document.getElementById("live") || { getAttribute: () => null }).getAttribute("aria-live") },
+      statusChange: document.getElementById("status-change") ? t("status-change") : null,
       sweepShown: !!document.getElementById("sweep-fill") && getComputedStyle(document.getElementById("sweep-fill")).display !== "none",
       heroBg: document.querySelector(".hero .sky") ? getComputedStyle(document.querySelector(".hero .sky")).backgroundImage : "",
       // V7 sections below the reading
@@ -258,6 +259,47 @@ console.log("\n[HOMEPAGE_PREVIEW] FAIL: a failed /organism read is said as a fai
 {
   const r = await render(null, load(scen.seeds_only[1]));
   check("F1 status unknown, 'failure to read, not an observation about the network'", r.status === "UNKNOWN" && /failure to read/.test(r.seeds), r.seeds);
+}
+
+console.log("\n[HOMEPAGE_PREVIEW] CF: the LIVE pill's name says the age in words; a status change is said once");
+{
+  const o = load(scen.seeds_only[0]), h = load(scen.seeds_only[1]);
+  const rf = await render(o, h), sec = (rf.live.text.match(/^LIVE · (\d+) s$/) || [])[1];
+  check("CF1 a fresh reading: the pill is named 'LIVE: the last completed public observation is N seconds old', N its own digits; no aria-live on it",
+    sec !== undefined && rf.live.label === `LIVE: the last completed public observation is ${sec} ${sec === "1" ? "second" : "seconds"} old` && rf.live.ariaLive === null, JSON.stringify(rf.live));
+  const stale = JSON.parse(JSON.stringify(o)); stale.staleness_seconds = 420;
+  const rs = await render(stale, h);
+  check("CF2 a stale reading: 'STALE: … is 7 minutes old'", rs.live.text === "STALE · 7 min" && rs.live.label === "STALE: the last completed public observation is 7 minutes old", JSON.stringify(rs.live));
+  const rd = await render(null, h);
+  check("CF3 a failed read: 'OFFLINE: this page could not read the age of the last completed public observation'", rd.live.text === "OFFLINE" && rd.live.label === "OFFLINE: this page could not read the age of the last completed public observation", JSON.stringify(rd.live));
+  check("CF4 the page has its hidden status region, and nothing is said in it on the first reading", rf.statusChange === "" && rs.statusChange === "" && rd.statusChange === "", JSON.stringify([rf.statusChange, rs.statusChange, rd.statusChange]));
+  // One page across four reads (the page's own 20 s schedule, run on a fake clock): same status, a change, a failed read, a change back.
+  current = { organism: o, health: h };
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.clock.install();
+  await page.goto(BASE + "/");
+  const said = () => page.evaluate(() => { const n = document.getElementById("status-change"); return n ? n.textContent : null; });   // missing: null, a failed check, not a crash
+  const st = () => page.evaluate(() => document.getElementById("status-value").textContent);
+  const until = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await new Promise((r) => setTimeout(r, 100)); } return false; };
+  const next = async (org) => { current = { organism: org, health: h }; await page.clock.runFor(20500); await new Promise((r) => setTimeout(r, 1200)); };
+  const reached = [];
+  reached.push(await until(async () => (await st()) === "STABLE"));
+  const s0 = await said();
+  await next(o);
+  const s1 = await said();
+  const deg = JSON.parse(JSON.stringify(o)); deg.status = "degraded";
+  await next(deg); reached.push(await until(async () => (await st()) === "DEGRADED"));
+  const s2 = await said();
+  // Failed reads: the page keeps the last reading for 300 s, then shows UNKNOWN (no reading). Run the clock past that.
+  current = { organism: null, health: h };
+  for (let i = 0; i < 17 && (await st()) !== "UNKNOWN"; i++) { await page.clock.runFor(20500); await new Promise((r) => setTimeout(r, 400)); }
+  reached.push(await until(async () => (await st()) === "UNKNOWN"));
+  const s3 = await said();
+  await next(o); reached.push(await until(async () => (await st()) === "STABLE"));
+  const s4 = await said();
+  await page.close();
+  check("CF5 the same status again says nothing; a change says 'Status is now degraded; it was stable.'; failed reads past 300 s (UNKNOWN, no reading) say nothing new; the next reading says 'Status is now stable; it was degraded.'",
+    reached.every(Boolean) && s0 === "" && s1 === "" && s2 === "Status is now degraded; it was stable." && s3 === s2 && s4 === "Status is now stable; it was degraded.", JSON.stringify({ reached, said: [s0, s1, s2, s3, s4] }));
 }
 
 await browser.close(); server.close();
