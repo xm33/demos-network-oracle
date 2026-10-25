@@ -321,9 +321,96 @@ check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-
   const catchBody = (comScript.match(/\} catch\(e\) \{([\s\S]*?)\n  \}\n\}\)\(\);/) || ["", ""])[1];
   check("COM2 when the observations cannot be read, every placeholder gets a state (the four cards and the table), none keeps 'Loading'",
     ["obs-state", "obs-dq", "obs-conf", "obs-count"].every((id) => catchBody.includes("'" + id + "'")) && /classList\.remove\('loading'\)/.test(catchBody) && /setTableNote\(/.test(catchBody), catchBody.slice(0, 200));
-  check("COM3 with no authority observed the table says so instead of keeping its placeholder row", /if \(!d\.authorities \|\| d\.authorities\.length === 0\) setTableNote\('No authority observed in this reading\.'\);/.test(comScript));
+  check("COM3 with no authority observed the table says so instead of keeping its placeholder row (and says when the runner's file could not be read)", /if \(!d\.authorities \|\| d\.authorities\.length === 0\) setTableNote\(d\.error \? 'The probe runner\\'s results could not be read; the values above are the fallback\.' : 'No authority was observed in the last probe cycle\.'\);/.test(comScript));
   check("COM5 before the script runs (or without it) the placeholders say 'not read yet', never 'Loading' or 'reading' that would wait for ever", !/>Loading\.\.\.<|>reading</.test(COM) && (COM.match(/>not read yet</g) || []).length === 4 && />Not read yet\.</.test(COM));
   check("COM4 setTableNote writes text, not markup (textContent), and replaces the placeholder row", /function setTableNote\(text\) \{[\s\S]*?td\.textContent = text;[\s\S]*?replaceChildren\(tr\);\s*\}/.test(comScript) && !/innerHTML/.test(comScript));
+}
+
+// ---- S3: the two Commerce pages take the shared layout, and every word about a probe is the probe runner's own -----------
+// The probe runner (src/commerce-probes.mjs) and the agent's public builder are the oracle: each check reads the value from
+// the code and looks for the page's sentence about it, so a changed threshold, state or field fails here until the page says it.
+{
+  const COMP = readFileSync(join(ROOT, "commerce.html"), "utf8");
+  const CMETH = readFileSync(join(ROOT, "commerce-methodology.html"), "utf8");
+  const PROBES = readFileSync(join(ROOT, "src", "commerce-probes.mjs"), "utf8");
+  const pubBuilder = (AGENTSRC.match(/function buildPublicCommerceObservation\(\) \{([\s\S]*?)\n\}\n/) || ["", ""])[1];
+  const sec = (html, id) => (html.match(new RegExp('<section[^>]* id="' + id + '"[\\s\\S]*?</section>')) || [""])[0];
+  const head = (html) => html.slice(html.indexOf('<header class="doc-head">'), html.indexOf("</header>", html.indexOf('<header class="doc-head">')));
+  const one = (h, re) => (h.match(re) || []).length === 1;
+  const headOk = (h, kicker) => one(h, /<p class="doc-kicker">/g) && h.includes('<p class="doc-kicker">' + kicker + "</p>") && one(h, /<h1>/g) && one(h, /<p class="doc-lede">/g) && /<div class="doc-facts">[\s\S]*<span>Layer <b>2<\/b> · separate from the reading<\/span>/.test(h);
+  check("S3-1 Commerce: the shared title band — kicker 'Layer 2 · Commerce observation', one h1, one lede, facts beside the title saying Layer 2 is separate from the reading", headOk(head(COMP), "Layer 2 · Commerce observation"));
+  check("S3-2 Commerce methodology: the shared title band — kicker 'Layer 2 · Method', one h1, one lede, the same facts line; contents beside the article", headOk(head(CMETH), "Layer 2 · Method") && /<div class="wrap doc-grid">\s*<details class="toc" open>/.test(CMETH) && /<article class="prose">/.test(CMETH));
+  const comStyle = (COMP.match(/<style>([\s\S]*?)<\/style>/) || ["", ""])[1];
+  const comSelectors = comStyle.replace(/\/\*[\s\S]*?\*\//g, "").split("}").map((r) => r.split("{")[0].trim()).filter((sel) => sel && !/^@media/.test(sel));
+  check("S3-3 no inline style on either page; the methodology page has no page style; the Commerce page's own rules all sit under .orient", !/ style="/.test(COMP) && !/ style="/.test(CMETH) && !/<style>/.test(CMETH) && comSelectors.length > 0 && comSelectors.every((sel) => sel.split(",").every((x) => /^\.orient\b/.test(x.trim()))), comSelectors.filter((sel) => !/^\.orient\b/.test(sel)).join(" | "));
+  const comScript = (COMP.match(/<script>([\s\S]*?)<\/script>/) || ["", ""])[1];
+  check("S3-4 no colour carries a state: no hex or rgb colour on either page, no style or class set by the script, and the state is printed as the API's own lowercase word", !/#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(COMP + CMETH) && !/\.style\.|className\s*=|classList\.add|toUpperCase/.test(comScript) && /String\(a\.reachability \|\| 'unknown'\)/.test(comScript));
+  const ths = [...(COMP.match(/<thead>[\s\S]*?<\/thead>/) || [""])[0].matchAll(/<th>([^<]+)<\/th>/g)].map((m) => m[1]);
+  const labels = (comScript.match(/td\.setAttribute\('data-label', \[([^\]]+)\]\[i\]\)/) || ["", ""])[1].split(",").map((x) => x.trim().replace(/^'|'$/g, ""));
+  check("S3-5 the authority table stacks on a phone: class 'tbl stack', and each cell's label is its column header, in order", /<table class="tbl stack authority-table">/.test(COMP) && ths.length === 5 && JSON.stringify(ths) === JSON.stringify(labels), JSON.stringify(labels));
+  const apiDisclaimer = (pubBuilder.match(/disclaimer: "([^"]+)"/) || ["", ""])[1];
+  check("S3-6 the API's disclaimer, word for word, on both pages; on Commerce with the Layer 1 boundary and a link to /organism", apiDisclaimer.length > 100
+    && /<p class="orient-key" id="com-disclaimer">/.test(COMP) && COMP.includes(apiDisclaimer + " Commerce observation is Layer 2 — it does not influence Layer 1 core network assessment (<a href=\"/organism\">/organism</a>).</p>")
+    && /<p class="note" id="com-disclaimer">/.test(CMETH) && CMETH.includes(apiDisclaimer + " Commerce observation does not influence core network assessment."));
+  check("S3-7 Layer 2's data quality and confidence are labelled Layer 2 and said not to be the reading's, on both pages",
+    COMP.includes('<span class="k">Data quality (Layer 2)</span>') && COMP.includes('<span class="k">Confidence (Layer 2)</span>') && COMP.includes("Data quality and confidence here are Layer 2's, computed from the probes; they are not the reading's.")
+    && /<h2>Data quality and confidence \(Layer 2\)<\/h2>/.test(CMETH) && CMETH.includes("They are computed from the probes alone and never enter the reading."));
+  // Every reachability value the runner can return has a row, and the runner's thresholds are the page's.
+  const reach = sec(CMETH, "reachability");
+  const runnerStates = [...new Set([...PROBES.matchAll(/reachability: '([a-z_]+)'/g)].map((m) => m[1]))].sort();
+  const rowStates = [...reach.matchAll(/<tr><td><code>([a-z_]+)<\/code><\/td>/g)].map((m) => m[1]).sort();
+  check("S3-8 every reachability value the probe runner returns has one row on the methodology page, and no other row", runnerStates.length >= 5 && JSON.stringify(runnerStates) === JSON.stringify(rowStates), "runner " + runnerStates.join(",") + " · page " + rowStates.join(","));
+  const row = (h, st) => (h.match(new RegExp("<tr><td><code>" + st + "</code></td><td>([\\s\\S]*?)</td></tr>")) || ["", ""])[1];
+  const r401 = /if \(response\.status === 401 \|\| response\.status === 403\) \{\s*return \{\s*reachability: 'unavailable'/.test(PROBES);
+  const r429 = /if \(response\.status === 429\) \{\s*return \{\s*reachability: 'degraded'/.test(PROBES);
+  const r5xx = /if \(response\.status >= 500\) \{\s*return \{\s*reachability: 'unavailable'/.test(PROBES);
+  const nonJsonPasses = /catch \{\s*\/\/ Non-JSON response — still reachable\s*\}/.test(PROBES) && /config\.validate && body !== null && !config\.validate\(body\)/.test(PROBES);
+  check("S3-9 the rows say what the runner does: 429 and an unexpected status are degraded; 401/403, 5xx and a timeout are unavailable; a 404 or named 4xx can be the expected answer; a body that is not JSON is not checked; no row calls a slow answer degraded",
+    r401 && r429 && r5xx && nonJsonPasses && /HTTP 429/.test(row(reach, "degraded")) && /unexpected status code/.test(row(reach, "degraded")) && !/slow/i.test(row(reach, "degraded"))
+    && /HTTP 401 or 403/.test(row(reach, "unavailable")) && /server error \(5xx\)/.test(row(reach, "unavailable")) && /within the timeout/.test(row(reach, "unavailable"))
+    && /a 404 or a named 4xx is the expected answer/.test(row(reach, "healthy")) && /A body that is not JSON is not checked\./.test(row(reach, "healthy")));
+  const timeoutS = Number((PROBES.match(/const PROBE_TIMEOUT_MS = (\d+);/) || ["", "0"])[1]) / 1000;
+  const cycleMin = Number((PROBES.match(/const CYCLE_INTERVAL_MS = (\d+) \* 60 \* 1000;/) || ["", "0"])[1]);
+  const jitterS = Number((PROBES.match(/const JITTER_MS = (\d+) \* 1000;/) || ["", "0"])[1]);
+  const budgetS = Number((PROBES.match(/const CYCLE_BUDGET_MS = (\d+) \* 1000;/) || ["", "0"])[1]);
+  check("S3-10 the timings are the runner's: a probe allows " + timeoutS + " s; a cycle about every " + cycleMin + " min (±" + jitterS + " s), " + budgetS + " s in all, a probe not reached left out",
+    timeoutS === 5 && reach.includes("A probe allows " + timeoutS + " seconds.") && sec(CMETH, "observes").includes("about every " + cycleMin + " minutes (±" + jitterS + " s)") && sec(CMETH, "observes").includes("A cycle allows " + budgetS + " seconds in total; a probe not reached in that time is left out of that cycle's results.")
+    && head(COMP).includes("Probed every <b>" + cycleMin + " min</b>") && head(CMETH).includes("every <b>" + cycleMin + " min</b>"));
+  const lat = (PROBES.match(/function classifyLatency\(ms\) \{([\s\S]*?)\n\}/) || ["", ""])[1];
+  const latMs = [...lat.matchAll(/if \(ms < (\d+)\) return '(\w+)';/g)].map((m) => [Number(m[1]), m[2]]);
+  const sFmt = (ms) => (ms / 1000).toString() + " s";
+  check("S3-11 the latency classes are the runner's, and the page says /commerce/observations does not publish them (it does not)",
+    latMs.length === 3 && latMs.every(([ms, cls]) => reach.includes("<code>" + cls + "</code> under " + sFmt(ms))) && !/latency/.test(pubBuilder) && reach.includes("The latency class does not change the state, and /commerce/observations does not publish it."), JSON.stringify(latMs));
+  check("S3-12 unsupported authorities: the runner marks them not configured, the public builder leaves them out, and the page says they are not probed, not counted, not listed",
+    /reachability: 'unsupported',[\s\S]{0,160}configured: false/.test(PROBES) && /\.filter\(function\(a\) \{ return a\.configured; \}\)/.test(pubBuilder) && /not probed, not counted, and not listed in <a href="\/commerce\/observations">\/commerce\/observations<\/a>/.test(row(reach, "unsupported")));
+  // The overall rule and Layer 2's data quality and confidence, from deriveOverall.
+  const derive = (PROBES.match(/function deriveOverall\(authorityResults\) \{([\s\S]*?)\n\}/) || ["", ""])[1];
+  const pct = (re) => Math.round(Number((derive.match(re) || ["", "NaN"])[1]) * 100);
+  const hPct = pct(/if \(healthy \/ total >= ([\d.]+)\)/), dPct = pct(/\} else if \(okPct >= ([\d.]+)\) \{\s*state = 'degraded'/), pPct = pct(/\} else if \(okPct >= ([\d.]+)\) \{\s*state = 'partial'/);
+  const qS = pct(/if \(okPct >= ([\d.]+)\) data_quality = 'sufficient'/), qP = pct(/else if \(okPct >= ([\d.]+)\) data_quality = 'partial'/);
+  const overall = sec(CMETH, "overall"), quality = sec(CMETH, "quality");
+  check("S3-13 the overall rule is the runner's (" + [hPct, dPct, pPct].join("/") + "%): healthy counts healthy probes only, the rest count 'answered' = healthy or degraded; unknown when none is active",
+    hPct === 90 && dPct === 70 && pPct === 40 && /const okCount = healthy \+ degraded;/.test(derive) && /if \(total === 0\) return \{ state: 'unknown'/.test(derive)
+    && overall.includes("\"Answered\" means <code>healthy</code> or <code>degraded</code>.") && row(overall, "healthy").includes(hPct + "% or more of the active probes are <code>healthy</code>")
+    && row(overall, "degraded").includes(dPct + "% or more answered") && row(overall, "partial").includes(pPct + "% or more answered") && row(overall, "unavailable").includes("Under " + pPct + "% answered") && /No active probe is configured/.test(row(overall, "unknown")));
+  check("S3-14 Layer 2's data quality and confidence rules are the runner's (" + qS + "/" + qP + "%; uncertain = some healthy and some unavailable in one cycle)",
+    qS === 70 && qP === 40 && /const confidence = \(unavailable > 0 && healthy > 0\) \? 'uncertain' : 'clear';/.test(derive)
+    && quality.includes("<code>sufficient</code> when " + qS + "% or more of the active probes answered; <code>partial</code> from " + qP + "%") && quality.includes("some probes are <code>healthy</code> and some <code>unavailable</code>"));
+  // Freshness: at this version the runner measures the window from the probe's own time (finding F1), so every authority with
+  // a cadence reads fresh. While that is the code, both pages must say so; when the code changes, this check fails until the words do.
+  const fromNow = /evaluateFreshness\(authorityId, now\)/.test(PROBES);
+  const freshStates = [...new Set([...PROBES.matchAll(/return '(fresh|stale|unknown|not_applicable)'|\? 'fresh' : 'stale'|: 'unknown';/g)].map((m) => m[0]))];
+  const fresh = sec(CMETH, "freshness");
+  check("S3-15 freshness: a row for each value the runner returns, and — while the window is measured from the probe's own time — the known limitation on the methodology page and a note under the Commerce table linking it",
+    ["fresh", "stale", "unknown", "not_applicable"].every((st) => row(fresh, st).length > 0) && freshStates.length >= 3
+    && fromNow === (fresh.includes('<p id="freshness-limit"><b>Known limitation.</b> At this version the window is measured from the probe\'s own time') && /<p class="orient-more" id="freshness-note">[^<]*it is not the age of anything[^<]*<a href="\/commerce\/methodology#freshness-limit">/.test(COMP)));
+  // Where an authority's data is read through another service, the page says so.
+  check("S3-16 the endpoints the runner probes through another service are named (the ECB's rates via Frankfurter, the DNS check via Cloudflare's resolver), and the one testnet endpoint (Base Sepolia) is not called production",
+    (!/api\.frankfurter\.dev/.test(PROBES) || sec(CMETH, "observes").includes("the ECB's reference rates are read through Frankfurter")) && (!/cloudflare-dns\.com/.test(PROBES) || sec(CMETH, "observes").includes("Cloudflare's public DNS resolver"))
+    && sec(CMETH, "observes").includes("the state says whether that service answered, not the authority") && !/does not require special access/.test(CMETH)
+    && (!/env_required: 'BASE_SEPOLIA_RPC'/.test(PROBES) || (sec(CMETH, "testnet").includes("reads a contract on Base Sepolia, a public testnet") && !/probed by the Oracle are production public APIs/.test(CMETH.replace("Most authority endpoints probed", "")))));
+  const words = textOf(COMP.replace(/<script>[\s\S]*?<\/script>/, "") + CMETH).split(/(?<=[.!?])\s+/).filter(publicLanguageHit);
+  check("S3-17 no banned public language on either page outside the disclaimer the shared list allows", words.length === 0, words.join(" | "));
 }
 
 // ---- The 2026-10-25 releases are in the methodology changelog; Criteria and the Agent Guide take the shared title band ------
