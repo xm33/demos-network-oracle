@@ -326,11 +326,19 @@ check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-
   check("COM4 setTableNote writes text, not markup (textContent), and replaces the placeholder row", /function setTableNote\(text\) \{[\s\S]*?td\.textContent = text;[\s\S]*?replaceChildren\(tr\);\s*\}/.test(comScript) && !/innerHTML/.test(comScript));
 }
 
-// ---- The 2026-10-25 releases are in the methodology changelog ---------------------------------------------------------
+// ---- The 2026-10-25 releases are in the methodology changelog; Criteria and the Agent Guide take the shared title band ------
 {
   const cl = (METHP.match(/<section id="methodology-changelog">[\s\S]*?<\/section>/) || [""])[0];
   check("CL1 the changelog dates today's releases above v1.2: block identity (enters no status field, linked to its section and the recipe) and the six-field correction (no rule changed)",
     /<p><b>Block identity — 2026-10-25\.<\/b>[^\n]*enters no status field[^\n]*href="#block-identity"[^\n]*href="\/agent#repeat-the-method"/.test(cl) && /<p><b>Corrections — 2026-10-25\.<\/b>[^\n]*six fields[^\n]*No rule changed\.<\/p>/.test(cl) && cl.indexOf("Block identity — 2026-10-25") < cl.indexOf("v1.2 — 2026-10-05"));
+  const CRIT = readFileSync(join(ROOT, "criteria.html"), "utf8");
+  const critHead = CRIT.slice(CRIT.indexOf('<header class="doc-head">'), CRIT.indexOf('<div class="wrap doc-grid">'));
+  const critArt = CRIT.slice(CRIT.indexOf('<article class="prose">'), CRIT.indexOf("</article>"));
+  check("TB1 Criteria: kicker 'Definitions only', one h1, one lede carrying 'definitions only: descriptive not prescriptive', a facts box beside the title (version, date, /criteria.json) as About Demos has; the title band holds no note",
+    /<p class="doc-kicker">Definitions only<\/p>/.test(critHead) && count(CRIT, "<h1") === 1 && count(critHead, 'class="doc-lede"') === 1 && /definitions only: descriptive not prescriptive/.test(critHead) && /<div class="doc-facts">\s*<span>Criteria Framework <b>v1\.0<\/b><\/span>\s*<span>Effective <b>2026-07-06<\/b><\/span>\s*<span>Machine-readable <a href="\/criteria\.json">\/criteria\.json<\/a><\/span>\s*<\/div>/.test(critHead) && !/class="note"/.test(critHead));
+  check("TB2 Criteria: the two notes open the article, unchanged in text, first in it", /^<article class="prose">\s*<div class="note">\s*<b>Definitions only — applied to no named participant here\.<\/b>/.test(critArt) && count(critArt, '<div class="note">') >= 2 && critArt.indexOf("gated and not live") > 0 && critArt.indexOf("gated and not live") < critArt.indexOf("<section"));
+  const AGH = GUIDE.slice(GUIDE.indexOf('<header class="doc-head">'), GUIDE.indexOf('<div class="wrap doc-grid">'));
+  check("TB3 Agent Guide: kicker 'Developers', one h1, one lede (the two merged), no doc-intro", /<p class="doc-kicker">Developers<\/p>/.test(AGH) && count(GUIDE, "<h1") === 1 && count(AGH, 'class="doc-lede"') === 1 && !/doc-intro/.test(AGH) && /how to repeat the method/.test(AGH));
 }
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
