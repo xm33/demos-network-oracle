@@ -259,7 +259,7 @@ const abSel = [...abStyle.matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).flatM
 check("SA11 the S2a styles in the page are scoped under .orient", abSel.length >= 5 && abSel.every((s) => /^\.orient\s/.test(s)), abSel.filter((s) => !/^\.orient\s/.test(s)).join(" | "));
 // A node's own /info can list its shard and name the secretary (seed read 2026-10-24, A35): the limit is that DNO does not read or check it, not that it cannot be seen.
 const abSeeClaims = abNewText.split(/(?<=[.!?])\s+/).filter((x) => /\b(cannot|can't|does not|never|not) (see|sees|seen)\b/i.test(x) && /shard|consensus|secretary|vote/i.test(x));
-check("SA12 the new text says DNO does not read or check consensus data, never that it cannot see it", abSeeClaims.length === 0 && (abNewText.match(/neither reads nor checks it/g) || []).length === 2, abSeeClaims.join(" | "));
+check("SA12 the new text says DNO does not use or check consensus data (it fetches the /info that carries it), never that it cannot see it", abSeeClaims.length === 0 && (abNewText.match(/does not use or check it/g) || []).length === 2 && !/neither reads nor checks/.test(abNewText), abSeeClaims.join(" | "));
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));

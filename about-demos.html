@@ -159,7 +159,7 @@
           <h3>Outside: DNO</h3>
           <p class="who">an independent observer · every 20 s</p>
           <p>DNO is not an official Demos product. Its reading uses the heights that three configured public seeds report for themselves. When fewer than two seeds give their own height, validators that answer as listed can stand in, under <a href="/methodology#witnesses">the published rules</a>.</p>
-          <p class="lens-note">DNO reports what those sources answered. It does not read consensus: shard composition, votes, or which validators took part in a round. Some nodes publish their own view of their shard; DNO neither reads nor checks it.</p>
+          <p class="lens-note">DNO reports what those sources answered. It does not read consensus: shard composition, votes, or which validators took part in a round. Some nodes publish their own view of their shard; DNO does not use or check it.</p>
         </div>
       </div>
       <p class="orient-more">Both side by side, in detail: <a href="#two-mechanisms">Two mechanisms</a>.</p>
@@ -175,7 +175,7 @@
           <tbody>
             <tr data-term="health"><td data-label="Word"><code>/health</code></td><td data-label="In Demos">A Demos node's own <code>GET /health</code>, its word for itself: <code>ok</code>, <code>degraded</code>, <code>dormant</code> or <code>failing</code>.</td><td data-label="In DNO">DNO's own <code>/health</code>, a different service: DNO's observation details and counts. DNO does not read a node's <code>/health</code>.</td></tr>
             <tr data-term="status"><td data-label="Word"><code>ACTIVE</code>, <code>stable</code></td><td data-label="In Demos"><code>ACTIVE</code>: a validator row's status on chain, eligible for shard selection.</td><td data-label="In DNO"><code>stable</code>: DNO's status for one cycle's reading of public answers. It is not <code>ACTIVE</code>, and it is not <code>ok</code>.</td></tr>
-            <tr data-term="shards"><td data-label="Word">shard, consensus</td><td data-label="In Demos">For each block, a shard drawn from the eligible validators runs consensus for that block.</td><td data-label="In DNO">A node may publish its own view of its shard; DNO neither reads nor checks it. DNO reads a height that moves, or does not, and never says why it stopped.</td></tr>
+            <tr data-term="shards"><td data-label="Word">shard, consensus</td><td data-label="In Demos">For each block, a shard drawn from the eligible validators runs consensus for that block.</td><td data-label="In DNO">A node may publish its own view of its shard; DNO does not use or check it. DNO reads a height that moves, or does not, and never says why it stopped.</td></tr>
           </tbody>
         </table>
       </div>
