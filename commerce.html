@@ -75,22 +75,23 @@
     <div class="status-grid">
       <div class="status-card">
         <div class="label">Observability</div>
-        <div class="value loading" id="obs-state">Loading...</div>
+        <div class="value loading" id="obs-state">not read yet</div>
       </div>
       <div class="status-card">
         <div class="label">Data quality</div>
-        <div class="value loading" id="obs-dq">reading</div>
+        <div class="value loading" id="obs-dq">not read yet</div>
       </div>
       <div class="status-card">
         <div class="label">Confidence</div>
-        <div class="value loading" id="obs-conf">reading</div>
+        <div class="value loading" id="obs-conf">not read yet</div>
       </div>
       <div class="status-card">
         <div class="label">Authorities observed</div>
-        <div class="value loading" id="obs-count">reading</div>
+        <div class="value loading" id="obs-count">not read yet</div>
       </div>
     </div>
     <div style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);opacity:0.7;" id="obs-updated"></div>
+    <noscript><p class="note" id="com-noscript">This page reads its values with JavaScript. The same observations are available as JSON at <a href="/commerce/observations">/commerce/observations</a>.</p></noscript>
   </section>
 
   <section class="section">
@@ -101,7 +102,7 @@
         <tr><th>Authority</th><th>Category</th><th>State</th><th>Freshness</th><th>Observed</th></tr>
       </thead>
       <tbody id="auth-table-body">
-        <tr><td colspan="5" class="loading">Loading...</td></tr>
+        <tr><td colspan="5" class="loading">Not read yet.</td></tr>
       </tbody>
     </table>
     </div>
@@ -123,6 +124,10 @@
 </main>
 <!--dno:footer-->
 <script>
+function setTableNote(text) {
+  var tbody = document.getElementById('auth-table-body'), tr = document.createElement('tr'), td = document.createElement('td');
+  td.colSpan = 5; td.textContent = text; tr.appendChild(td); tbody.replaceChildren(tr);
+}
 (async function(){
   try {
     var res = await fetch('/commerce/observations');
@@ -154,7 +159,8 @@
       document.getElementById('obs-updated').textContent = 'Updated ' + ago + 's ago';
     }
 
-    // Authority table
+    // Authority table. With none observed, say so: the placeholder row never stays.
+    if (!d.authorities || d.authorities.length === 0) setTableNote('No authority observed in this reading.');
     if (d.authorities && d.authorities.length > 0) {
       var tbody = document.getElementById('auth-table-body');
       tbody.replaceChildren();
@@ -171,9 +177,15 @@
       });
     }
   } catch(e) {
+    // The observations could not be read: every placeholder says so, none keeps waiting.
     document.getElementById('obs-state').textContent = 'UNAVAILABLE';
-    document.getElementById('obs-state').classList.remove('loading');
     document.getElementById('obs-state').style.color = 'var(--text-secondary)';
+    ['obs-state', 'obs-dq', 'obs-conf', 'obs-count'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (id !== 'obs-state') el.textContent = 'not available';
+      el.classList.remove('loading');
+    });
+    setTableNote('The observations could not be read. The JSON is at /commerce/observations.');
   }
 })();
 </script>

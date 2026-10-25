@@ -309,6 +309,23 @@ check("FR7 full values decide equality; a prefix only recognises", /Compare the 
 check("FR8 no banned public language or verdict words in the recipe", !publicLanguageHit(frText) && !/\b(healthy|verified|certif|synced|majority|canonical)\b/i.test(frText));
 check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-the-method">repeat it yourself<\/a>/.test(METHP));
 
+
+// ---- FR-REF-503 and FR-COM-NOJS: an unavailable state is said, never a 200 that reads empty or a page that keeps waiting --
+{
+  const refBranch = (AGENTSRC.match(/reqPath === "\/reference"\) \{\s*([\s\S]*?)\n      function esc\(/) || ["", ""])[1];
+  check("REF1 /reference without the store answers 503 in the site's shell (head, header, footer), says the tables are unavailable and that this says nothing about the network — never 200 'No data'",
+    /res\.writeHead\(503,/.test(refBranch) && /siteHead\(\)/.test(refBranch) && /siteHeader\("reference"\)/.test(refBranch) && /siteFooter\("reference"\)/.test(refBranch) && /says nothing about the network/.test(refBranch) && !/No data/.test(refBranch) && !/writeHead\(200/.test(refBranch), refBranch.slice(0, 160));
+  const COM = readFileSync(join(ROOT, "commerce.html"), "utf8");
+  const comScript = (COM.match(/<script>([\s\S]*?)<\/script>/) || ["", ""])[1];
+  check("COM1 without JavaScript the Commerce page says where the same observations are (a <noscript> note linking /commerce/observations)", /<noscript><p class="note" id="com-noscript">[^<]*<a href="\/commerce\/observations">\/commerce\/observations<\/a>/.test(COM));
+  const catchBody = (comScript.match(/\} catch\(e\) \{([\s\S]*?)\n  \}\n\}\)\(\);/) || ["", ""])[1];
+  check("COM2 when the observations cannot be read, every placeholder gets a state (the four cards and the table), none keeps 'Loading'",
+    ["obs-state", "obs-dq", "obs-conf", "obs-count"].every((id) => catchBody.includes("'" + id + "'")) && /classList\.remove\('loading'\)/.test(catchBody) && /setTableNote\(/.test(catchBody), catchBody.slice(0, 200));
+  check("COM3 with no authority observed the table says so instead of keeping its placeholder row", /if \(!d\.authorities \|\| d\.authorities\.length === 0\) setTableNote\('No authority observed in this reading\.'\);/.test(comScript));
+  check("COM5 before the script runs (or without it) the placeholders say 'not read yet', never 'Loading' or 'reading' that would wait for ever", !/>Loading\.\.\.<|>reading</.test(COM) && (COM.match(/>not read yet</g) || []).length === 4 && />Not read yet\.</.test(COM));
+  check("COM4 setTableNote writes text, not markup (textContent), and replaces the placeholder row", /function setTableNote\(text\) \{[\s\S]*?td\.textContent = text;[\s\S]*?replaceChildren\(tr\);\s*\}/.test(comScript) && !/innerHTML/.test(comScript));
+}
+
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));
