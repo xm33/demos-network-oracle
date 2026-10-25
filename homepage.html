@@ -1103,7 +1103,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           </div>
         </div>
         <ul class="cat-grid" id="cat-grid" aria-label="Peer-listed identities"><li class="cat-empty">Awaiting first reading of /health.</li></ul>
-        <p class="owner-line">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of Demos beta.</p>
+        <p class="owner-line">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of the public Demos testnet.</p>
       </div>
     </div>
   </section>
@@ -1883,7 +1883,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
       const crawlAt = vg ? parseTime(vg.catalog_crawl_completed_at) : null;
       text = [el('h3', { text: 'Peer-listed identities: never dialed' }),
         el('p', { text: API10 ? 'Identities DNO recorded from peerlists, the public seeds\' and its own node\'s, with when each was first seen.' : 'The identities the public seeds list on their own peerlists, read in the same requests. DNO keeps an identity once two public peerlists have listed it, so one peerlist cannot fill the catalog.' }),
-        el('p', { text: 'DNO never dials them, so whether they answer is not observed. They are not the on-chain validators table and not a census of Demos beta.' }),
+        el('p', { text: 'DNO never dials them, so whether they answer is not observed. They are not the on-chain validators table and not a census of the public Demos testnet.' }),
         links(['#catalog', 'find a node'], ['/catalog', '/catalog'])];
       facts = [
         [API10 ? 'recorded' : 'kept', vg && isNum(vg.discovered) ? fmtInt(vg.discovered) : wait()],

@@ -170,7 +170,7 @@
 </section>
 <section id="before-relying">
 <h2>Before Relying on a Reading</h2>
-<p>These fields describe how complete this observation is. DNO informs context; it does not advise, predict, score, certify, or decide action.</p>
+<p>These fields describe how complete this observation is.</p>
 <p><code>data_quality</code> — <span class="val">insufficient</span> means fewer than two seeds reported their own height and no validator stood in, or the observation is stale.</p>
 <p><code>witnesses.mode</code> — what the reading rests on. <span class="val">seed_and_validators</span>: one seed, and the validators within 25 blocks of it. <span class="val">validators_only</span>: no seed; DNO does not check who runs those validators, and confidence is <span class="val">uncertain</span>.</p>
 <p><code>staleness_seconds</code> — how old the observation is. Above 300 s, data quality is insufficient.</p>
@@ -411,7 +411,7 @@ done</pre>
 </section>
 <section id="design-principle">
 <h2>Design Principle</h2>
-<div class="aside">This API describes state. It does not suggest actions.<br>The Oracle publishes its core assessment. Your agent interprets it.<br>DNO informs context; it does not advise, predict, score, certify, or decide action.</div>
+<div class="aside">This API describes state. It does not suggest actions.<br>The Oracle publishes its core assessment. Your agent interprets it.</div>
 </section>
     </article>
   </div>

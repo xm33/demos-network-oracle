@@ -272,8 +272,18 @@ const meOrient = meArticleAt < 0 ? "" : METHP.slice(METHP.indexOf("<main"), meAr
 const meText = (h) => h.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 check("SC1 one h1 on Methodology, the page's name, with the kicker and tagline; 'How the Oracle works' names the full text", count(METHP, "<h1") === 1 && METHP.includes("<h1>Methodology</h1>") && /<p class="doc-kicker">Method<\/p>/.test(METHP) && /04 \/ How the Oracle works, in full/.test(meOrient));
 check("SC2 the orientation (fields, who-decides, outside, full) sits above the article, each id once", ["fields", "who-decides", "outside", "full"].every((id) => count(meOrient, 'id="' + id + '"') === 1 && count(METHP, 'id="' + id + '"') === 1) && meOrient.indexOf('id="fields"') < meOrient.indexOf('id="who-decides"') && meOrient.indexOf('id="who-decides"') < meOrient.indexOf('id="outside"') && meOrient.indexOf('id="outside"') < meOrient.indexOf('id="full"'));
-check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries: the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "b00f3d54ff954bded7899ca7816c34feb8d05991529fbfa450586f0ed1cc1c2d"
+check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5 (the locked sentence in the footer only) and D3 (the public Demos testnet): the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "3c5b6bf7c20f2e560539f2e78435049b0786292a7ed6f2ac2a56d44b884aa598"
   && ["what-the-oracle-is", "what-it-measures", "how-it-works", "validators", "witnesses", "block-identity", "clocks", "known-limitations", "methodology-changelog"].every((id) => count(METHP, 'id="' + id + '"') === 1));
+{ const AG = readFileSync(join(ROOT, "agent-guide.html"), "utf8");
+  check("D5 the locked sentence is not in the Methodology or Agent Guide text either: the shared footer carries it on every page; the sentences around it stay",
+    count(METHP, "DNO informs context; it does not advise") === 0 && count(AG, "DNO informs context; it does not advise") === 0
+    && AG.includes("<p>These fields describe how complete this observation is.</p>") && AG.includes('<div class="aside">This API describes state. It does not suggest actions.<br>The Oracle publishes its core assessment. Your agent interprets it.</div>')
+    && METHP.includes("The locked sentence in the footer of every page is no longer repeated at the end of the limitations.")); }
+{ const beta = [["homepage.html", HOME], ["methodology.html", METHP], ["src/agent.mjs", AGENTSRC]].map(([n, t]) => [n, count(t, "Demos beta")]);
+  const NEW = "a census of the public Demos testnet";
+  check("D3 'Demos beta' is gone from every page and from the /catalog notes: each place says 'the public Demos testnet', the name the site gives the network elsewhere; only the changelog quotes the old words",
+    count(HOME, NEW) === 2 && count(METHP, "not " + NEW + ", and not a promise of monitoring.") === 1 && count(AGENTSRC, "Not " + NEW + ".") === 3
+    && beta.every(([n, c]) => c === (n === "methodology.html" ? 1 : 0)) && /Peer-listed identities are said not to be a census of the public Demos testnet, the name this site gives the network everywhere else, where the page said "Demos beta"\. No rule changed\.<\/p>/.test(METHP), JSON.stringify(beta)); }
 const FIELDS = ["status", "trend", "risk", "data_quality", "confidence", "agreement"];
 const fieldRows = [...meOrient.matchAll(/<li data-field="([a-z_]+)"><code>([a-z_]+)<\/code><span>([^<]+)<\/span><a href="#([^"]+)">the rule<\/a><\/li>/g)];
 check("SC4 the six fields, in the schema's order, each naming itself once and linking to its own rule in the article", fieldRows.length === 6 && JSON.stringify(fieldRows.map((m) => m[1])) === JSON.stringify(FIELDS) && fieldRows.every((m) => m[1] === m[2] && m[4] === "what-it-measures-" + m[1].replace("_", "-") && count(meArticle, 'id="' + m[4] + '"') === 1), fieldRows.map((m) => m[1]).join(" "));
@@ -716,6 +726,8 @@ try {
     if (count(t, 'class="doc-kicker"') !== 1 || count(t, "<h1") !== 1) noKicker.push(pth + " kickers " + count(t, 'class="doc-kicker"') + " h1 " + count(t, "<h1"));
   }
   check("S4-6 every subpage, as served: exactly one kicker and one h1", noKicker.length === 0, noKicker.join(", "));
+  { const cat = await get("/catalog"); const notes = cat.body && Array.isArray(cat.body.notes) ? cat.body.notes : [];
+    check("D3-s /catalog's notes, as served, say 'Not a census of the public Demos testnet.' and never 'Demos beta'", notes.some((n) => /Not a census of the public Demos testnet\./.test(n)) && !notes.some((n) => /Demos beta/.test(n)), JSON.stringify(notes).slice(0, 200)); }
   // CF served: once an observation exists, no page's pill says "connecting"; each gives a time, in its text and its name.
   if (o.observed_at) {
     const pillOff = [];
