@@ -263,6 +263,33 @@ check("SA11 the S2a styles in the page are scoped under .orient", abSel.length >
 // A node's own /info can list its shard and name the secretary (seed read 2026-10-24, A35): the limit is that DNO does not read or check it, not that it cannot be seen.
 const abSeeClaims = abNewText.split(/(?<=[.!?])\s+/).filter((x) => /\b(cannot|can't|does not|never|not) (see|sees|seen)\b/i.test(x) && /shard|consensus|secretary|vote/i.test(x));
 check("SA12 the new text says DNO does not use or check consensus data (it fetches the /info that carries it), never that it cannot see it", abSeeClaims.length === 0 && (abNewText.match(/does not use or check it/g) || []).length === 2 && !/neither reads nor checks/.test(abNewText), abSeeClaims.join(" | "));
+
+// ---- S2c: the Methodology page opens with the six fields, who decides a round, and what stays outside ----------------
+const METHP = readFileSync(join(ROOT, "methodology.html"), "utf8");
+const meArticleAt = METHP.indexOf('<div class="wrap doc-grid">'), meArticle = meArticleAt < 0 ? "" : METHP.slice(meArticleAt, METHP.indexOf("</article>") + "</article>".length);
+const meOrient = meArticleAt < 0 ? "" : METHP.slice(METHP.indexOf("<main"), meArticleAt);
+const meText = (h) => h.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+check("SC1 one h1 on Methodology, the page's name, with the kicker and tagline; 'How the Oracle works' names the full text", count(METHP, "<h1") === 1 && METHP.includes("<h1>Methodology</h1>") && /<p class="doc-kicker">Method<\/p>/.test(METHP) && /04 \/ How the Oracle works, in full/.test(meOrient));
+check("SC2 the orientation (fields, who-decides, outside, full) sits above the article, each id once", ["fields", "who-decides", "outside", "full"].every((id) => count(meOrient, 'id="' + id + '"') === 1 && count(METHP, 'id="' + id + '"') === 1) && meOrient.indexOf('id="fields"') < meOrient.indexOf('id="who-decides"') && meOrient.indexOf('id="who-decides"') < meOrient.indexOf('id="outside"') && meOrient.indexOf('id="outside"') < meOrient.indexOf('id="full"'));
+check("SC3 the published Methodology text (section list and article) is byte for byte the article after D8: S2c adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "c7b539c96c51786049e7f9cddbbf0bcf96a20b245d160ecbcd101dd678085d19"
+  && ["what-the-oracle-is", "what-it-measures", "how-it-works", "validators", "witnesses", "block-identity", "clocks", "known-limitations", "methodology-changelog"].every((id) => count(METHP, 'id="' + id + '"') === 1));
+const FIELDS = ["status", "trend", "risk", "data_quality", "confidence", "agreement"];
+const fieldRows = [...meOrient.matchAll(/<li data-field="([a-z_]+)"><code>([a-z_]+)<\/code><span>([^<]+)<\/span><a href="#([^"]+)">the rule<\/a><\/li>/g)];
+check("SC4 the six fields, in the schema's order, each naming itself once and linking to its own rule in the article", fieldRows.length === 6 && JSON.stringify(fieldRows.map((m) => m[1])) === JSON.stringify(FIELDS) && fieldRows.every((m) => m[1] === m[2] && m[4] === "what-it-measures-" + m[1].replace("_", "-") && count(meArticle, 'id="' + m[4] + '"') === 1), fieldRows.map((m) => m[1]).join(" "));
+const meArtText = meText(meArticle);
+const fieldSentences = fieldRows.map((m) => m[3].replace(/\s+/g, " ").trim());
+const notBound = fieldSentences.filter((t) => !t.split(/(?<=[.])\s+/).every((sent) => sent.length < 12 || meArtText.includes(sent.replace(/\.$/, ""))));
+check("SC5 every sentence in the fields list is the article's own (no new definition on the orientation)", notBound.length === 0, notBound.join(" | "));
+check("SC5b the records are named beside the six with the article's own sentence, never as a seventh field", /Beside the six: the incident and condition records\. Condition records follow status, so they do not feed it\./.test(meOrient) && meArtText.includes("Condition records follow status, so they do not feed it") && !/seventh|seven values/.test(meOrient));
+const modeRows = [...meOrient.matchAll(/<li data-mode="([a-z_]+)">/g)].map((m) => m[1]);
+check("SC6 the modes list names status-rule.mjs's modes, each once, in the rule's order", JSON.stringify(modeRows) === JSON.stringify(MODES), modeRows.join(" "));
+const modesText = meText((meOrient.match(/<ul class="enters modes">[\s\S]*?<\/ul>/) || [""])[0]);
+check("SC7 the modes' numbers are the rule's (±band twice, the 300 s age), and the witness rule, the drawn decision and the clocks are linked", [...modesText.matchAll(/±\s*(\d+)/g)].every((m) => +m[1] === RULE.bandBlocks) && count(modesText, "±") === 2 && /300 s/.test(modesText) && /href="#witnesses"/.test(meOrient) && /href="\/sources#path"/.test(meOrient) && count(SOURCES, 'id="path"') === 1 && /href="#clocks"/.test(meOrient) && count(METHP, 'id="clocks"') === 1);
+check("SC8 'outside the reading' links each item to its rule, and every target exists once in the article", ["#block-identity", "#validators", "#public-vs-reference-separation", "#what-it-measures-incidents"].every((h) => meOrient.includes('href="' + h + '"') && count(meArticle, 'id="' + h.slice(1) + '"') === 1));
+check("SC9 the version line is kept, once, with the full text", count(METHP, "Methodology v1.2 · 2026-10-05 · aligned with") === 1 && meOrient.includes("not aspirational, not approximate"));
+check("SC10 no banned public language and no verdict words in the orientation", !publicLanguageHit(meText(meOrient)) && !/\b(healthy|health score|verified|certif|same chain|majority)\b/i.test(meText(meOrient)));
+check("SC11 the page CSS is scoped to the orientation (.orient .fields), no bare selectors", [...METHP.matchAll(/^\s*\.[a-z][^{]*\{/gm)].every((m) => /^\s*\.orient[ #.]/.test(m[0])) && /\.orient \.fields \{/.test(METHP));
+
 const heroH1 = (HOME.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/) || ["", ""])[1];
 check("H36 the hero heading is type: 'Observe.' and 'Explain.', no mark, no image inside", heroH1.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() === "Observe. Explain." && !/<(img|svg|use)\b/.test(heroH1), heroH1);
 check("H37 the reading names its network inside the panel head", /<h2 id="cycle-title"[^>]*>[\s\S]*?Demos public testnet[\s\S]*?<\/h2>/.test(HOME));

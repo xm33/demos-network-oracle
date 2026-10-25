@@ -4,6 +4,21 @@
 <meta charset="utf-8">
 <title>Methodology · Demos Network Oracle</title>
 <!--dno:head-->
+<style>
+/* Methodology: the fields list. Tokens and type come from the site kit. */
+.orient .fields { display: grid; max-width: 56rem; margin: 18px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); counter-reset: f; }
+.orient .fields li { display: grid; grid-template-columns: 9rem minmax(0, 1fr) auto; gap: 16px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.orient .fields code { color: var(--metal-2); }
+.orient .fields span { color: var(--metal-1); }
+.orient .fields a { font: 400 0.8125rem/1.4 var(--mono); color: var(--mute); white-space: nowrap; }
+.orient .fields a:hover { color: var(--ink); }
+.orient#fields .orient-more { max-width: 56rem; }
+@media (max-width: 719px) {
+  .orient .fields li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .orient .fields a { justify-self: start; }
+  .orient .enters li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+</style>
 </head>
 <body>
 <!--dno:header:methodology-->
@@ -11,13 +26,61 @@
   <header class="doc-head">
     <div class="wrap">
       <div>
-        <h1>How the Oracle Works</h1>
-        
-        <div class="doc-intro"><p class="doc-lede">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
-<p>Methodology v1.2 · 2026-10-05 · aligned with <a href="/organism/schema">/organism contract v1.2</a></p></div>
+        <p class="doc-kicker">Method</p>
+        <h1>Methodology</h1>
+        <p class="doc-tagline">The rule before the reading.</p>
+        <p class="doc-lede">Every value DNO publishes comes from a published rule. This page states the six fields and the question each answers, which seeds decide a round, and what stays outside the reading; then the method in full, as it has stood since v1.0, versioned and dated.</p>
       </div>
     </div>
   </header>
+  <section class="orient" id="fields" aria-labelledby="fields-h">
+    <div class="wrap">
+      <p class="orient-k">01 / The six fields</p>
+      <h2 id="fields-h">Six fields, six questions.</h2>
+      <p class="orient-lede">One reading is six fields on <a href="/organism">/organism</a>, each with its reason. Each sentence below is the method's own; the link beside it opens the rule.</p>
+      <ol class="fields">
+        <li data-field="status"><code>status</code><span>Status describes what DNO saw this cycle of the nodes its reading is made of: the public seeds, or, when fewer than two of them reported their own height, the validators standing in.</span><a href="#what-it-measures-status">the rule</a></li>
+        <li data-field="trend"><code>trend</code><span>Trend tells you whether the situation is getting better, holding steady, or getting worse, based on comparing the current observation against recent history. It is purely backward-looking — it describes what has changed, never what will change.</span><a href="#what-it-measures-trend">the rule</a></li>
+        <li data-field="risk"><code>risk</code><span>Risk summarises the observed conditions that reduce the margin of this reading. It is a snapshot of the present reading, not a forecast.</span><a href="#what-it-measures-risk">the rule</a></li>
+        <li data-field="data_quality"><code>data_quality</code><span>Data quality measures whether DNO got enough to compare. It describes DNO's vantage, not the network.</span><a href="#what-it-measures-data-quality">the rule</a></li>
+        <li data-field="confidence"><code>confidence</code><span>Confidence measures whether the heights DNO compared are close to each other.</span><a href="#what-it-measures-confidence">the rule</a></li>
+        <li data-field="agreement"><code>agreement</code><span>Agreement measures whether the heights DNO compared agree.</span><a href="#what-it-measures-agreement">the rule</a></li>
+      </ol>
+      <p class="orient-key">Beside the six: the incident and condition records. Condition records follow status, so they do not feed it. <a href="#what-it-measures-incidents">How records open and close</a>.</p>
+      <p class="orient-more">Why <code>stable</code>, <code>uncertain</code> and <code>elevated</code> can stand together: the fields answer different questions about one observation. "I can't see enough" is a data quality problem. "What I see is contradictory" is a confidence problem.</p>
+    </div>
+  </section>
+  <section class="orient" id="who-decides" aria-labelledby="who-h">
+    <div class="wrap">
+      <p class="orient-k">02 / Who decides a round</p>
+      <h2 id="who-h">Two seeds' own heights, or the witness rule.</h2>
+      <p class="orient-lede">Each round names which reported heights the reading rests on. <code>witnesses.mode</code> on <a href="/organism">/organism</a> says which it was.</p>
+      <ul class="enters modes">
+        <li data-mode="seeds_only"><span><code>seeds_only</code></span><b>Two or more configured public seeds gave their own height; status uses those heights and nothing else.</b></li>
+        <li data-mode="seed_and_validators"><span><code>seed_and_validators</code></span><b>One seed did, and at least one validator within ±25 blocks of it stood in beside it.</b></li>
+        <li data-mode="validators_only"><span><code>validators_only</code></span><b>No seed did; at least two validators, more than half of those that gave a height, within ±25 blocks of their median.</b></li>
+        <li data-mode="insufficient"><span><code>insufficient</code></span><b>Anything else, or an observation older than 300 s. The reading is still published: data quality insufficient, status unknown.</b></li>
+      </ul>
+      <p class="orient-more">The decision drawn: <a href="/sources#path">Sources, the public observation path</a>. The rule in full: <a href="#witnesses">Witnesses</a>. Which clock each count runs on: <a href="#clocks">Clocks, kept apart</a>.</p>
+    </div>
+  </section>
+  <section class="orient" id="outside" aria-labelledby="outside-h">
+    <div class="wrap">
+      <p class="orient-k">03 / What stays outside the reading</p>
+      <h2 id="outside-h">Published beside the reading, never inside it.</h2>
+      <ul class="enters">
+        <li><span>Block identity</span><b>the seeds' own block hashes, compared within a round — <a href="#block-identity">how</a></b></li>
+        <li><span>Validator counts</span><b>the on-chain list and who answered as listed — <a href="#validators">how</a>; a validator enters status only as a witness</b></li>
+        <li><span>Reference fleet</span><b>DNO's operator's own nodes, filtered out of every public value — <a href="#public-vs-reference-separation">how</a></b></li>
+        <li><span>Condition records</span><b>DNO's record of its own reading, opened and closed after the fact — <a href="#what-it-measures-incidents">how</a></b></li>
+      </ul>
+    </div>
+  </section>
+  <div class="wrap orient-full" id="full">
+    <p class="orient-k">04 / How the Oracle works, in full</p>
+    <div class="doc-intro"><p class="doc-lede">This page explains how DNO makes its assessments, what data it uses, and what it can and cannot know. Everything described here is what the Oracle actually does — not aspirational, not approximate.</p>
+<p>Methodology v1.2 · 2026-10-05 · aligned with <a href="/organism/schema">/organism contract v1.2</a></p></div>
+  </div>
   <div class="wrap doc-grid">
     <details class="toc" open>
       <summary>On this page</summary>
