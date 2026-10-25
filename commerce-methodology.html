@@ -57,14 +57,14 @@
 </section>
 <section id="freshness">
 <h2>Freshness</h2>
-<p>Some authorities publish data on known cadences. The Oracle tracks whether the last observation is within the authority's expected update window.</p>
+<p>Some authorities publish data on known cadences. For those, the Oracle reports whether the endpoint has answered <code>healthy</code> within that update window.</p>
 <div class="tbl-wrap"><table class="tbl"><thead><tr><th>State</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>fresh</code></td><td>Last observation is within the authority's expected update window.</td></tr>
-<tr><td><code>stale</code></td><td>Last observation exceeds the expected update window.</td></tr>
-<tr><td><code>unknown</code></td><td>The authority was not probed, so there is nothing to measure.</td></tr>
+<tr><td><code>fresh</code></td><td>The endpoint's last <code>healthy</code> answer is within the authority's update window.</td></tr>
+<tr><td><code>stale</code></td><td>The endpoint has not answered <code>healthy</code> within the authority's update window.</td></tr>
+<tr><td><code>unknown</code></td><td>The authority was not probed, or has not answered <code>healthy</code> since the probe runner last started.</td></tr>
 <tr><td><code>not_applicable</code></td><td>Authority has no defined update cadence.</td></tr>
 </tbody></table></div>
-<p id="freshness-limit"><b>Known limitation.</b> At this version the window is measured from the probe's own time, so an authority with a cadence reads <code>fresh</code> after every probe, whatever it answered. Read freshness as "has a cadence", not as the age of anything; the state column says whether the endpoint answered.</p>
+<p id="freshness-scope">Freshness is about the Oracle's own answers from the endpoint, not the age of the authority's data: an endpoint can answer <code>healthy</code> with data of any age. The time of the last <code>healthy</code> answer is kept in memory, so it starts again when the probe runner restarts.</p>
 </section>
 <section id="overall">
 <h2>Overall assessment</h2>
