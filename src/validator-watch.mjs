@@ -629,6 +629,8 @@ export function roundLogLine(round) {
   if (round.outcomes) {
     var x = round.outcomes;
     s += "; dialed " + (round.counts.active - x.not_dialed) + " of " + round.counts.active + ": " + x.answered_as_listed + " as listed (" + (x.at_seed_height === null ? "heights not compared" : x.at_seed_height + " at the seeds' height") + "), " + x.no_answer + " no answer, " + x.answered_other_key + " other key, " + x.answered_no_key + " no key";
+    // The two endpoint counts, every round, so a week of rounds can be read back from the log (the IP-count value review).
+    s += "; " + x.origins_dialed + " published origins dialed, " + x.distinct_ips_targeted + " distinct IPs targeted";
     s += "; every round last hour: " + (!round.counted ? "not counted this round" : round.everyRound.count === null ? "window incomplete (" + round.everyRound.window.counted_rounds + "/" + round.everyRound.window.expected_rounds + ")" : round.everyRound.count);
   }
   if (round.faults && round.faults.dials > 0) s += "; " + round.faults.dials + " dial" + (round.faults.dials === 1 ? "" : "s") + " ended in an internal error (a fault in DNO's own read): no counts for this round";
