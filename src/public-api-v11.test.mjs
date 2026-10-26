@@ -272,7 +272,7 @@ const meOrient = meArticleAt < 0 ? "" : METHP.slice(METHP.indexOf("<main"), meAr
 const meText = (h) => h.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 check("SC1 one h1 on Methodology, the page's name, with the kicker and tagline; 'How the Oracle works' names the full text", count(METHP, "<h1") === 1 && METHP.includes("<h1>Methodology</h1>") && /<p class="doc-kicker">Method<\/p>/.test(METHP) && /04 \/ How the Oracle works, in full/.test(meOrient));
 check("SC2 the orientation (fields, who-decides, outside, full) sits above the article, each id once", ["fields", "who-decides", "outside", "full"].every((id) => count(meOrient, 'id="' + id + '"') === 1 && count(METHP, 'id="' + id + '"') === 1) && meOrient.indexOf('id="fields"') < meOrient.indexOf('id="who-decides"') && meOrient.indexOf('id="who-decides"') < meOrient.indexOf('id="outside"') && meOrient.indexOf('id="outside"') < meOrient.indexOf('id="full"'));
-check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5 (the locked sentence in the footer only) and D3 (the public Demos testnet): the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "3c5b6bf7c20f2e560539f2e78435049b0786292a7ed6f2ac2a56d44b884aa598"
+check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5, D3 and the IP-addresses-targeted entry and paragraph: the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "e567f2128816fa8f011743e0dcd1c6685b0328acb628f3f48e1d984d576bc1f9"
   && ["what-the-oracle-is", "what-it-measures", "how-it-works", "validators", "witnesses", "block-identity", "clocks", "known-limitations", "methodology-changelog"].every((id) => count(METHP, 'id="' + id + '"') === 1));
 { const AG = readFileSync(join(ROOT, "agent-guide.html"), "utf8");
   check("D5 the locked sentence is not in the Methodology or Agent Guide text either: the shared footer carries it on every page; the sentences around it stay",
@@ -660,13 +660,13 @@ try {
   // SPEC-v7: the on-chain validators read and watch, on /health only, counts only.
   const ocv = health.on_chain_validators, vwt = health.validator_watch;
   const OC_KEYS = "active,first_agreed_as_of,first_agreed_month,first_agreed_reason,first_agreed_since,first_agreed_today,first_agreed_week,listed,min_validator_stake,observed_at,other_status,reason,seeds_agreed,seeds_answered,seeds_configured,state,unstaking";
-  const VW_KEYS = "answered_as_listed,answered_as_listed_seeds,answered_no_key,answered_other_key,at_seed_height,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,max_rows_per_origin,no_answer,not_dialed,not_dialed_reasons,off_seed_height,origins_dialed,other_key_shared,other_key_shared_origins,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
+  const VW_KEYS = "answered_as_listed,answered_as_listed_seeds,answered_no_key,answered_other_key,at_seed_height,distinct_ips_targeted,every_round_last_hour,height_band_blocks,height_not_compared,height_not_reported,interval_seconds,max_rows_per_origin,no_answer,not_dialed,not_dialed_reasons,off_seed_height,origins_dialed,other_key_shared,other_key_shared_origins,reason,reference_height,reference_observed_at,round_at,state,versions,versions_other,watched,window";
   check("V1 /health on_chain_validators: exactly the published keys", ocv && Object.keys(ocv).sort().join(",") === OC_KEYS, ocv && Object.keys(ocv).sort().join(","));
   check("V2 /health validator_watch: exactly the published keys", vwt && Object.keys(vwt).sort().join(",") === VW_KEYS, vwt && Object.keys(vwt).sort().join(","));
   check("V3 states from the documented sets", ocv && ["pending", "agreed", "not_agreed", "stale"].includes(ocv.state) && vwt && ["pending", "observed", "no_agreed_list", "read_fault", "stale", "disabled"].includes(vwt.state), ocv && vwt && ocv.state + " / " + vwt.state);
   const ocCounts = ["listed", "active", "unstaking", "other_status", "first_agreed_today", "first_agreed_week", "first_agreed_month", "first_agreed_as_of"];
   const vwCounts = ["watched", "not_dialed", "no_answer", "answered_other_key", "answered_no_key", "answered_as_listed", "every_round_last_hour",
-    "origins_dialed", "max_rows_per_origin", "other_key_shared", "other_key_shared_origins", "answered_as_listed_seeds"];
+    "origins_dialed", "max_rows_per_origin", "distinct_ips_targeted", "other_key_shared", "other_key_shared_origins", "answered_as_listed_seeds"];
   check("V4 a count only in the agreed or observed state", ocv && vwt && (ocv.state === "agreed" || ocCounts.every((k) => ocv[k] === null)) && (vwt.state === "observed" || vwCounts.every((k) => vwt[k] === null))
     && (ocv.state !== "agreed" || (Number.isInteger(ocv.active) && ocv.seeds_agreed >= 2)) && (ocv.min_validator_stake === null || /^\d+$/.test(ocv.min_validator_stake)));
   const vLeaks = stringsDeep([ocv, vwt]).filter((x) => FULL_ID.test(x) || IPV4.test(x) || HOSTPORT.test(x) || /https?:|0x[0-9a-f]{8,}/i.test(x));
@@ -678,7 +678,7 @@ try {
     && Object.values(vwt.not_dialed_reasons || {}).reduce((t, n) => t + z(n), 0) === vwt.not_dialed
     && z(vwt.at_seed_height) + z(vwt.off_seed_height) + z(vwt.height_not_reported) + z(vwt.height_not_compared) === vwt.answered_as_listed
     && z(vwt.other_key_shared) <= vwt.answered_other_key && z(vwt.answered_as_listed_seeds) <= vwt.answered_as_listed
-    && (vwt.other_key_shared === 0) === (vwt.other_key_shared_origins === 0) && vwt.origins_dialed <= vwt.watched - vwt.not_dialed);
+    && (vwt.other_key_shared === 0) === (vwt.other_key_shared_origins === 0) && vwt.origins_dialed <= vwt.watched - vwt.not_dialed && Number.isInteger(vwt.distinct_ips_targeted) && vwt.distinct_ips_targeted <= vwt.origins_dialed && (vwt.origins_dialed === 0) === (vwt.distinct_ips_targeted === 0));
   check("V7 validator_watch: every ACTIVE row in exactly one outcome, and each subset inside its set", part, vwt && JSON.stringify(vwt).slice(0, 400));
   const win = ocv ? [ocv.first_agreed_today, ocv.first_agreed_week, ocv.first_agreed_month] : [];
   const nest = win.every((v) => v === null || (Number.isInteger(v) && v >= 0)) && (win.includes(null) ? typeof ocv.first_agreed_reason === "string" && ocv.first_agreed_reason.length > 0 : ocv.first_agreed_reason === null)

@@ -1234,6 +1234,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
             <div><dt><code>sufficient</code></dt><dd><span data-v10="at least two seeds answered, and the observation is at most 300 s old.">at least two seeds reported their own height, or validators that answer as listed stood in for the missing one, and the observation is at most 300 s old.</span> It describes DNO's vantage, not the network.</dd></div>
             <div><dt>peer-reported</dt><dd>what a public peerlist said. Never confirmed by DNO.</dd></div>
             <div><dt>at the seeds' height</dt><dd>a validator's own height, in its answer to DNO, within ±25 blocks of the seeds' median. Not Demos' sync check.</dd></div>
+            <div><dt>IP addresses targeted</dt><dd>the distinct public IP addresses DNO selected as dial targets in a watch round, answered or not: the first address each published name resolved to. One address can front many machines and one name can have several addresses, so it counts neither machines nor operators.</dd></div>
             <div><dt>stands in</dt><dd>a validator that answered as the key the validators list holds, read in the place of a seed that gave no height. It can count with a seed. It cannot count against one.</dd></div>
             <div><dt>first counted</dt><dd>on DNO's own clock. A peer-listed identity: when a public peerlist first listed it, once a second has. An ACTIVE key: the first agreed validators list that showed it. Not the chain's <code>firstSeen</code>.</dd></div>
           </dl>
@@ -2180,7 +2181,9 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const whole = parts.reduce((t, [, c]) => t + c, 0) === w.watched;
     if (!whole) notes.unshift(`These parts do not add up to the ${fmtInt(w.watched)} ACTIVE rows of this round, so no bar is drawn. The counts are as reported.`);
     const dialedN = w.watched - (isNum(w.not_dialed) ? w.not_dialed : 0);
-    const sub = isNum(w.origins_dialed) ? `${fmtInt(dialedN)} dialed at ${fmtInt(w.origins_dialed)} published ${w.origins_dialed === 1 ? 'origin' : 'origins'}` : `${fmtInt(dialedN)} dialed`;
+    // Three counts, kept apart: rows covered by the dials, published origins dialed (one dial each), IP addresses targeted.
+    const ips = isNum(w.distinct_ips_targeted) ? ` · ${fmtInt(w.distinct_ips_targeted)} distinct public IP ${w.distinct_ips_targeted === 1 ? 'address' : 'addresses'} targeted` : '';
+    const sub = isNum(w.origins_dialed) ? `${fmtInt(dialedN)} ACTIVE ${dialedN === 1 ? 'row' : 'rows'} covered by the dials · ${fmtInt(w.origins_dialed)} published ${w.origins_dialed === 1 ? 'origin' : 'origins'} dialed${ips}` : `${fmtInt(dialedN)} dialed`;
     const sig = JSON.stringify([sub, parts, notes, whole]);
     box.hidden = false;
     if (box.dataset.sig === sig) return;

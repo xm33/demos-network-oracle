@@ -18,6 +18,9 @@
 // those reads mean.
 //
 // Published objects carry counts only: never an address, connection URL, host, per-row height, per-row outcome or stake.
+// distinct_ips_targeted counts the distinct public IP addresses among the round's dial targets (the first address each
+// published name resolved to, one target per address and port), whether or not a target answered. It is a count of
+// where DNO dialed, never of machines or operators: one address can front many machines and one name can have several.
 // Version groups are published only in a strict version shape and only when at least two validators share one.
 //
 // The first-agreed clock (DNO's clock): the host's UTC time at which an ACTIVE key first appeared on an agreed list,
@@ -236,9 +239,15 @@ async function lookupNames(names, o, onFault) {
 // answer names at most one of the keys listed there; the others are answered_other_key, with shared set only when the
 // answer named one of the keys listed on that same published origin. Returns { results: one per ACTIVE row
 // { key, outcome, notDialed?, shared?, origin?, seed?, height?, version?, published? }, origins: { dialed: published
-// origins dialed, maxRows: the most ACTIVE rows on one of them }, faults: dials that ended in an internal error, and
+// origins dialed, maxRows: the most ACTIVE rows on one of them, ips: distinct IP addresses among the targets }, faults: dials that ended in an internal error, and
 // address checks that did (a fault in DNO's own read or check: the round then says nothing about the rows it dialed) }. published: the bare origin a row answered
 // as listed at (kept for the witness candidates; never published).
+// The distinct IP addresses among pinned origins ("http://ip:port" or "http://[ip6]:port"): the host part, without the port.
+export function distinctIps(origins) {
+  var seen = new Set();
+  origins.forEach(function(origin) { var p = parseProbeOrigin(origin); if (p) seen.add(p.hostname); });
+  return seen.size;
+}
 export async function dialActive(rows, o) {
   var first = o.first instanceof Set ? o.first : new Set(), recent = o.recent instanceof Set ? o.recent : new Set();
   var byKey = function(a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; };
@@ -305,7 +314,7 @@ export async function dialActive(rows, o) {
       else results.push({ key: r.key, outcome: "answered_as_listed", seed: seedKeys.has(r.key), height: a.height, version: a.version, published: published });
     });
   });
-  return { results: results, origins: { dialed: order.length, maxRows: maxRows },
+  return { results: results, origins: { dialed: order.length, maxRows: maxRows, ips: distinctIps(dials) },
     faults: answers.filter(function(a) { return !a.answered && a.error === "internal error"; }).length + checkFaults };
 }
 
@@ -454,7 +463,7 @@ export async function runValidatorRound(opts) {
   if (results) {
     outcomes = { not_dialed: 0, not_dialed_reasons: { no_address: 0, not_public_http: 0, name_unresolved: 0, seeds_differ: 0, over_cap: 0 }, no_answer: 0, answered_other_key: 0, answered_no_key: 0, answered_as_listed: 0,
       at_seed_height: 0, off_seed_height: 0, height_not_reported: 0, height_not_compared: 0,
-      origins_dialed: dialed.origins.dialed, max_rows_per_origin: dialed.origins.maxRows, other_key_shared: 0, other_key_shared_origins: 0, answered_as_listed_seeds: 0 };
+      origins_dialed: dialed.origins.dialed, max_rows_per_origin: dialed.origins.maxRows, distinct_ips_targeted: dialed.origins.ips, other_key_shared: 0, other_key_shared_origins: 0, answered_as_listed_seeds: 0 };
     var vg = new Map(), sharedOrigins = new Set();
     results.forEach(function(r) {
       outcomes[r.outcome]++;
@@ -548,7 +557,7 @@ export function publicValidatorWatch(round, nowMs, cfg) {
     reference_height: null, reference_observed_at: null, watched: null,
     not_dialed: null, not_dialed_reasons: null, no_answer: null, answered_other_key: null, answered_no_key: null, answered_as_listed: null,
     at_seed_height: null, off_seed_height: null, height_not_reported: null, height_not_compared: null,
-    origins_dialed: null, max_rows_per_origin: null, other_key_shared: null, other_key_shared_origins: null, answered_as_listed_seeds: null,
+    origins_dialed: null, max_rows_per_origin: null, distinct_ips_targeted: null, other_key_shared: null, other_key_shared_origins: null, answered_as_listed_seeds: null,
     every_round_last_hour: null, window: null, versions: null, versions_other: null, reason: "no round has completed yet" };
   if (c.dials === false) { out.state = "disabled"; out.reason = "dialing validators is turned off on this server"; return out; }
   if (!round) return out;
