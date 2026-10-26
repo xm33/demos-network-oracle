@@ -7,7 +7,7 @@
 // every-round window; versions sanitised; stale and disabled states; counts only in what is published.
 // Run: bun src/validator-watch.test.mjs   (executable harness, not `bun test`)
 
-import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
+import { runValidatorRound, createWatchHistory, publicOnChainValidators, publicValidatorWatch, roundLogLine, agreeLists, reduceValidatorRows, heightPlace, keyOf, createFirstAgreedStore, validatorsSentence, listedStatus, dialsEnabled, distinctIps } from "./validator-watch.mjs";
 import { readFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { parseProbeOrigin, resolvePublicProbeOrigin } from "./public-safety.mjs";
@@ -233,11 +233,16 @@ console.log("\n[" + TAG + "] published origins and dialed addresses");
   check("W20 two published names on one address: dialed once, two published origins, the second row is another key, not a shared origin",
     dials === 1 && w20.origins_dialed === 2 && w20.max_rows_per_origin === 1 && w20.answered_as_listed === 1 && w20.answered_other_key === 1 && w20.other_key_shared === 0 && w20.other_key_shared_origins === 0,
     JSON.stringify([dials, w20.origins_dialed, w20.max_rows_per_origin, w20.answered_other_key, w20.other_key_shared]));
+  check("IP1 two published names on one address: one distinct IP targeted", w20.distinct_ips_targeted === 1, JSON.stringify(w20.distinct_ips_targeted));
+  // The published object carries the count, never a dial target (a mutation that publishes the list must fail here).
+  const w20s = JSON.stringify(w20);
+  check("IP8 the published object carries no IP literal", !/\b\d{1,3}(\.\d{1,3}){3}\b/.test(w20s) && !/alpha\.example|beta\.example/.test(w20s), w20s.slice(0, 200));
   one.stop(true);
   // Three rows on one published origin that does not answer: three no answer, none shared.
   const w21 = await roundOver([row(0xc2, "2", closedUrl), row(0xc3, "2", closedUrl), row(0xc4, "2", closedUrl)], loopResolver);
   check("W21 a shared published origin that does not answer: every row there is no answer, none is counted as sharing",
     w21.no_answer === 3 && w21.other_key_shared === 0 && w21.origins_dialed === 1 && w21.max_rows_per_origin === 3, JSON.stringify([w21.no_answer, w21.other_key_shared, w21.origins_dialed]));
+  check("IP2 a target that does not answer still counts: targets, not connections", w21.distinct_ips_targeted === 1, JSON.stringify(w21.distinct_ips_targeted));
   // Three rows on one published origin that answers with a key none of them lists: three other key, none shared.
   const w22 = await roundOver([row(0xc5, "2", V.e.url), row(0xc6, "2", V.e.url), row(0xc7, "2", V.e.url)], loopResolver);
   check("W22 a shared published origin answering with an unlisted key: every row there is another key, none is counted as sharing",
@@ -805,5 +810,16 @@ console.log("\n[" + TAG + "] the rows that answered before are dialed first");
 
 Object.values(V).concat([trap]).forEach((v) => v.srv.stop(true));
 Object.values(S).forEach((s) => s.srv.stop(true));
+// ---- distinct_ips_targeted: the pure count over pinned origins, and the published field ------------------------------
+{
+  check("IP3 one IP on two ports counts once", distinctIps(["http://203.0.113.5:53550", "http://203.0.113.5:53551"]) === 1, "");
+  check("IP4 two IPs count twice", distinctIps(["http://203.0.113.5:53550", "http://203.0.113.6:53550"]) === 2, "");
+  check("IP5 IPv6 brackets are not part of the address", distinctIps(["http://[2001:db8::1]:53550", "http://[2001:db8::1]:53551", "http://203.0.113.5:53550"]) === 2, "");
+  check("IP6 no targets: zero, not null", distinctIps([]) === 0, "");
+  // The published field is null exactly when the watch's other counts are null.
+  const nullStates = [publicValidatorWatch(null, Date.now(), {}), publicValidatorWatch(null, Date.now(), { dials: false })];
+  check("IP7 pending and disabled publish null, never 0", nullStates.every((w) => w.distinct_ips_targeted === null && w.origins_dialed === null), JSON.stringify(nullStates.map((w) => [w.state, w.distinct_ips_targeted])));
+}
+
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
 if (failed) process.exit(1);
