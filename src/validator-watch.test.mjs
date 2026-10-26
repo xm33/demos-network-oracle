@@ -332,6 +332,9 @@ console.log("\n[" + TAG + "] states and what is published");
   check("P3 published objects: no address, key, connection URL, host, port or stake", leaks.length === 0, leaks.join(" "));
   const line = roundLogLine(r);
   check("P4 the log line carries counts only", FORBIDDEN(line).length === 0 && /2\/3 seeds agreed, 21 rows, 19 ACTIVE/.test(line), line);
+  check("P4b the log line carries the endpoint counts every observed round, as numbers, never an address",
+    new RegExp("; " + r.outcomes.origins_dialed + " published origins dialed, " + r.outcomes.distinct_ips_targeted + " distinct IPs targeted").test(line)
+    && Number.isInteger(r.outcomes.distinct_ips_targeted) && !/\b\d{1,3}(\.\d{1,3}){3}\b/.test(line), line);
   const w = publicValidatorWatch(r, r.roundAt, {});
   check("P5 no per-row field in what is published", !/"(key|address|url|connectionUrl|height|outcome|rows|stakedAmount)"/.test(text) && Array.isArray(w.versions));
   check("P6 key comparison ignores case and a leading 0x only", keyOf("0xAB12") === "ab12" && keyOf("AB12") === "ab12" && keyOf("0xab 12") === null && keyOf(12) === null);
