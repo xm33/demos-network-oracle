@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { leadCount, cycleSeeds, seedsParts, seedsCalm, figureClocks, fieldReason, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
+import { leadCount, cycleSeeds, seedsParts, seedsCalm, figureClocks, listSource, fieldReason, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
 import { BANNED_PUBLIC_LANGUAGE } from "./banned-public-language.mjs";
 
 const TAG = "HOME_CYCLE";
@@ -228,6 +228,28 @@ check("B23 not read yet, not carried, turned off: each said, never a clock from 
 check("B24 a field's reason in Explain: the reading's own text, else a plain statement that none is published",
   fieldReason("confidence", "Observed public signals agree") === "Observed public signals agree" && fieldReason("risk", "") === "No risk factors are listed in this reading."
   && fieldReason("data_quality", null) === "No reason is published for this value in this reading." && fieldReason("trend", "  ") === "No reason is published for this value in this reading.");
+// F-FS-02: Explain's on-chain source line said "the validator list two public seeds returned alike" in every state,
+// including a list that was not agreed (23 Oct capture, insufficient). It now says what /health says.
+{
+  const oc = (state, reason) => ({ on_chain_validators: { state, reason } });
+  const cases = [
+    [oc("agreed", "2 of 3 public seeds returned the same validator list"), "2 of 3 public seeds returned the same validator list"],
+    [oc("agreed", ""), "at least two public seeds returned the same validator list"],
+    [oc("not_agreed", "fewer than two public seeds returned a validator list"), "no agreed validator list: fewer than two public seeds returned a validator list"],
+    [oc("not_agreed", "the public seeds returned different validator lists"), "no agreed validator list: the public seeds returned different validator lists"],
+    [oc("stale", "the last read is older than 300 s"), "no current validator list: the last read is older than 300 s"],
+    [oc("pending", "no read has completed yet"), "no validator list yet: no read has completed yet"],
+    [oc("not_agreed", null), "no agreed validator list"],
+    [oc("some_new_state", "x"), "no agreed validator list: x"],
+    [{}, "the validator list"], [null, "the validator list"], [{ on_chain_validators: "agreed" }, "the validator list"]];
+  const got = cases.map(([h]) => listSource(h));
+  check("B25 the on-chain source line, in the list's own words: its reason when agreed, else 'no … list' with the reason; nothing read, only the noun",
+    cases.every(([, want], i) => got[i] === want), JSON.stringify(got));
+  const FX = join(ROOT, "tools", "homepage-preview", "fixtures");
+  const fixtures = ["capture-20261021T072727Z", "capture-20261023T122827Z", "insufficient", "seed_and_validators", "seeds_only", "validators_only"].map((n) => JSON.parse(readFileSync(join(FX, "health-" + n + ".json"), "utf8")));
+  const wrong = fixtures.map((h) => [h.on_chain_validators.state, listSource(h)]).filter(([st, s]) => st === "agreed" ? !/returned the same validator list/.test(s) : !s.startsWith("no agreed validator list: ") || /returned the same|alike/.test(s));
+  check("B26 on every fixture, agreement is claimed iff the list was agreed (4 of 6 are not)", wrong.length === 0 && fixtures.filter((h) => h.on_chain_validators.state !== "agreed").length === 4, JSON.stringify(wrong));
+}
 
 console.log("\n[" + TAG + "] one source");
 const MOD = readFileSync(join(__dir, "home-cycle.mjs"), "utf8").replace(/^export /gm, "");
@@ -235,10 +257,10 @@ const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
 check("H1 homepage.html carries this module verbatim (rebuild the page after editing it)", HOME.includes(MOD), "module text not found in homepage.html");
 check("H2 the page calls the shared functions for the card", ["HOME_CYCLE.leadCount(", "HOME_CYCLE.cycleSeeds(", "HOME_CYCLE.readbarText(", "HOME_CYCLE.trendReason("].every((s) => HOME.includes(s)));
 check("H3 the agent fills the trend card's reason from the same function (R-08)", readFileSync(join(__dir, "agent.mjs"), "utf8").includes("trend: trendReason(c.trend)"));
-check("H4 the page fills the band and the Agreement section's movement line from the shared functions", ["HOME_CYCLE.seedsCalm(", "HOME_CYCLE.figureClocks(", "HOME_CYCLE.fieldReason(", "HOME_CYCLE.tileMedian(", "HOME_CYCLE.tileSeeds(", "HOME_CYCLE.tileOnChain(", "HOME_CYCLE.tileAnswered(", "HOME_CYCLE.tilesBetween(", "HOME_CYCLE.heightLine("].every((s) => HOME.includes(s)));
+check("H4 the page fills the band and the Agreement section's movement line from the shared functions", ["HOME_CYCLE.seedsCalm(", "HOME_CYCLE.figureClocks(", "HOME_CYCLE.listSource(", "HOME_CYCLE.fieldReason(", "HOME_CYCLE.tileMedian(", "HOME_CYCLE.tileSeeds(", "HOME_CYCLE.tileOnChain(", "HOME_CYCLE.tileAnswered(", "HOME_CYCLE.tilesBetween(", "HOME_CYCLE.heightLine("].every((s) => HOME.includes(s)));
 {
   const A = readFileSync(join(__dir, "agent.mjs"), "utf8");
-  check("H5 the agent fills the band for readers without JavaScript from the same functions", ["tileMedian(", "tileSeeds(", "tileOnChain(", "tileAnswered(", "tilesBetween(", "figureClocks(", "seedsCalm(", "fieldReason("].every((s) => A.includes(s)) && /import \{[^}]*tileMedian[^}]*\} from "\.\/home-cycle\.mjs"/.test(A));
+  check("H5 the agent fills the band for readers without JavaScript from the same functions", ["tileMedian(", "tileSeeds(", "tileOnChain(", "tileAnswered(", "tilesBetween(", "figureClocks(", "listSource(", "seedsCalm(", "fieldReason("].every((s) => A.includes(s)) && /import \{[^}]*tileMedian[^}]*\} from "\.\/home-cycle\.mjs"/.test(A));
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");

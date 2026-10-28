@@ -205,6 +205,18 @@ export function figureClocks(o, h) {
     list: !h ? "not read yet" : oc && oc.state !== "pending" ? at(oc.observed_at, "read") : oc ? "not read yet" : "not reported",
     check: !h ? "not read yet" : w && w.state !== "pending" && w.state !== "disabled" ? at(w.round_at, "round") : w && w.state === "disabled" ? "turned off on this server" : w ? "not read yet" : "not reported" };
 }
+// What the on-chain figure rests on, for Explain this reading, in the list's own words: the published reason while the
+// seeds agreed, and in every other state (pending, stale, not agreed, or one this page does not know) a line that
+// begins "no" and claims no agreement. Before /health is read, or when it carries no list, only the noun. h: /health.
+export function listSource(h) {
+  h = objOf(h);
+  var oc = h && objOf(h.on_chain_validators);
+  if (!oc) return "the validator list";
+  var why = typeof oc.reason === "string" ? oc.reason.trim() : "";
+  if (oc.state === "agreed") return why || "at least two public seeds returned the same validator list";
+  var head = oc.state === "pending" ? "no validator list yet" : oc.state === "stale" ? "no current validator list" : "no agreed validator list";
+  return why ? head + ": " + why : head;
+}
 // A field's reason in Explain this reading: the reading's own text, or, when it publishes none, a plain statement that
 // it publishes none (the risk line in the words of the status/risk explanation). key: the card's data-card key.
 export function fieldReason(key, reason) {

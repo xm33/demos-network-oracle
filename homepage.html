@@ -884,7 +884,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
             <p class="xk">Where the figures come from</p>
             <dl class="xsrc">
               <div><dt>median block, public seeds</dt><dd>this reading, from <code>/organism</code>, <span id="x-at-reading">not read yet</span></dd></div>
-              <div><dt>on chain</dt><dd>the validator list two public seeds returned alike, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd></div>
+              <div><dt>on chain</dt><dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd></div>
               <div><dt>answered as listed</dt><dd>DNO's own check: it dials the address each ACTIVE row published on chain, from <code>/health</code>, <span id="x-at-check">not read yet</span></dd></div>
             </dl>
             <p class="xk">What the seeds reported</p>
@@ -1757,6 +1757,18 @@ function figureClocks(o, h) {
     list: !h ? "not read yet" : oc && oc.state !== "pending" ? at(oc.observed_at, "read") : oc ? "not read yet" : "not reported",
     check: !h ? "not read yet" : w && w.state !== "pending" && w.state !== "disabled" ? at(w.round_at, "round") : w && w.state === "disabled" ? "turned off on this server" : w ? "not read yet" : "not reported" };
 }
+// What the on-chain figure rests on, for Explain this reading, in the list's own words: the published reason while the
+// seeds agreed, and in every other state (pending, stale, not agreed, or one this page does not know) a line that
+// begins "no" and claims no agreement. Before /health is read, or when it carries no list, only the noun. h: /health.
+function listSource(h) {
+  h = objOf(h);
+  var oc = h && objOf(h.on_chain_validators);
+  if (!oc) return "the validator list";
+  var why = typeof oc.reason === "string" ? oc.reason.trim() : "";
+  if (oc.state === "agreed") return why || "at least two public seeds returned the same validator list";
+  var head = oc.state === "pending" ? "no validator list yet" : oc.state === "stale" ? "no current validator list" : "no agreed validator list";
+  return why ? head + ": " + why : head;
+}
 // A field's reason in Explain this reading: the reading's own text, or, when it publishes none, a plain statement that
 // it publishes none (the risk line in the words of the status/risk explanation). key: the card's data-card key.
 function fieldReason(key, reason) {
@@ -1764,7 +1776,7 @@ function fieldReason(key, reason) {
   return key === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.";
 }
 
-return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, fieldReason };
+return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason };
 })();
   // The band beside the status word: four tiles, each one published figure on its own clock (HOME_CYCLE.tile*). The
   // two from /organism are the reading's; the two from /health are its list read and its watch round. A failed request
@@ -1882,6 +1894,7 @@ return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason,
     setText($('xw-status'), st || (failed ? 'unknown' : 'reading'));
     const c = HOME_CYCLE.figureClocks(o, h), hFail = !h && !!reads.health.error;
     setText($('x-at-reading'), failed ? 'not read' : c.reading);
+    setText($('x-src-list'), HOME_CYCLE.listSource(h));
     setText($('x-at-list'), hFail ? 'not read' : c.list);
     setText($('x-at-check'), hFail ? 'not read' : c.check);
     setText($('x-seeds'), o ? HOME_CYCLE.cycleSeeds(r, sameObservation(h, o) ? active : null) : $('seeds-line').textContent);

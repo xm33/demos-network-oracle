@@ -34,7 +34,7 @@ import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from ".
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, versionOf, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
-import { leadCount, cycleSeeds, seedsCalm, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, fieldReason } from "./home-cycle.mjs";
+import { leadCount, cycleSeeds, seedsCalm, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
 import { compareBlockIdentity, createBlockIdentityTracker, describeBlockIdentity } from "./block-identity.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
@@ -362,6 +362,7 @@ var HOME_MARKERS = {
   xStatus: '<span id="x-status">reading</span>',
   xwStatus: '<span id="xw-status">reading</span>',
   xAt: { reading: '<span id="x-at-reading">not read yet</span>', list: '<span id="x-at-list">not read yet</span>', check: '<span id="x-at-check">not read yet</span>' },
+  xSrcList: '<span id="x-src-list">the validator list</span>',
   xSeeds: '<p id="x-seeds">reading</p>',
   xInsufficient: '<p class="xnote" id="x-insufficient" hidden>',
   cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality"), reading_agreement: homeCardMarker("reading_agreement") }
@@ -398,6 +399,7 @@ function renderHomepageNoJs(html) {
     html = html.replace(HOME_MARKERS.xwStatus, '<span id="xw-status">' + e(String(c.status || "unknown")) + '</span>');
     var clocks = figureClocks({ observed_at: c.observed_at }, hv);
     for (var xk in HOME_MARKERS.xAt) html = html.replace(HOME_MARKERS.xAt[xk], '<span id="x-at-' + xk + '">' + e(clocks[xk]) + '</span>');
+    html = html.replace(HOME_MARKERS.xSrcList, '<span id="x-src-list">' + e(listSource(hv)) + '</span>');
     if (c.data_quality === "insufficient") {
       html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
       html = html.replace(HOME_MARKERS.xInsufficient, '<p class="xnote" id="x-insufficient">');

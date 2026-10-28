@@ -74,7 +74,7 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       seedsHidden: !!document.getElementById("seeds-line") && document.getElementById("seeds-line").hidden,
       insuff: shown("insufficient") ? t("insufficient") : null, xInsuff: shown("x-insufficient") ? t("x-insufficient") : null,
       explain: (() => { const d = document.getElementById("explain"); if (!d) return null;
-        return { tag: d.tagName.toLowerCase(), open: d.open, status: t("x-status"), wstatus: t("xw-status"), seeds: t("x-seeds"), at: { reading: t("x-at-reading"), list: t("x-at-list"), check: t("x-at-check") },
+        return { tag: d.tagName.toLowerCase(), open: d.open, status: t("x-status"), wstatus: t("xw-status"), seeds: t("x-seeds"), at: { reading: t("x-at-reading"), list: t("x-at-list"), check: t("x-at-check") }, listSrc: t("x-src-list"),
           why: Object.fromEntries([...d.querySelectorAll("[data-why]")].map((n) => [n.dataset.why, n.textContent])), whyv: Object.fromEntries([...d.querySelectorAll("[data-whyv]")].map((n) => [n.dataset.whyv, n.textContent])),
           cardSubs: Object.fromEntries([...document.querySelectorAll("#cards [data-card]")].filter((c) => c.querySelector(".s")).map((c) => [c.dataset.card, c.querySelector(".s").textContent])),
           live: /LIVE is the age of DNO's last completed observation, not the network's state\./.test(d.textContent), summaryInside: !!d.querySelector("#summary") }; })(),
@@ -260,6 +260,10 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
     const hh = (iso) => (iso ? iso.slice(11, 19) + " UTC" : null), ocx = h.on_chain_validators || {}, wx = h.validator_watch || {};
     check(`EX2 ${name}: Explain is a native <details>, closed at first, with each figure's own clock`, ex.tag === "details" && ex.open === false
       && ex.at.reading === "read " + hh(o.observed_at) && ex.at.list === (ocx.observed_at ? "read " + hh(ocx.observed_at) : "not reported") && ex.at.check === (wx.round_at ? "round " + hh(wx.round_at) : wx.state === "disabled" ? "turned off on this server" : "not reported") && ex.live, JSON.stringify(ex.at));
+    // F-FS-02: the on-chain source line claims agreement only when /health says the list was agreed; otherwise it says
+    // there is no agreed list, in the list's own reason.
+    check(`EX7 ${name}: the on-chain source line is the list's own reason, and claims agreement only when the list was agreed (${ocx.state})`,
+      ocx.state === "agreed" ? ex.listSrc === ocx.reason : typeof ex.listSrc === "string" && ex.listSrc.startsWith("no ") && ex.listSrc.includes(ocx.reason) && !/returned the same|alike/.test(ex.listSrc), ex.listSrc);
     const ws = o.witnesses || {}, okSeeds = (h.publicNodes || []).filter((n) => n.ok).length, calm = ws.mode === "seeds_only" && String(o.agreement) === "strong" && okSeeds === (ws.public_seeds || {}).own_height && !o.active_incidents && (o.height_static_seconds || 0) < 300 && o.data_quality === "sufficient";
     check(`EX3 ${name}: the seeds line under the band is ${calm ? "left out (calm)" : "shown"}, and Explain carries it in full`, r.seedsHidden === calm && ex.seeds === r.seeds && ex.seeds.length > 20, r.seedsHidden + " | " + ex.seeds);
     const insufficient = o.data_quality === "insufficient";

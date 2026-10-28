@@ -113,7 +113,17 @@ check("H26 the band: each tile marker and the line under the band present once, 
     && xa.includes('<span class="xw" data-why="data_quality">No reason is published for this value in this reading.</span>') && xa.includes('<span data-whyv="reading_agreement">strong</span>')
     && xb.includes('<span class="xw" data-why="risk">' + escHtml(o23.risk_factors.join(" · ")) + '</span>') && !/>reading</.test(xa) && !/>reading</.test(xb) && !/>not read yet</.test(xa)
     && xa.includes('<p class="xnote" id="x-insufficient" hidden>') && xa.includes("LIVE is the age of DNO's last completed observation, not the network's state."), xa.slice(0, 900));
+  // F-FS-02: the on-chain source line, without JavaScript, on an agreed list (21 Oct), a list not agreed with validators
+  // standing in (23 Oct), and the insufficient reading (0 of 3 seeds).
+  const xc = explainOf(fill(fx("organism-insufficient.json"), fx("health-insufficient.json")));
+  const SRC_SPAN = (s) => '<span id="x-src-list">' + s + '</span>';
+  check("H51 no-JS fill: the on-chain source line claims agreement only for an agreed list, and gives the list's own reason otherwise",
+    xa.includes(SRC_SPAN("2 of 3 public seeds returned the same validator list")) && xb.includes(SRC_SPAN("no agreed validator list: fewer than two public seeds returned a validator list"))
+    && xc.includes(SRC_SPAN("no agreed validator list: fewer than two public seeds returned a validator list")) && ![xb, xc].some((x) => /returned the same validator list|alike/.test(x)), [xa, xb, xc].map((x) => (x.match(/<span id="x-src-list">[^<]*<\/span>/) || ["(none)"])[0]).join(" | "));
 }
+check("H50 the on-chain source line is a fill marker (present once, the agent fills the same one), and no fixed agreement wording is left in it",
+  count(HOME, '<dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd>') === 1
+  && SRC.includes("xSrcList: '<span id=\"x-src-list\">the validator list</span>'") && !HOME.includes("returned alike"), count(HOME, 'id="x-src-list"'));
 // The insufficient-reading banner: the operator's approved words (2026-10-28, "banner approve"), directly under the band;
 // the old banner's detail is inside Explain, shown only when data quality is insufficient.
 check("H48 the insufficient banner is the approved text, placed before the reading's lines; the old detail lives in Explain only",
