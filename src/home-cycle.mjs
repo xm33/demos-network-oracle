@@ -1,19 +1,14 @@
-// home-cycle.mjs — the This cycle card's lines, one source: the agent's page for readers without JavaScript and the
-// page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases. No imports.
+// home-cycle.mjs — the This cycle card's lines and the first screen's band, one source: the agent's page for readers
+// without JavaScript and the page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases.
+// No imports.
 
-var NUM_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 var isNum = function(v) { return typeof v === "number" && Number.isFinite(v); };
 var fmt = function(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
 
-// The count the lead prints (on_chain_validators while agreed), or null. Line 2 names the same count or none.
+// The ACTIVE count as the agreeing seeds list it (on_chain_validators while agreed), or null: the band's on-chain tile
+// shows this count, and the seeds line names the same count or none.
 export function leadCount(oc) {
   return oc && oc.state === "agreed" && isNum(oc.active) && isNum(oc.seeds_agreed) ? oc.active : null;
-}
-// The ACTIVE count as the agreeing seeds list it, or why there is none this cycle.
-export function cycleLead(oc) {
-  if (!oc || oc.state === "pending") return "ACTIVE on chain: reading.";
-  if (leadCount(oc) !== null) return fmt(oc.active) + " ACTIVE on chain as " + (NUM_WORD[oc.seeds_agreed] || fmt(oc.seeds_agreed)) + " public seeds list them.";
-  return "ACTIVE on chain: not reported this cycle" + (typeof oc.reason === "string" && oc.reason ? " (" + oc.reason + ")" : "") + ".";
 }
 
 // The second line, in parts. r is one observation: { publicNodes (the configured seeds, each with ok), agreement (the
@@ -94,6 +89,15 @@ export function seedsParts(r, active) {
     : stoodIn ? "Status is those validators alone" : "Status is those seeds") + (isNum(active) ? ", not the " + fmt(active) : "") + ".";
   return p;
 }
+// The seeds line says nothing the band does not when every seed that answered gave its own height, those heights align,
+// none has stopped, no incident is open, and status is the seeds': the page then leaves the line out. Any other state
+// (a seed without its own height, validators standing in, a spread, a standstill, an incident, a stale or missing
+// observation, a failed read) keeps it.
+export function seedsCalm(r, active) {
+  var p = seedsParts(r, active);
+  return /^(\d+ of \d+ configured seeds answered|\d+ configured seeds gave their own height)\.$/.test(p.answered || "") && p.heights === "Their heights align."
+    && !p.stall && !p.incidents && /^Status is those seeds(, not the [\d,]+)?\.$/.test(p.status || "");
+}
 export function cycleSeeds(r, active) {
   var p = seedsParts(r, active);
   return [p.answered, p.heights, p.stall, p.incidents, p.status].filter(Boolean).join(" ");
@@ -104,15 +108,118 @@ export function readbarText(r) {
   return [p.incidents, p.answered, p.heights, p.stall].filter(Boolean).join(" ");
 }
 
-// The peer-listed count for the door line, or null when it is not known.
-export function cycleDoor(discovered) {
-  return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
-}
-
 // The trend card's reason: the comparison the agent makes (agent.mjs, the trend block), in words. Backward-looking only.
 // Empty for unknown: the definition on the card says why (fewer than 10 prior cycles, or data quality insufficient).
 export function trendReason(trend) {
   return trend === "improving" || trend === "stable" || trend === "worsening"
     ? "This round against the mean of the previous 10\u201315 rounds: seeds answering, agreement, block spread."
     : "";
+}
+
+// ---- The band beside the status word (the first screen). Each tile is one published figure with its own clock, or
+// the word the sections below use for the same field when there is none: "reading" before the first read, "not
+// reported" when the document does not carry the field, "unknown" when it does and the figure is not current or not
+// agreed, "not computed" for a median no comparison made, "not observed" for a watch turned off on the server. The
+// page says "not read" itself when a request failed. Nothing is carried over from an earlier read.
+var objOf = function(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : null; };
+var clockOf = function(t) { return typeof t === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/.test(t) ? t.slice(11, 19) : null; };
+var READING = function() { return { value: "reading", unit: null, line: null, n: null }; };
+var NONE = function(value, line) { return { value: value, unit: null, line: line || null, n: null }; };
+
+// Height movement, in the words of the Agreement section's line under its median block; null when the document does
+// not carry height_static_seconds. r: /organism or /health (or the agent's canonical state).
+export function heightLine(r) {
+  r = objOf(r) || {};
+  var hs = r.height_static_seconds;
+  if (hs === undefined) return null;
+  if (!isNum(hs)) return "height movement not observed this cycle";
+  var seen = typeof r.height_last_advanced_at === "string", span = hs < 120 ? hs + " s" : Math.floor(hs / 60) + " min";
+  var w = objOf(r.witnesses), seed = !!w && w.mode === "seed_and_validators";
+  var following = Array.isArray(r.risk_factors) && r.risk_factors.indexOf("following heights below a height read earlier") >= 0;
+  return hs === 0 ? (seen ? "a new height arrived this cycle" : following ? "following lower heights; no arrival is claimed" : "count started this cycle; no arrival seen")
+    : seed ? "the seed has shown no new height for " + (seen ? "" : "at least ") + span
+    : seen ? "no new height for " + span : "no new height seen for at least " + span;
+}
+// The reading's median block, only where heights were compared (one seed's height is not a median), and how long since
+// a new height. r: /organism (agreement a word, agreement_detail) or the /health shape (agreement an object).
+export function tileMedian(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var a = objOf(r.agreement), d = objOf(r.agreement_detail) || a;
+  var st = typeof r.agreement === "string" ? r.agreement.toLowerCase() : a && typeof a.state === "string" ? a.state.toLowerCase() : null;
+  var compared = st === "strong" || st === "moderate" || st === "weak";
+  var n = compared && d && isNum(d.median_block) ? d.median_block : null;
+  return { value: n !== null ? fmt(n) : st === null ? "not reported" : !compared ? "not computed" : "not reported",
+    unit: null, line: r.data_quality_reason === "stale" ? null : heightLine(r), n: n };
+}
+// The configured public seeds that gave their own height in this reading (witnesses.public_seeds, API 1.2). The line
+// names the seeds that gave none: "did not" give its own height, which is not "did not answer" (a seed can answer
+// without its own height).
+export function tileSeeds(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var w = objOf(r.witnesses), ps = w && objOf(w.public_seeds);
+  if (!ps || !isNum(ps.own_height) || !isNum(ps.configured)) return NONE("not reported");
+  if (r.data_quality_reason === "stale" || r.data_quality_reason === "no_observation") return NONE("unknown");
+  var own = ps.own_height, rest = ps.configured - own;
+  var line = own === 0 ? "none gave its own height" : (own === 1 ? "gave its own height" : "gave their own height") + (rest > 0 ? "; " + fmt(rest) + " did not" : "");
+  return { value: fmt(own), unit: "of " + fmt(ps.configured), line: line, n: own };
+}
+// The ACTIVE count as the agreeing seeds list it (leadCount), with the list read's own clock. h: /health.
+export function tileOnChain(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var oc = objOf(h.on_chain_validators);
+  if (!oc) return NONE("not reported");
+  if (oc.state === "pending") return READING();
+  var n = leadCount(oc), at = clockOf(oc.observed_at);
+  return { value: n === null ? "unknown" : fmt(n), unit: n === null ? null : "ACTIVE", line: at ? "list read " + at + " UTC" : null, n: n };
+}
+// The ACTIVE rows that answered DNO's dial as their listed key, with the watch round's own clock. The server marks the
+// round stale after 300 s; a round that is not observed gives no count. h: /health.
+export function tileAnswered(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var w = objOf(h.validator_watch);
+  if (!w) return NONE("not reported");
+  if (w.state === "pending") return READING();
+  if (w.state === "disabled") return NONE("not observed");
+  var at = clockOf(w.round_at), line = at ? "checked " + at + " UTC" : null;
+  if (w.state !== "observed") return NONE("unknown", line);
+  if (!isNum(w.answered_as_listed)) return NONE("not reported", line);
+  return { value: fmt(w.answered_as_listed), unit: null, line: line, n: w.answered_as_listed };
+}
+// The sentence under the band: the two validator figures are separate observations, and neither is a count of what is
+// online. active and answered: the n of the two tiles (the number shown, or null).
+export function tilesBetween(active, answered) {
+  return { text: isNum(active) && isNum(answered) ? fmt(active) + " and " + fmt(answered) + " are two observations on their own clocks. Neither shows how many validators are online."
+    : "Neither validator figure shows how many validators are online.", link: isNum(active) ? "How the " + fmt(active) + " split" : "Validators on chain" };
+}
+// Where each band figure comes from, with its clock, for Explain this reading: the reading's (/organism), the list
+// read's and the watch round's (/health). A document not read yet says so; a field it does not carry is not reported.
+export function figureClocks(o, h) {
+  o = objOf(o); h = objOf(h);
+  var at = function(t, word) { var c = clockOf(t); return c ? word + " " + c + " UTC" : "not reported"; };
+  var oc = h && objOf(h.on_chain_validators), w = h && objOf(h.validator_watch);
+  return { reading: o ? at(o.observed_at, "read") : "not read yet",
+    list: !h ? "not read yet" : oc && oc.state !== "pending" ? at(oc.observed_at, "read") : oc ? "not read yet" : "not reported",
+    check: !h ? "not read yet" : w && w.state !== "pending" && w.state !== "disabled" ? at(w.round_at, "round") : w && w.state === "disabled" ? "turned off on this server" : w ? "not read yet" : "not reported" };
+}
+// What the on-chain figure rests on, for Explain this reading, in the list's own words: the published reason while the
+// seeds agreed, and in every other state (pending, stale, not agreed, or one this page does not know) a line that
+// begins "no" and claims no agreement. Before /health is read, or when it carries no list, only the noun. h: /health.
+export function listSource(h) {
+  h = objOf(h);
+  var oc = h && objOf(h.on_chain_validators);
+  if (!oc) return "the validator list";
+  var why = typeof oc.reason === "string" ? oc.reason.trim() : "";
+  if (oc.state === "agreed") return why || "at least two public seeds returned the same validator list";
+  var head = oc.state === "pending" ? "no validator list yet" : oc.state === "stale" ? "no current validator list" : "no agreed validator list";
+  return why ? head + ": " + why : head;
+}
+// A field's reason in Explain this reading: the reading's own text, or, when it publishes none, a plain statement that
+// it publishes none (the risk line in the words of the status/risk explanation). key: the card's data-card key.
+export function fieldReason(key, reason) {
+  if (typeof reason === "string" && reason.trim()) return reason;
+  return key === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.";
 }

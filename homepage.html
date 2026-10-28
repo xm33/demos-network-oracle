@@ -194,10 +194,7 @@ h2 { font-size: 1.375rem; line-height: 1.2; font-weight: 500; color: var(--metal
 .status-value { display: flex; align-items: center; gap: 14px; font-size: clamp(2.125rem, 4.8vw, 3rem); line-height: 1; font-weight: 500; color: var(--metal-2); letter-spacing: 0.01em; }
 .status-value .ind { width: 14px; height: 14px; border-width: 2px; }
 .status-text { display: grid; gap: 8px; }
-.cycle-lead { font-size: 1.125rem; line-height: 1.4; color: var(--ink); }
 .seeds { color: var(--metal-1); }
-.door { font-family: var(--mono); font-size: 0.875rem; color: var(--metal-1); }
-.door a { font-family: var(--mono); font-size: 0.875rem; }
 .panel[data-state="unread"] .status-block, .panel[data-state="pending"] .status-block {
   background: repeating-linear-gradient(-45deg, transparent 0 9px, var(--elevated) 9px 10px); /* no signal, hatched along the needle's direction */
 }
@@ -653,53 +650,96 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 .facts a { color: #a9b8cc; text-decoration: none; }
 .facts a:hover { color: var(--ink); text-decoration: underline; }
 
-.assessment { position: relative; z-index: 2; margin-top: -28px; padding-block: 0 64px; }
-.panel { display: block; border: 1px solid #1d2a44; border-radius: 14px; background: linear-gradient(180deg, rgba(10, 17, 32, .96), rgba(5, 9, 18, .98)); box-shadow: 0 20px 60px -20px rgba(0, 0, 0, .8); overflow: hidden; }
-.panel .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 20px var(--pad) 16px; border-bottom: 1px solid var(--navy-line); }
+/* The reading lies flat under the hero; from 720 px the artwork runs on behind its top (--art-under), seen through the
+   panel's glass. The glass values pass the measured contrast check (tools/homepage-preview, C-1): change them only with it. */
+:root { --art-under: 0px; --glass-panel: .30; --glass-tile: .30; }
+@media (min-width: 720px) { :root { --art-under: 240px; } }
+.hero { padding-bottom: var(--art-under); }
+.hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; z-index: -1; height: calc(var(--art-under) + 40px); pointer-events: none; background: linear-gradient(180deg, rgba(3, 6, 11, 0), var(--bg)); }   /* the artwork fades into the page, no edge behind the panel */
+.assessment { position: relative; z-index: 2; margin-top: calc(-28px - var(--art-under)); padding-block: 0 64px; }
+.panel { display: block; border: 1px solid #223249; border-radius: 14px; background: rgba(7, 12, 23, var(--glass-panel)); -webkit-backdrop-filter: blur(6px) saturate(120%); backdrop-filter: blur(6px) saturate(120%); box-shadow: 0 20px 60px -20px rgba(0, 0, 0, .8); overflow: hidden; }
+.panel .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 20px var(--pad) 12px; }
 .rkick { display: flex; align-items: center; gap: 12px; font: 500 0.75rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink); }
 .rdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--violet-2); box-shadow: 0 0 10px var(--violet); }
 .panel .panel-head .meta { margin-left: auto; font: 400 0.8125rem/1.5 var(--mono); color: var(--metal-1); }
-.panel .panel-head .meta .sep { color: var(--metal-0); padding-inline: 8px; }
+.panel .panel-head .meta .sep { color: var(--metal-1); padding-inline: 8px; }   /* metal-0 fell to 3.4:1 over the artwork at 1920 (C-1) */
 .panel .panel-head .meta { display: flex; flex-wrap: wrap; align-items: baseline; }   /* the line breaks between items, */
 .panel .panel-head .meta > span:not(.sep) { white-space: nowrap; }   /* never inside one: a value stays with its unit */
-.panel .panel-tools { display: flex; gap: 8px; padding: 0; }
-.rhead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem); gap: 24px 40px; padding: 28px var(--pad) 8px; }
-.summary { font-size: clamp(1.5rem, 2.6vw, 2.25rem); line-height: 1.22; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); }
-.summary .s2 { color: #9aa6cc; }
-.six { margin-top: 14px; font-size: 0.9375rem; color: var(--metal-1); }
-.srcctx { display: grid; gap: 6px; align-content: start; padding-left: 24px; border-left: 1px solid var(--navy-line); }
+.panel .panel-tools { display: flex; gap: 14px; padding: 0; }
+.panel .panel-tools .linkbtn { font: 400 0.8125rem/1.5 var(--mono); }
+.panel .panel-tools .linkbtn:disabled { cursor: default; text-decoration: none; }
 .ek { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--metal-0); }
-.srcctx-h { font-size: 0.875rem; color: var(--metal-1); }
-.srcctx-n { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
-.srcctx .seeds, .srcctx-cap { font-size: 0.875rem; color: var(--metal-1); }
-.panel .cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 20px var(--pad) 12px; border: 0; counter-reset: card; }
-.panel .cards > div:nth-child(n) { counter-increment: card; display: grid; gap: 8px; align-content: start; padding: 14px 16px 16px; min-width: 0; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 9, 18, .9); }
-.panel .cards .k { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-0); }
-.panel .cards .k::before { content: counter(card, decimal-leading-zero) " / "; }
-.panel .cards .v { font-size: 1.25rem; font-weight: 500; }
+/* The band: the status word, then four tiles, each one published figure on its own clock (HOME_CYCLE.tile*). */
+.band { display: grid; grid-template-columns: 12.5rem repeat(4, minmax(0, 1fr)); gap: 12px; padding: 24px var(--pad) 8px; }
+.band .k { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-1); }
+.bstat { display: grid; align-content: center; padding: 8px 16px 8px 0; border-right: 1px solid var(--navy-line); min-width: 0; }
+.bword { display: flex; align-items: center; gap: 12px; font-size: 2.125rem; line-height: 1.1; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); }
+.bword .ind { width: 12px; height: 12px; }
+#band-status { text-transform: capitalize; }
+.tile { display: grid; gap: 6px; align-content: start; padding: 14px 16px 16px; min-width: 0; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 10, 20, var(--glass-tile)); }
+.tv { font: 500 1.75rem/1.15 var(--sans); letter-spacing: -0.01em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tv .tu { margin-left: 6px; font: 500 0.75rem/1 var(--sans); letter-spacing: 0.12em; color: var(--metal-1); }
+.tv.none { font-size: 1rem; line-height: 1.6; font-weight: 400; color: var(--metal-1); }
+.ts { font: 400 0.75rem/1.45 var(--mono); color: var(--metal-1); }
+.rsum { display: grid; gap: 6px; padding: 6px var(--pad) 0; }
+.rsum .seeds, .seeds-cap, .between { font-size: 0.875rem; color: var(--metal-1); }
+/* The six fields, flat: a word each. Each field's reason lives in Explain this reading, which reads it from the card's
+   .s line (kept, not shown); the definitions are on /methodology. */
+.panel .cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px 16px; margin: 14px var(--pad) 0; padding: 14px 0 12px; border: 0; border-top: 1px solid var(--navy-line); }
+.panel .cards > div:nth-child(n) { position: relative; display: grid; gap: 4px; align-content: start; padding: 0; min-width: 0; border: 0; background: none; }
+.panel .cards .k { font: 400 0.75rem/1.4 var(--sans); letter-spacing: 0; text-transform: none; color: var(--metal-1); }
+.panel .cards .v { gap: 8px; font-size: 0.9375rem; font-weight: 500; }
 .panel #status-value { text-transform: lowercase; }
-.panel .cards .s { font: 400 0.8125rem/1.45 var(--sans); color: var(--metal-1); }
+.panel .cards .s { display: none; }
+/* Explain this reading: a native <details>, closed by default, opened with or without JavaScript. */
+.explain { margin: 4px var(--pad) 0; border-top: 1px solid var(--navy-line); }
+.explain > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-height: 44px; cursor: pointer; list-style: none; }
+.explain > summary::-webkit-details-marker { display: none; }
+.explain > summary::before { content: ""; flex: none; width: 7px; height: 7px; margin: 0 4px 0 2px; border-right: 1.5px solid var(--metal-1); border-bottom: 1.5px solid var(--metal-1); transform: rotate(-45deg); }
+.explain[open] > summary::before { transform: rotate(45deg); }
+.explain > summary:focus-visible { outline: 2px solid var(--metal-2); outline-offset: 2px; }
+.explain .xt { font-weight: 500; color: var(--ink); }
+.explain .xs { font: 400 0.75rem/1.4 var(--mono); color: var(--metal-1); }
+.xbody { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 14px 28px; padding: 8px 0 16px 22px; font-size: 0.875rem; line-height: 1.55; color: var(--metal-1); }
+.xbody .xk { font: 500 0.6875rem/1.6 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--metal-1); }
+.xbody .summary { font-size: 1rem; line-height: 1.45; color: var(--ink); }
+.xbody .summary .s2 { color: var(--metal-1); }
+.xsrc { display: grid; gap: 6px; margin: 0; }
+.xsrc > div { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 2px 16px; }
+.xsrc dt { color: var(--ink); }
+.xsrc dd { margin: 0; }
+.xsrc code { font: 400 0.8125rem/1.5 var(--mono); }
+.xwhy { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.xwhy li { display: grid; grid-template-columns: 12rem minmax(0, 1fr) auto; gap: 2px 16px; align-items: baseline; }
+.xwhy .xf { color: var(--ink); }
+.xwhy a { font-size: 0.8125rem; }
+.xnote { grid-column: 1 / -1; }
+.xnote[hidden] { display: none; }
 .whybox { margin: 4px var(--pad) 0; padding: 12px 16px; border: 1px solid #2a3654; border-radius: 8px; background: rgba(14, 24, 48, .5); }
 .whybox[hidden] { display: none; }
 .whybox summary { cursor: pointer; font-weight: 500; color: var(--ink); }
 .whybox ul { margin: 10px 0 0 20px; list-style: disc; color: var(--metal-1); }
 .whybox p { margin-top: 8px; color: var(--metal-1); }
-.ctxstrip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px var(--pad); }
-.ctxstrip > div { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 9, 18, .6); }
-.ctxstrip .cycle-lead { font-size: 1rem; color: var(--ink); }
 .clock { font: 400 0.75rem/1.45 var(--mono); color: var(--metal-0); }
-.panel .insufficient { margin: 0 var(--pad) 12px; border: 1px solid #3a3215; border-radius: 8px; }
-.panel .under, .panel .bound { border-top: 1px solid var(--navy-line); border-bottom: 0; }
+.panel .insufficient { margin: 8px var(--pad) 0; border: 1px solid #3a3215; border-radius: 8px; }
+.panel .under, .panel .bound { border: 0; padding: 4px var(--pad); font-size: 0.8125rem; color: var(--metal-1); }
+.panel .under { padding-top: 12px; }
+.panel .bound { padding-bottom: 18px; }
 @media (max-width: 1099px) {
-  .panel .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .rhead { grid-template-columns: minmax(0, 1fr); }
-  .srcctx { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--navy-line); }
+  .band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bstat { grid-column: 1 / -1; padding: 0 0 12px; border-right: 0; border-bottom: 1px solid var(--navy-line); }
+}
+@media (max-width: 859px) { .panel .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 719px) {
+  .xbody { grid-template-columns: minmax(0, 1fr); gap: 8px; padding-left: 0; }
+  .xbody .xk { margin-top: 8px; }
+  .xsrc > div, .xwhy li { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 719px) {
   .hero .wrap { min-height: 0; padding-block: 36px 52px; }
   .hero .sky { background-position: 75% center; opacity: .8; }
-  .panel .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ctxstrip { grid-template-columns: minmax(0, 1fr); }
+  .band { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 16px; }
+  .tv { font-size: 1.5rem; }
   .panel .panel-head .meta { margin-left: 0; }
   .cta { flex: 1 1 100%; justify-content: space-between; }
 }
@@ -806,45 +846,65 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     <div class="wrap">
       <div class="panel" id="panel" data-state="pending">
         <header class="panel-head">
-          <h2 id="cycle-title" class="rkick"><span class="rdot" aria-hidden="true"></span><span>Public observation <span class="sl">/</span> <span data-network="demos-testnet">Demos public testnet</span></span></h2>
-          <p class="meta"><span id="obs-at">not read yet</span><span class="sep">·</span><span id="countdown">first read in progress</span><span class="sep">·</span><span>api <span id="api-v">reading</span></span></p>
+          <h2 id="cycle-title" class="rkick"><span class="rdot" aria-hidden="true"></span><span>The reading now <span class="sl">·</span> <span data-network="demos-testnet">Demos public testnet</span></span></h2>
+          <p class="meta"><span id="obs-at">not read yet</span><span class="sep">·</span><span id="countdown">first read in progress</span></p>
           <div class="panel-tools" role="group" aria-label="Update controls">
-            <button type="button" class="btn" id="btn-pause" aria-pressed="false">Pause</button>
-            <button type="button" class="btn" id="btn-refresh" title="Reads again now. Disabled for 5 s after a read.">Refresh now</button>
+            <button type="button" class="linkbtn" id="btn-pause" aria-pressed="false">Pause</button>
+            <button type="button" class="linkbtn" id="btn-refresh" title="Reads again now. Disabled for 5 s after a read.">Refresh</button>
           </div>
         </header>
         <div class="ruler" aria-hidden="true"><span class="sweep-fill" id="sweep-fill"></span><span class="sweep-mark" id="sweep-mark"></span></div>
-        <div class="rhead">
-          <div class="rsum">
-            <p class="summary" id="summary" data-src="api">reading</p>
-            <p class="six">Six separate measures. A word in one does not soften or confirm another; each has its own reason.</p>
-          </div>
-          <aside class="srcctx" aria-label="Source context">
-            <p class="ek">Source context</p>
-            <p class="srcctx-h">Heights counted this round</p>
-            <p class="srcctx-n" id="ctx-count">reading</p>
-            <p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>
-            <p class="srcctx-cap" id="ctx-cap" hidden></p>
-          </aside>
+        <div class="band" id="band">
+          <div class="bstat" aria-hidden="true"><p class="bword"><span class="ind" id="band-ind" data-tone="pending"></span><span id="band-status">reading</span></p></div>
+          <div class="tile" data-tile="median"><p class="k">median block</p><p class="tv" id="tile-median-v">reading</p><p class="ts" id="tile-median-s" data-src="api"></p></div>
+          <div class="tile" data-tile="seeds"><p class="k">public seeds</p><p class="tv" id="tile-seeds-v">reading</p><p class="ts" id="tile-seeds-s" data-src="api"></p></div>
+          <div class="tile" data-tile="onchain"><p class="k">on chain</p><p class="tv" id="tile-onchain-v">reading</p><p class="ts" id="tile-onchain-s" data-src="api"></p></div>
+          <div class="tile" data-tile="answered"><p class="k">answered as listed</p><p class="tv" id="tile-answered-v">reading</p><p class="ts" id="tile-answered-s" data-src="api"></p></div>
+        </div>
+        <p class="insufficient" id="insufficient" hidden>DNO could not form a sufficient reading from public sources this time, so the status is unknown.</p>
+        <div class="rsum">
+          <p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>
+          <p class="seeds-cap" id="ctx-cap" hidden></p>
+          <p class="between"><span id="tile-between">Neither validator figure shows how many validators are online.</span> <a href="#validators" id="tile-between-a">Validators on chain</a></p>
         </div>
         <div class="strip cards" id="cards">
-          <div data-card="status"><p class="k">status</p><p class="v"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> status</span></button><p class="sr" id="status-change" role="status" aria-live="polite"></p></div>
-          <div data-card="confidence"><p class="k">confidence</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="confidence" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> confidence</span></button></div>
-          <div data-card="risk"><p class="k">risk</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="risk" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> risk</span></button></div>
-          <div data-card="data_quality"><p class="k">data quality</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="data_quality" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> data quality</span></button></div>
-          <div data-card="reading_agreement"><p class="k">agreement</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="agreement" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> agreement</span></button></div>
-          <div data-card="trend"><p class="k">trend</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="trend" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> trend</span></button></div>
+          <div data-card="status"><p class="k">status</p><p class="v"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p><p class="sr" id="status-change" role="status" aria-live="polite"></p></div>
+          <div data-card="confidence"><p class="k">confidence</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p></div>
+          <div data-card="risk"><p class="k">risk</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p></div>
+          <div data-card="data_quality"><p class="k">data quality</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p></div>
+          <div data-card="reading_agreement"><p class="k">agreement</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p></div>
+          <div data-card="trend"><p class="k">trend</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p></div>
         </div>
-        <div class="xpanel-host" id="x-cycle" hidden></div>
         <details class="whybox" id="whybox" hidden><summary id="why-q">Why can these two differ?</summary><div id="why-a"></div></details>
-        <div class="ctxstrip">
-          <div><p class="ek">On-chain validators list</p><p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p><p class="clock" id="list-at"></p></div>
-          <div><p class="ek">Peer-listed identities</p><p class="door"><span id="door-n"></span><a href="#catalog" id="door">find a node</a></p><p class="clock">A retained catalog from seed peerlists: not a census, not status input.</p></div>
-        </div>
-        <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale or not made yet. Public assessment is unknown. Peer-listed identities do not enter status.</p>
-        <p class="under">Not operated by Kynesys. Path A is three public Kynesys /info URLs, one org. Anyone can read those URLs; the rules that turn their answers into status are on <a href="/methodology">/methodology</a>.</p>
+        <details class="explain" id="explain">
+          <summary><span class="xt">Explain this reading</span><span class="xs">the summary, where each figure comes from, why each field reads as it does</span></summary>
+          <div class="xbody">
+            <p class="xk">Why the status is <span id="x-status">reading</span></p>
+            <div><p class="summary" id="summary" data-src="api">reading</p></div>
+            <p class="xk">Where the figures come from</p>
+            <dl class="xsrc">
+              <div><dt>median block, public seeds</dt><dd>this reading, from <code>/organism</code>, <span id="x-at-reading">not read yet</span></dd></div>
+              <div><dt>on chain</dt><dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd></div>
+              <div><dt>answered as listed</dt><dd>DNO's own check: it dials the address each ACTIVE row published on chain, from <code>/health</code>, <span id="x-at-check">not read yet</span></dd></div>
+            </dl>
+            <p class="xk">What the seeds reported</p>
+            <p id="x-seeds">reading</p>
+            <p class="xk">Why each field reads as it does</p>
+            <ul class="xwhy">
+              <li><span class="xf">status · <span id="xw-status">reading</span></span><span>the summary above</span><a href="/methodology#what-it-measures-status">definition<span class="sr"> of status</span></a></li>
+              <li><span class="xf">confidence · <span data-whyv="confidence">reading</span></span><span class="xw" data-why="confidence"></span><a href="/methodology#what-it-measures-confidence">definition<span class="sr"> of confidence</span></a></li>
+              <li><span class="xf">risk · <span data-whyv="risk">reading</span></span><span class="xw" data-why="risk"></span><a href="/methodology#what-it-measures-risk">definition<span class="sr"> of risk</span></a></li>
+              <li><span class="xf">data quality · <span data-whyv="data_quality">reading</span></span><span class="xw" data-why="data_quality"></span><a href="/methodology#what-it-measures-data-quality">definition<span class="sr"> of data quality</span></a></li>
+              <li><span class="xf">agreement · <span data-whyv="reading_agreement">reading</span></span><span class="xw" data-why="reading_agreement"></span><a href="/methodology#what-it-measures-agreement">definition<span class="sr"> of agreement</span></a></li>
+              <li><span class="xf">trend · <span data-whyv="trend">reading</span></span><span class="xw" data-why="trend"></span><a href="/methodology#what-it-measures-trend">definition<span class="sr"> of trend</span></a></li>
+            </ul>
+            <p class="xnote" id="x-insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale or not made yet. Peer-listed identities do not enter status.</p>
+            <p class="xnote">LIVE is the age of DNO's last completed observation, not the network's state.</p>
+          </div>
+        </details>
+        <p class="under">The three seeds are public URLs of one organization, Kynesys, which does not operate DNO. Not shown here: how many validators are online, or who runs them.</p>
         <div class="notices" id="notices" hidden></div>
-        <p class="bound">LIVE is DNO's own freshness. Status is what the public endpoints showed this cycle. Neither is a score or a go/no-go.</p>
+        <p class="bound">LIVE is DNO's own freshness. Status is what the public endpoints showed this cycle. Neither is a score or a go/no-go. API <span id="api-v">reading</span>.</p>
       </div>
       <noscript><p class="note" style="margin-top:16px">Live readings on this page need JavaScript. The same reading is available as JSON at <a href="/organism">/organism</a>.</p></noscript>
     </div>
@@ -1439,7 +1499,6 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     too_few_heights: 'fewer than 2 seeds reported their own height',
   };
   function currentValue(key, hostId) {
-    if (key === 'agreement' && hostId === 'x-cycle') { const o = reads.organism.data; return o && typeof o.agreement === 'string' ? o.agreement : null; }
     if (key === 'agreement') { const a = reads.health.data && reads.health.data.agreement; return a && typeof a.state === 'string' ? a.state : null; }
     const o = reads.organism.data;
     return o && typeof o[key] === 'string' ? o[key] : null;
@@ -1491,22 +1550,17 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   const lower = (v) => (typeof v === 'string' && v ? v.toLowerCase() : null);
 
   const HOME_CYCLE = (() => {
-// home-cycle.mjs — the This cycle card's lines, one source: the agent's page for readers without JavaScript and the
-// page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases. No imports.
+// home-cycle.mjs — the This cycle card's lines and the first screen's band, one source: the agent's page for readers
+// without JavaScript and the page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases.
+// No imports.
 
-var NUM_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 var isNum = function(v) { return typeof v === "number" && Number.isFinite(v); };
 var fmt = function(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
 
-// The count the lead prints (on_chain_validators while agreed), or null. Line 2 names the same count or none.
+// The ACTIVE count as the agreeing seeds list it (on_chain_validators while agreed), or null: the band's on-chain tile
+// shows this count, and the seeds line names the same count or none.
 function leadCount(oc) {
   return oc && oc.state === "agreed" && isNum(oc.active) && isNum(oc.seeds_agreed) ? oc.active : null;
-}
-// The ACTIVE count as the agreeing seeds list it, or why there is none this cycle.
-function cycleLead(oc) {
-  if (!oc || oc.state === "pending") return "ACTIVE on chain: reading.";
-  if (leadCount(oc) !== null) return fmt(oc.active) + " ACTIVE on chain as " + (NUM_WORD[oc.seeds_agreed] || fmt(oc.seeds_agreed)) + " public seeds list them.";
-  return "ACTIVE on chain: not reported this cycle" + (typeof oc.reason === "string" && oc.reason ? " (" + oc.reason + ")" : "") + ".";
 }
 
 // The second line, in parts. r is one observation: { publicNodes (the configured seeds, each with ok), agreement (the
@@ -1587,6 +1641,15 @@ function seedsParts(r, active) {
     : stoodIn ? "Status is those validators alone" : "Status is those seeds") + (isNum(active) ? ", not the " + fmt(active) : "") + ".";
   return p;
 }
+// The seeds line says nothing the band does not when every seed that answered gave its own height, those heights align,
+// none has stopped, no incident is open, and status is the seeds': the page then leaves the line out. Any other state
+// (a seed without its own height, validators standing in, a spread, a standstill, an incident, a stale or missing
+// observation, a failed read) keeps it.
+function seedsCalm(r, active) {
+  var p = seedsParts(r, active);
+  return /^(\d+ of \d+ configured seeds answered|\d+ configured seeds gave their own height)\.$/.test(p.answered || "") && p.heights === "Their heights align."
+    && !p.stall && !p.incidents && /^Status is those seeds(, not the [\d,]+)?\.$/.test(p.status || "");
+}
 function cycleSeeds(r, active) {
   var p = seedsParts(r, active);
   return [p.answered, p.heights, p.stall, p.incidents, p.status].filter(Boolean).join(" ");
@@ -1597,11 +1660,6 @@ function readbarText(r) {
   return [p.incidents, p.answered, p.heights, p.stall].filter(Boolean).join(" ");
 }
 
-// The peer-listed count for the door line, or null when it is not known.
-function cycleDoor(discovered) {
-  return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
-}
-
 // The trend card's reason: the comparison the agent makes (agent.mjs, the trend block), in words. Backward-looking only.
 // Empty for unknown: the definition on the card says why (fewer than 10 prior cycles, or data quality insufficient).
 function trendReason(trend) {
@@ -1610,13 +1668,137 @@ function trendReason(trend) {
     : "";
 }
 
-return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, trendReason };
+// ---- The band beside the status word (the first screen). Each tile is one published figure with its own clock, or
+// the word the sections below use for the same field when there is none: "reading" before the first read, "not
+// reported" when the document does not carry the field, "unknown" when it does and the figure is not current or not
+// agreed, "not computed" for a median no comparison made, "not observed" for a watch turned off on the server. The
+// page says "not read" itself when a request failed. Nothing is carried over from an earlier read.
+var objOf = function(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : null; };
+var clockOf = function(t) { return typeof t === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/.test(t) ? t.slice(11, 19) : null; };
+var READING = function() { return { value: "reading", unit: null, line: null, n: null }; };
+var NONE = function(value, line) { return { value: value, unit: null, line: line || null, n: null }; };
+
+// Height movement, in the words of the Agreement section's line under its median block; null when the document does
+// not carry height_static_seconds. r: /organism or /health (or the agent's canonical state).
+function heightLine(r) {
+  r = objOf(r) || {};
+  var hs = r.height_static_seconds;
+  if (hs === undefined) return null;
+  if (!isNum(hs)) return "height movement not observed this cycle";
+  var seen = typeof r.height_last_advanced_at === "string", span = hs < 120 ? hs + " s" : Math.floor(hs / 60) + " min";
+  var w = objOf(r.witnesses), seed = !!w && w.mode === "seed_and_validators";
+  var following = Array.isArray(r.risk_factors) && r.risk_factors.indexOf("following heights below a height read earlier") >= 0;
+  return hs === 0 ? (seen ? "a new height arrived this cycle" : following ? "following lower heights; no arrival is claimed" : "count started this cycle; no arrival seen")
+    : seed ? "the seed has shown no new height for " + (seen ? "" : "at least ") + span
+    : seen ? "no new height for " + span : "no new height seen for at least " + span;
+}
+// The reading's median block, only where heights were compared (one seed's height is not a median), and how long since
+// a new height. r: /organism (agreement a word, agreement_detail) or the /health shape (agreement an object).
+function tileMedian(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var a = objOf(r.agreement), d = objOf(r.agreement_detail) || a;
+  var st = typeof r.agreement === "string" ? r.agreement.toLowerCase() : a && typeof a.state === "string" ? a.state.toLowerCase() : null;
+  var compared = st === "strong" || st === "moderate" || st === "weak";
+  var n = compared && d && isNum(d.median_block) ? d.median_block : null;
+  return { value: n !== null ? fmt(n) : st === null ? "not reported" : !compared ? "not computed" : "not reported",
+    unit: null, line: r.data_quality_reason === "stale" ? null : heightLine(r), n: n };
+}
+// The configured public seeds that gave their own height in this reading (witnesses.public_seeds, API 1.2). The line
+// names the seeds that gave none: "did not" give its own height, which is not "did not answer" (a seed can answer
+// without its own height).
+function tileSeeds(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var w = objOf(r.witnesses), ps = w && objOf(w.public_seeds);
+  if (!ps || !isNum(ps.own_height) || !isNum(ps.configured)) return NONE("not reported");
+  if (r.data_quality_reason === "stale" || r.data_quality_reason === "no_observation") return NONE("unknown");
+  var own = ps.own_height, rest = ps.configured - own;
+  var line = own === 0 ? "none gave its own height" : (own === 1 ? "gave its own height" : "gave their own height") + (rest > 0 ? "; " + fmt(rest) + " did not" : "");
+  return { value: fmt(own), unit: "of " + fmt(ps.configured), line: line, n: own };
+}
+// The ACTIVE count as the agreeing seeds list it (leadCount), with the list read's own clock. h: /health.
+function tileOnChain(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var oc = objOf(h.on_chain_validators);
+  if (!oc) return NONE("not reported");
+  if (oc.state === "pending") return READING();
+  var n = leadCount(oc), at = clockOf(oc.observed_at);
+  return { value: n === null ? "unknown" : fmt(n), unit: n === null ? null : "ACTIVE", line: at ? "list read " + at + " UTC" : null, n: n };
+}
+// The ACTIVE rows that answered DNO's dial as their listed key, with the watch round's own clock. The server marks the
+// round stale after 300 s; a round that is not observed gives no count. h: /health.
+function tileAnswered(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var w = objOf(h.validator_watch);
+  if (!w) return NONE("not reported");
+  if (w.state === "pending") return READING();
+  if (w.state === "disabled") return NONE("not observed");
+  var at = clockOf(w.round_at), line = at ? "checked " + at + " UTC" : null;
+  if (w.state !== "observed") return NONE("unknown", line);
+  if (!isNum(w.answered_as_listed)) return NONE("not reported", line);
+  return { value: fmt(w.answered_as_listed), unit: null, line: line, n: w.answered_as_listed };
+}
+// The sentence under the band: the two validator figures are separate observations, and neither is a count of what is
+// online. active and answered: the n of the two tiles (the number shown, or null).
+function tilesBetween(active, answered) {
+  return { text: isNum(active) && isNum(answered) ? fmt(active) + " and " + fmt(answered) + " are two observations on their own clocks. Neither shows how many validators are online."
+    : "Neither validator figure shows how many validators are online.", link: isNum(active) ? "How the " + fmt(active) + " split" : "Validators on chain" };
+}
+// Where each band figure comes from, with its clock, for Explain this reading: the reading's (/organism), the list
+// read's and the watch round's (/health). A document not read yet says so; a field it does not carry is not reported.
+function figureClocks(o, h) {
+  o = objOf(o); h = objOf(h);
+  var at = function(t, word) { var c = clockOf(t); return c ? word + " " + c + " UTC" : "not reported"; };
+  var oc = h && objOf(h.on_chain_validators), w = h && objOf(h.validator_watch);
+  return { reading: o ? at(o.observed_at, "read") : "not read yet",
+    list: !h ? "not read yet" : oc && oc.state !== "pending" ? at(oc.observed_at, "read") : oc ? "not read yet" : "not reported",
+    check: !h ? "not read yet" : w && w.state !== "pending" && w.state !== "disabled" ? at(w.round_at, "round") : w && w.state === "disabled" ? "turned off on this server" : w ? "not read yet" : "not reported" };
+}
+// What the on-chain figure rests on, for Explain this reading, in the list's own words: the published reason while the
+// seeds agreed, and in every other state (pending, stale, not agreed, or one this page does not know) a line that
+// begins "no" and claims no agreement. Before /health is read, or when it carries no list, only the noun. h: /health.
+function listSource(h) {
+  h = objOf(h);
+  var oc = h && objOf(h.on_chain_validators);
+  if (!oc) return "the validator list";
+  var why = typeof oc.reason === "string" ? oc.reason.trim() : "";
+  if (oc.state === "agreed") return why || "at least two public seeds returned the same validator list";
+  var head = oc.state === "pending" ? "no validator list yet" : oc.state === "stale" ? "no current validator list" : "no agreed validator list";
+  return why ? head + ": " + why : head;
+}
+// A field's reason in Explain this reading: the reading's own text, or, when it publishes none, a plain statement that
+// it publishes none (the risk line in the words of the status/risk explanation). key: the card's data-card key.
+function fieldReason(key, reason) {
+  if (typeof reason === "string" && reason.trim()) return reason;
+  return key === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.";
+}
+
+return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason };
 })();
-  function leadLine(vm) {
-    if (vm.mode === 'unpublished') return 'ACTIVE on chain: not reported (this server does not publish on_chain_validators).';
-    if (vm.mode === 'unread') return 'ACTIVE on chain: not read.';
-    if (vm.mode === 'pending') return 'ACTIVE on chain: reading.';
-    return HOME_CYCLE.cycleLead(vm.oc);
+  // The band beside the status word: four tiles, each one published figure on its own clock (HOME_CYCLE.tile*). The
+  // two from /organism are the reading's; the two from /health are its list read and its watch round. A failed request
+  // says "not read"; nothing from an earlier read stands in.
+  function setTile(key, t) {
+    const v = $(`tile-${key}-v`), sig = `${t.value}|${t.unit}`;
+    if (v.dataset.sig !== sig) {
+      v.dataset.sig = sig;
+      v.replaceChildren(t.value, ...(t.unit ? [' ', el('span', { class: 'tu', text: t.unit })] : []));
+    }
+    v.classList.toggle('none', t.n === null);
+    setText($(`tile-${key}-s`), t.line || '');
+  }
+  function renderBand(o, h) {
+    const notRead = { value: 'not read', unit: null, line: null, n: null };
+    const oFail = !o && !!reads.organism.error, hFail = !h && !!reads.health.error;
+    setTile('median', oFail ? notRead : HOME_CYCLE.tileMedian(o));
+    setTile('seeds', oFail ? notRead : HOME_CYCLE.tileSeeds(o));
+    const oc = hFail ? notRead : HOME_CYCLE.tileOnChain(h), an = hFail ? notRead : HOME_CYCLE.tileAnswered(h);
+    setTile('onchain', oc); setTile('answered', an);
+    const b = HOME_CYCLE.tilesBetween(oc.n, an.n);
+    setText($('tile-between'), b.text); setText($('tile-between-a'), b.link);
   }
   // One observation: /health joins the seeds line only when it is the same observation as /organism (equal observed_at).
   // Matching labels are not identity: two rounds can carry the same words over different heights and lists.
@@ -1638,17 +1820,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     let i = text.indexOf('. '); if (i < 0) i = text.indexOf(', ');
     node.replaceChildren(...(i < 0 ? [text] : [el('span', { class: 's1', text: text.slice(0, i + 1) }), el('span', { class: 's2', text: text.slice(i + 1) })]));
   }
-  // Heights counted this round: from /organism.witnesses alone. Validators that stand in are not the validator population.
+  // Validators that stand in for a seed: from /organism.witnesses alone, and said not to be the validator population.
   function renderSourceContext(o) {
-    const w = o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null, ps = w && w.public_seeds, v = w && w.validators;
-    const seeds = ps && isNum(ps.own_height) ? ps.own_height : null, counted = v && isNum(v.counted) ? v.counted : 0, read = v && isNum(v.read) ? v.read : null;
-    const seedWord = (n) => `${fmtInt(n)} ${n === 1 ? 'seed' : 'seeds'}`, witWord = (n) => `${fmtInt(n)} validator ${n === 1 ? 'witness' : 'witnesses'}`;
-    const mode = w && typeof w.mode === 'string' ? w.mode : null;
-    setText($('ctx-count'), !w ? 'not reported in this reading'
-      : mode === 'seeds_only' && seeds != null ? seedWord(seeds)
-      : mode === 'seed_and_validators' && seeds != null ? `${seedWord(seeds)} + ${witWord(counted)}`
-      : mode === 'validators_only' ? witWord(counted)
-      : 'too few for a reading');
+    const w = o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null, v = w && w.validators;
+    const counted = v && isNum(v.counted) ? v.counted : 0, read = v && isNum(v.read) ? v.read : null;
     const cap = counted > 0 && read != null ? `${fmtInt(read)} ${read === 1 ? 'validator was' : 'validators were'} read; ${fmtInt(counted)} ${counted === 1 ? 'was' : 'were'} counted for this reading. The validators counted here are not the total validator population.` : '';
     setText($('ctx-cap'), cap); $('ctx-cap').hidden = !cap;
   }
@@ -1710,26 +1885,46 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     if (st && lastStatus && st !== lastStatus) setText($('status-change'), `Status is now ${st}; it was ${lastStatus}.`);
     if (st) lastStatus = st;
   }
+  // Explain this reading (a native <details>): the summary, each figure's source and clock, what the seeds reported in
+  // full, and each field's own reason as the card carries it, all from the documents the panel shows. The agent fills
+  // the same for readers without JavaScript (renderHomepageNoJs).
+  function renderExplainReading(o, h, r, active) {
+    const failed = !o && !!reads.organism.error, st = o ? lower(o.status) : null;
+    setText($('x-status'), st || (failed ? 'unknown' : 'reading'));
+    setText($('xw-status'), st || (failed ? 'unknown' : 'reading'));
+    const c = HOME_CYCLE.figureClocks(o, h), hFail = !h && !!reads.health.error;
+    setText($('x-at-reading'), failed ? 'not read' : c.reading);
+    setText($('x-src-list'), HOME_CYCLE.listSource(h));
+    setText($('x-at-list'), hFail ? 'not read' : c.list);
+    setText($('x-at-check'), hFail ? 'not read' : c.check);
+    setText($('x-seeds'), o ? HOME_CYCLE.cycleSeeds(r, sameObservation(h, o) ? active : null) : $('seeds-line').textContent);
+    for (const k of ['confidence', 'risk', 'data_quality', 'reading_agreement', 'trend']) {
+      const cell = document.querySelector(`#cards [data-card="${k}"]`);
+      setText(document.querySelector(`[data-whyv="${k}"]`), cell ? cell.querySelector('.val').textContent : '');
+      setText(document.querySelector(`[data-why="${k}"]`), !o ? (failed ? 'not read' : 'reading') : HOME_CYCLE.fieldReason(k, cell ? cell.querySelector('.s').textContent : ''));
+    }
+    $('x-insufficient').hidden = !o || lower(o.data_quality) !== 'insufficient';
+  }
   function renderCycle() {
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
     const vm = validatorModel();
     const active = vm.mode === 'live' ? HOME_CYCLE.leadCount(vm.oc) : null;
-    setText($('cycle-lead'), leadLine(vm));
-    setText($('list-at'), vm.mode === 'live' && parseTime(vm.oc.observed_at) != null ? `List read ${clock(parseTime(vm.oc.observed_at))}, its own clock: not the reading's.` : '');
-    const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
-    setText($('door-n'), vg && isNum(vg.discovered) ? `${API10 ? `${fmtInt(vg.discovered)} recorded from peerlists` : HOME_CYCLE.cycleDoor(vg.discovered)} · ` : '');
+    renderBand(o, h);
 
     if (!o) {
       const failed = !!reads.organism.error;
       panel.dataset.state = failed ? 'unread' : 'pending';
       setTone($('status-ind'), failed ? 'unknown' : 'pending');
       setText($('status-value'), failed ? 'UNKNOWN' : 'READING');
+      setTone($('band-ind'), failed ? 'unknown' : 'pending');
+      setText($('band-status'), failed ? 'unknown' : 'reading');
       const why = failed ? `No reading: ${reads.organism.error}.${reads.organism.expired ? ' The last reading received is more than 300 s old and is no longer shown.' : ''} This is a failure to read, not an observation about the network.` : 'The first request to /organism is in flight.';
-      setText($('seeds-line'), why);
+      setText($('seeds-line'), why); $('seeds-line').hidden = false;
       setText($('summary'), failed ? 'No reading.' : 'reading');
-      setText($('ctx-count'), failed ? 'not read' : 'reading'); $('ctx-cap').hidden = true; $('whybox').hidden = true;
+      $('ctx-cap').hidden = true; $('whybox').hidden = true;
       $('insufficient').hidden = true;
       for (const k of ['trend', 'risk', 'confidence', 'data_quality', 'reading_agreement']) setCard(k, failed ? 'unknown' : 'pending', failed ? 'unknown' : 'reading', failed ? 'not read' : '');
+      renderExplainReading(null, h, null, null);
       renderNotices(); renderReadbar(failed ? `No reading: ${reads.organism.error}.` : '');
       return;
     }
@@ -1737,14 +1932,18 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const st = lower(o.status);
     setTone($('status-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
     setText($('status-value'), st ? st.toUpperCase() : 'UNKNOWN');
+    setTone($('band-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
+    setText($('band-status'), st || 'unknown');
     announceStatus(st);
     const r = seedsReading(o, h);
     // The ACTIVE count is the list read's, carried by /health: named in the reading's line only for the same observation.
     setText($('seeds-line'), HOME_CYCLE.cycleSeeds(r, sameObservation(h, o) ? active : null));
+    // Left out only when it says nothing the band does not (HOME_CYCLE.seedsCalm); any other state keeps it.
+    $('seeds-line').hidden = HOME_CYCLE.seedsCalm(r, sameObservation(h, o) ? active : null);
     // The reading's sentence, verbatim (D-3), and its own clock and version (D-1: all from this /organism).
     renderSummary(typeof o.summary === 'string' && o.summary ? o.summary : 'No summary in this reading.');
     const oAt = parseTime(o.observed_at);
-    setText($('obs-at'), oAt != null ? `${new Date(oAt).toISOString().slice(0, 10)} ${clock(oAt)}` : 'not reported');
+    setText($('obs-at'), oAt != null ? `read ${clock(oAt)}` : 'not reported');
     setText($('api-v'), typeof o.api_version === 'string' ? o.api_version : 'not reported');
     renderSourceContext(o);
     $('insufficient').hidden = lower(o.data_quality) !== 'insufficient';
@@ -1762,7 +1961,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const ra = lower(o.agreement);
     setCard('reading_agreement', ra ? (TONE.agreement[ra] || 'neutral') : 'unknown', ra || 'unknown', typeof o.agreement_reason === 'string' ? o.agreement_reason : '');
     renderWhy(o);
-    renderExplain('x-cycle');
+    renderExplainReading(o, h, r, active);
     renderNotices(); renderReadbar(HOME_CYCLE.readbarText(r));
   }
   function renderReadbar(text) {
@@ -1994,17 +2193,12 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     renderExplain('x-agree');
     renderLanes();
   }
+  // The same words as the band's median tile (HOME_CYCLE.heightLine), here from /health when it carries the fields.
   function renderHeightLine() {
-    const node = $('ag-height'), hs = pick('height_static_seconds');
-    if (hs === undefined) { node.hidden = true; return; }
-    node.hidden = false;
-    const seen = typeof pick('height_last_advanced_at') === 'string', span = hs < 120 ? `${hs} s` : `${Math.floor(hs / 60)} min`;
-    const w = pick('witnesses'), rf = pick('risk_factors'), seed = !!w && w.mode === 'seed_and_validators';
-    const following = Array.isArray(rf) && rf.includes('following heights below a height read earlier');
-    setText(node, !isNum(hs) ? 'height movement not observed this cycle'
-      : hs === 0 ? (seen ? 'a new height arrived this cycle' : following ? 'following lower heights; no arrival is claimed' : 'count started this cycle; no arrival seen')
-      : seed ? `the seed has shown no new height for ${seen ? '' : 'at least '}${span}`
-      : seen ? `no new height for ${span}` : `no new height seen for at least ${span}`);
+    const node = $('ag-height');
+    const t = HOME_CYCLE.heightLine({ height_static_seconds: pick('height_static_seconds'), height_last_advanced_at: pick('height_last_advanced_at'), witnesses: pick('witnesses'), risk_factors: pick('risk_factors') });
+    node.hidden = t === null;
+    if (t !== null) setText(node, t);
   }
   let laneKey = '';
   const laneMarks = new Map();
@@ -2660,11 +2854,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     $('find').select();
   });
   $('find-clear').addEventListener('click', () => { $('find').value = ''; applySearch(true); $('find').focus(); });
-  $('door').addEventListener('click', (e) => {
-    e.preventDefault();
-    $('catalog').scrollIntoView({ behavior: MOTION ? 'smooth' : 'auto', block: 'start' });
-    $('find').focus({ preventScroll: true });
-  });
 
   function incidentItem(i) {
     const t = parseTime(i.startedAt);
@@ -2842,7 +3031,7 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
   let timer = null, lastStart = 0, inFlight = false, paused = false;
   function renderCountdown() {
     const left = Math.max(0, Math.ceil((REFRESH_MS - (Date.now() - lastStart)) / 1000));
-    setText($('countdown'), inFlight ? 'reading now' : paused ? 'updates paused' : document.hidden ? 'paused while hidden' : `next read in ${left} s`);
+    setText($('countdown'), inFlight ? 'reading now' : paused ? 'updates paused' : document.hidden ? 'paused while hidden' : `next in ${left} s`);
     const rb = $('btn-refresh'), cool = inFlight || Date.now() - lastStart < MIN_GAP_MS;
     if (rb.disabled !== cool) rb.disabled = cool;
   }
