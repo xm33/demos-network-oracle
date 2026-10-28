@@ -12,6 +12,28 @@ import { dirname, join } from "node:path";
 import * as HC from "./home-cycle.mjs";
 import { escHtml } from "./public-safety.mjs";
 const { tileOnChain } = HC;
+// The reading panel as the agent fills it for readers without JavaScript, checked by one predicate on the served page
+// (S25b) and on the two operator captures (H52): the band's four tiles filled (none left "reading"); the on-chain count
+// only with its unit and the list read's own clock; the answered count only with the check's own clock (the words of
+// home-cycle.mjs since FS R2: "list read HH:MM:SS UTC", "checked HH:MM:SS UTC"); then what status is made of; never
+// "nodes aligned". S25b alone runs only against a live agent; it kept FS v0.2's "list HH:MM:SS" and failed on n3 after
+// the FS deploy (2026-10-28) on a correct page, so the same predicate now runs statically too.
+const panelOf = (html) => html.slice(html.indexOf('id="panel"'), html.indexOf('<p class="bound">', html.indexOf('id="panel"')));
+const TILE_RE = (k) => new RegExp('<p class="tv( none)?" id="tile-' + k + '-v">([^<]*)(?: <span class="tu">([^<]*)</span>)?</p><p class="ts" id="tile-' + k + '-s" data-src="api">([^<]*)</p>');
+const bandTiles = (card) => ["median", "seeds", "onchain", "answered"].map((k) => card.match(TILE_RE(k)) || []);
+// The page and /organism may be a round apart, so any ending the given witnesses' modes allow is accepted.
+const statusEnding = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
+  : w.mode === "insufficient" ? "Status is unknown" : "Status is those seeds");   // insufficient is never compared: unknown, whether or not validators were read
+const seedsLineOk = (card, ws) => ws.some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite"( hidden)?>[^<]+ ' + statusEnding(w) + (statusEnding(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
+function panelNoJsOk(card, health, ws) {
+  const band = bandTiles(card), oc = (health && health.on_chain_validators) || {};
+  return band.every((m) => m.length > 0 && m[2] !== "reading")
+    && (band[2][3] === undefined || (band[2][3] === "ACTIVE" && /^[\d,]+$/.test(band[2][2]) && /^list read \d\d:\d\d:\d\d UTC$/.test(band[2][4])))
+    && (oc.state !== "agreed" || band[2][2] === tileOnChain(health).value)
+    && (!/^[\d,]+$/.test(band[3][2] || "") || /^checked \d\d:\d\d:\d\d UTC$/.test(band[3][4]))
+    && seedsLineOk(card, ws)
+    && !/nodes aligned/.test(card);
+}
 import { BANNED_PUBLIC_LANGUAGE, CHARACTERIZATION, publicLanguageHit } from "./banned-public-language.mjs";
 import { RULE, MODES } from "./status-rule.mjs";
 
@@ -120,6 +142,19 @@ check("H26 the band: each tile marker and the line under the band present once, 
   check("H51 no-JS fill: the on-chain source line claims agreement only for an agreed list, and gives the list's own reason otherwise",
     xa.includes(SRC_SPAN("2 of 3 public seeds returned the same validator list")) && xb.includes(SRC_SPAN("no agreed validator list: fewer than two public seeds returned a validator list"))
     && xc.includes(SRC_SPAN("no agreed validator list: fewer than two public seeds returned a validator list")) && ![xb, xc].some((x) => /returned the same validator list|alike/.test(x)), [xa, xb, xc].map((x) => (x.match(/<span id="x-src-list">[^<]*<\/span>/) || ["(none)"])[0]).join(" | "));
+}
+// S25b's predicate, run here on the agent's no-JS fill of both captures (the static suite never reached S25b before).
+{
+  const FX = join(ROOT, "tools", "homepage-preview", "fixtures"), fx = (n) => JSON.parse(readFileSync(join(FX, n), "utf8"));
+  const i = SRC.indexOf("var HOME_TONE = {"), j = SRC.indexOf("// The locked DNO mark");
+  const fill = (o, h) => new Function("escHtml", "computeCanonicalState", "publicOnChainValidators", "publicValidatorWatch", "latestValidatorRound", "validatorPublishConfig", "latestPublicNodes", "validatorsNoJsLine", "HC",
+    "var { " + Object.keys(HC).join(", ") + " } = HC;\n" + SRC.slice(i, j) + "\nreturn renderHomepageNoJs;")(
+    escHtml, () => Object.assign({}, o, { agreement: Object.assign({ state: o.agreement }, o.agreement_detail) }), () => h.on_chain_validators, () => h.validator_watch, null, () => ({}), h.publicNodes, () => null, HC)(HOME);
+  const caps = ["20261021T072727Z", "20261023T122827Z"].map((t) => { const o = fx("organism-capture-" + t + ".json"), h = fx("health-capture-" + t + ".json"); return { o, h, card: panelOf(fill(o, h)) }; });
+  const t21 = bandTiles(caps[0].card);
+  check("H52 S25b's check of the no-JS panel, run on both captures: tiles filled, each count with its own clock in the module's words, the seeds line, no 'nodes aligned'",
+    caps.every((c) => c.card.length > 1000 && panelNoJsOk(c.card, c.h, [c.o.witnesses || {}, c.h.witnesses || {}]))
+    && t21[2][4] === "list read 07:27:23 UTC" && t21[3][4] === "checked 07:27:23 UTC", JSON.stringify(t21.map((m) => m.slice(2))));
 }
 check("H50 the on-chain source line is a fill marker (present once, the agent fills the same one), and no fixed agreement wording is left in it",
   count(HOME, '<dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd>') === 1
@@ -859,23 +894,12 @@ try {
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
   // The whole reading panel: the band (status, four tiles) first, then the reading's lines and the six cards.
   const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('<p class="bound">', html.indexOf('id="panel"')));
-  const ocH = health.on_chain_validators;
   // The card's second line says what status is made of in this observation (1.2): the seeds; one seed and the validators
   // standing in; validators alone; or, when validators were read and gave no reading, that status is unknown. The page
   // and /organism may be a round apart, so any of the endings the two rounds' modes allow is accepted.
   const hw = (await get("/health")).body.witnesses || {};
-  const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
-    : w.mode === "insufficient" ? "Status is unknown" : "Status is those seeds");   // insufficient is never compared: unknown, whether or not validators were read
-  const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite"( hidden)?>[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
-  const tileRe = (k) => new RegExp('<p class="tv( none)?" id="tile-' + k + '-v">([^<]*)(?: <span class="tu">([^<]*)</span>)?</p><p class="ts" id="tile-' + k + '-s" data-src="api">([^<]*)</p>');
-  const band = ["median", "seeds", "onchain", "answered"].map((k) => cardHtml.match(tileRe(k)) || []);
   check("S25b the band and the reading's line for readers without JavaScript: four tiles filled (none left reading), a count only with its own clock, then what status is made of; no 'nodes aligned'",
-    !o.observed_at || (band.every((m) => m.length > 0 && m[2] !== "reading")
-      && (band[2][3] === undefined || (band[2][3] === "ACTIVE" && /^[\d,]+$/.test(band[2][2]) && /^list \d\d:\d\d:\d\d$/.test(band[2][4])))
-      && (ocH.state !== "agreed" || band[2][2] === tileOnChain(health).value)
-      && (!/^[\d,]+$/.test(band[3][2] || "") || /^check \d\d:\d\d:\d\d$/.test(band[3][4]))
-      && seedsLineOk(cardHtml)
-      && !/nodes aligned/.test(cardHtml)), cardHtml.slice(0, 600));
+    !o.observed_at || panelNoJsOk(cardHtml, health, [wt, hw]), cardHtml.slice(0, 600));
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());
   check("S26 the mark asset is served byte-for-byte, cached", mk.status === 200 && mk.headers.get("content-type") === "image/jpeg" && /immutable/.test(mk.headers.get("cache-control") || "") && createHash("sha256").update(mkBytes).digest("hex") === markSha);
