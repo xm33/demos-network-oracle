@@ -1,19 +1,14 @@
-// home-cycle.mjs — the This cycle card's lines, one source: the agent's page for readers without JavaScript and the
-// page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases. No imports.
+// home-cycle.mjs — the This cycle card's lines and the first screen's band, one source: the agent's page for readers
+// without JavaScript and the page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases.
+// No imports.
 
-var NUM_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 var isNum = function(v) { return typeof v === "number" && Number.isFinite(v); };
 var fmt = function(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
 
-// The count the lead prints (on_chain_validators while agreed), or null. Line 2 names the same count or none.
+// The ACTIVE count as the agreeing seeds list it (on_chain_validators while agreed), or null: the band's on-chain tile
+// shows this count, and the seeds line names the same count or none.
 export function leadCount(oc) {
   return oc && oc.state === "agreed" && isNum(oc.active) && isNum(oc.seeds_agreed) ? oc.active : null;
-}
-// The ACTIVE count as the agreeing seeds list it, or why there is none this cycle.
-export function cycleLead(oc) {
-  if (!oc || oc.state === "pending") return "ACTIVE on chain: reading.";
-  if (leadCount(oc) !== null) return fmt(oc.active) + " ACTIVE on chain as " + (NUM_WORD[oc.seeds_agreed] || fmt(oc.seeds_agreed)) + " public seeds list them.";
-  return "ACTIVE on chain: not reported this cycle" + (typeof oc.reason === "string" && oc.reason ? " (" + oc.reason + ")" : "") + ".";
 }
 
 // The second line, in parts. r is one observation: { publicNodes (the configured seeds, each with ok), agreement (the
@@ -104,15 +99,86 @@ export function readbarText(r) {
   return [p.incidents, p.answered, p.heights, p.stall].filter(Boolean).join(" ");
 }
 
-// The peer-listed count for the door line, or null when it is not known.
-export function cycleDoor(discovered) {
-  return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
-}
-
 // The trend card's reason: the comparison the agent makes (agent.mjs, the trend block), in words. Backward-looking only.
 // Empty for unknown: the definition on the card says why (fewer than 10 prior cycles, or data quality insufficient).
 export function trendReason(trend) {
   return trend === "improving" || trend === "stable" || trend === "worsening"
     ? "This round against the mean of the previous 10\u201315 rounds: seeds answering, agreement, block spread."
     : "";
+}
+
+// ---- The band beside the status word (the first screen). Each tile is one published figure with its own clock, or
+// the word the sections below use for the same field when there is none: "reading" before the first read, "not
+// reported" when the document does not carry the field, "unknown" when it does and the figure is not current or not
+// agreed, "not computed" for a median no comparison made, "not observed" for a watch turned off on the server. The
+// page says "not read" itself when a request failed. Nothing is carried over from an earlier read.
+var objOf = function(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : null; };
+var clockOf = function(t) { return typeof t === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/.test(t) ? t.slice(11, 19) : null; };
+var READING = function() { return { value: "reading", unit: null, line: null, n: null }; };
+var NONE = function(value, line) { return { value: value, unit: null, line: line || null, n: null }; };
+
+// Height movement, in the words of the Agreement section's line under its median block; null when the document does
+// not carry height_static_seconds. r: /organism or /health (or the agent's canonical state).
+export function heightLine(r) {
+  r = objOf(r) || {};
+  var hs = r.height_static_seconds;
+  if (hs === undefined) return null;
+  if (!isNum(hs)) return "height movement not observed this cycle";
+  var seen = typeof r.height_last_advanced_at === "string", span = hs < 120 ? hs + " s" : Math.floor(hs / 60) + " min";
+  var w = objOf(r.witnesses), seed = !!w && w.mode === "seed_and_validators";
+  var following = Array.isArray(r.risk_factors) && r.risk_factors.indexOf("following heights below a height read earlier") >= 0;
+  return hs === 0 ? (seen ? "a new height arrived this cycle" : following ? "following lower heights; no arrival is claimed" : "count started this cycle; no arrival seen")
+    : seed ? "the seed has shown no new height for " + (seen ? "" : "at least ") + span
+    : seen ? "no new height for " + span : "no new height seen for at least " + span;
+}
+// The reading's median block, only where heights were compared (one seed's height is not a median), and how long since
+// a new height. r: /organism (agreement a word, agreement_detail) or the /health shape (agreement an object).
+export function tileMedian(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var a = objOf(r.agreement), d = objOf(r.agreement_detail) || a;
+  var st = typeof r.agreement === "string" ? r.agreement.toLowerCase() : a && typeof a.state === "string" ? a.state.toLowerCase() : null;
+  var compared = st === "strong" || st === "moderate" || st === "weak";
+  var n = compared && d && isNum(d.median_block) ? d.median_block : null;
+  return { value: n !== null ? fmt(n) : st === null ? "not reported" : !compared ? "not computed" : "not reported",
+    unit: null, line: r.data_quality_reason === "stale" ? null : heightLine(r), n: n };
+}
+// The configured public seeds that gave their own height in this reading (witnesses.public_seeds, API 1.2).
+export function tileSeeds(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var w = objOf(r.witnesses), ps = w && objOf(w.public_seeds);
+  if (!ps || !isNum(ps.own_height) || !isNum(ps.configured)) return NONE("not reported");
+  if (r.data_quality_reason === "stale" || r.data_quality_reason === "no_observation") return NONE("unknown");
+  return { value: fmt(ps.own_height) + " of " + fmt(ps.configured), unit: null, line: ps.own_height === 1 ? "gave its own height" : "gave their own height", n: ps.own_height };
+}
+// The ACTIVE count as the agreeing seeds list it (leadCount), with the list read's own clock. h: /health.
+export function tileOnChain(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var oc = objOf(h.on_chain_validators);
+  if (!oc) return NONE("not reported");
+  if (oc.state === "pending") return READING();
+  var n = leadCount(oc), at = clockOf(oc.observed_at);
+  return { value: n === null ? "unknown" : fmt(n), unit: n === null ? null : "ACTIVE", line: at ? "list " + at : null, n: n };
+}
+// The ACTIVE rows that answered DNO's dial as their listed key, with the watch round's own clock. The server marks the
+// round stale after 300 s; a round that is not observed gives no count. h: /health.
+export function tileAnswered(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var w = objOf(h.validator_watch);
+  if (!w) return NONE("not reported");
+  if (w.state === "pending") return READING();
+  if (w.state === "disabled") return NONE("not observed");
+  var at = clockOf(w.round_at), line = at ? "check " + at : null;
+  if (w.state !== "observed") return NONE("unknown", line);
+  if (!isNum(w.answered_as_listed)) return NONE("not reported", line);
+  return { value: fmt(w.answered_as_listed), unit: null, line: line, n: w.answered_as_listed };
+}
+// The sentence under the band: the two validator figures are separate observations, and neither is a count of what is
+// online. active and answered: the n of the two tiles (the number shown, or null).
+export function tilesBetween(active, answered) {
+  return { text: isNum(active) && isNum(answered) ? fmt(active) + " and " + fmt(answered) + " are two observations on their own clocks. Neither shows how many validators are online."
+    : "Neither validator figure shows how many validators are online.", link: isNum(active) ? "How the " + fmt(active) + " split" : "Validators on chain" };
 }

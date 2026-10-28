@@ -9,7 +9,9 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { cycleLead } from "./home-cycle.mjs";
+import * as HC from "./home-cycle.mjs";
+import { escHtml } from "./public-safety.mjs";
+const { tileOnChain } = HC;
 import { BANNED_PUBLIC_LANGUAGE, CHARACTERIZATION, publicLanguageHit } from "./banned-public-language.mjs";
 import { RULE, MODES } from "./status-rule.mjs";
 
@@ -51,7 +53,7 @@ const card = (key, label) => '<div data-card="' + key + '"><p class="k">' + labe
 const MARKERS = [
   '<div class="panel" id="panel" data-state="pending">',
   '<span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span>',
-  '<p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p>',
+  '<span class="ind" id="band-ind" data-tone="pending"></span><span id="band-status">reading</span>',
   '<p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>',
   '<p class="insufficient" id="insufficient" hidden>',
   '<span class="ind" id="ag-ind" data-tone="pending"></span><span id="ag-state">reading</span>',
@@ -63,8 +65,55 @@ const MARKERS = [
 const VW_MARKER = '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>';
 MARKERS.forEach((m, i) => check("H" + (i + 1) + " fill marker present once: " + m.slice(0, 48), count(HOME, m) === 1, "count " + count(HOME, m)));
 check("H25 validators line: marker present once, and the agent fills it from the same text", count(HOME, VW_MARKER) === 1 && SRC.includes("validators: '" + VW_MARKER + "'"), "count " + count(HOME, VW_MARKER));
-const DOOR_MARKER = '<span id="door-n"></span>';
-check("H26 This cycle door: the peer-listed count marker present once, and the agent fills it", count(HOME, DOOR_MARKER) === 1 && SRC.includes("door: '" + DOOR_MARKER + "'"), "count " + count(HOME, DOOR_MARKER));
+// The band beside the status word (FS): the four tiles and the line under them. The peer-listed door left the panel;
+// section 02 (populations) keeps it beside its own count.
+const TILE_MARKER = (k) => '<p class="tv" id="tile-' + k + '-v">reading</p><p class="ts" id="tile-' + k + '-s" data-src="api"></p>';
+const BETWEEN_MARKER = '<span id="tile-between">Neither validator figure shows how many validators are online.</span> <a href="#validators" id="tile-between-a">Validators on chain</a>';
+check("H26 the band: each tile marker and the line under the band present once, and the agent fills them from the same strings",
+  ["median", "seeds", "onchain", "answered"].every((k) => count(HOME, TILE_MARKER(k)) === 1 && SRC.includes("homeTileMarker(\"" + k + "\")")) && count(HOME, BETWEEN_MARKER) === 1
+  && SRC.includes("between: '" + BETWEEN_MARKER + "'") && SRC.includes("return '<p class=\"tv\" id=\"tile-' + key + '-v\">reading</p><p class=\"ts\" id=\"tile-' + key + '-s\" data-src=\"api\"></p>';")
+  && !HOME.includes('id="door-n"') && !HOME.includes('id="cycle-lead"'), ["median", "seeds", "onchain", "answered"].map((k) => count(HOME, TILE_MARKER(k))).join(","));
+// Every element the page's script asks for by id is in the page: a removed element whose handler stays stops the whole
+// script before the first render (FS: the door's click handler outlived the door).
+{
+  const asked = [...new Set([...HOME.matchAll(/\$\('([a-z0-9-]+)'\)/g)].map((m) => m[1]))], lacking = asked.filter((id) => !HOME.includes('id="' + id + '"'));
+  check("H41 every id the page's script asks for with $('…') is in the page", asked.length > 50 && lacking.length === 0, lacking.join(", "));
+}
+// The agent's fill for readers without JavaScript, run as shipped (its source, sliced from agent.mjs) on homepage.html,
+// with the two operator captures as the agent's state: the band is filled from the same functions, nothing in it is
+// left "reading", a count stands only with its clock, and a list not agreed carries no count.
+{
+  const i = SRC.indexOf("var HOME_TONE = {"), j = SRC.indexOf("// The locked DNO mark");
+  const FX = join(ROOT, "tools", "homepage-preview", "fixtures"), fx = (n) => JSON.parse(readFileSync(join(FX, n), "utf8"));
+  const fill = (o, h) => new Function("escHtml", "computeCanonicalState", "publicOnChainValidators", "publicValidatorWatch", "latestValidatorRound", "validatorPublishConfig", "latestPublicNodes", "validatorsNoJsLine", "HC",
+    "var { leadCount, cycleSeeds, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } = HC;\n" + SRC.slice(i, j) + "\nreturn renderHomepageNoJs;")(
+    escHtml, () => Object.assign({}, o, { agreement: Object.assign({ state: o.agreement }, o.agreement_detail) }), () => h.on_chain_validators, () => h.validator_watch, null, () => ({}), h.publicNodes, () => null, HC)(HOME);
+  const bandOf = (html) => html.slice(html.indexOf('id="band"'), html.indexOf('<p class="six">'));
+  const a = bandOf(fill(fx("organism-capture-20261021T072727Z.json"), fx("health-capture-20261021T072727Z.json")));
+  const b = bandOf(fill(fx("organism-capture-20261023T122827Z.json"), fx("health-capture-20261023T122827Z.json")));
+  check("H42 no-JS fill, 21 Oct capture: the band carries the median, the seeds, 35 ACTIVE with its list clock, 6 with its check clock, and the line names both",
+    i > 0 && j > i && a.includes('<span id="band-status">stable</span>') && a.includes('id="tile-median-v">6,675</p>') && a.includes('id="tile-seeds-v">2 of 3</p>')
+    && a.includes('id="tile-onchain-v">35 <span class="tu">ACTIVE</span></p><p class="ts" id="tile-onchain-s" data-src="api">list 07:27:23</p>')
+    && a.includes('id="tile-answered-v">6</p><p class="ts" id="tile-answered-s" data-src="api">check 07:27:23</p>')
+    && a.includes(">35 and 6 are two observations on their own clocks. Neither shows how many validators are online.</span>") && a.includes(">How the 35 split</a>") && !/>reading</.test(a), a.slice(0, 900));
+  check("H43 no-JS fill, 23 Oct capture (no agreed list, so the watch round gives no counts): no count on chain or answered, and the line names neither",
+    b.includes('class="tv none" id="tile-onchain-v">unknown</p>') && b.includes('class="tv none" id="tile-answered-v">unknown</p>') && b.includes('id="tile-seeds-v">1 of 3</p>')
+    && b.includes(">Neither validator figure shows how many validators are online.</span>") && !/>reading</.test(b) && !/\b35\b/.test(b), b.slice(0, 900));
+}
+// The band's labels name the field each tile shows: the seeds' median (one seed's height is not a median, and DNO reads
+// heights the seeds report, not the chain's latest block), and the rows that answered DNO as their listed key (rows that
+// answered with another key or none answered DNO too: validator_watch publishes them apart).
+{
+  const labels = [...HOME.slice(HOME.indexOf('id="band"'), HOME.indexOf('<div class="rsum">')).matchAll(/<p class="k">([^<]+)<\/p>/g)].map((m) => m[1]);
+  check("H44 the band's labels are its fields' names: status, median block, public seeds, on chain, answered as listed (never latest block, never answered DNO)",
+    JSON.stringify(labels) === JSON.stringify(["status", "median block", "public seeds", "on chain", "answered as listed"]) && !/>\s*(latest block|answered DNO)\s*</i.test(HOME), labels.join(" | "));
+}
+// A figure that waits on its own gate is not on the first screen: the block interval (FR-WEB-INTERVAL), the seeds' block
+// hash (the strip, from 2026-11-01), and the recent blocks' signatures (committee build).
+{
+  const band = HOME.slice(HOME.indexOf('id="band"'), HOME.indexOf('<p class="bound">'));
+  check("H40 the band ships no gated figure: no interval, no block hash, no recent-blocks signature count", band.length > 0 && !/every \[|\bevery \d+ s\b|block hash|signature|recent blocks|\[300\]/i.test(band), (band.match(/.{30}(every \[|block hash|signature|recent blocks).{30}/i) || [])[0]);
+}
 check("H27 This cycle card: no 'nodes aligned' and no calm or status-reason line in the page", !/nodes aligned/.test(HOME.slice(HOME.indexOf('id="panel"'), HOME.indexOf('<p class="bound">', HOME.indexOf('id="panel"')))) && !HOME.includes('id="calm"') && !HOME.includes('id="status-reason"'));
 check("H12 agent builds the same markers", MARKERS.slice(0, 7).every((m) => SRC.includes(JSON.stringify(m).slice(1, -1).replace(/\\"/g, '"')) || SRC.includes("'" + m + "'")));
 const markSha = createHash("sha256").update(readFileSync(join(ROOT, "assets", "dno-mark.jpg"))).digest("hex");
@@ -84,7 +133,7 @@ check("R07b the badge text is the status word alone when stable", SRC.includes('
 check("D1a the reading's reasons are /organism's: no same-label substitution from /health", !/same\('risk'\)|same\('confidence'\)/.test(HOME) && HOME.includes("const rf = o.risk_factors;") && HOME.includes("const cr = o.confidence_reason;"));
 check("D1b /health joins the seeds line on observation identity only (equal observed_at), never on alike labels", !HOME.includes("statusAlike") && HOME.includes("h.observed_at === o.observed_at") && HOME.includes("function seedsReading(o, h) {\n    if (sameObservation(h, o)) {"));
 check("D5a no stored or historical ACTIVE count in the page: ONE_READ and the oneread mode are gone", !/ONE_READ|oneread|\bone read\b/.test(HOME), (HOME.match(/.{20}(ONE_READ|oneread|\bone read\b).{20}/) || [])[0]);
-check("D5b a /health without on_chain_validators is 'unpublished': not reported, nothing retained", HOME.includes("oc ? 'live' : 'unpublished'") && HOME.includes("'ACTIVE on chain: not reported (this server does not publish on_chain_validators).'"));
+check("D5b a /health without on_chain_validators is 'unpublished': not reported, nothing retained (the band's tile: HOME_CYCLE.tileOnChain, B11)", HOME.includes("oc ? 'live' : 'unpublished'") && HOME.includes("HOME_CYCLE.tileOnChain(h)") && !/tileOnChain\([^)]*(last|prev|cache)/i.test(HOME));
 check("D2 the watch round shows its own clock beside the list-read clock", HOME.includes("`watch round ${clock(parseTime(w.round_at))}`") && HOME.includes("`List read ${clock(parseTime(oc.observed_at))}`"));
 check("H16b homepage: no adoption, demand, settled-commerce, or rail-reality claim", !CHARACTERIZATION.test(homeText), (homeText.match(CHARACTERIZATION) || [])[0]);
 check("H17 homepage: no IPv4 literal, no full identity, no Demos violet", !IPV4.test(HOME) && !FULL_ID.test(HOME) && !/#2B36D9/i.test(HOME));
@@ -766,7 +815,7 @@ try {
   const home = await get("/");
   const html = typeof home.body === "string" ? home.body : "";
   check("S25 / is filled for readers without JavaScript once an observation exists", !o.observed_at || (html.includes('<div class="panel" id="panel" data-state="live">') && html.includes('<span id="status-value">' + String(o.status).toUpperCase() + "</span>")));
-  // The whole reading panel: since V7 the ACTIVE line sits below the six cards (the on-chain list strip), not above them.
+  // The whole reading panel: the band (status, four tiles) first, then the reading's lines and the six cards.
   const cardHtml = html.slice(html.indexOf('id="panel"'), html.indexOf('<p class="bound">', html.indexOf('id="panel"')));
   const ocH = health.on_chain_validators;
   // The card's second line says what status is made of in this observation (1.2): the seeds; one seed and the validators
@@ -776,9 +825,13 @@ try {
   const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
     : w.mode === "insufficient" ? "Status is unknown" : "Status is those seeds");   // insufficient is never compared: unknown, whether or not validators were read
   const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
-  check("S25b the card's lines for readers without JavaScript: the ACTIVE count first, then what status is made of in this observation; no 'nodes aligned'",
-    !o.observed_at || (/<p class="cycle-lead" id="cycle-lead" data-src="api">([\d,]+ ACTIVE on chain as \w+ public seeds list them\.|ACTIVE on chain: (reading|not reported this cycle[^<]*)\.)<\/p>/.test(cardHtml)
-      && (ocH.state !== "agreed" || cardHtml.includes(">" + cycleLead(ocH) + "<"))
+  const tileRe = (k) => new RegExp('<p class="tv( none)?" id="tile-' + k + '-v">([^<]*)(?: <span class="tu">([^<]*)</span>)?</p><p class="ts" id="tile-' + k + '-s" data-src="api">([^<]*)</p>');
+  const band = ["median", "seeds", "onchain", "answered"].map((k) => cardHtml.match(tileRe(k)) || []);
+  check("S25b the band and the reading's line for readers without JavaScript: four tiles filled (none left reading), a count only with its own clock, then what status is made of; no 'nodes aligned'",
+    !o.observed_at || (band.every((m) => m.length > 0 && m[2] !== "reading")
+      && (band[2][3] === undefined || (band[2][3] === "ACTIVE" && /^[\d,]+$/.test(band[2][2]) && /^list \d\d:\d\d:\d\d$/.test(band[2][4])))
+      && (ocH.state !== "agreed" || band[2][2] === tileOnChain(health).value)
+      && (!/^[\d,]+$/.test(band[3][2] || "") || /^check \d\d:\d\d:\d\d$/.test(band[3][4]))
       && seedsLineOk(cardHtml)
       && !/nodes aligned/.test(cardHtml)), cardHtml.slice(0, 600));
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");

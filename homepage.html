@@ -194,10 +194,7 @@ h2 { font-size: 1.375rem; line-height: 1.2; font-weight: 500; color: var(--metal
 .status-value { display: flex; align-items: center; gap: 14px; font-size: clamp(2.125rem, 4.8vw, 3rem); line-height: 1; font-weight: 500; color: var(--metal-2); letter-spacing: 0.01em; }
 .status-value .ind { width: 14px; height: 14px; border-width: 2px; }
 .status-text { display: grid; gap: 8px; }
-.cycle-lead { font-size: 1.125rem; line-height: 1.4; color: var(--ink); }
 .seeds { color: var(--metal-1); }
-.door { font-family: var(--mono); font-size: 0.875rem; color: var(--metal-1); }
-.door a { font-family: var(--mono); font-size: 0.875rem; }
 .panel[data-state="unread"] .status-block, .panel[data-state="pending"] .status-block {
   background: repeating-linear-gradient(-45deg, transparent 0 9px, var(--elevated) 9px 10px); /* no signal, hatched along the needle's direction */
 }
@@ -653,27 +650,43 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 .facts a { color: #a9b8cc; text-decoration: none; }
 .facts a:hover { color: var(--ink); text-decoration: underline; }
 
-.assessment { position: relative; z-index: 2; margin-top: -28px; padding-block: 0 64px; }
-.panel { display: block; border: 1px solid #1d2a44; border-radius: 14px; background: linear-gradient(180deg, rgba(10, 17, 32, .96), rgba(5, 9, 18, .98)); box-shadow: 0 20px 60px -20px rgba(0, 0, 0, .8); overflow: hidden; }
+/* The reading lies flat under the hero; from 720 px the artwork runs on behind its top (--art-under), seen through the
+   panel's glass. The glass values pass the measured contrast check (tools/homepage-preview, C-1): change them only with it. */
+:root { --art-under: 0px; --glass-panel: .30; --glass-tile: .30; }
+@media (min-width: 720px) { :root { --art-under: 240px; } }
+.hero { padding-bottom: var(--art-under); }
+.hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; z-index: -1; height: calc(var(--art-under) + 40px); pointer-events: none; background: linear-gradient(180deg, rgba(3, 6, 11, 0), var(--bg)); }   /* the artwork fades into the page, no edge behind the panel */
+.assessment { position: relative; z-index: 2; margin-top: calc(-28px - var(--art-under)); padding-block: 0 64px; }
+.panel { display: block; border: 1px solid #223249; border-radius: 14px; background: rgba(7, 12, 23, var(--glass-panel)); -webkit-backdrop-filter: blur(6px) saturate(120%); backdrop-filter: blur(6px) saturate(120%); box-shadow: 0 20px 60px -20px rgba(0, 0, 0, .8); overflow: hidden; }
 .panel .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 20px var(--pad) 16px; border-bottom: 1px solid var(--navy-line); }
 .rkick { display: flex; align-items: center; gap: 12px; font: 500 0.75rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink); }
 .rdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--violet-2); box-shadow: 0 0 10px var(--violet); }
 .panel .panel-head .meta { margin-left: auto; font: 400 0.8125rem/1.5 var(--mono); color: var(--metal-1); }
-.panel .panel-head .meta .sep { color: var(--metal-0); padding-inline: 8px; }
+.panel .panel-head .meta .sep { color: var(--metal-1); padding-inline: 8px; }   /* metal-0 fell to 3.4:1 over the artwork at 1920 (C-1) */
 .panel .panel-head .meta { display: flex; flex-wrap: wrap; align-items: baseline; }   /* the line breaks between items, */
 .panel .panel-head .meta > span:not(.sep) { white-space: nowrap; }   /* never inside one: a value stays with its unit */
 .panel .panel-tools { display: flex; gap: 8px; padding: 0; }
-.rhead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem); gap: 24px 40px; padding: 28px var(--pad) 8px; }
-.summary { font-size: clamp(1.5rem, 2.6vw, 2.25rem); line-height: 1.22; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); }
-.summary .s2 { color: #9aa6cc; }
-.six { margin-top: 14px; font-size: 0.9375rem; color: var(--metal-1); }
-.srcctx { display: grid; gap: 6px; align-content: start; padding-left: 24px; border-left: 1px solid var(--navy-line); }
 .ek { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--metal-0); }
-.srcctx-h { font-size: 0.875rem; color: var(--metal-1); }
-.srcctx-n { font-size: 1.25rem; font-weight: 500; color: var(--ink); }
-.srcctx .seeds, .srcctx-cap { font-size: 0.875rem; color: var(--metal-1); }
-.panel .cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 20px var(--pad) 12px; border: 0; counter-reset: card; }
-.panel .cards > div:nth-child(n) { counter-increment: card; display: grid; gap: 8px; align-content: start; padding: 14px 16px 16px; min-width: 0; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 9, 18, .9); }
+/* The band: the status word, then four tiles, each one published figure on its own clock (HOME_CYCLE.tile*). */
+.band { display: grid; grid-template-columns: 12.5rem repeat(4, minmax(0, 1fr)); gap: 12px; padding: 24px var(--pad) 8px; }
+.band .k { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-1); }
+.bstat { display: grid; gap: 10px; align-content: center; padding: 8px 16px 8px 0; border-right: 1px solid var(--navy-line); min-width: 0; }
+.bword { display: flex; align-items: center; gap: 12px; font-size: 2.125rem; line-height: 1.1; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); }
+.bword .ind { width: 12px; height: 12px; }
+#band-status { text-transform: capitalize; }
+.tile { display: grid; gap: 6px; align-content: start; padding: 14px 16px 16px; min-width: 0; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 10, 20, var(--glass-tile)); }
+.tv { font: 500 1.75rem/1.15 var(--sans); letter-spacing: -0.01em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tv .tu { margin-left: 6px; font: 500 0.75rem/1 var(--sans); letter-spacing: 0.12em; color: var(--metal-1); }
+.tv.none { font-size: 1rem; line-height: 1.6; font-weight: 400; color: var(--metal-1); }
+.ts { font: 400 0.75rem/1.45 var(--mono); color: var(--metal-1); }
+.rsum { display: grid; gap: 8px; padding: 12px var(--pad) 4px; }
+.summary { font-size: clamp(1.125rem, 1.6vw, 1.375rem); line-height: 1.35; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
+.summary .s2 { color: #b4bfdc; }
+.rsum .seeds { font-size: 0.9375rem; }
+.seeds-cap, .between { font-size: 0.875rem; color: var(--metal-1); }
+.panel > .six { padding: 16px var(--pad) 0; font-size: 0.875rem; color: var(--metal-1); }
+.panel .cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 12px var(--pad) 12px; border: 0; counter-reset: card; }
+.panel .cards > div:nth-child(n) { counter-increment: card; display: grid; gap: 8px; align-content: start; padding: 14px 16px 16px; min-width: 0; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 10, 20, var(--glass-tile)); }
 .panel .cards .k { font: 500 0.6875rem/1.4 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--metal-0); }
 .panel .cards .k::before { content: counter(card, decimal-leading-zero) " / "; }
 .panel .cards .v { font-size: 1.25rem; font-weight: 500; }
@@ -684,22 +697,20 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 .whybox summary { cursor: pointer; font-weight: 500; color: var(--ink); }
 .whybox ul { margin: 10px 0 0 20px; list-style: disc; color: var(--metal-1); }
 .whybox p { margin-top: 8px; color: var(--metal-1); }
-.ctxstrip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px var(--pad); }
-.ctxstrip > div { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border: 1px solid #1c2740; border-radius: 10px; background: rgba(5, 9, 18, .6); }
-.ctxstrip .cycle-lead { font-size: 1rem; color: var(--ink); }
 .clock { font: 400 0.75rem/1.45 var(--mono); color: var(--metal-0); }
 .panel .insufficient { margin: 0 var(--pad) 12px; border: 1px solid #3a3215; border-radius: 8px; }
 .panel .under, .panel .bound { border-top: 1px solid var(--navy-line); border-bottom: 0; }
 @media (max-width: 1099px) {
   .panel .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .rhead { grid-template-columns: minmax(0, 1fr); }
-  .srcctx { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--navy-line); }
+  .band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bstat { grid-column: 1 / -1; padding: 0 0 12px; border-right: 0; border-bottom: 1px solid var(--navy-line); }
 }
 @media (max-width: 719px) {
   .hero .wrap { min-height: 0; padding-block: 36px 52px; }
   .hero .sky { background-position: 75% center; opacity: .8; }
   .panel .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ctxstrip { grid-template-columns: minmax(0, 1fr); }
+  .band { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 16px; }
+  .tv { font-size: 1.5rem; }
   .panel .panel-head .meta { margin-left: 0; }
   .cta { flex: 1 1 100%; justify-content: space-between; }
 }
@@ -814,19 +825,20 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           </div>
         </header>
         <div class="ruler" aria-hidden="true"><span class="sweep-fill" id="sweep-fill"></span><span class="sweep-mark" id="sweep-mark"></span></div>
-        <div class="rhead">
-          <div class="rsum">
-            <p class="summary" id="summary" data-src="api">reading</p>
-            <p class="six">Six separate measures. A word in one does not soften or confirm another; each has its own reason.</p>
-          </div>
-          <aside class="srcctx" aria-label="Source context">
-            <p class="ek">Source context</p>
-            <p class="srcctx-h">Heights counted this round</p>
-            <p class="srcctx-n" id="ctx-count">reading</p>
-            <p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>
-            <p class="srcctx-cap" id="ctx-cap" hidden></p>
-          </aside>
+        <div class="band" id="band">
+          <div class="bstat" aria-hidden="true"><p class="k">status</p><p class="bword"><span class="ind" id="band-ind" data-tone="pending"></span><span id="band-status">reading</span></p></div>
+          <div class="tile" data-tile="median"><p class="k">median block</p><p class="tv" id="tile-median-v">reading</p><p class="ts" id="tile-median-s" data-src="api"></p></div>
+          <div class="tile" data-tile="seeds"><p class="k">public seeds</p><p class="tv" id="tile-seeds-v">reading</p><p class="ts" id="tile-seeds-s" data-src="api"></p></div>
+          <div class="tile" data-tile="onchain"><p class="k">on chain</p><p class="tv" id="tile-onchain-v">reading</p><p class="ts" id="tile-onchain-s" data-src="api"></p></div>
+          <div class="tile" data-tile="answered"><p class="k">answered as listed</p><p class="tv" id="tile-answered-v">reading</p><p class="ts" id="tile-answered-s" data-src="api"></p></div>
         </div>
+        <div class="rsum">
+          <p class="summary" id="summary" data-src="api">reading</p>
+          <p class="seeds" id="seeds-line" aria-live="polite">The first request to /organism is in flight.</p>
+          <p class="seeds-cap" id="ctx-cap" hidden></p>
+          <p class="between"><span id="tile-between">Neither validator figure shows how many validators are online.</span> <a href="#validators" id="tile-between-a">Validators on chain</a></p>
+        </div>
+        <p class="six">Six separate measures. A word in one does not soften or confirm another; each has its own reason.</p>
         <div class="strip cards" id="cards">
           <div data-card="status"><p class="k">status</p><p class="v"><span class="ind" id="status-ind" data-tone="pending"></span><span id="status-value">READING</span></p><button type="button" class="linkbtn xbtn" data-x="status" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> status</span></button><p class="sr" id="status-change" role="status" aria-live="polite"></p></div>
           <div data-card="confidence"><p class="k">confidence</p><p class="v"><span class="ind" data-tone="pending"></span><span class="val">reading</span></p><p class="s" data-src="api"></p><button type="button" class="linkbtn xbtn" data-x="confidence" aria-expanded="false" aria-controls="x-cycle">Explain<span class="sr"> confidence</span></button></div>
@@ -837,12 +849,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         </div>
         <div class="xpanel-host" id="x-cycle" hidden></div>
         <details class="whybox" id="whybox" hidden><summary id="why-q">Why can these two differ?</summary><div id="why-a"></div></details>
-        <div class="ctxstrip">
-          <div><p class="ek">On-chain validators list</p><p class="cycle-lead" id="cycle-lead" data-src="api">ACTIVE on chain: reading.</p><p class="clock" id="list-at"></p></div>
-          <div><p class="ek">Peer-listed identities</p><p class="door"><span id="door-n"></span><a href="#catalog" id="door">find a node</a></p><p class="clock">A retained catalog from seed peerlists: not a census, not status input.</p></div>
-        </div>
         <p class="insufficient" id="insufficient" hidden>Network observability is limited. Fewer than two probed seeds <span data-v10="answered">reported their own block height</span><span data-v10-hide> and no validator stood in for the missing one</span>, or the observation is stale or not made yet. Public assessment is unknown. Peer-listed identities do not enter status.</p>
-        <p class="under">Not operated by Kynesys. Path A is three public Kynesys /info URLs, one org. Anyone can read those URLs; the rules that turn their answers into status are on <a href="/methodology">/methodology</a>.</p>
+        <p class="under">DNO is not operated by Kynesys. The three seeds are public Kynesys /info URLs, one organization; anyone can read them, and the rules that turn their answers into status are on <a href="/methodology">/methodology</a>. Not shown here: how many validators are online, or who runs them.</p>
         <div class="notices" id="notices" hidden></div>
         <p class="bound">LIVE is DNO's own freshness. Status is what the public endpoints showed this cycle. Neither is a score or a go/no-go.</p>
       </div>
@@ -1491,22 +1499,17 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
   const lower = (v) => (typeof v === 'string' && v ? v.toLowerCase() : null);
 
   const HOME_CYCLE = (() => {
-// home-cycle.mjs — the This cycle card's lines, one source: the agent's page for readers without JavaScript and the
-// page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases. No imports.
+// home-cycle.mjs — the This cycle card's lines and the first screen's band, one source: the agent's page for readers
+// without JavaScript and the page's script (inlined at build) both use this file; home-cycle.test.mjs has the cases.
+// No imports.
 
-var NUM_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 var isNum = function(v) { return typeof v === "number" && Number.isFinite(v); };
 var fmt = function(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
 
-// The count the lead prints (on_chain_validators while agreed), or null. Line 2 names the same count or none.
+// The ACTIVE count as the agreeing seeds list it (on_chain_validators while agreed), or null: the band's on-chain tile
+// shows this count, and the seeds line names the same count or none.
 function leadCount(oc) {
   return oc && oc.state === "agreed" && isNum(oc.active) && isNum(oc.seeds_agreed) ? oc.active : null;
-}
-// The ACTIVE count as the agreeing seeds list it, or why there is none this cycle.
-function cycleLead(oc) {
-  if (!oc || oc.state === "pending") return "ACTIVE on chain: reading.";
-  if (leadCount(oc) !== null) return fmt(oc.active) + " ACTIVE on chain as " + (NUM_WORD[oc.seeds_agreed] || fmt(oc.seeds_agreed)) + " public seeds list them.";
-  return "ACTIVE on chain: not reported this cycle" + (typeof oc.reason === "string" && oc.reason ? " (" + oc.reason + ")" : "") + ".";
 }
 
 // The second line, in parts. r is one observation: { publicNodes (the configured seeds, each with ok), agreement (the
@@ -1597,11 +1600,6 @@ function readbarText(r) {
   return [p.incidents, p.answered, p.heights, p.stall].filter(Boolean).join(" ");
 }
 
-// The peer-listed count for the door line, or null when it is not known.
-function cycleDoor(discovered) {
-  return isNum(discovered) ? fmt(discovered) + " peer-listed" : null;
-}
-
 // The trend card's reason: the comparison the agent makes (agent.mjs, the trend block), in words. Backward-looking only.
 // Empty for unknown: the definition on the card says why (fewer than 10 prior cycles, or data quality insufficient).
 function trendReason(trend) {
@@ -1610,13 +1608,105 @@ function trendReason(trend) {
     : "";
 }
 
-return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, trendReason };
+// ---- The band beside the status word (the first screen). Each tile is one published figure with its own clock, or
+// the word the sections below use for the same field when there is none: "reading" before the first read, "not
+// reported" when the document does not carry the field, "unknown" when it does and the figure is not current or not
+// agreed, "not computed" for a median no comparison made, "not observed" for a watch turned off on the server. The
+// page says "not read" itself when a request failed. Nothing is carried over from an earlier read.
+var objOf = function(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : null; };
+var clockOf = function(t) { return typeof t === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/.test(t) ? t.slice(11, 19) : null; };
+var READING = function() { return { value: "reading", unit: null, line: null, n: null }; };
+var NONE = function(value, line) { return { value: value, unit: null, line: line || null, n: null }; };
+
+// Height movement, in the words of the Agreement section's line under its median block; null when the document does
+// not carry height_static_seconds. r: /organism or /health (or the agent's canonical state).
+function heightLine(r) {
+  r = objOf(r) || {};
+  var hs = r.height_static_seconds;
+  if (hs === undefined) return null;
+  if (!isNum(hs)) return "height movement not observed this cycle";
+  var seen = typeof r.height_last_advanced_at === "string", span = hs < 120 ? hs + " s" : Math.floor(hs / 60) + " min";
+  var w = objOf(r.witnesses), seed = !!w && w.mode === "seed_and_validators";
+  var following = Array.isArray(r.risk_factors) && r.risk_factors.indexOf("following heights below a height read earlier") >= 0;
+  return hs === 0 ? (seen ? "a new height arrived this cycle" : following ? "following lower heights; no arrival is claimed" : "count started this cycle; no arrival seen")
+    : seed ? "the seed has shown no new height for " + (seen ? "" : "at least ") + span
+    : seen ? "no new height for " + span : "no new height seen for at least " + span;
+}
+// The reading's median block, only where heights were compared (one seed's height is not a median), and how long since
+// a new height. r: /organism (agreement a word, agreement_detail) or the /health shape (agreement an object).
+function tileMedian(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var a = objOf(r.agreement), d = objOf(r.agreement_detail) || a;
+  var st = typeof r.agreement === "string" ? r.agreement.toLowerCase() : a && typeof a.state === "string" ? a.state.toLowerCase() : null;
+  var compared = st === "strong" || st === "moderate" || st === "weak";
+  var n = compared && d && isNum(d.median_block) ? d.median_block : null;
+  return { value: n !== null ? fmt(n) : st === null ? "not reported" : !compared ? "not computed" : "not reported",
+    unit: null, line: r.data_quality_reason === "stale" ? null : heightLine(r), n: n };
+}
+// The configured public seeds that gave their own height in this reading (witnesses.public_seeds, API 1.2).
+function tileSeeds(r) {
+  r = objOf(r);
+  if (!r) return READING();
+  var w = objOf(r.witnesses), ps = w && objOf(w.public_seeds);
+  if (!ps || !isNum(ps.own_height) || !isNum(ps.configured)) return NONE("not reported");
+  if (r.data_quality_reason === "stale" || r.data_quality_reason === "no_observation") return NONE("unknown");
+  return { value: fmt(ps.own_height) + " of " + fmt(ps.configured), unit: null, line: ps.own_height === 1 ? "gave its own height" : "gave their own height", n: ps.own_height };
+}
+// The ACTIVE count as the agreeing seeds list it (leadCount), with the list read's own clock. h: /health.
+function tileOnChain(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var oc = objOf(h.on_chain_validators);
+  if (!oc) return NONE("not reported");
+  if (oc.state === "pending") return READING();
+  var n = leadCount(oc), at = clockOf(oc.observed_at);
+  return { value: n === null ? "unknown" : fmt(n), unit: n === null ? null : "ACTIVE", line: at ? "list " + at : null, n: n };
+}
+// The ACTIVE rows that answered DNO's dial as their listed key, with the watch round's own clock. The server marks the
+// round stale after 300 s; a round that is not observed gives no count. h: /health.
+function tileAnswered(h) {
+  h = objOf(h);
+  if (!h) return READING();
+  var w = objOf(h.validator_watch);
+  if (!w) return NONE("not reported");
+  if (w.state === "pending") return READING();
+  if (w.state === "disabled") return NONE("not observed");
+  var at = clockOf(w.round_at), line = at ? "check " + at : null;
+  if (w.state !== "observed") return NONE("unknown", line);
+  if (!isNum(w.answered_as_listed)) return NONE("not reported", line);
+  return { value: fmt(w.answered_as_listed), unit: null, line: line, n: w.answered_as_listed };
+}
+// The sentence under the band: the two validator figures are separate observations, and neither is a count of what is
+// online. active and answered: the n of the two tiles (the number shown, or null).
+function tilesBetween(active, answered) {
+  return { text: isNum(active) && isNum(answered) ? fmt(active) + " and " + fmt(answered) + " are two observations on their own clocks. Neither shows how many validators are online."
+    : "Neither validator figure shows how many validators are online.", link: isNum(active) ? "How the " + fmt(active) + " split" : "Validators on chain" };
+}
+
+return { leadCount, seedsParts, cycleSeeds, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween };
 })();
-  function leadLine(vm) {
-    if (vm.mode === 'unpublished') return 'ACTIVE on chain: not reported (this server does not publish on_chain_validators).';
-    if (vm.mode === 'unread') return 'ACTIVE on chain: not read.';
-    if (vm.mode === 'pending') return 'ACTIVE on chain: reading.';
-    return HOME_CYCLE.cycleLead(vm.oc);
+  // The band beside the status word: four tiles, each one published figure on its own clock (HOME_CYCLE.tile*). The
+  // two from /organism are the reading's; the two from /health are its list read and its watch round. A failed request
+  // says "not read"; nothing from an earlier read stands in.
+  function setTile(key, t) {
+    const v = $(`tile-${key}-v`), sig = `${t.value}|${t.unit}`;
+    if (v.dataset.sig !== sig) {
+      v.dataset.sig = sig;
+      v.replaceChildren(t.value, ...(t.unit ? [' ', el('span', { class: 'tu', text: t.unit })] : []));
+    }
+    v.classList.toggle('none', t.n === null);
+    setText($(`tile-${key}-s`), t.line || '');
+  }
+  function renderBand(o, h) {
+    const notRead = { value: 'not read', unit: null, line: null, n: null };
+    const oFail = !o && !!reads.organism.error, hFail = !h && !!reads.health.error;
+    setTile('median', oFail ? notRead : HOME_CYCLE.tileMedian(o));
+    setTile('seeds', oFail ? notRead : HOME_CYCLE.tileSeeds(o));
+    const oc = hFail ? notRead : HOME_CYCLE.tileOnChain(h), an = hFail ? notRead : HOME_CYCLE.tileAnswered(h);
+    setTile('onchain', oc); setTile('answered', an);
+    const b = HOME_CYCLE.tilesBetween(oc.n, an.n);
+    setText($('tile-between'), b.text); setText($('tile-between-a'), b.link);
   }
   // One observation: /health joins the seeds line only when it is the same observation as /organism (equal observed_at).
   // Matching labels are not identity: two rounds can carry the same words over different heights and lists.
@@ -1638,17 +1728,10 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     let i = text.indexOf('. '); if (i < 0) i = text.indexOf(', ');
     node.replaceChildren(...(i < 0 ? [text] : [el('span', { class: 's1', text: text.slice(0, i + 1) }), el('span', { class: 's2', text: text.slice(i + 1) })]));
   }
-  // Heights counted this round: from /organism.witnesses alone. Validators that stand in are not the validator population.
+  // Validators that stand in for a seed: from /organism.witnesses alone, and said not to be the validator population.
   function renderSourceContext(o) {
-    const w = o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null, ps = w && w.public_seeds, v = w && w.validators;
-    const seeds = ps && isNum(ps.own_height) ? ps.own_height : null, counted = v && isNum(v.counted) ? v.counted : 0, read = v && isNum(v.read) ? v.read : null;
-    const seedWord = (n) => `${fmtInt(n)} ${n === 1 ? 'seed' : 'seeds'}`, witWord = (n) => `${fmtInt(n)} validator ${n === 1 ? 'witness' : 'witnesses'}`;
-    const mode = w && typeof w.mode === 'string' ? w.mode : null;
-    setText($('ctx-count'), !w ? 'not reported in this reading'
-      : mode === 'seeds_only' && seeds != null ? seedWord(seeds)
-      : mode === 'seed_and_validators' && seeds != null ? `${seedWord(seeds)} + ${witWord(counted)}`
-      : mode === 'validators_only' ? witWord(counted)
-      : 'too few for a reading');
+    const w = o.witnesses && typeof o.witnesses === 'object' ? o.witnesses : null, v = w && w.validators;
+    const counted = v && isNum(v.counted) ? v.counted : 0, read = v && isNum(v.read) ? v.read : null;
     const cap = counted > 0 && read != null ? `${fmtInt(read)} ${read === 1 ? 'validator was' : 'validators were'} read; ${fmtInt(counted)} ${counted === 1 ? 'was' : 'were'} counted for this reading. The validators counted here are not the total validator population.` : '';
     setText($('ctx-cap'), cap); $('ctx-cap').hidden = !cap;
   }
@@ -1714,20 +1797,19 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const o = reads.organism.data, h = reads.health.data, panel = $('panel');
     const vm = validatorModel();
     const active = vm.mode === 'live' ? HOME_CYCLE.leadCount(vm.oc) : null;
-    setText($('cycle-lead'), leadLine(vm));
-    setText($('list-at'), vm.mode === 'live' && parseTime(vm.oc.observed_at) != null ? `List read ${clock(parseTime(vm.oc.observed_at))}, its own clock: not the reading's.` : '');
-    const vg = h && h.validator_growth && typeof h.validator_growth === 'object' ? h.validator_growth : null;
-    setText($('door-n'), vg && isNum(vg.discovered) ? `${API10 ? `${fmtInt(vg.discovered)} recorded from peerlists` : HOME_CYCLE.cycleDoor(vg.discovered)} · ` : '');
+    renderBand(o, h);
 
     if (!o) {
       const failed = !!reads.organism.error;
       panel.dataset.state = failed ? 'unread' : 'pending';
       setTone($('status-ind'), failed ? 'unknown' : 'pending');
       setText($('status-value'), failed ? 'UNKNOWN' : 'READING');
+      setTone($('band-ind'), failed ? 'unknown' : 'pending');
+      setText($('band-status'), failed ? 'unknown' : 'reading');
       const why = failed ? `No reading: ${reads.organism.error}.${reads.organism.expired ? ' The last reading received is more than 300 s old and is no longer shown.' : ''} This is a failure to read, not an observation about the network.` : 'The first request to /organism is in flight.';
       setText($('seeds-line'), why);
       setText($('summary'), failed ? 'No reading.' : 'reading');
-      setText($('ctx-count'), failed ? 'not read' : 'reading'); $('ctx-cap').hidden = true; $('whybox').hidden = true;
+      $('ctx-cap').hidden = true; $('whybox').hidden = true;
       $('insufficient').hidden = true;
       for (const k of ['trend', 'risk', 'confidence', 'data_quality', 'reading_agreement']) setCard(k, failed ? 'unknown' : 'pending', failed ? 'unknown' : 'reading', failed ? 'not read' : '');
       renderNotices(); renderReadbar(failed ? `No reading: ${reads.organism.error}.` : '');
@@ -1737,6 +1819,8 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     const st = lower(o.status);
     setTone($('status-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
     setText($('status-value'), st ? st.toUpperCase() : 'UNKNOWN');
+    setTone($('band-ind'), st ? (TONE.status[st] || 'neutral') : 'unknown');
+    setText($('band-status'), st || 'unknown');
     announceStatus(st);
     const r = seedsReading(o, h);
     // The ACTIVE count is the list read's, carried by /health: named in the reading's line only for the same observation.
@@ -1994,17 +2078,12 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     renderExplain('x-agree');
     renderLanes();
   }
+  // The same words as the band's median tile (HOME_CYCLE.heightLine), here from /health when it carries the fields.
   function renderHeightLine() {
-    const node = $('ag-height'), hs = pick('height_static_seconds');
-    if (hs === undefined) { node.hidden = true; return; }
-    node.hidden = false;
-    const seen = typeof pick('height_last_advanced_at') === 'string', span = hs < 120 ? `${hs} s` : `${Math.floor(hs / 60)} min`;
-    const w = pick('witnesses'), rf = pick('risk_factors'), seed = !!w && w.mode === 'seed_and_validators';
-    const following = Array.isArray(rf) && rf.includes('following heights below a height read earlier');
-    setText(node, !isNum(hs) ? 'height movement not observed this cycle'
-      : hs === 0 ? (seen ? 'a new height arrived this cycle' : following ? 'following lower heights; no arrival is claimed' : 'count started this cycle; no arrival seen')
-      : seed ? `the seed has shown no new height for ${seen ? '' : 'at least '}${span}`
-      : seen ? `no new height for ${span}` : `no new height seen for at least ${span}`);
+    const node = $('ag-height');
+    const t = HOME_CYCLE.heightLine({ height_static_seconds: pick('height_static_seconds'), height_last_advanced_at: pick('height_last_advanced_at'), witnesses: pick('witnesses'), risk_factors: pick('risk_factors') });
+    node.hidden = t === null;
+    if (t !== null) setText(node, t);
   }
   let laneKey = '';
   const laneMarks = new Map();
@@ -2660,11 +2739,6 @@ return { leadCount, cycleLead, seedsParts, cycleSeeds, readbarText, cycleDoor, t
     $('find').select();
   });
   $('find-clear').addEventListener('click', () => { $('find').value = ''; applySearch(true); $('find').focus(); });
-  $('door').addEventListener('click', (e) => {
-    e.preventDefault();
-    $('catalog').scrollIntoView({ behavior: MOTION ? 'smooth' : 'auto', block: 'start' });
-    $('find').focus({ preventScroll: true });
-  });
 
   function incidentItem(i) {
     const t = parseTime(i.startedAt);

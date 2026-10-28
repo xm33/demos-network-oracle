@@ -65,14 +65,19 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
     const t = (id) => (document.getElementById(id) || {}).textContent || "";
     const shown = (id) => { const n = document.getElementById(id); return n && !n.hidden ? n : null; };   // null when missing or hidden: a missing element fails its check, it does not crash the run
     const card = (k) => { const c = document.querySelector(`[data-card="${k}"]`); return c ? { val: c.querySelector(".val").textContent, sub: c.querySelector(".s").textContent, tone: c.querySelector(".ind").dataset.tone } : null; };
-    return { state: document.getElementById("panel").dataset.state, status: t("status-value"), lead: t("cycle-lead"), seeds: t("seeds-line"),
+    const tile = (k) => document.getElementById(`tile-${k}-v`) ? { v: t(`tile-${k}-v`), s: t(`tile-${k}-s`), none: document.getElementById(`tile-${k}-v`).classList.contains("none") } : null;
+    return { state: document.getElementById("panel").dataset.state, status: t("status-value"), seeds: t("seeds-line"),
+      band: { status: t("band-status"), shown: getComputedStyle(document.getElementById("band-status") || document.body).textTransform, tone: (document.getElementById("band-ind") || { dataset: {} }).dataset.tone,
+        median: tile("median"), seeds: tile("seeds"), onchain: tile("onchain"), answered: tile("answered"), between: t("tile-between"), link: t("tile-between-a"),
+        href: (document.getElementById("tile-between-a") || { getAttribute: () => null }).getAttribute("href") },
+      vnAnswered: t("vn-answered"),
       cards: { trend: card("trend"), risk: card("risk"), confidence: card("confidence"), data_quality: card("data_quality") },
       vwcap: t("vw-cap"), vnActive: t("vn-active"), plValidators: t("pl-validators"), growthHidden: document.getElementById("vw-growth").hidden,
       body: document.body.innerText, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth,
       // V7 first screen
       summary: t("summary"), obsAt: t("obs-at"), apiV: t("api-v"), head: (document.querySelector(".panel-head .rkick") || {}).textContent || "",
       cardOrder: [...document.querySelectorAll("#cards > [data-card]")].map((c) => c.dataset.card),
-      ra: card("reading_agreement"), ctxCount: t("ctx-count"), ctxCap: shown("ctx-cap") ? t("ctx-cap") : null,
+      ra: card("reading_agreement"), ctxCap: shown("ctx-cap") ? t("ctx-cap") : null,
       why: shown("whybox") ? { q: t("why-q"), a: t("why-a") } : null,
       h1: (document.querySelector("#hero-title") || {}).textContent || "", h1Img: !!document.querySelector("#hero-title img, #hero-title svg"),
       live: { state: (document.getElementById("live") || { dataset: {} }).dataset.state, text: t("live-text"), label: (document.getElementById("live") || { getAttribute: () => null }).getAttribute("aria-label"), ariaLive: (document.getElementById("live") || { getAttribute: () => null }).getAttribute("aria-live") },
@@ -84,14 +89,14 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       wit: { n: t("wit-n"), read: t("wit-read"), own: t("wit-own"), counted: t("wit-counted") },
       branchOn: [...document.querySelectorAll("#branch li")].filter((li) => li.dataset.on === "true").map((li) => li.dataset.mode),
       // Contained: nothing inside a card or panel extends past its box (a page-width check cannot see this).
-      spill: [...document.querySelectorAll(".panel .panel-head, .twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .ctxstrip > div, .srcctx")].flatMap((box) => {
+      spill: [...document.querySelectorAll(".panel .panel-head, .twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .band .tile, .bstat")].flatMap((box) => {
         const b = box.getBoundingClientRect();
         return [...box.querySelectorAll("*")].filter((n) => { if (n.closest(".nodes") && box.querySelector(".nodes")) return false; const r = n.getBoundingClientRect(); return r.width > 0 && (r.right > b.right + 1 || r.left < b.left - 1); })
           .slice(0, 1).map((n) => (box.id || box.className) + " > " + n.tagName.toLowerCase() + "." + n.className);
       }),
       // Each item of the reading's meta line (its clock, the countdown, the API version) set on one line: "20 / s" split across lines reads as two values.
       metaSplit: [...document.querySelectorAll(".panel-head .meta > span:not(.sep)")].filter((s) => new Set([...s.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size > 1).map((s) => s.textContent),
-      seedsAt: t("seeds-at"), seedsAnswered: t("gc-answered"), ctxCount: t("ctx-count"), listAt: t("list-at"),
+      seedsAt: t("seeds-at"), seedsAnswered: t("gc-answered"),
       pop4: { oc: t("p4-oc"), ocAt: t("p4-oc-at"), cat: t("p4-cat"), catAt: t("p4-cat-at"), rounds: t("p4-rounds"), move: t("p4-move"), roundsAt: t("p4-rounds-at") } };
   });
   if (shot) await page.screenshot({ path: shot, fullPage: /-full\.png$/.test(shot) });
@@ -149,6 +154,11 @@ console.log("\n[HOMEPAGE_PREVIEW] ADJ: adjacent cycles with identical labels are
   const n = h.on_chain_validators && h.on_chain_validators.state === "agreed" ? h.on_chain_validators.active : null;
   check("ADJ4 the seeds line names no ACTIVE count from /health of another round", n !== null && !r.seeds.includes("not the " + n), "health active " + n + " | " + r.seeds);
   check("ADJ5 with equal observed_at the seeds line may name it", n !== null && same.seeds.includes("not the " + n), same.seeds);
+  // The band's two reading tiles are /organism's alone: a /health of another round with another median and other seeds moves neither.
+  const h3 = JSON.parse(JSON.stringify(h2));
+  h3.agreement = Object.assign({}, h3.agreement, { state: "weak", median_block: 999999 }); h3.witnesses = { mode: "seed_and_validators", public_seeds: { configured: 3, answered: 1, own_height: 1 } };
+  const r3 = await render(o, h3), od = o.agreement_detail || {}, ops = (o.witnesses || {}).public_seeds || {};
+  check("ADJ6 the median and seeds tiles are /organism's, whatever /health of another round says", r3.band.median.v === od.median_block.toLocaleString("en-US") && r3.band.seeds.v === ops.own_height + " of " + ops.configured && !/999,999/.test(r3.body.slice(0, r3.body.indexOf("Six separate"))), JSON.stringify([r3.band.median, r3.band.seeds]));
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] NOOC: a /health without on_chain_validators retains nothing");
@@ -156,7 +166,7 @@ console.log("\n[HOMEPAGE_PREVIEW] NOOC: a /health without on_chain_validators re
   const o = load(scen.seeds_only[0]), h = JSON.parse(JSON.stringify(load(scen.seeds_only[1])));
   delete h.on_chain_validators; delete h.validator_watch;
   const r = await render(o, h);
-  check("NOOC1 the lead says not reported", /ACTIVE on chain: not reported/.test(r.lead), r.lead);
+  check("NOOC1 the band's on-chain and answered tiles say not reported, with no clock", r.band.onchain.v === "not reported" && r.band.onchain.s === "" && r.band.answered.v === "not reported" && r.band.answered.s === "", JSON.stringify([r.band.onchain, r.band.answered]));
   check("NOOC2 the ACTIVE rung has no number", r.vnActive.trim() === "not reported", r.vnActive);
   check("NOOC3 no 35 anywhere, no 'one read'", !/\b35\b/.test(r.body) && !/\bone read\b/i.test(r.body), (r.body.match(/.{30}(\b35\b|\bone read\b).{30}/i) || [])[0]);
   check("NOOC4 the caption says why", /does not publish on_chain_validators/.test(r.vwcap), r.vwcap);
@@ -172,6 +182,14 @@ console.log("\n[HOMEPAGE_PREVIEW] WATCH: the watch round has its own clock");
   if (w && w.state === "observed" && w.round_at) check("WATCH1 'watch round HH:MM:SS UTC' is shown from validator_watch.round_at", r.vwcap.includes("watch round " + hhmmss(w.round_at)), r.vwcap);
   else check("WATCH1 (watch not observed in this fixture) no watch clock is shown", !/watch round/.test(r.vwcap), r.vwcap);
   if (oc && oc.observed_at) check("WATCH2 'List read HH:MM:SS UTC' is from on_chain_validators.observed_at", r.vwcap.includes("List read " + hhmmss(oc.observed_at)), r.vwcap);
+  // A round the server marks stale (older than 300 s) still carries its counts in the object; the band shows none of them.
+  const hs = JSON.parse(JSON.stringify(h)); hs.validator_watch.state = "stale"; hs.on_chain_validators.state = "stale";
+  const rs = await render(o, hs);
+  check("WATCH3 a stale list and a stale watch round give no count in the band: unknown, each with its own clock", rs.band.onchain.v === "unknown" && rs.band.answered.v === "unknown" && rs.band.onchain.s === "list " + oc.observed_at.slice(11, 19) && rs.band.answered.s === "check " + w.round_at.slice(11, 19)
+    && rs.band.between === "Neither validator figure shows how many validators are online.", JSON.stringify([rs.band.onchain, rs.band.answered, rs.band.between]));
+  const hd = JSON.parse(JSON.stringify(h)); hd.validator_watch = { state: "disabled", round_at: null, reason: "dialing validators is turned off on this server" };
+  const rd = await render(o, hd);
+  check("WATCH4 a watch turned off on the server: not observed, no clock", rd.band.answered.v === "not observed" && rd.band.answered.s === "", JSON.stringify(rd.band.answered));
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] MIX: /organism and /health from rounds of different modes (the two operator captures, each way round)");
@@ -184,11 +202,11 @@ console.log("\n[HOMEPAGE_PREVIEW] MIX: /organism and /health from rounds of diff
   for (const [tag, of, hf] of pairs) {
     const o = load(of), h = load(hf), r = await render(o, h), oc = h.on_chain_validators || {}, ps = (o.witnesses || {}).public_seeds || {};
     const n = oc.state === "agreed" ? oc.active : null;
-    check(`MIX${tag}1 the first screen counts /organism's seeds (${ps.own_height}), the seeds panel /health's (${h.validator_growth.monitored_online})`,
-      r.ctxCount.startsWith(ps.own_height + " seed") && r.seedsAnswered === String(h.validator_growth.monitored_online), r.ctxCount + " | " + r.seedsAnswered);
+    check(`MIX${tag}1 the band counts /organism's seeds (${ps.own_height} of ${ps.configured}), the seeds panel /health's (${h.validator_growth.monitored_online})`,
+      r.band.seeds.v === ps.own_height + " of " + ps.configured && r.seedsAnswered === String(h.validator_growth.monitored_online), r.band.seeds.v + " | " + r.seedsAnswered);
     check(`MIX${tag}2 the seeds panel carries /health's own clock, which differs from the reading's`, r.seedsAt === "as of /health, " + stamp(h.observed_at) && stamp(h.observed_at) !== stamp(o.observed_at), r.seedsAt);
     check(`MIX${tag}3 the seeds line names no ACTIVE count from the other round`, n === null || !r.seeds.includes("not the " + n), r.seeds);
-    check(`MIX${tag}4 the list strip shows /health's list state with the list's own clock`, r.listAt.includes("List read " + hhmmss(oc.observed_at)) && (n === null ? /not reported/.test(r.lead) : r.lead.includes(n + " ACTIVE")), r.lead + " | " + r.listAt);
+    check(`MIX${tag}4 the on-chain tile shows /health's list state with the list's own clock`, r.band.onchain.s === "list " + oc.observed_at.slice(11, 19) && (n === null ? r.band.onchain.v === "unknown" : r.band.onchain.v === n + " ACTIVE"), JSON.stringify(r.band.onchain));
     check(`MIX${tag}5 the on-chain population card carries the list's clock, the catalog card /health's`, r.pop4.ocAt.includes(stamp(oc.observed_at)) && /as of \/health/.test(r.pop4.catAt || "") && r.pop4.catAt.includes(stamp(h.observed_at)), r.pop4.ocAt + " | " + r.pop4.catAt);
   }
 }
@@ -196,8 +214,18 @@ console.log("\n[HOMEPAGE_PREVIEW] MIX: /organism and /health from rounds of diff
 console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own fields, in the locked layout");
 {
   const TONE = { status: { stable: "ok", degraded: "warn", unstable: "bad", unknown: "unknown" }, risk: { low: "ok", elevated: "warn", high: "bad" } };
-  const expectCount = (o) => { const w = o.witnesses || {}, ps = w.public_seeds || {}, v = w.validators || {}, n = v.counted || 0, sd = (k) => k + (k === 1 ? " seed" : " seeds"), wt = (k) => k + (k === 1 ? " validator witness" : " validator witnesses");
-    return w.mode === "seeds_only" ? sd(ps.own_height) : w.mode === "seed_and_validators" ? sd(ps.own_height) + " + " + wt(n) : w.mode === "validators_only" ? wt(n) : "too few for a reading"; };
+  // The band, worked out here from the fixture fields (not from home-cycle.mjs): what each tile must show.
+  const fmt = (n) => n.toLocaleString("en-US"), num = (x) => typeof x === "number" && Number.isFinite(x);
+  const expectBand = (o, h) => {
+    const ag = String(o.agreement).toLowerCase(), compared = ["strong", "moderate", "weak"].includes(ag), d = o.agreement_detail || {}, ps = (o.witnesses || {}).public_seeds || {};
+    const oc = h.on_chain_validators, w = h.validator_watch, agreed = !!oc && oc.state === "agreed" && num(oc.active) && num(oc.seeds_agreed);
+    return { median: compared && num(d.median_block) ? fmt(d.median_block) : "not computed", seeds: num(ps.own_height) ? fmt(ps.own_height) + " of " + fmt(ps.configured) : "not reported",
+      onchain: !oc ? "not reported" : agreed ? fmt(oc.active) + " ACTIVE" : oc.state === "pending" ? "reading" : "unknown",
+      onchainS: oc && oc.state !== "pending" && oc.observed_at ? "list " + oc.observed_at.slice(11, 19) : "",
+      answered: !w ? "not reported" : w.state === "observed" ? (num(w.answered_as_listed) ? fmt(w.answered_as_listed) : "not reported") : w.state === "disabled" ? "not observed" : w.state === "pending" ? "reading" : "unknown",
+      answeredS: w && w.state !== "pending" && w.state !== "disabled" && w.round_at ? "check " + w.round_at.slice(11, 19) : "",
+      both: agreed && !!w && w.state === "observed" && num(w.answered_as_listed) ? [oc.active, w.answered_as_listed] : null, active: agreed ? oc.active : null };
+  };
   for (const [name, [of, hf]] of Object.entries(scen)) {
     const o = load(of), h = load(hf);
     const r = await render(o, h, { width: 1440, shot: SHOTS ? join(SHOTS, name + "-1440.png") : null });
@@ -206,7 +234,13 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
     check(`V3 ${name}: the reading names its network`, /Demos public testnet/.test(r.head), r.head);
     check(`V4 ${name}: six cards in the locked order`, JSON.stringify(r.cardOrder) === JSON.stringify(["status", "confidence", "risk", "data_quality", "reading_agreement", "trend"]), r.cardOrder.join(","));
     check(`V5 ${name}: the agreement card is /organism.agreement with its reason`, !!r.ra && r.ra.val === String(o.agreement) && r.ra.sub === (o.agreement_reason || ""), JSON.stringify(r.ra));
-    check(`V6 ${name}: heights counted this round, from /organism.witnesses`, r.ctxCount === expectCount(o), r.ctxCount + " vs " + expectCount(o));
+    const x = expectBand(o, h), got = { median: r.band.median.v, seeds: r.band.seeds.v, onchain: r.band.onchain.v, onchainS: r.band.onchain.s, answered: r.band.answered.v, answeredS: r.band.answered.s };
+    check(`V6 ${name}: the band's four tiles are the published fields, each on its own clock`, Object.keys(got).every((k) => got[k] === x[k]), JSON.stringify(got) + " want " + JSON.stringify(x));
+    check(`V6b ${name}: the on-chain and answered tiles say what the validators section says, word for word`, r.band.onchain.v.replace(/ ACTIVE$/, "") === r.vnActive.trim() && r.band.answered.v === r.vnAnswered.trim(), r.band.onchain.v + " / " + r.vnActive + " | " + r.band.answered.v + " / " + r.vnAnswered);
+    check(`V6c ${name}: the band's status is /organism.status, the same tone as the status card`, r.band.status === String(o.status) && r.band.shown === "capitalize" && r.band.tone === (TONE.status[o.status] || "neutral"), JSON.stringify([r.band.status, r.band.shown, r.band.tone]));
+    check(`V6d ${name}: the line under the band names both figures only when both are counts, and links to the validators section`,
+      (x.both ? r.band.between === fmt(x.both[0]) + " and " + fmt(x.both[1]) + " are two observations on their own clocks. Neither shows how many validators are online." : r.band.between === "Neither validator figure shows how many validators are online.")
+      && r.band.link === (x.active !== null ? "How the " + fmt(x.active) + " split" : "Validators on chain") && r.band.href === "#validators", r.band.between + " | " + r.band.link);
     const counted = o.witnesses && o.witnesses.validators && o.witnesses.validators.counted > 0;
     check(`V7 ${name}: the witnesses caption appears iff validators were counted, and says they are not the population`, counted ? /not the total validator population/.test(r.ctxCap || "") : r.ctxCap === null, r.ctxCap);
     const differ = TONE.status[o.status] !== TONE.risk[o.risk];
@@ -300,6 +334,67 @@ console.log("\n[HOMEPAGE_PREVIEW] CF: the LIVE pill's name says the age in words
   await page.close();
   check("CF5 the same status again says nothing; a change says 'Status is now degraded; it was stable.'; failed reads past 300 s (UNKNOWN, no reading) say nothing new; the next reading says 'Status is now stable; it was degraded.'",
     reached.every(Boolean) && s0 === "" && s1 === "" && s2 === "Status is now degraded; it was stable." && s3 === s2 && s4 === "Status is now stable; it was degraded.", JSON.stringify({ reached, said: [s0, s1, s2, s3, s4] }));
+}
+
+console.log("\n[HOMEPAGE_PREVIEW] C-1: every text in the reading panel against what is behind it, measured");
+{
+  // Text made transparent (and the tone marks hidden), the page photographed, and the pixels behind each line of text
+  // read back: the worst pixel against the text's own colour. WCAG 2 AA: 4.5:1, or 3:1 from 24 px. The artwork runs
+  // behind the panel's top, so the measure is the art, the glass and the blur together, not the colour tokens alone.
+  async function measure(width, glass) {
+    current = { organism: load(scen.seeds_only[0]), health: load(scen.seeds_only[1]) };
+    const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+    await page.goto(BASE + "/");
+    await page.waitForFunction(() => document.getElementById("panel").dataset.state !== "pending", null, { timeout: 10000 });
+    if (glass !== null) await page.addStyleTag({ content: `:root { --glass-panel: ${glass} !important; --glass-tile: ${glass} !important; }` });
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(500);
+    const boxes = await page.evaluate(() => {
+      const out = [];
+      for (const n of document.getElementById("panel").querySelectorAll("*")) {
+        const texts = [...n.childNodes].filter((c) => c.nodeType === 3 && c.textContent.trim());
+        if (!texts.length) continue;
+        const cs = getComputedStyle(n);
+        // Out of scope by WCAG 1.4.3: text no one sees (hidden, screen-reader only) and inactive controls (a disabled button).
+        if (cs.visibility === "hidden" || n.closest("[hidden]") || n.closest(".sr") || n.closest(":disabled")) continue;
+        const rects = texts.flatMap((tn) => { const rg = document.createRange(); rg.selectNodeContents(tn); return [...rg.getClientRects()].filter((r) => r.width > 1 && r.height > 1).map((r) => ({ x: r.left, y: r.top + scrollY, w: r.width, h: r.height })); });
+        if (rects.length) out.push({ sel: (n.id ? "#" + n.id : n.tagName.toLowerCase() + "." + n.className), text: n.textContent.trim().slice(0, 32), color: cs.color, size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight), rects });
+      }
+      return out;
+    });
+    await page.addStyleTag({ content: "#panel, #panel * { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; caret-color: transparent !important; } #panel .ind, #panel .rdot { visibility: hidden !important; }" });
+    await page.waitForTimeout(150);
+    const png = (await page.screenshot({ fullPage: true })).toString("base64");
+    const res = await page.evaluate(async ({ png, boxes }) => {
+      const img = new Image(); img.src = "data:image/png;base64," + png; await img.decode();
+      const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height;
+      const cx = cv.getContext("2d"); cx.drawImage(img, 0, 0);
+      const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const L = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      return boxes.map((b) => {
+        const m = b.color.match(/[\d.]+/g).map(Number), Lt = L(m[0], m[1], m[2]);
+        let lo = 1, hi = 0;
+        for (const r of b.rects) {
+          const x0 = Math.max(0, Math.floor(r.x) + 1), y0 = Math.max(0, Math.floor(r.y) + 1), w = Math.max(1, Math.floor(r.w) - 2), h = Math.max(1, Math.floor(r.h) - 2);
+          const d = cx.getImageData(x0, y0, Math.min(w, cv.width - x0), Math.min(h, cv.height - y0)).data;
+          for (let i = 0; i < d.length; i += 4) { const l = L(d[i], d[i + 1], d[i + 2]); if (l < lo) lo = l; if (l > hi) hi = l; }
+        }
+        const worst = Math.min(ratio(Lt, lo), ratio(Lt, hi)), need = b.size >= 24 || (b.size >= 18.66 && b.weight >= 700) ? 3 : 4.5;
+        return { sel: b.sel, text: b.text, worst: Math.round(worst * 100) / 100, need, ok: worst >= need };
+      });
+    }, { png, boxes });
+    await page.close();
+    return res;
+  }
+  for (const width of [390, 768, 1280, 1440, 1920]) {
+    const res = await measure(width, null), bad = res.filter((x) => !x.ok), min = res.reduce((m, x) => (x.worst / x.need < m.worst / m.need ? x : m), res[0]);
+    check(`C-1 at ${width}: every text in the panel reaches 4.5:1 (3:1 from 24 px) over what is behind it (${res.length} texts; closest ${min.worst}:1 for ${min.sel})`, res.length > 20 && bad.length === 0, bad.slice(0, 4).map((x) => x.sel + " '" + x.text + "' " + x.worst + "/" + x.need).join("; "));
+  }
+  // The measure can fail: with no glass at all, text over the artwork does not reach the ratio (at 1920, where the
+  // artwork behind the panel's head is brightest).
+  const bare = await measure(1920, 0);
+  check("C-1 control: with the glass removed (0), the same measure finds text that falls short", bare.some((x) => !x.ok), "no text fell short with the glass removed: the measure has no power over this artwork");
 }
 
 await browser.close(); server.close();
