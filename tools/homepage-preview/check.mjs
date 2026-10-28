@@ -71,6 +71,13 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
         median: tile("median"), seeds: tile("seeds"), onchain: tile("onchain"), answered: tile("answered"), between: t("tile-between"), link: t("tile-between-a"),
         href: (document.getElementById("tile-between-a") || { getAttribute: () => null }).getAttribute("href") },
       vnAnswered: t("vn-answered"),
+      seedsHidden: !!document.getElementById("seeds-line") && document.getElementById("seeds-line").hidden,
+      insuff: shown("insufficient") ? t("insufficient") : null, xInsuff: shown("x-insufficient") ? t("x-insufficient") : null,
+      explain: (() => { const d = document.getElementById("explain"); if (!d) return null;
+        return { tag: d.tagName.toLowerCase(), open: d.open, status: t("x-status"), wstatus: t("xw-status"), seeds: t("x-seeds"), at: { reading: t("x-at-reading"), list: t("x-at-list"), check: t("x-at-check") },
+          why: Object.fromEntries([...d.querySelectorAll("[data-why]")].map((n) => [n.dataset.why, n.textContent])), whyv: Object.fromEntries([...d.querySelectorAll("[data-whyv]")].map((n) => [n.dataset.whyv, n.textContent])),
+          cardSubs: Object.fromEntries([...document.querySelectorAll("#cards [data-card]")].filter((c) => c.querySelector(".s")).map((c) => [c.dataset.card, c.querySelector(".s").textContent])),
+          live: /LIVE is the age of DNO's last completed observation, not the network's state\./.test(d.textContent), summaryInside: !!d.querySelector("#summary") }; })(),
       cards: { trend: card("trend"), risk: card("risk"), confidence: card("confidence"), data_quality: card("data_quality") },
       vwcap: t("vw-cap"), vnActive: t("vn-active"), plValidators: t("pl-validators"), growthHidden: document.getElementById("vw-growth").hidden,
       body: document.body.innerText, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth,
@@ -89,7 +96,7 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
       wit: { n: t("wit-n"), read: t("wit-read"), own: t("wit-own"), counted: t("wit-counted") },
       branchOn: [...document.querySelectorAll("#branch li")].filter((li) => li.dataset.on === "true").map((li) => li.dataset.mode),
       // Contained: nothing inside a card or panel extends past its box (a page-width check cannot see this).
-      spill: [...document.querySelectorAll(".panel .panel-head, .twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .band .tile, .bstat")].flatMap((box) => {
+      spill: [...document.querySelectorAll(".panel .panel-head, .twin-p, .pop4 > div, .persp-c, .branch li, .panel .cards > div, .band .tile, .bstat, .explain .xsrc > div, .explain .xwhy li")].flatMap((box) => {
         const b = box.getBoundingClientRect();
         return [...box.querySelectorAll("*")].filter((n) => { if (n.closest(".nodes") && box.querySelector(".nodes")) return false; const r = n.getBoundingClientRect(); return r.width > 0 && (r.right > b.right + 1 || r.left < b.left - 1); })
           .slice(0, 1).map((n) => (box.id || box.className) + " > " + n.tagName.toLowerCase() + "." + n.className);
@@ -185,7 +192,7 @@ console.log("\n[HOMEPAGE_PREVIEW] WATCH: the watch round has its own clock");
   // A round the server marks stale (older than 300 s) still carries its counts in the object; the band shows none of them.
   const hs = JSON.parse(JSON.stringify(h)); hs.validator_watch.state = "stale"; hs.on_chain_validators.state = "stale";
   const rs = await render(o, hs);
-  check("WATCH3 a stale list and a stale watch round give no count in the band: unknown, each with its own clock", rs.band.onchain.v === "unknown" && rs.band.answered.v === "unknown" && rs.band.onchain.s === "list " + oc.observed_at.slice(11, 19) && rs.band.answered.s === "check " + w.round_at.slice(11, 19)
+  check("WATCH3 a stale list and a stale watch round give no count in the band: unknown, each with its own clock", rs.band.onchain.v === "unknown" && rs.band.answered.v === "unknown" && rs.band.onchain.s === "list read " + oc.observed_at.slice(11, 19) + " UTC" && rs.band.answered.s === "checked " + w.round_at.slice(11, 19) + " UTC"
     && rs.band.between === "Neither validator figure shows how many validators are online.", JSON.stringify([rs.band.onchain, rs.band.answered, rs.band.between]));
   const hd = JSON.parse(JSON.stringify(h)); hd.validator_watch = { state: "disabled", round_at: null, reason: "dialing validators is turned off on this server" };
   const rd = await render(o, hd);
@@ -206,7 +213,7 @@ console.log("\n[HOMEPAGE_PREVIEW] MIX: /organism and /health from rounds of diff
       r.band.seeds.v === ps.own_height + " of " + ps.configured && r.seedsAnswered === String(h.validator_growth.monitored_online), r.band.seeds.v + " | " + r.seedsAnswered);
     check(`MIX${tag}2 the seeds panel carries /health's own clock, which differs from the reading's`, r.seedsAt === "as of /health, " + stamp(h.observed_at) && stamp(h.observed_at) !== stamp(o.observed_at), r.seedsAt);
     check(`MIX${tag}3 the seeds line names no ACTIVE count from the other round`, n === null || !r.seeds.includes("not the " + n), r.seeds);
-    check(`MIX${tag}4 the on-chain tile shows /health's list state with the list's own clock`, r.band.onchain.s === "list " + oc.observed_at.slice(11, 19) && (n === null ? r.band.onchain.v === "unknown" : r.band.onchain.v === n + " ACTIVE"), JSON.stringify(r.band.onchain));
+    check(`MIX${tag}4 the on-chain tile shows /health's list state with the list's own clock`, r.band.onchain.s === "list read " + oc.observed_at.slice(11, 19) + " UTC" && (n === null ? r.band.onchain.v === "unknown" : r.band.onchain.v === n + " ACTIVE"), JSON.stringify(r.band.onchain));
     check(`MIX${tag}5 the on-chain population card carries the list's clock, the catalog card /health's`, r.pop4.ocAt.includes(stamp(oc.observed_at)) && /as of \/health/.test(r.pop4.catAt || "") && r.pop4.catAt.includes(stamp(h.observed_at)), r.pop4.ocAt + " | " + r.pop4.catAt);
   }
 }
@@ -221,20 +228,21 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
     const oc = h.on_chain_validators, w = h.validator_watch, agreed = !!oc && oc.state === "agreed" && num(oc.active) && num(oc.seeds_agreed);
     return { median: compared && num(d.median_block) ? fmt(d.median_block) : "not computed", seeds: num(ps.own_height) ? fmt(ps.own_height) + " of " + fmt(ps.configured) : "not reported",
       onchain: !oc ? "not reported" : agreed ? fmt(oc.active) + " ACTIVE" : oc.state === "pending" ? "reading" : "unknown",
-      onchainS: oc && oc.state !== "pending" && oc.observed_at ? "list " + oc.observed_at.slice(11, 19) : "",
+      onchainS: oc && oc.state !== "pending" && oc.observed_at ? "list read " + oc.observed_at.slice(11, 19) + " UTC" : "",
+      seedsS: !num(ps.own_height) ? "" : ps.own_height === 0 ? "none gave its own height" : (ps.own_height === 1 ? "gave its own height" : "gave their own height") + (ps.configured > ps.own_height ? "; " + (ps.configured - ps.own_height) + " did not" : ""),
       answered: !w ? "not reported" : w.state === "observed" ? (num(w.answered_as_listed) ? fmt(w.answered_as_listed) : "not reported") : w.state === "disabled" ? "not observed" : w.state === "pending" ? "reading" : "unknown",
-      answeredS: w && w.state !== "pending" && w.state !== "disabled" && w.round_at ? "check " + w.round_at.slice(11, 19) : "",
+      answeredS: w && w.state !== "pending" && w.state !== "disabled" && w.round_at ? "checked " + w.round_at.slice(11, 19) + " UTC" : "",
       both: agreed && !!w && w.state === "observed" && num(w.answered_as_listed) ? [oc.active, w.answered_as_listed] : null, active: agreed ? oc.active : null };
   };
   for (const [name, [of, hf]] of Object.entries(scen)) {
     const o = load(of), h = load(hf);
     const r = await render(o, h, { width: 1440, shot: SHOTS ? join(SHOTS, name + "-1440.png") : null });
     check(`V1 ${name}: the summary is /organism.summary, verbatim`, r.summary === o.summary, r.summary);
-    check(`V2 ${name}: the observation's own clock and API version`, r.obsAt === o.observed_at.slice(0, 10) + " " + o.observed_at.slice(11, 19) + " UTC" && r.apiV === o.api_version, r.obsAt + " | " + r.apiV);
+    check(`V2 ${name}: the observation's own clock and API version`, r.obsAt === "read " + o.observed_at.slice(11, 19) + " UTC" && r.apiV === o.api_version, r.obsAt + " | " + r.apiV);
     check(`V3 ${name}: the reading names its network`, /Demos public testnet/.test(r.head), r.head);
     check(`V4 ${name}: six cards in the locked order`, JSON.stringify(r.cardOrder) === JSON.stringify(["status", "confidence", "risk", "data_quality", "reading_agreement", "trend"]), r.cardOrder.join(","));
     check(`V5 ${name}: the agreement card is /organism.agreement with its reason`, !!r.ra && r.ra.val === String(o.agreement) && r.ra.sub === (o.agreement_reason || ""), JSON.stringify(r.ra));
-    const x = expectBand(o, h), got = { median: r.band.median.v, seeds: r.band.seeds.v, onchain: r.band.onchain.v, onchainS: r.band.onchain.s, answered: r.band.answered.v, answeredS: r.band.answered.s };
+    const x = expectBand(o, h), got = { median: r.band.median.v, seeds: r.band.seeds.v, seedsS: r.band.seeds.s, onchain: r.band.onchain.v, onchainS: r.band.onchain.s, answered: r.band.answered.v, answeredS: r.band.answered.s };
     check(`V6 ${name}: the band's four tiles are the published fields, each on its own clock`, Object.keys(got).every((k) => got[k] === x[k]), JSON.stringify(got) + " want " + JSON.stringify(x));
     check(`V6b ${name}: the on-chain and answered tiles say what the validators section says, word for word`, r.band.onchain.v.replace(/ ACTIVE$/, "") === r.vnActive.trim() && r.band.answered.v === r.vnAnswered.trim(), r.band.onchain.v + " / " + r.vnActive + " | " + r.band.answered.v + " / " + r.vnAnswered);
     check(`V6c ${name}: the band's status is /organism.status, the same tone as the status card`, r.band.status === String(o.status) && r.band.shown === "capitalize" && r.band.tone === (TONE.status[o.status] || "neutral"), JSON.stringify([r.band.status, r.band.shown, r.band.tone]));
@@ -242,6 +250,21 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
       (x.both ? r.band.between === fmt(x.both[0]) + " and " + fmt(x.both[1]) + " are two observations on their own clocks. Neither shows how many validators are online." : r.band.between === "Neither validator figure shows how many validators are online.")
       && r.band.link === (x.active !== null ? "How the " + fmt(x.active) + " split" : "Validators on chain") && r.band.href === "#validators", r.band.between + " | " + r.band.link);
     const counted = o.witnesses && o.witnesses.validators && o.witnesses.validators.counted > 0;
+    // R2: Explain this reading holds every reason the earlier layout showed on the cards (reason retention), the summary,
+    // the status, each figure's clock and the seeds line in full; the seeds line under the band shows only when not calm;
+    // the banner and its detail show only for an insufficient reading.
+    const ex = r.explain || {}, FALLBACK = (k) => (k === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.");
+    check(`EX1 ${name}: every field's reason is in Explain, the card's own text where it has one (nothing lost from the earlier layout)`,
+      !!r.explain && Object.keys(ex.cardSubs || {}).length === 5 && Object.entries(ex.cardSubs).every(([k, sub]) => ex.why[k] === (sub.trim() ? sub : FALLBACK(k)))
+      && ex.whyv.risk === String(o.risk) && ex.whyv.reading_agreement === String(o.agreement) && ex.status === String(o.status) && ex.wstatus === String(o.status) && ex.summaryInside, JSON.stringify(ex.why) + " | cards " + JSON.stringify(ex.cardSubs));
+    const hh = (iso) => (iso ? iso.slice(11, 19) + " UTC" : null), ocx = h.on_chain_validators || {}, wx = h.validator_watch || {};
+    check(`EX2 ${name}: Explain is a native <details>, closed at first, with each figure's own clock`, ex.tag === "details" && ex.open === false
+      && ex.at.reading === "read " + hh(o.observed_at) && ex.at.list === (ocx.observed_at ? "read " + hh(ocx.observed_at) : "not reported") && ex.at.check === (wx.round_at ? "round " + hh(wx.round_at) : wx.state === "disabled" ? "turned off on this server" : "not reported") && ex.live, JSON.stringify(ex.at));
+    const ws = o.witnesses || {}, okSeeds = (h.publicNodes || []).filter((n) => n.ok).length, calm = ws.mode === "seeds_only" && String(o.agreement) === "strong" && okSeeds === (ws.public_seeds || {}).own_height && !o.active_incidents && (o.height_static_seconds || 0) < 300 && o.data_quality === "sufficient";
+    check(`EX3 ${name}: the seeds line under the band is ${calm ? "left out (calm)" : "shown"}, and Explain carries it in full`, r.seedsHidden === calm && ex.seeds === r.seeds && ex.seeds.length > 20, r.seedsHidden + " | " + ex.seeds);
+    const insufficient = o.data_quality === "insufficient";
+    check(`EX4 ${name}: the approved banner and its detail in Explain show iff the reading is insufficient`,
+      insufficient ? r.insuff === "DNO could not form a sufficient reading from public sources this time, so the status is unknown." && /Peer-listed identities do not enter status\./.test(r.xInsuff || "") : r.insuff === null && r.xInsuff === null, r.insuff + " | " + r.xInsuff);
     check(`V7 ${name}: the witnesses caption appears iff validators were counted, and says they are not the population`, counted ? /not the total validator population/.test(r.ctxCap || "") : r.ctxCap === null, r.ctxCap);
     const differ = TONE.status[o.status] !== TONE.risk[o.risk];
     check(`V8 ${name}: the why-box appears iff status and risk tones differ, and quotes every risk factor`, differ ? !!r.why && r.why.q.includes(o.status) && r.why.q.includes(o.risk) && (o.risk_factors || []).every((f) => r.why.a.includes(f)) : r.why === null, JSON.stringify(r.why).slice(0, 200));
@@ -292,7 +315,7 @@ console.log("\n[HOMEPAGE_PREVIEW] S: the sections below the reading, in the lock
 console.log("\n[HOMEPAGE_PREVIEW] FAIL: a failed /organism read is said as a failure to read");
 {
   const r = await render(null, load(scen.seeds_only[1]));
-  check("F1 status unknown, 'failure to read, not an observation about the network'", r.status === "UNKNOWN" && /failure to read/.test(r.seeds), r.seeds);
+  check("F1 status unknown, 'failure to read, not an observation about the network', said under the band (never hidden as calm)", r.status === "UNKNOWN" && /failure to read/.test(r.seeds) && r.seedsHidden === false, r.seeds);
 }
 
 console.log("\n[HOMEPAGE_PREVIEW] CF: the LIVE pill's name says the age in words; a status change is said once");
@@ -341,12 +364,13 @@ console.log("\n[HOMEPAGE_PREVIEW] C-1: every text in the reading panel against w
   // Text made transparent (and the tone marks hidden), the page photographed, and the pixels behind each line of text
   // read back: the worst pixel against the text's own colour. WCAG 2 AA: 4.5:1, or 3:1 from 24 px. The artwork runs
   // behind the panel's top, so the measure is the art, the glass and the blur together, not the colour tokens alone.
-  async function measure(width, glass) {
+  async function measure(width, glass, open) {
     current = { organism: load(scen.seeds_only[0]), health: load(scen.seeds_only[1]) };
     const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
     await page.goto(BASE + "/");
     await page.waitForFunction(() => document.getElementById("panel").dataset.state !== "pending", null, { timeout: 10000 });
     if (glass !== null) await page.addStyleTag({ content: `:root { --glass-panel: ${glass} !important; --glass-tile: ${glass} !important; }` });
+    if (open) await page.evaluate(() => { document.getElementById("explain").open = true; });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(500);
     const boxes = await page.evaluate(() => {
@@ -356,7 +380,7 @@ console.log("\n[HOMEPAGE_PREVIEW] C-1: every text in the reading panel against w
         if (!texts.length) continue;
         const cs = getComputedStyle(n);
         // Out of scope by WCAG 1.4.3: text no one sees (hidden, screen-reader only) and inactive controls (a disabled button).
-        if (cs.visibility === "hidden" || n.closest("[hidden]") || n.closest(".sr") || n.closest(":disabled")) continue;
+        if (cs.visibility === "hidden" || n.closest("[hidden]") || n.closest(".sr") || n.closest(":disabled") || (n.closest("details:not([open])") && !n.closest("summary"))) continue;   // a closed <details> draws only its summary
         const rects = texts.flatMap((tn) => { const rg = document.createRange(); rg.selectNodeContents(tn); return [...rg.getClientRects()].filter((r) => r.width > 1 && r.height > 1).map((r) => ({ x: r.left, y: r.top + scrollY, w: r.width, h: r.height })); });
         if (rects.length) out.push({ sel: (n.id ? "#" + n.id : n.tagName.toLowerCase() + "." + n.className), text: n.textContent.trim().slice(0, 32), color: cs.color, size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight), rects });
       }
@@ -388,13 +412,45 @@ console.log("\n[HOMEPAGE_PREVIEW] C-1: every text in the reading panel against w
     return res;
   }
   for (const width of [390, 768, 1280, 1440, 1920]) {
-    const res = await measure(width, null), bad = res.filter((x) => !x.ok), min = res.reduce((m, x) => (x.worst / x.need < m.worst / m.need ? x : m), res[0]);
-    check(`C-1 at ${width}: every text in the panel reaches 4.5:1 (3:1 from 24 px) over what is behind it (${res.length} texts; closest ${min.worst}:1 for ${min.sel})`, res.length > 20 && bad.length === 0, bad.slice(0, 4).map((x) => x.sel + " '" + x.text + "' " + x.worst + "/" + x.need).join("; "));
+    for (const open of [false, true]) {
+      const res = await measure(width, null, open), bad = res.filter((x) => !x.ok), min = res.reduce((m, x) => (x.worst / x.need < m.worst / m.need ? x : m), res[0]);
+      check(`C-1 at ${width}, Explain ${open ? "open" : "closed"}: every text in the panel reaches 4.5:1 (3:1 from 24 px) over what is behind it (${res.length} texts; closest ${min.worst}:1 for ${min.sel})`, res.length > (open ? 40 : 20) && bad.length === 0, bad.slice(0, 4).map((x) => x.sel + " '" + x.text + "' " + x.worst + "/" + x.need).join("; "));
+    }
   }
   // The measure can fail: with no glass at all, text over the artwork does not reach the ratio (at 1920, where the
   // artwork behind the panel's head is brightest).
   const bare = await measure(1920, 0);
   check("C-1 control: with the glass removed (0), the same measure finds text that falls short", bare.some((x) => !x.ok), "no text fell short with the glass removed: the measure has no power over this artwork");
+}
+
+console.log("\n[HOMEPAGE_PREVIEW] EX: Explain this reading opens from the keyboard, and without JavaScript");
+{
+  current = { organism: load(scen.seeds_only[0]), health: load(scen.seeds_only[1]) };
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto(BASE + "/");
+  await page.waitForFunction(() => document.getElementById("panel").dataset.state !== "pending", null, { timeout: 10000 });
+  // A wait is part of the check (L-WAIT-IS-A-CHECK): a missing or hidden control fails these checks, it never crashes the run.
+  let focused = false, opened = false, closed = false;
+  try {
+    await page.focus("#explain > summary", { timeout: 3000 });
+    focused = await page.evaluate(() => document.activeElement === document.querySelector("#explain > summary"));
+    await page.keyboard.press("Enter");
+    opened = await page.evaluate(() => document.getElementById("explain").open);
+    await page.keyboard.press("Enter");
+    closed = await page.evaluate(() => !document.getElementById("explain").open);
+  } catch (e) { /* stays false: reported by EX5 */ }
+  await page.close();
+  check("EX5 the Explain summary takes focus, Enter opens it and Enter closes it", focused && opened && closed, JSON.stringify({ focused, opened, closed }));
+  const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 900 } });
+  const p2 = await ctx.newPage();
+  await p2.goto(BASE + "/");
+  let noJs = { open: false, shown: false, jsRan: null, error: "the summary could not be clicked without JavaScript" };
+  try {
+    await p2.click("#explain > summary", { timeout: 3000 });
+    noJs = await p2.evaluate(() => ({ open: document.getElementById("explain").open, shown: document.getElementById("x-seeds").getBoundingClientRect().height > 0, jsRan: document.documentElement.classList.contains("js") }));
+  } catch (e) { /* noJs stays failed: reported by EX6 */ }
+  await ctx.close();
+  check("EX6 without JavaScript the section still opens (native <details>) and shows its contents", noJs.open && noJs.shown && !noJs.jsRan, JSON.stringify(noJs));
 }
 
 await browser.close(); server.close();

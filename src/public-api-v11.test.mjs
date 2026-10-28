@@ -86,28 +86,60 @@ check("H26 the band: each tile marker and the line under the band present once, 
   const i = SRC.indexOf("var HOME_TONE = {"), j = SRC.indexOf("// The locked DNO mark");
   const FX = join(ROOT, "tools", "homepage-preview", "fixtures"), fx = (n) => JSON.parse(readFileSync(join(FX, n), "utf8"));
   const fill = (o, h) => new Function("escHtml", "computeCanonicalState", "publicOnChainValidators", "publicValidatorWatch", "latestValidatorRound", "validatorPublishConfig", "latestPublicNodes", "validatorsNoJsLine", "HC",
-    "var { leadCount, cycleSeeds, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } = HC;\n" + SRC.slice(i, j) + "\nreturn renderHomepageNoJs;")(
+    "var { " + Object.keys(HC).join(", ") + " } = HC;\n" + SRC.slice(i, j) + "\nreturn renderHomepageNoJs;")(
     escHtml, () => Object.assign({}, o, { agreement: Object.assign({ state: o.agreement }, o.agreement_detail) }), () => h.on_chain_validators, () => h.validator_watch, null, () => ({}), h.publicNodes, () => null, HC)(HOME);
-  const bandOf = (html) => html.slice(html.indexOf('id="band"'), html.indexOf('<p class="six">'));
-  const a = bandOf(fill(fx("organism-capture-20261021T072727Z.json"), fx("health-capture-20261021T072727Z.json")));
-  const b = bandOf(fill(fx("organism-capture-20261023T122827Z.json"), fx("health-capture-20261023T122827Z.json")));
+  const bandOf = (html) => html.slice(html.indexOf('id="band"'), html.indexOf('<div class="strip cards" id="cards">'));
+  const explainOf = (html) => html.slice(html.indexOf('<details class="explain" id="explain">'), html.indexOf('</details>', html.indexOf('<details class="explain" id="explain">')));
+  const A = fill(fx("organism-capture-20261021T072727Z.json"), fx("health-capture-20261021T072727Z.json")), B = fill(fx("organism-capture-20261023T122827Z.json"), fx("health-capture-20261023T122827Z.json"));
+  const a = bandOf(A), b = bandOf(B), xa = explainOf(A), xb = explainOf(B);
   check("H42 no-JS fill, 21 Oct capture: the band carries the median, the seeds, 35 ACTIVE with its list clock, 6 with its check clock, and the line names both",
-    i > 0 && j > i && a.includes('<span id="band-status">stable</span>') && a.includes('id="tile-median-v">6,675</p>') && a.includes('id="tile-seeds-v">2 of 3</p>')
-    && a.includes('id="tile-onchain-v">35 <span class="tu">ACTIVE</span></p><p class="ts" id="tile-onchain-s" data-src="api">list 07:27:23</p>')
-    && a.includes('id="tile-answered-v">6</p><p class="ts" id="tile-answered-s" data-src="api">check 07:27:23</p>')
+    i > 0 && j > i && a.includes('<span id="band-status">stable</span>') && a.includes('id="tile-median-v">6,675</p>') && a.includes('id="tile-seeds-v">2 <span class="tu">of 3</span></p><p class="ts" id="tile-seeds-s" data-src="api">gave their own height; 1 did not</p>')
+    && a.includes('id="tile-onchain-v">35 <span class="tu">ACTIVE</span></p><p class="ts" id="tile-onchain-s" data-src="api">list read 07:27:23 UTC</p>')
+    && a.includes('id="tile-answered-v">6</p><p class="ts" id="tile-answered-s" data-src="api">checked 07:27:23 UTC</p>')
     && a.includes(">35 and 6 are two observations on their own clocks. Neither shows how many validators are online.</span>") && a.includes(">How the 35 split</a>") && !/>reading</.test(a), a.slice(0, 900));
   check("H43 no-JS fill, 23 Oct capture (no agreed list, so the watch round gives no counts): no count on chain or answered, and the line names neither",
-    b.includes('class="tv none" id="tile-onchain-v">unknown</p>') && b.includes('class="tv none" id="tile-answered-v">unknown</p>') && b.includes('id="tile-seeds-v">1 of 3</p>')
+    b.includes('class="tv none" id="tile-onchain-v">unknown</p>') && b.includes('class="tv none" id="tile-answered-v">unknown</p>') && b.includes('id="tile-seeds-v">1 <span class="tu">of 3</span></p>')
     && b.includes(">Neither validator figure shows how many validators are online.</span>") && !/>reading</.test(b) && !/\b35\b/.test(b), b.slice(0, 900));
+  // The seeds line under the band: left out when calm (21 Oct: two seeds, aligned), kept when validators stand in (23 Oct).
+  check("H46 no-JS fill: the seeds line is hidden when it says nothing the band does not, shown when it does, and Explain carries it in full either way",
+    a.includes('<p class="seeds" id="seeds-line" aria-live="polite" hidden>2 of 3 configured seeds answered.') && b.includes('<p class="seeds" id="seeds-line" aria-live="polite">1 of 3 configured seeds answered.')
+    && xa.includes('<p id="x-seeds">2 of 3 configured seeds answered.') && xb.includes('<p id="x-seeds">1 of 3 configured seeds answered. 4 validators'), a.slice(Math.max(0, a.indexOf("seeds-line") - 20), a.indexOf("seeds-line") + 160));
+  // Explain this reading, without JavaScript: the summary verbatim, each figure's clock, each field's value and reason.
+  const o21 = fx("organism-capture-20261021T072727Z.json"), o23 = fx("organism-capture-20261023T122827Z.json");
+  check("H47 no-JS fill: Explain this reading carries the summary, the source clocks and every field's reason, nothing left reading",
+    xa.includes('<p class="summary" id="summary" data-src="api">' + escHtml(o21.summary) + '</p>') && xa.includes('<span id="x-status">stable</span>')
+    && xa.includes('<span id="x-at-reading">read 07:27:13 UTC</span>') && xa.includes('<span id="x-at-list">read 07:27:23 UTC</span>') && xa.includes('<span id="x-at-check">round 07:27:23 UTC</span>')
+    && xa.includes('<span class="xw" data-why="risk">' + escHtml(o21.risk_factors.join(" · ")) + '</span>') && xa.includes('<span class="xw" data-why="confidence">' + escHtml(o21.confidence_reason) + '</span>')
+    && xa.includes('<span class="xw" data-why="data_quality">No reason is published for this value in this reading.</span>') && xa.includes('<span data-whyv="reading_agreement">strong</span>')
+    && xb.includes('<span class="xw" data-why="risk">' + escHtml(o23.risk_factors.join(" · ")) + '</span>') && !/>reading</.test(xa) && !/>reading</.test(xb) && !/>not read yet</.test(xa)
+    && xa.includes('<p class="xnote" id="x-insufficient" hidden>') && xa.includes("LIVE is the age of DNO's last completed observation, not the network's state."), xa.slice(0, 900));
+}
+// The insufficient-reading banner: the operator's approved words (2026-10-28, "banner approve"), directly under the band;
+// the old banner's detail is inside Explain, shown only when data quality is insufficient.
+check("H48 the insufficient banner is the approved text, placed before the reading's lines; the old detail lives in Explain only",
+  HOME.includes('<p class="insufficient" id="insufficient" hidden>DNO could not form a sufficient reading from public sources this time, so the status is unknown.</p>')
+  && HOME.indexOf('id="insufficient"') > HOME.indexOf('id="band"') && HOME.indexOf('id="insufficient"') < HOME.indexOf('id="seeds-line"')
+  && count(HOME, "Network observability is limited.") === 1 && HOME.indexOf("Network observability is limited.") > HOME.indexOf('id="x-insufficient"') && HOME.indexOf("Network observability is limited.") < HOME.indexOf('id="x-insufficient"') + 80);
+// Each field's definition link in Explain points at a section the methodology page really has.
+{
+  const METH = readFileSync(join(ROOT, "methodology.html"), "utf8");
+  const ex = HOME.slice(HOME.indexOf('<details class="explain" id="explain">'), HOME.indexOf('</details>', HOME.indexOf('<details class="explain" id="explain">')));
+  const anchors = [...ex.matchAll(/href="\/methodology#([a-z0-9-]+)"/g)].map((m) => m[1]);
+  check("H49 Explain links each of the six fields to its own section on /methodology, and every section exists", anchors.length === 6 && new Set(anchors).size === 6 && anchors.every((id) => METH.includes('id="' + id + '"')), anchors.join(", "));
 }
 // The band's labels name the field each tile shows: the seeds' median (one seed's height is not a median, and DNO reads
 // heights the seeds report, not the chain's latest block), and the rows that answered DNO as their listed key (rows that
 // answered with another key or none answered DNO too: validator_watch publishes them apart).
 {
   const labels = [...HOME.slice(HOME.indexOf('id="band"'), HOME.indexOf('<div class="rsum">')).matchAll(/<p class="k">([^<]+)<\/p>/g)].map((m) => m[1]);
-  check("H44 the band's labels are its fields' names: status, median block, public seeds, on chain, answered as listed (never latest block, never answered DNO)",
-    JSON.stringify(labels) === JSON.stringify(["status", "median block", "public seeds", "on chain", "answered as listed"]) && !/>\s*(latest block|answered DNO)\s*</i.test(HOME), labels.join(" | "));
+  check("H44 the band's labels are its fields' names: median block, public seeds, on chain, answered as listed (never latest block, never answered DNO)",
+    JSON.stringify(labels) === JSON.stringify(["median block", "public seeds", "on chain", "answered as listed"]) && !/>\s*(latest block|answered DNO)\s*</i.test(HOME), labels.join(" | "));
 }
+// The panel head as the operator's board has it (2026-10-28): "read HH:MM:SS UTC · next in N s", the API version moved
+// to the panel's last line, Pause and Refresh kept as text (a page that updates itself can be paused: WCAG 2.2.2).
+check("H45 the head: the agent writes 'read HH:MM:SS UTC', the page says 'next in N s', Pause and Refresh stay, the API version is on the last line",
+  SRC.includes(`'<span id="obs-at">read ' + e(c.observed_at.slice(11, 19)) + ' UTC</span>'`) && HOME.includes("`next in ${left} s`") && HOME.includes('id="btn-pause"') && HOME.includes('id="btn-refresh"')
+  && /<p class="bound">[^<]*API <span id="api-v">reading<\/span>\.<\/p>/.test(HOME));
 // A figure that waits on its own gate is not on the first screen: the block interval (FR-WEB-INTERVAL), the seeds' block
 // hash (the strip, from 2026-11-01), and the recent blocks' signatures (committee build).
 {
@@ -824,7 +856,7 @@ try {
   const hw = (await get("/health")).body.witnesses || {};
   const ending = (w) => (w.mode === "seed_and_validators" ? "Status is that seed and (that validator|those validators)" : w.mode === "validators_only" ? "Status is those validators alone"
     : w.mode === "insufficient" ? "Status is unknown" : "Status is those seeds");   // insufficient is never compared: unknown, whether or not validators were read
-  const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite">[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
+  const seedsLineOk = (card) => [wt, hw].some((w) => new RegExp('<p class="seeds" id="seeds-line" aria-live="polite"( hidden)?>[^<]+ ' + ending(w) + (ending(w) === "Status is unknown" ? "" : "(, not the [\\d,]+)?") + '\\.</p>').test(card));
   const tileRe = (k) => new RegExp('<p class="tv( none)?" id="tile-' + k + '-v">([^<]*)(?: <span class="tu">([^<]*)</span>)?</p><p class="ts" id="tile-' + k + '-s" data-src="api">([^<]*)</p>');
   const band = ["median", "seeds", "onchain", "answered"].map((k) => cardHtml.match(tileRe(k)) || []);
   check("S25b the band and the reading's line for readers without JavaScript: four tiles filled (none left reading), a count only with its own clock, then what status is made of; no 'nodes aligned'",

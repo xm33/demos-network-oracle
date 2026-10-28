@@ -34,7 +34,7 @@ import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from ".
 import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, versionOf, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
-import { leadCount, cycleSeeds, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
+import { leadCount, cycleSeeds, seedsCalm, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, fieldReason } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
 import { compareBlockIdentity, createBlockIdentityTracker, describeBlockIdentity } from "./block-identity.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
@@ -357,6 +357,13 @@ var HOME_MARKERS = {
   bandStatus: '<span class="ind" id="band-ind" data-tone="pending"></span><span id="band-status">reading</span>',
   between: '<span id="tile-between">Neither validator figure shows how many validators are online.</span> <a href="#validators" id="tile-between-a">Validators on chain</a>',
   tiles: { median: homeTileMarker("median"), seeds: homeTileMarker("seeds"), onchain: homeTileMarker("onchain"), answered: homeTileMarker("answered") },
+  // Explain this reading (a native <details>, so it opens without JavaScript): the status word twice, each figure's
+  // source clock, the seeds line in full, each field's value and reason, and the old banner's detail when insufficient.
+  xStatus: '<span id="x-status">reading</span>',
+  xwStatus: '<span id="xw-status">reading</span>',
+  xAt: { reading: '<span id="x-at-reading">not read yet</span>', list: '<span id="x-at-list">not read yet</span>', check: '<span id="x-at-check">not read yet</span>' },
+  xSeeds: '<p id="x-seeds">reading</p>',
+  xInsufficient: '<p class="xnote" id="x-insufficient" hidden>',
   cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality"), reading_agreement: homeCardMarker("reading_agreement") }
 };
 function renderHomepageNoJs(html) {
@@ -379,14 +386,25 @@ function renderHomepageNoJs(html) {
     }
     var btw = tilesBetween(tiles.onchain.n, tiles.answered.n);
     html = html.replace(HOME_MARKERS.between, '<span id="tile-between">' + e(btw.text) + '</span> <a href="#validators" id="tile-between-a">' + e(btw.link) + '</a>');
-    var seedLine = cycleSeeds({ publicNodes: latestPublicNodes || [], agreement: c.agreement, data_quality_reason: c.data_quality_reason,
+    var seedR = { publicNodes: latestPublicNodes || [], agreement: c.agreement, data_quality_reason: c.data_quality_reason,
       staleness_seconds: c.staleness_seconds, height_static_seconds: c.height_static_seconds, active_incidents: c.active_incidents,
-      witnesses: c.witnesses, height_standstill_after_seconds: c.height_standstill_after_seconds }, leadCount(ocV));
-    html = html.replace(HOME_MARKERS.seeds, '<p class="seeds" id="seeds-line" aria-live="polite">' + e(seedLine) + '</p>');
-    if (c.data_quality === "insufficient") html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
+      witnesses: c.witnesses, height_standstill_after_seconds: c.height_standstill_after_seconds };
+    var seedLine = cycleSeeds(seedR, leadCount(ocV));
+    // Under the band only when it says something the band does not (seedsCalm, as the page's script decides); in full
+    // inside Explain this reading every time.
+    html = html.replace(HOME_MARKERS.seeds, '<p class="seeds" id="seeds-line" aria-live="polite"' + (seedsCalm(seedR, leadCount(ocV)) ? ' hidden' : '') + '>' + e(seedLine) + '</p>');
+    html = html.replace(HOME_MARKERS.xSeeds, '<p id="x-seeds">' + e(seedLine) + '</p>');
+    html = html.replace(HOME_MARKERS.xStatus, '<span id="x-status">' + e(String(c.status || "unknown")) + '</span>');
+    html = html.replace(HOME_MARKERS.xwStatus, '<span id="xw-status">' + e(String(c.status || "unknown")) + '</span>');
+    var clocks = figureClocks({ observed_at: c.observed_at }, hv);
+    for (var xk in HOME_MARKERS.xAt) html = html.replace(HOME_MARKERS.xAt[xk], '<span id="x-at-' + xk + '">' + e(clocks[xk]) + '</span>');
+    if (c.data_quality === "insufficient") {
+      html = html.replace(HOME_MARKERS.insufficient, '<p class="insufficient" id="insufficient">');
+      html = html.replace(HOME_MARKERS.xInsufficient, '<p class="xnote" id="x-insufficient">');
+    }
     // The reading's sentence, verbatim, and its clock and API version: the first screen's own fields (V7).
     if (typeof c.summary === "string" && c.summary) html = html.replace(HOME_MARKERS.summary, '<p class="summary" id="summary" data-src="api">' + e(c.summary) + '</p>');
-    html = html.replace(HOME_MARKERS.observedAt, '<span id="obs-at">' + e(c.observed_at.slice(0, 10) + " " + c.observed_at.slice(11, 19)) + ' UTC</span>');
+    html = html.replace(HOME_MARKERS.observedAt, '<span id="obs-at">read ' + e(c.observed_at.slice(11, 19)) + ' UTC</span>');
     if (typeof c.api_version === "string") html = html.replace(HOME_MARKERS.apiVersion, '<span id="api-v">' + e(c.api_version) + '</span>');
     var readingAg = (c.agreement && c.agreement.state) || "unknown";
     var subs = {
@@ -399,6 +417,8 @@ function renderHomepageNoJs(html) {
     for (var key in HOME_MARKERS.cards) {
       var raw = key === "reading_agreement" ? readingAg : c[key];
       var val = raw || "unknown";
+      html = html.replace('<span data-whyv="' + key + '">reading</span>', '<span data-whyv="' + key + '">' + e(val) + '</span>');
+      html = html.replace('<span class="xw" data-why="' + key + '"></span>', '<span class="xw" data-why="' + key + '">' + e(fieldReason(key, subs[key])) + '</span>');
       html = html.replace(HOME_MARKERS.cards[key], '<div data-card="' + key + '"><p class="k">' + HOME_CARD_LABEL[key] + '</p><p class="v"><span class="ind" data-tone="' + homeTone(key === "reading_agreement" ? "agreement" : key, raw) + '"></span><span class="val">' + e(val) + '</span></p><p class="s" data-src="api"' + (subs[key] ? '' : ' hidden') + '>' + e(subs[key]) + '</p>');
     }
     var ag = (c.agreement && c.agreement.state) || "unknown";

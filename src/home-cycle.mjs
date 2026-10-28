@@ -89,6 +89,15 @@ export function seedsParts(r, active) {
     : stoodIn ? "Status is those validators alone" : "Status is those seeds") + (isNum(active) ? ", not the " + fmt(active) : "") + ".";
   return p;
 }
+// The seeds line says nothing the band does not when every seed that answered gave its own height, those heights align,
+// none has stopped, no incident is open, and status is the seeds': the page then leaves the line out. Any other state
+// (a seed without its own height, validators standing in, a spread, a standstill, an incident, a stale or missing
+// observation, a failed read) keeps it.
+export function seedsCalm(r, active) {
+  var p = seedsParts(r, active);
+  return /^(\d+ of \d+ configured seeds answered|\d+ configured seeds gave their own height)\.$/.test(p.answered || "") && p.heights === "Their heights align."
+    && !p.stall && !p.incidents && /^Status is those seeds(, not the [\d,]+)?\.$/.test(p.status || "");
+}
 export function cycleSeeds(r, active) {
   var p = seedsParts(r, active);
   return [p.answered, p.heights, p.stall, p.incidents, p.status].filter(Boolean).join(" ");
@@ -143,14 +152,18 @@ export function tileMedian(r) {
   return { value: n !== null ? fmt(n) : st === null ? "not reported" : !compared ? "not computed" : "not reported",
     unit: null, line: r.data_quality_reason === "stale" ? null : heightLine(r), n: n };
 }
-// The configured public seeds that gave their own height in this reading (witnesses.public_seeds, API 1.2).
+// The configured public seeds that gave their own height in this reading (witnesses.public_seeds, API 1.2). The line
+// names the seeds that gave none: "did not" give its own height, which is not "did not answer" (a seed can answer
+// without its own height).
 export function tileSeeds(r) {
   r = objOf(r);
   if (!r) return READING();
   var w = objOf(r.witnesses), ps = w && objOf(w.public_seeds);
   if (!ps || !isNum(ps.own_height) || !isNum(ps.configured)) return NONE("not reported");
   if (r.data_quality_reason === "stale" || r.data_quality_reason === "no_observation") return NONE("unknown");
-  return { value: fmt(ps.own_height) + " of " + fmt(ps.configured), unit: null, line: ps.own_height === 1 ? "gave its own height" : "gave their own height", n: ps.own_height };
+  var own = ps.own_height, rest = ps.configured - own;
+  var line = own === 0 ? "none gave its own height" : (own === 1 ? "gave its own height" : "gave their own height") + (rest > 0 ? "; " + fmt(rest) + " did not" : "");
+  return { value: fmt(own), unit: "of " + fmt(ps.configured), line: line, n: own };
 }
 // The ACTIVE count as the agreeing seeds list it (leadCount), with the list read's own clock. h: /health.
 export function tileOnChain(h) {
@@ -160,7 +173,7 @@ export function tileOnChain(h) {
   if (!oc) return NONE("not reported");
   if (oc.state === "pending") return READING();
   var n = leadCount(oc), at = clockOf(oc.observed_at);
-  return { value: n === null ? "unknown" : fmt(n), unit: n === null ? null : "ACTIVE", line: at ? "list " + at : null, n: n };
+  return { value: n === null ? "unknown" : fmt(n), unit: n === null ? null : "ACTIVE", line: at ? "list read " + at + " UTC" : null, n: n };
 }
 // The ACTIVE rows that answered DNO's dial as their listed key, with the watch round's own clock. The server marks the
 // round stale after 300 s; a round that is not observed gives no count. h: /health.
@@ -171,7 +184,7 @@ export function tileAnswered(h) {
   if (!w) return NONE("not reported");
   if (w.state === "pending") return READING();
   if (w.state === "disabled") return NONE("not observed");
-  var at = clockOf(w.round_at), line = at ? "check " + at : null;
+  var at = clockOf(w.round_at), line = at ? "checked " + at + " UTC" : null;
   if (w.state !== "observed") return NONE("unknown", line);
   if (!isNum(w.answered_as_listed)) return NONE("not reported", line);
   return { value: fmt(w.answered_as_listed), unit: null, line: line, n: w.answered_as_listed };
@@ -181,4 +194,20 @@ export function tileAnswered(h) {
 export function tilesBetween(active, answered) {
   return { text: isNum(active) && isNum(answered) ? fmt(active) + " and " + fmt(answered) + " are two observations on their own clocks. Neither shows how many validators are online."
     : "Neither validator figure shows how many validators are online.", link: isNum(active) ? "How the " + fmt(active) + " split" : "Validators on chain" };
+}
+// Where each band figure comes from, with its clock, for Explain this reading: the reading's (/organism), the list
+// read's and the watch round's (/health). A document not read yet says so; a field it does not carry is not reported.
+export function figureClocks(o, h) {
+  o = objOf(o); h = objOf(h);
+  var at = function(t, word) { var c = clockOf(t); return c ? word + " " + c + " UTC" : "not reported"; };
+  var oc = h && objOf(h.on_chain_validators), w = h && objOf(h.validator_watch);
+  return { reading: o ? at(o.observed_at, "read") : "not read yet",
+    list: !h ? "not read yet" : oc && oc.state !== "pending" ? at(oc.observed_at, "read") : oc ? "not read yet" : "not reported",
+    check: !h ? "not read yet" : w && w.state !== "pending" && w.state !== "disabled" ? at(w.round_at, "round") : w && w.state === "disabled" ? "turned off on this server" : w ? "not read yet" : "not reported" };
+}
+// A field's reason in Explain this reading: the reading's own text, or, when it publishes none, a plain statement that
+// it publishes none (the risk line in the words of the status/risk explanation). key: the card's data-card key.
+export function fieldReason(key, reason) {
+  if (typeof reason === "string" && reason.trim()) return reason;
+  return key === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.";
 }

@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { leadCount, cycleSeeds, seedsParts, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
+import { leadCount, cycleSeeds, seedsParts, seedsCalm, figureClocks, fieldReason, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
 import { BANNED_PUBLIC_LANGUAGE } from "./banned-public-language.mjs";
 
 const TAG = "HOME_CYCLE";
@@ -171,20 +171,24 @@ check("B5 the movement line is the Agreement section's, case by case", [
   [{ height_static_seconds: 125, height_last_advanced_at: "x" }, "no new height for 2 min"],
   [{ height_static_seconds: null }, "height movement not observed this cycle"],
   [{}, null]].every(([r, want]) => heightLine(r) === want), [0, 90, 125].map((s) => heightLine({ height_static_seconds: s })).join(" | "));
-eq("B6 the seeds that gave their own height, of those configured", tv(tileSeeds(org)), "2 of 3 | gave their own height");
-eq("B7 one seed: singular", tv(tileSeeds({ ...org, witnesses: { mode: "seed_and_validators", public_seeds: { configured: 3, answered: 1, own_height: 1 } } })), "1 of 3 | gave its own height");
+eq("B6 the seeds that gave their own height, of those configured, and how many did not", tv(tileSeeds(org)), "2 of 3 | gave their own height; 1 did not");
+eq("B7 one seed: singular, two did not", tv(tileSeeds({ ...org, witnesses: { mode: "seed_and_validators", public_seeds: { configured: 3, answered: 1, own_height: 1 } } })), "1 of 3 | gave its own height; 2 did not");
+check("B7b every seed gave its own height: nothing to name; none did: said so (never '0 gave their own height')",
+  tv(tileSeeds({ witnesses: { public_seeds: { configured: 3, answered: 3, own_height: 3 } } })) === "3 of 3 | gave their own height"
+  && tv(tileSeeds({ witnesses: { public_seeds: { configured: 3, answered: 1, own_height: 0 } } })) === "0 of 3 | none gave its own height"
+  && !/answer/.test(tv(tileSeeds({ witnesses: { public_seeds: { configured: 3, answered: 1, own_height: 0 } } }))), tv(tileSeeds({ witnesses: { public_seeds: { configured: 3, answered: 1, own_height: 0 } } })));
 check("B8 a stale or unmade observation: unknown; no witnesses (API 1.1): not reported; no document: reading",
   tileSeeds({ ...org, data_quality_reason: "stale" }).value === "unknown" && tileSeeds({ ...org, data_quality_reason: "no_observation" }).value === "unknown"
   && tileSeeds({ agreement: "strong" }).value === "not reported" && tileSeeds(null).value === "reading");
 const oc36 = { state: "agreed", active: 36, seeds_agreed: 2, observed_at: "2026-10-27T13:20:04.412Z" };
-eq("B9 the ACTIVE count as the agreeing seeds list it, with the list's own clock", tv(tileOnChain({ on_chain_validators: oc36 })), "36 ACTIVE | list 13:20:04");
+eq("B9 the ACTIVE count as the agreeing seeds list it, with the list's own clock", tv(tileOnChain({ on_chain_validators: oc36 })), "36 ACTIVE | list read 13:20:04 UTC");
 check("B10 no count unless agreed now: a list not agreed or stale carries no 36, even with active in the object",
   ["not_agreed", "stale"].every((s) => { const t = tileOnChain({ on_chain_validators: { ...oc36, state: s } }); return t.value === "unknown" && t.unit === null && !/36/.test(tv(t)); })
   && tileOnChain({ on_chain_validators: { ...oc36, seeds_agreed: null } }).value === "unknown", tv(tileOnChain({ on_chain_validators: { ...oc36, state: "not_agreed" } })));
 check("B11 pending: reading; no on_chain_validators: not reported; no document: reading",
   tileOnChain({ on_chain_validators: { state: "pending" } }).value === "reading" && tileOnChain({}).value === "not reported" && tileOnChain(null).value === "reading");
 const w6 = { state: "observed", answered_as_listed: 6, round_at: "2026-10-27T13:20:05.118Z" };
-eq("B12 the rows that answered DNO as their listed key, with the watch round's own clock", tv(tileAnswered({ validator_watch: w6 })), "6 | check 13:20:05");
+eq("B12 the rows that answered DNO as their listed key, with the watch round's own clock", tv(tileAnswered({ validator_watch: w6 })), "6 | checked 13:20:05 UTC");
 check("B13 a round that is not observed gives no count, whatever the object still holds",
   ["stale", "read_fault", "no_agreed_list"].every((s) => { const t = tileAnswered({ validator_watch: { ...w6, state: s } }); return t.value === "unknown" && !/\b6\b/.test(t.value); }), tv(tileAnswered({ validator_watch: { ...w6, state: "stale" } })));
 check("B14 turned off: not observed; pending: reading; no validator_watch: not reported; observed without the count: not reported",
@@ -193,11 +197,37 @@ check("B14 turned off: not observed; pending: reading; no validator_watch: not r
 eq("B15 the line under the band names both figures when both are shown", JSON.stringify(tilesBetween(36, 6)), JSON.stringify({ text: "36 and 6 are two observations on their own clocks. Neither shows how many validators are online.", link: "How the 36 split" }));
 eq("B16 with either figure missing it names none", JSON.stringify(tilesBetween(null, 6)) + JSON.stringify(tilesBetween(36, null)),
   JSON.stringify({ text: "Neither validator figure shows how many validators are online.", link: "Validators on chain" }) + JSON.stringify({ text: "Neither validator figure shows how many validators are online.", link: "How the 36 split" }));
-check("B17 numbers are grouped as on the page", tileOnChain({ on_chain_validators: { ...oc36, active: 1234 } }).value === "1,234" && tileAnswered({ validator_watch: { ...w6, answered_as_listed: 1234 } }).value === "1,234" && tileSeeds({ witnesses: { public_seeds: { configured: 1200, own_height: 1100 } } }).value === "1,100 of 1,200");
+check("B17 numbers are grouped as on the page", tileOnChain({ on_chain_validators: { ...oc36, active: 1234 } }).value === "1,234" && tileAnswered({ validator_watch: { ...w6, answered_as_listed: 1234 } }).value === "1,234" && tv(tileSeeds({ witnesses: { public_seeds: { configured: 1200, own_height: 1100 } } })).startsWith("1,100 of 1,200 |"));
 const band = [org, { ...org, agreement: "unknown" }, { ...org, data_quality_reason: "stale" }, null, {}].flatMap((r) => [tileMedian(r), tileSeeds(r)])
   .concat([oc36, { ...oc36, state: "not_agreed" }, { state: "pending" }].map((x) => tileOnChain({ on_chain_validators: x })))
   .concat([w6, { ...w6, state: "stale" }, { state: "disabled" }].map((x) => tileAnswered({ validator_watch: x }))).map(tv).concat([tilesBetween(36, 6).text, tilesBetween(null, null).text, tilesBetween(36, 6).link]).join(" ");
 check("B18 no banned word, no latest / live / synced / producing / running / reachable in any band string", !BANNED_PUBLIC_LANGUAGE.test(band) && !/\blatest\b|\blive\b|\bsynced\b|producing|running|reachable/i.test(band), band.slice(0, 300));
+
+console.log("\n[" + TAG + "] the seeds line: left out only when the band already says it all");
+check("B19 the calm reading (every seed that answered gave its own height, aligned, nothing stalled, no incident): left out, with /health's detail or /organism's alone",
+  seedsCalm(calmR, 35) && seedsCalm(calmR, null) && seedsCalm({ agreement: { state: "strong", total_nodes: 2, aligned_nodes: 2, block_spread: 0 }, data_quality_reason: null, height_static_seconds: 0, active_incidents: 0 }, null), cycleSeeds(calmR, 35));
+check("B20 kept for every state the band does not say: fewer own heights than answers, a spread, validators standing in, a standstill, an incident, stale, no observation, nothing compared",
+  [{ ...calmR, publicNodes: seeds(true, true, true) }, { ...calmR, agreement: ag("moderate", 2, 2, 22) }, oneSeed, noSeed, { ...calmR, height_static_seconds: 400 }, { ...calmR, active_incidents: 1 },
+   { ...calmR, agreement: ag("unknown", 2, null, null), data_quality_reason: "stale", staleness_seconds: 400 }, { publicNodes: [], agreement: ag("unknown", 0, null, null), data_quality_reason: "no_observation" },
+   none1, {}, null].every((r) => !seedsCalm(r, 35)), [{ ...calmR, publicNodes: seeds(true, true, true) }, oneSeed, none1].map((r) => cycleSeeds(r, 35)).join(" | "));
+check("B21 left out means said elsewhere: the calm line's facts are the band's (the seeds tile's count, the on-chain count it names)", (() => {
+  const t = tileSeeds({ witnesses: { public_seeds: { configured: 3, own_height: 2 } } });
+  return seedsCalm(calmR, 35) && tv(t) === "2 of 3 | gave their own height; 1 did not" && cycleSeeds(calmR, 35).startsWith("2 of 3 configured seeds answered.");
+})());
+
+console.log("\n[" + TAG + "] Explain this reading: where each figure comes from");
+eq("B22 each figure's source clock: the reading's, the list read's, the watch round's", JSON.stringify(figureClocks({ observed_at: "2026-10-27T23:52:00.973Z" }, { on_chain_validators: oc36, validator_watch: w6 })),
+  JSON.stringify({ reading: "read 23:52:00 UTC", list: "read 13:20:04 UTC", check: "round 13:20:05 UTC" }));
+check("B23 not read yet, not carried, turned off: each said, never a clock from elsewhere",
+  JSON.stringify(figureClocks(null, null)) === JSON.stringify({ reading: "not read yet", list: "not read yet", check: "not read yet" })
+  && JSON.stringify(figureClocks({}, {})) === JSON.stringify({ reading: "not reported", list: "not reported", check: "not reported" })
+  && figureClocks({}, { validator_watch: { state: "disabled" } }).check === "turned off on this server"
+  && figureClocks({}, { on_chain_validators: { state: "pending" } }).list === "not read yet"
+  && figureClocks({}, { validator_watch: { state: "stale", round_at: "2026-10-27T23:40:00.000Z" } }).check === "round 23:40:00 UTC", JSON.stringify(figureClocks({}, {})));
+
+check("B24 a field's reason in Explain: the reading's own text, else a plain statement that none is published",
+  fieldReason("confidence", "Observed public signals agree") === "Observed public signals agree" && fieldReason("risk", "") === "No risk factors are listed in this reading."
+  && fieldReason("data_quality", null) === "No reason is published for this value in this reading." && fieldReason("trend", "  ") === "No reason is published for this value in this reading.");
 
 console.log("\n[" + TAG + "] one source");
 const MOD = readFileSync(join(__dir, "home-cycle.mjs"), "utf8").replace(/^export /gm, "");
@@ -205,10 +235,10 @@ const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
 check("H1 homepage.html carries this module verbatim (rebuild the page after editing it)", HOME.includes(MOD), "module text not found in homepage.html");
 check("H2 the page calls the shared functions for the card", ["HOME_CYCLE.leadCount(", "HOME_CYCLE.cycleSeeds(", "HOME_CYCLE.readbarText(", "HOME_CYCLE.trendReason("].every((s) => HOME.includes(s)));
 check("H3 the agent fills the trend card's reason from the same function (R-08)", readFileSync(join(__dir, "agent.mjs"), "utf8").includes("trend: trendReason(c.trend)"));
-check("H4 the page fills the band and the Agreement section's movement line from the shared functions", ["HOME_CYCLE.tileMedian(", "HOME_CYCLE.tileSeeds(", "HOME_CYCLE.tileOnChain(", "HOME_CYCLE.tileAnswered(", "HOME_CYCLE.tilesBetween(", "HOME_CYCLE.heightLine("].every((s) => HOME.includes(s)));
+check("H4 the page fills the band and the Agreement section's movement line from the shared functions", ["HOME_CYCLE.seedsCalm(", "HOME_CYCLE.figureClocks(", "HOME_CYCLE.fieldReason(", "HOME_CYCLE.tileMedian(", "HOME_CYCLE.tileSeeds(", "HOME_CYCLE.tileOnChain(", "HOME_CYCLE.tileAnswered(", "HOME_CYCLE.tilesBetween(", "HOME_CYCLE.heightLine("].every((s) => HOME.includes(s)));
 {
   const A = readFileSync(join(__dir, "agent.mjs"), "utf8");
-  check("H5 the agent fills the band for readers without JavaScript from the same functions", ["tileMedian(", "tileSeeds(", "tileOnChain(", "tileAnswered(", "tilesBetween("].every((s) => A.includes(s)) && /import \{[^}]*tileMedian[^}]*\} from "\.\/home-cycle\.mjs"/.test(A));
+  check("H5 the agent fills the band for readers without JavaScript from the same functions", ["tileMedian(", "tileSeeds(", "tileOnChain(", "tileAnswered(", "tilesBetween(", "figureClocks(", "seedsCalm(", "fieldReason("].every((s) => A.includes(s)) && /import \{[^}]*tileMedian[^}]*\} from "\.\/home-cycle\.mjs"/.test(A));
 }
 
 console.log("\n[" + TAG + "] " + passed + " passed, " + failed + " failed");
