@@ -156,6 +156,48 @@ check("H26 the band: each tile marker and the line under the band present once, 
     caps.every((c) => c.card.length > 1000 && panelNoJsOk(c.card, c.h, [c.o.witnesses || {}, c.h.witnesses || {}]))
     && t21[2][4] === "list read 07:27:23 UTC" && t21[3][4] === "checked 07:27:23 UTC", JSON.stringify(t21.map((m) => m.slice(2))));
 }
+// W1 (say only what is measured). The strings below are the published ones; each check fails at 42490f6.
+const W1 = {
+  fine: "How the seeds' median height moved over 24 hours. Advancing: it rose from one five-minute window to the next, at any rate. Not block production, not a cause.",
+  note: 'Without JavaScript this page shows the reading as it stood when it was served. The counts below the reading fill in with JavaScript; all of them are in the JSON this page reads: <a href="/organism">/organism</a>, <a href="/health">/health</a>, <a href="/incidents">/incidents</a> and <a href="/catalog">/catalog</a>.',
+  docs: "That commit need not be the code this server runs.",
+  glossary: "a row in the on-chain validators table. DNO counts the rows of the list two public seeds return alike. That list shows validators as of the block it was read; validators that are leaving or have left may not appear in it, so it is not a count of either. DNO assigns none of these statuses.",
+  reset: "document.querySelectorAll('[data-nojs]').forEach((n) => { n.textContent = 'reading'; n.removeAttribute('data-nojs'); });",
+  comment: "// configured observation interval (default 20 s), independent of the publish interval; a reading's age is its own observed_at, not this number",
+};
+// The part of a served homepage below the reading panel and above the page script: where W1 marks script-only values.
+const belowPanel = (html) => { const a = html.indexOf('<p class="bound">'), b = a < 0 ? -1 : html.indexOf("<script", a); return a < 0 || b < 0 ? "" : html.slice(a, b); };
+{
+  check("H53 W1-1 movement: the tone map gives `normal` no green, the panel's fine print says what advancing means, the page uses the shared movementLine",
+    HOME.includes("movement: { normal: 'neutral', interrupted: 'neutral', unknown: 'unknown' }") && !HOME.includes("movement: { normal: 'ok'") && count(HOME, W1.fine) === 1
+    && count(HOME, "HOME_CYCLE.movementLine(") === 2, count(HOME, "HOME_CYCLE.movementLine("));
+  const FX = join(ROOT, "tools", "homepage-preview", "fixtures"), fx = (n) => JSON.parse(readFileSync(join(FX, n), "utf8"));
+  const i = SRC.indexOf("var HOME_TONE = {"), j = SRC.indexOf("// The locked DNO mark");
+  const fill = (o, h) => new Function("escHtml", "computeCanonicalState", "publicOnChainValidators", "publicValidatorWatch", "latestValidatorRound", "validatorPublishConfig", "latestPublicNodes", "validatorsNoJsLine", "HC",
+    "var { " + Object.keys(HC).join(", ") + " } = HC;\n" + SRC.slice(i, j) + "\nreturn renderHomepageNoJs;")(
+    escHtml, () => Object.assign({}, o, { agreement: Object.assign({ state: o.agreement }, o.agreement_detail) }), () => h.on_chain_validators, () => h.validator_watch, null, () => ({}), h.publicNodes, () => null, HC)(HOME);
+  const served = ["20261021T072727Z", "20261023T122827Z"].map((t) => fill(fx("organism-capture-" + t + ".json"), fx("health-capture-" + t + ".json")));
+  const res = served.map((html) => { const b = belowPanel(html), top = html.slice(0, html.indexOf('<p class="bound">'));
+    return { countdown: (html.match(/<span id="countdown">([^<]*)<\/span>/) || [])[1], reading: (b.match(/>reading</g) || []).length, marked: (b.match(/ data-nojs>shown with JavaScript</g) || []).length,
+      anyMark: (b.match(/data-nojs/g) || []).length, topMark: (top.match(/data-nojs/g) || []).length }; });
+  check("H54 W1-2 no-JS fill, both captures: the countdown says when the page was served and that it does not refresh; no value below the panel is left 'reading'; each of the 26 script-only values is marked and says so; nothing in the panel is marked; the page script resets the marks",
+    res.every((r) => /^served \d\d:\d\d:\d\d UTC · not refreshing$/.test(r.countdown || "") && r.reading === 0 && r.marked === 26 && r.anyMark === 26 && r.topMark === 0)
+    && count(HOME, W1.reset) === 1 && HOME.indexOf(W1.reset) < HOME.indexOf("const SERVED_BY_AGENT"), JSON.stringify(res));
+  check("H55 W1-2 the note for readers without JavaScript says what is served and where every count is; the old note is gone",
+    count(HOME, W1.note) === 1 && !HOME.includes("Live readings on this page need JavaScript"));
+  check("H56 W1-3 /docs says what /version's commit fields are, and that the commit need not be the running code (the agent guide already did)",
+    SRC.includes("the newest commit on the master branch of DNO\\'s public repository as GitHub gave it at <code>checkedAt</code>") && SRC.includes(W1.docs)
+    && !SRC.includes("'Running agent version and the version most seeds report.'"));
+  check("H57 W1-5/6: the stake grouped through groupDigits with its plain sub-line; the UNSTAKING row through unstakingCell; the glossary says what the list is and is not; the old wordings are gone",
+    count(HOME, W1.glossary) === 1 && !HOME.includes("DNO counts ACTIVE and UNSTAKING rows") && HOME.includes("HOME_CYCLE.unstakingCell(oc, pend)") && !HOME.includes("'none listed'")
+    && HOME.includes("HOME_CYCLE.groupDigits(oc.min_validator_stake)") && HOME.includes("raw, as the list reports it; the list states no unit") && !HOME.includes("raw, as reported'"));
+  check("H58 W1-7 the observation-interval comment states the configured 20 s and what a reading's age is; '1 min' is gone",
+    SRC.includes(W1.comment) && !SRC.includes("1 min monitoring"));
+  const SCH = JSON.parse(readFileSync(join(ROOT, "organism.schema.json"), "utf8"));
+  const st = (((((SCH.properties || {}).last_24h || {}).properties || {}).chain_movement || {}).properties || {}).state || {};
+  check("H59 W1-1 the schema says what `normal` means (description only; the enum is unchanged)",
+    JSON.stringify(st.enum) === JSON.stringify(["unknown", "normal", "interrupted"]) && st.description === "normal: the seeds' median rose in every five-minute bucket of the window (and at least the published share). It says nothing about rate.", JSON.stringify(st));
+}
 check("H50 the on-chain source line is a fill marker (present once, the agent fills the same one), and no fixed agreement wording is left in it",
   count(HOME, '<dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd>') === 1
   && SRC.includes("xSrcList: '<span id=\"x-src-list\">the validator list</span>'") && !HOME.includes("returned alike"), count(HOME, 'id="x-src-list"'));
@@ -900,6 +942,12 @@ try {
   const hw = (await get("/health")).body.witnesses || {};
   check("S25b the band and the reading's line for readers without JavaScript: four tiles filled (none left reading), a count only with its own clock, then what status is made of; no 'nodes aligned'",
     !o.observed_at || panelNoJsOk(cardHtml, health, [wt, hw]), cardHtml.slice(0, 600));
+  // W1 served twins (H54–H57 run the same expectations statically on the captures).
+  { const b = belowPanel(html);
+    check("S42 W1-2 / for readers without JavaScript once an observation exists: the served countdown and no value below the panel left 'reading'; script-only values marked",
+      !o.observed_at || (/<span id="countdown">served \d\d:\d\d:\d\d UTC · not refreshing<\/span>/.test(html) && !html.includes(">first read in progress<") && !/>reading</.test(b) && / data-nojs>shown with JavaScript</.test(b)), (b.match(/>reading<|data-nojs/g) || []).length);
+    check("S43 W1-3 served /docs says the /version commit need not be the running code", docsHtml.includes(W1.docs));
+    check("S44 W1-1/2/6 the served homepage carries the new fine print, note and glossary, not the old ones", html.includes(W1.fine) && html.includes(W1.note) && html.includes(W1.glossary) && !html.includes("DNO counts ACTIVE and UNSTAKING rows")); }
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());
   check("S26 the mark asset is served byte-for-byte, cached", mk.status === 200 && mk.headers.get("content-type") === "image/jpeg" && /immutable/.test(mk.headers.get("cache-control") || "") && createHash("sha256").update(mkBytes).digest("hex") === markSha);

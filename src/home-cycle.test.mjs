@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { leadCount, cycleSeeds, seedsParts, seedsCalm, figureClocks, listSource, fieldReason, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
+import { leadCount, cycleSeeds, seedsParts, seedsCalm, figureClocks, listSource, fieldReason, movementLine, groupDigits, unstakingCell, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween } from "./home-cycle.mjs";
 import { BANNED_PUBLIC_LANGUAGE } from "./banned-public-language.mjs";
 
 const TAG = "HOME_CYCLE";
@@ -251,13 +251,52 @@ check("B24 a field's reason in Explain: the reading's own text, else a plain sta
   check("B26 on every fixture, agreement is claimed iff the list was agreed (4 of 6 are not)", wrong.length === 0 && fixtures.filter((h) => h.on_chain_validators.state !== "agreed").length === 4, JSON.stringify(wrong));
 }
 
+// W1-1: the movement word claims only what the rule checks; nothing but `normal` reads as advancing.
+{
+  const j = (x) => JSON.stringify(x);
+  check("B27 movementLine: normal → 'advancing', neutral, with the published share; interrupted keeps its standstill; unknown and unrecognised keep their word; nothing → null",
+    j(movementLine({ state: "normal", pct_advancing: 1 })) === j({ word: "advancing", tone: "neutral", line: "rose in every five-minute window over 24 h · no target rate" })
+    && movementLine({ state: "normal", pct_advancing: 0.97 }).line === "rose in 97 % of five-minute windows over 24 h · no target rate"
+    && movementLine({ state: "normal" }).line === "advancing over 24 h · no target rate"
+    && j(movementLine({ state: "interrupted", longest_static_minutes: 15 })) === j({ word: "interrupted", tone: "neutral", line: "longest standstill 15 min" })
+    && movementLine({ state: "interrupted" }).line === null
+    && j(movementLine({ state: "unknown" })) === j({ word: "unknown", tone: "unknown", line: null })
+    && j(movementLine({ state: "steady" })) === j({ word: "steady", tone: "unknown", line: null })
+    && [null, undefined, {}, { state: "" }, { state: 5 }, "normal", []].every((x) => movementLine(x) === null),
+    j(movementLine({ state: "normal", pct_advancing: 1 })));
+  const others = [{ state: "interrupted", longest_static_minutes: 30, pct_advancing: 1 }, { state: "interrupted", pct_advancing: 0.99 }, { state: "unknown", pct_advancing: 1 },
+    { state: "NORMAL", pct_advancing: 1 }, { state: "normal ", pct_advancing: 1 }, { state: "steady", pct_advancing: 1 }];
+  check("B28 must-not: no state but `normal` reads as advancing or as having risen (r9), whatever share is attached",
+    others.every((x) => { const m = movementLine(x); return m && !/advancing|rose in/.test(m.word + " " + (m.line || "")) && m.tone !== "ok"; }),
+    j(others.map(movementLine)));
+}
+// W1-5: the stake's digits grouped as written, never through a number.
+check("B29 groupDigits: a digit string grouped as written; anything else unchanged; no numeric conversion in the function",
+  groupDigits("1000000000000") === "1,000,000,000,000" && groupDigits("0") === "0" && groupDigits("12") === "12" && groupDigits("1234") === "1,234"
+  && groupDigits("12345678901234567890123") === "12,345,678,901,234,567,890,123" && groupDigits("abc") === "abc" && groupDigits("") === "" && groupDigits("1e12") === "1e12"
+  && groupDigits(null) === null && groupDigits(1000) === 1000
+  && !/Number\(|parseInt|parseFloat/.test(groupDigits.toString()), groupDigits("1000000000000"));
+// W1-6: the UNSTAKING row in its three states (r9): not agreed, agreed with none (null: the contract never sends 0),
+// agreed with a number.
+{
+  const j = (x) => JSON.stringify(x);
+  check("B30 unstakingCell: not agreed → not reported (reading while pending), dimmed; agreed and null → 'none in this list · not a count of validators leaving'; agreed and a number → 'N listed, not dialed'",
+    j(unstakingCell({ state: "not_agreed", unstaking: null }, false)) === j({ text: "not reported", dim: true })
+    && j(unstakingCell({ state: "pending" }, true)) === j({ text: "reading", dim: true })
+    && j(unstakingCell({ state: "stale", unstaking: 3 }, false)) === j({ text: "not reported", dim: true })
+    && j(unstakingCell({ state: "agreed", unstaking: null }, false)) === j({ text: "none in this list · not a count of validators leaving", dim: false })
+    && j(unstakingCell({ state: "agreed", unstaking: 2 }, false)) === j({ text: "2 listed, not dialed", dim: false })
+    && j(unstakingCell({ state: "agreed", unstaking: 1200 }, false)) === j({ text: "1,200 listed, not dialed", dim: false })
+    && j(unstakingCell(null, false)) === j({ text: "not reported", dim: true }), j(unstakingCell({ state: "agreed", unstaking: null }, false)));
+}
+
 console.log("\n[" + TAG + "] one source");
 const MOD = readFileSync(join(__dir, "home-cycle.mjs"), "utf8").replace(/^export /gm, "");
 const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
 check("H1 homepage.html carries this module verbatim (rebuild the page after editing it)", HOME.includes(MOD), "module text not found in homepage.html");
 check("H2 the page calls the shared functions for the card", ["HOME_CYCLE.leadCount(", "HOME_CYCLE.cycleSeeds(", "HOME_CYCLE.readbarText(", "HOME_CYCLE.trendReason("].every((s) => HOME.includes(s)));
 check("H3 the agent fills the trend card's reason from the same function (R-08)", readFileSync(join(__dir, "agent.mjs"), "utf8").includes("trend: trendReason(c.trend)"));
-check("H4 the page fills the band and the Agreement section's movement line from the shared functions", ["HOME_CYCLE.seedsCalm(", "HOME_CYCLE.figureClocks(", "HOME_CYCLE.listSource(", "HOME_CYCLE.fieldReason(", "HOME_CYCLE.tileMedian(", "HOME_CYCLE.tileSeeds(", "HOME_CYCLE.tileOnChain(", "HOME_CYCLE.tileAnswered(", "HOME_CYCLE.tilesBetween(", "HOME_CYCLE.heightLine("].every((s) => HOME.includes(s)));
+check("H4 the page fills the band and the Agreement section's movement line from the shared functions", ["HOME_CYCLE.seedsCalm(", "HOME_CYCLE.figureClocks(", "HOME_CYCLE.listSource(", "HOME_CYCLE.fieldReason(", "HOME_CYCLE.movementLine(", "HOME_CYCLE.groupDigits(", "HOME_CYCLE.unstakingCell(", "HOME_CYCLE.tileMedian(", "HOME_CYCLE.tileSeeds(", "HOME_CYCLE.tileOnChain(", "HOME_CYCLE.tileAnswered(", "HOME_CYCLE.tilesBetween(", "HOME_CYCLE.heightLine("].every((s) => HOME.includes(s)));
 {
   const A = readFileSync(join(__dir, "agent.mjs"), "utf8");
   check("H5 the agent fills the band for readers without JavaScript from the same functions", ["tileMedian(", "tileSeeds(", "tileOnChain(", "tileAnswered(", "tilesBetween(", "figureClocks(", "listSource(", "seedsCalm(", "fieldReason("].every((s) => A.includes(s)) && /import \{[^}]*tileMedian[^}]*\} from "\.\/home-cycle\.mjs"/.test(A));
