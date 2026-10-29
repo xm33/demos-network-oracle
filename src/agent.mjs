@@ -120,7 +120,7 @@ const RPC_URL = process.env.DEMOS_RPC_URL || "https://demosnode.discus.sh/";
 const FALLBACK_RPCS = Object.freeze([RPC_URL, ...FLEET_RPC_FALLBACKS]);
 const INTERVAL_MS = parseInt(process.env.PUBLISH_INTERVAL_MS || "1200000");
 const AGENT_VERSION = "7.2";  // single source of truth for the Oracle build/release version (NOT api_version, NOT node version). It read "6.9" through 7.0, 7.1 and 7.1.1.
-const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // 1 min monitoring, independent of publish interval
+const MONITOR_INTERVAL_MS = parseInt(process.env.MONITOR_INTERVAL_MS || "20000"); // configured observation interval (default 20 s), independent of the publish interval; a reading's age is its own observed_at, not this number
 const STALE_MULTIPLIER = 3; // public-RPC freshness multiplier
 const STALE_BOUND = STALE_MULTIPLIER * MONITOR_INTERVAL_MS; // derived from cycle cadence; passed explicitly to buildPublicMetrics
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://127.0.0.1:9091";
@@ -286,7 +286,7 @@ docsEntry('GET /commerce/observations', 'The observations of /commerce, as JSON.
 docsEntry('GET /federate', 'Prometheus text, not JSON: the oracle version, plus cross-check RPC reachability and probe latency observed from this vantage, under neutral names.') +
 docsEntry('GET /metrics', 'The same text as /federate.') +
 docsEntry('GET /badge', 'An SVG image, not JSON, of the current status word.') +
-docsEntry('GET /version', 'Running agent version and the version most seeds report.') +
+docsEntry('GET /version', 'Running agent version (<code>running</code>); the version label most answering seeds report (<code>nodeVersion</code>); and the newest commit on the master branch of DNO\'s public repository as GitHub gave it at <code>checkedAt</code> (<code>latestCommit</code>, <code>latestMessage</code>, <code>latestDate</code>). That commit need not be the code this server runs.') +
 docsEntry('GET /sentinel', 'Whether DNO\'s own alert process completed a check in the last 15 minutes: status ok or unknown, and last_check. No counts.') +
 docsEntry('GET /consensus', CONSENSUS_ENABLED ? 'An experiment that collects other observers\' reports. Not part of the reading.' : 'An experiment that would collect other observers\' reports. It is switched off on this server and answers {"error":"Consensus not initialized"}. Not part of the reading.') +
 '</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s.</p></section>' +
@@ -353,6 +353,7 @@ var HOME_MARKERS = {
   validators: '<p class="note" id="vw-line">Validator counts are published on <a href="/health">/health</a> as on_chain_validators and validator_watch.</p>',
   summary: '<p class="summary" id="summary" data-src="api">reading</p>',
   observedAt: '<span id="obs-at">not read yet</span>',
+  countdown: '<span id="countdown">first read in progress</span>',
   apiVersion: '<span id="api-v">reading</span>',
   bandStatus: '<span class="ind" id="band-ind" data-tone="pending"></span><span id="band-status">reading</span>',
   between: '<span id="tile-between">Neither validator figure shows how many validators are online.</span> <a href="#validators" id="tile-between-a">Validators on chain</a>',
@@ -367,6 +368,14 @@ var HOME_MARKERS = {
   xInsufficient: '<p class="xnote" id="x-insufficient" hidden>',
   cards: { trend: homeCardMarker("trend"), risk: homeCardMarker("risk"), confidence: homeCardMarker("confidence"), data_quality: homeCardMarker("data_quality"), reading_agreement: homeCardMarker("reading_agreement") }
 };
+// W1-2. Below the reading panel the values are filled by the page's script only. For readers without JavaScript each
+// one still saying "reading" is marked and says so; the script turns every marked value back into its own pending word
+// before its first read. Only the HTML between the panel's end and the page script is touched.
+function markScriptOnly(html) {
+  var from = html.indexOf('<p class="bound">'), to = from < 0 ? -1 : html.indexOf('<script', from);
+  if (from < 0 || to < 0) return html;
+  return html.slice(0, from) + html.slice(from, to).replace(/<([a-z][a-z0-9]*)((?:\s[^>]*)?)>reading<\/\1>/g, '<$1$2 data-nojs>shown with JavaScript</$1>') + html.slice(to);
+}
 function renderHomepageNoJs(html) {
   try {
     var c = computeCanonicalState();
@@ -428,7 +437,9 @@ function renderHomepageNoJs(html) {
     html = fillLiveNoJs(html, c.observed_at);
     var vline = validatorsNoJsLine();
     if (vline) html = html.replace(HOME_MARKERS.validators, '<p class="note" id="vw-line">' + e(vline) + '</p>');
-    return html;
+    // W1-2: when the page was served, and that it does not refresh without its script (the script's first tick replaces it).
+    html = html.replace(HOME_MARKERS.countdown, '<span id="countdown">served ' + new Date().toISOString().slice(11, 19) + ' UTC · not refreshing</span>');
+    return markScriptOnly(html);
   } catch (err) {
     return html;
   }

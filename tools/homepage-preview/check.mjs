@@ -23,6 +23,12 @@ import { kitAssets, SCENARIOS } from "./inputs.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, "..", "..");
 const HOME = readFileSync(join(ROOT, "homepage.html"), "utf8");
+// W1-2: the homepage as the agent serves it to readers without JavaScript: its own markScriptOnly (sliced from the
+// agent's source) and the countdown wording. Proves the page script resets the marks, and that without a script they say so.
+const AGENT_SRC = readFileSync(join(ROOT, "src", "agent.mjs"), "utf8");
+const markScriptOnly = new Function(AGENT_SRC.slice(AGENT_SRC.indexOf("function markScriptOnly("), AGENT_SRC.indexOf("function renderHomepageNoJs(")) + "\nreturn markScriptOnly;")();
+const SERVED_HOME = markScriptOnly(HOME.replace('<span id="countdown">first read in progress</span>', '<span id="countdown">served 12:00:00 UTC · not refreshing</span>'));
+const SERVED_MARKS = (SERVED_HOME.match(/ data-nojs>shown with JavaScript</g) || []).length;
 const FX = join(here, "fixtures");
 const load = (n) => JSON.parse(readFileSync(join(FX, n), "utf8"));
 const { chromium } = await import("playwright");
@@ -40,6 +46,7 @@ let current = { organism: null, health: null };
 const server = createServer((req, res) => {
   const p = new URL(req.url, "http://x").pathname;
   if (p === "/") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(HOME); }
+  if (p === "/served") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(SERVED_HOME); }
   if (ASSETS[p]) { res.writeHead(200, { "Content-Type": ASSETS[p].type }); return res.end(ASSETS[p].b); }
   if (p === "/organism" || p === "/health") {
     const d = current[p.slice(1)];
@@ -71,6 +78,10 @@ async function render(organism, health, { width = 1280, shot = null, reduced = f
         median: tile("median"), seeds: tile("seeds"), onchain: tile("onchain"), answered: tile("answered"), between: t("tile-between"), link: t("tile-between-a"),
         href: (document.getElementById("tile-between-a") || { getAttribute: () => null }).getAttribute("href") },
       vnAnswered: t("vn-answered"),
+      w1: (() => { const row = (label) => { const k = [...document.querySelectorAll("p.k")].find((n) => n.textContent === label); const v = k && k.parentElement.querySelector(".v"); return v ? v.textContent : null; };
+        const ck = [...document.querySelectorAll("p.k")].find((n) => n.textContent === "chain movement"), cb = ck ? ck.parentElement : null;
+        return { p4Move: t("p4-move"), chain: cb ? { v: cb.querySelector(".v").textContent, tone: (cb.querySelector(".ind") || { dataset: {} }).dataset.tone, s: (cb.querySelector(".s") || {}).textContent || null } : null,
+          unstaking: row("UNSTAKING"), stake: row("minValidatorStake"), marks: document.querySelectorAll("[data-nojs]").length }; })(),
       seedsHidden: !!document.getElementById("seeds-line") && document.getElementById("seeds-line").hidden,
       insuff: shown("insufficient") ? t("insufficient") : null, xInsuff: shown("x-insufficient") ? t("x-insufficient") : null,
       explain: (() => { const d = document.getElementById("explain"); if (!d) return null;
@@ -264,6 +275,14 @@ console.log("\n[HOMEPAGE_PREVIEW] V7: the first screen shows the reading's own f
     // there is no agreed list, in the list's own reason.
     check(`EX7 ${name}: the on-chain source line is the list's own reason, and claims agreement only when the list was agreed (${ocx.state})`,
       ocx.state === "agreed" ? ex.listSrc === ocx.reason : typeof ex.listSrc === "string" && ex.listSrc.startsWith("no ") && ex.listSrc.includes(ocx.reason) && !/returned the same|alike/.test(ex.listSrc), ex.listSrc);
+    // W1-1, W1-5, W1-6 in the browser, against the fixture's own fields (expected values written out, not computed by the page's function).
+    { const w = r.w1 || {}, cmx = (o.last_24h || {}).chain_movement || {}, ocw = h.on_chain_validators || {};
+      const wantLine = cmx.state === "normal" ? (cmx.pct_advancing >= 1 ? "rose in every five-minute window over 24 h · no target rate" : null) : cmx.state === "interrupted" && isFinite(cmx.longest_static_minutes) ? "longest standstill " + cmx.longest_static_minutes + " min" : null;
+      check(`W1a ${name}: the movement word claims only what the rule checks (${cmx.state}): 'advancing', neutral, with its line only for normal; never 'advancing' otherwise`,
+        !!w.chain && (cmx.state === "normal" ? w.p4Move === "advancing" && w.chain.v === "advancing" && w.chain.tone === "neutral" && w.chain.s === wantLine
+          : !/advancing|rose in/.test(w.p4Move + " " + w.chain.v + " " + (w.chain.s || "")) && (cmx.state !== "interrupted" || (w.p4Move === "interrupted, " + wantLine && w.chain.s === wantLine))), JSON.stringify(w));
+      check(`W1b ${name}: the stake's digits grouped and the UNSTAKING row in the list's terms when the list is agreed (${ocw.state})`,
+        ocw.state !== "agreed" || (w.stake === "1,000,000,000,000raw, as the list reports it; the list states no unit" && w.unstaking === "none in this list · not a count of validators leaving"), JSON.stringify([w.stake, w.unstaking])); }
     const ws = o.witnesses || {}, okSeeds = (h.publicNodes || []).filter((n) => n.ok).length, calm = ws.mode === "seeds_only" && String(o.agreement) === "strong" && okSeeds === (ws.public_seeds || {}).own_height && !o.active_incidents && (o.height_static_seconds || 0) < 300 && o.data_quality === "sufficient";
     check(`EX3 ${name}: the seeds line under the band is ${calm ? "left out (calm)" : "shown"}, and Explain carries it in full`, r.seedsHidden === calm && ex.seeds === r.seeds && ex.seeds.length > 20, r.seedsHidden + " | " + ex.seeds);
     const insufficient = o.data_quality === "insufficient";
@@ -455,6 +474,30 @@ console.log("\n[HOMEPAGE_PREVIEW] EX: Explain this reading opens from the keyboa
   } catch (e) { /* noJs stays failed: reported by EX6 */ }
   await ctx.close();
   check("EX6 without JavaScript the section still opens (native <details>) and shows its contents", noJs.open && noJs.shown && !noJs.jsRan, JSON.stringify(noJs));
+  // W1-2: the page as served to readers without JavaScript. With a script, every marked value goes back to the page's
+  // pending word and then fills; without one, the marks and the served countdown are what a reader sees.
+  { const nj1 = [];
+    for (const [sname, [of, hf]] of Object.entries(scen)) {
+      current = { organism: load(of), health: load(hf) };
+      const pj = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      let withJs = { scenario: sname, marks: -1, said: -1, p4: "", countdown: "" };
+      try { await pj.goto(BASE + "/served"); await pj.waitForFunction(() => document.getElementById("panel").dataset.state !== "pending", null, { timeout: 10000 }); await pj.waitForTimeout(1200);
+        withJs = Object.assign(withJs, await pj.evaluate(() => ({ marks: document.querySelectorAll("[data-nojs]").length, said: [...document.querySelectorAll("body *")].filter((n) => !n.children.length && n.textContent === "shown with JavaScript").length, p4: (document.getElementById("p4-move") || {}).textContent, countdown: (document.getElementById("countdown") || {}).textContent }))); } catch (e) { /* reported below */ }
+      await pj.close();
+      nj1.push(withJs);
+    }
+    // the served countdown ("served … · not refreshing") is the script's to replace on its first tick (spec W1-2a NEEDS-CHECK)
+    const nj1Bad = nj1.filter((w) => !(w.marks === 0 && w.said === 0 && w.p4 !== "reading" && w.p4 !== "" && w.countdown !== "" && !/not refreshing/.test(w.countdown)));
+    current = { organism: load(scen.capture[0]), health: load(scen.capture[1]) };
+    check("NJ1 with JavaScript, on all " + nj1.length + " scenarios the served page's " + SERVED_MARKS + " marked values are reset and filled (none left marked or saying 'shown with JavaScript') and the served countdown is replaced", SERVED_MARKS >= 20 && nj1.length === Object.keys(scen).length && nj1Bad.length === 0, JSON.stringify(nj1Bad.length ? nj1Bad : nj1.map((w) => w.scenario + ":" + w.countdown)));
+    const cx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 900 } });
+    const pn = await cx.newPage();
+    let noScript = { said: -1, countdown: "", note: false };
+    try { await pn.goto(BASE + "/served");
+      noScript = await pn.evaluate(() => ({ said: [...document.querySelectorAll("body *")].filter((n) => !n.children.length && n.textContent === "shown with JavaScript").length, countdown: (document.getElementById("countdown") || {}).textContent,
+        note: document.body.innerText.includes("Without JavaScript this page shows the reading as it stood when it was served.") })); } catch (e) { /* reported below */ }
+    await cx.close();
+    check("NJ2 without JavaScript, the served page says which values need it (" + SERVED_MARKS + "), when it was served and that it does not refresh, and shows the note", noScript.said === SERVED_MARKS && noScript.countdown === "served 12:00:00 UTC · not refreshing" && noScript.note, JSON.stringify(noScript)); }
 }
 
 await browser.close(); server.close();

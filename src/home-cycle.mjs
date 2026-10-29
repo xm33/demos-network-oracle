@@ -223,3 +223,32 @@ export function fieldReason(key, reason) {
   if (typeof reason === "string" && reason.trim()) return reason;
   return key === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.";
 }
+// W1-1. The 24 h movement in words that claim only what the rule checks. The API's `normal` means the seeds' median
+// rose in the five-minute windows of the last 24 h (any static window makes it `interrupted`); it says nothing about
+// rate, so the page says "advancing", in a neutral tone, with the published share. Every other state keeps its own
+// word and never reads as advancing. cm: /organism.last_24h.chain_movement. Returns null when there is none to show.
+export function movementLine(cm) {
+  cm = objOf(cm);
+  if (!cm || typeof cm.state !== "string" || !cm.state) return null;
+  if (cm.state === "normal") {
+    var p = isNum(cm.pct_advancing) ? cm.pct_advancing : null;
+    return { word: "advancing", tone: "neutral",
+      line: (p === null ? "advancing over 24 h" : p >= 1 ? "rose in every five-minute window over 24 h" : "rose in " + Math.round(p * 100) + " % of five-minute windows over 24 h") + " · no target rate" };
+  }
+  if (cm.state === "interrupted") return { word: "interrupted", tone: "neutral", line: isNum(cm.longest_static_minutes) ? "longest standstill " + fmt(cm.longest_static_minutes) + " min" : null };
+  return { word: cm.state, tone: "unknown", line: null };
+}
+// W1-5. A digit string grouped as written, never converted to a number (the stake is larger than a double holds
+// exactly). Anything that is not a plain digit string comes back unchanged.
+export function groupDigits(s) {
+  return typeof s === "string" && /^\d+$/.test(s) ? fmt(s) : s;
+}
+// W1-6. The UNSTAKING row of the validators ladder. The count is null when the agreed list holds no UNSTAKING row (the
+// contract never sends 0), so in the agreed state null is an observation about the list, not about validators leaving.
+// oc: /health.on_chain_validators; pending: the list read has not completed. Returns { text, dim }.
+export function unstakingCell(oc, pending) {
+  oc = objOf(oc);
+  if (!oc || oc.state !== "agreed") return { text: pending ? "reading" : "not reported", dim: true };
+  if (isNum(oc.unstaking)) return { text: fmt(oc.unstaking) + " listed, not dialed", dim: false };
+  return { text: "none in this list · not a count of validators leaving", dim: false };
+}

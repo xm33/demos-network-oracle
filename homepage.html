@@ -906,7 +906,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         <div class="notices" id="notices" hidden></div>
         <p class="bound">LIVE is DNO's own freshness. Status is what the public endpoints showed this cycle. Neither is a score or a go/no-go. API <span id="api-v">reading</span>.</p>
       </div>
-      <noscript><p class="note" style="margin-top:16px">Live readings on this page need JavaScript. The same reading is available as JSON at <a href="/organism">/organism</a>.</p></noscript>
+      <noscript><p class="note" style="margin-top:16px">Without JavaScript this page shows the reading as it stood when it was served. The counts below the reading fill in with JavaScript; all of them are in the JSON this page reads: <a href="/organism">/organism</a>, <a href="/health">/health</a>, <a href="/incidents">/incidents</a> and <a href="/catalog">/catalog</a>.</p></noscript>
     </div>
   </section>
 
@@ -980,7 +980,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
         <div><p class="ek">On-chain validators</p><p class="p4-n" id="p4-oc">reading</p><p class="fine">ACTIVE rows of the getValidators list, only when two public seeds return the same list.</p><p class="clock" id="p4-oc-at"></p><a href="#validators">in detail</a></div>
         <div><p class="ek">Peer-listed identities</p><p class="p4-n" id="p4-cat">reading</p><p class="fine">A retained catalog from the seeds' peerlists. Not a census, never dialed, never status input.</p><p class="clock" id="p4-cat-at"></p><a href="#catalog">find a node</a></div>
         <div><p class="ek">DNO's own rounds</p><p class="p4-n" id="p4-rounds">reading</p><p class="fine">Rounds DNO completed in the last 24 hours. A measure of DNO, not of the network.</p><p class="clock" id="p4-rounds-at"></p></div>
-        <div><p class="ek">Seed-median movement</p><p class="p4-n" id="p4-move">reading</p><p class="fine">How the seeds' median height moved over 24 hours. Not block production, not a cause.</p><p class="clock" id="p4-move-at"></p></div>
+        <div><p class="ek">Seed-median movement</p><p class="p4-n" id="p4-move">reading</p><p class="fine">How the seeds' median height moved over 24 hours. Advancing: it rose from one five-minute window to the next, at any rate. Not block production, not a cause.</p><p class="clock" id="p4-move-at"></p></div>
       </div>
     </div>
   </section>
@@ -1303,7 +1303,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
           <p class="words-k">Demos' words · not DNO's</p>
           <dl class="words-list words-list--off">
             <div><dt><code>ok</code> <code>degraded</code> <code>dormant</code> <code>failing</code></dt><dd>a node's own GET /health. DNO does not read it.</dd></div>
-            <div><dt><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></dt><dd>a row in the on-chain validators table. DNO counts ACTIVE and UNSTAKING rows as two public seeds list them; EXITED rows are not in that list. It decides none of them.</dd></div>
+            <div><dt><code>ACTIVE</code> <code>UNSTAKING</code> <code>EXITED</code></dt><dd>a row in the on-chain validators table. DNO counts the rows of the list two public seeds return alike. That list shows validators as of the block it was read; validators that are leaving or have left may not appear in it, so it is not a count of either. DNO assigns none of these statuses.</dd></div>
             <div><dt>out of sync</dt><dd>consensus Phase 1: a validator skipped from shard composition for those blocks. Not slashing. DNO does not see it.</dd></div>
           </dl>
           <p class="fine" style="margin-top:12px">Sources and the full table: <a href="/about-demos#words">About Demos</a>.</p>
@@ -1330,6 +1330,8 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
 <script>
 (() => {
   'use strict';
+  // W1-2: values the agent marked for readers without JavaScript go back to the page's own pending word first.
+  document.querySelectorAll('[data-nojs]').forEach((n) => { n.textContent = 'reading'; n.removeAttribute('data-nojs'); });
 
   const SERVED_BY_AGENT = true;
   const ORIGIN = SERVED_BY_AGENT || /(^|\.)demos-oracle\.com$/i.test(location.hostname) ? '' : 'https://demos-oracle.com';
@@ -1438,7 +1440,7 @@ html:not(.js) :is(.panel-tools, .xbtn, .finder, .console, #paths, #path-panel, .
     confidence: { clear: 'ok', uncertain: 'warn' },
     data_quality: { sufficient: 'ok', insufficient: 'warn' },
     agreement: { strong: 'ok', moderate: 'warn', weak: 'bad', unknown: 'unknown' },
-    movement: { normal: 'ok', interrupted: 'neutral', unknown: 'unknown' },
+    movement: { normal: 'neutral', interrupted: 'neutral', unknown: 'unknown' },   // W1-1: `normal` asserts no baseline, so no green
   };
   const DEFS = {
     status: { note: 'Status does not use the catalog. "Public incident" here excludes the condition records DNO opens when its reading stays unknown, degraded or unstable.', values: [
@@ -1775,8 +1777,37 @@ function fieldReason(key, reason) {
   if (typeof reason === "string" && reason.trim()) return reason;
   return key === "risk" ? "No risk factors are listed in this reading." : "No reason is published for this value in this reading.";
 }
+// W1-1. The 24 h movement in words that claim only what the rule checks. The API's `normal` means the seeds' median
+// rose in the five-minute windows of the last 24 h (any static window makes it `interrupted`); it says nothing about
+// rate, so the page says "advancing", in a neutral tone, with the published share. Every other state keeps its own
+// word and never reads as advancing. cm: /organism.last_24h.chain_movement. Returns null when there is none to show.
+function movementLine(cm) {
+  cm = objOf(cm);
+  if (!cm || typeof cm.state !== "string" || !cm.state) return null;
+  if (cm.state === "normal") {
+    var p = isNum(cm.pct_advancing) ? cm.pct_advancing : null;
+    return { word: "advancing", tone: "neutral",
+      line: (p === null ? "advancing over 24 h" : p >= 1 ? "rose in every five-minute window over 24 h" : "rose in " + Math.round(p * 100) + " % of five-minute windows over 24 h") + " · no target rate" };
+  }
+  if (cm.state === "interrupted") return { word: "interrupted", tone: "neutral", line: isNum(cm.longest_static_minutes) ? "longest standstill " + fmt(cm.longest_static_minutes) + " min" : null };
+  return { word: cm.state, tone: "unknown", line: null };
+}
+// W1-5. A digit string grouped as written, never converted to a number (the stake is larger than a double holds
+// exactly). Anything that is not a plain digit string comes back unchanged.
+function groupDigits(s) {
+  return typeof s === "string" && /^\d+$/.test(s) ? fmt(s) : s;
+}
+// W1-6. The UNSTAKING row of the validators ladder. The count is null when the agreed list holds no UNSTAKING row (the
+// contract never sends 0), so in the agreed state null is an observation about the list, not about validators leaving.
+// oc: /health.on_chain_validators; pending: the list read has not completed. Returns { text, dim }.
+function unstakingCell(oc, pending) {
+  oc = objOf(oc);
+  if (!oc || oc.state !== "agreed") return { text: pending ? "reading" : "not reported", dim: true };
+  if (isNum(oc.unstaking)) return { text: fmt(oc.unstaking) + " listed, not dialed", dim: false };
+  return { text: "none in this list · not a count of validators leaving", dim: false };
+}
 
-return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason };
+return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason, heightLine, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason, movementLine, groupDigits, unstakingCell };
 })();
   // The band beside the status word: four tiles, each one published figure on its own clock (HOME_CYCLE.tile*). The
   // two from /organism are the reading's; the two from /health are its list read and its watch round. A failed request
@@ -1874,7 +1905,8 @@ return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason,
     const l = o && o.last_24h && typeof o.last_24h === 'object' ? o.last_24h : null;
     setText($('p4-rounds'), l && isNum(l.observed_cycles) && isNum(l.expected_cycles) ? `${fmtInt(l.observed_cycles)} / ${fmtInt(l.expected_cycles)}` : o ? 'not reported' : 'reading');
     const cm = l && l.chain_movement && typeof l.chain_movement === 'object' ? l.chain_movement : null;
-    setText($('p4-move'), cm && typeof cm.state === 'string' ? cm.state + (isNum(cm.longest_static_minutes) ? `, longest standstill ${fmtInt(cm.longest_static_minutes)} min` : '') : o ? 'not reported' : 'reading');
+    const ml = HOME_CYCLE.movementLine(cm);
+    setText($('p4-move'), ml ? ml.word + (ml.word === 'interrupted' && ml.line ? `, ${ml.line}` : '') : o ? 'not reported' : 'reading');
     const lc = l ? parseTime(l.computed_at) : null;
     setText($('p4-rounds-at'), at(lc, 'window computed')); setText($('p4-move-at'), at(lc, 'window computed'));
   }
@@ -2291,8 +2323,8 @@ return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason,
         ? `${ps.size} nodes observed; ${ps.avg_reachable} answered on average across ${ps.cycles} cycles`
         : `${ps.size} nodes observed; the average and cycle count were not reported` })));
     }
-    const cm = l.chain_movement && typeof l.chain_movement.state === 'string' ? l.chain_movement.state : 'unknown';
-    items.push(item('chain movement', el('span', { class: 'lv' }, ind(TONE.movement[cm] || 'neutral'), el('span', { text: cm }))));
+    const ml = HOME_CYCLE.movementLine(l.chain_movement) || { word: 'unknown', tone: 'unknown', line: null };
+    items.push(item('chain movement', el('span', { class: 'lv' }, ind(ml.tone), el('span', { text: ml.word })), ml.line || undefined));
     if (l.chain_movement && typeof l.chain_movement === 'object' && 'blocks_advanced' in l.chain_movement) {
       const ba = l.chain_movement.blocks_advanced;
       items.push(item('blocks advanced (observed)', el('span', { text: isNum(ba) ? fmtInt(ba) : 'not published' }), isNum(ba) ? 'newest median minus oldest · no target rate'
@@ -2461,9 +2493,9 @@ return { leadCount, seedsParts, seedsCalm, cycleSeeds, readbarText, trendReason,
         ? w.versions.map((g) => `${typeof g.version === 'string' && g.version ? g.version : 'no release version'} (${fmtInt(g.count)})`).join(' · ') + (w.versions_other > 0 ? ` · other (${fmtInt(w.versions_other)})` : '') : null;
       const pend = oc.state === 'pending', ws = w ? w.state : null;
       facts = [
-        ['minValidatorStake', typeof oc.min_validator_stake === 'string' ? [mono(oc.min_validator_stake), dim('raw, as reported')]
+        ['minValidatorStake', typeof oc.min_validator_stake === 'string' ? [mono(HOME_CYCLE.groupDigits(oc.min_validator_stake)), dim('raw, as the list reports it; the list states no unit')]
           : [dim(pend ? 'reading' : oc.state === 'stale' ? 'not reported' : 'not reported: two seeds did not give the same value')]],
-        ['UNSTAKING', [oc.state !== 'agreed' ? dim(pend ? 'reading' : 'not reported') : plain(isNum(oc.unstaking) ? `${fmtInt(oc.unstaking)} listed, not dialed` : 'none listed')]],
+        ['UNSTAKING', [(({ text, dim: d }) => (d ? dim(text) : plain(text)))(HOME_CYCLE.unstakingCell(oc, pend))]],
         ['versions answered', [vers ? plain(vers) : dim(ws === 'pending' ? 'reading' : ws === 'stale' ? 'not reported' : 'not observed')]],
       ];
       if (oc.state === 'agreed' && isNum(oc.other_status) && oc.other_status > 0) facts.push(['other status', [plain(`${fmtInt(oc.other_status)} listed, not dialed`)]]);

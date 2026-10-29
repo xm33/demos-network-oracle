@@ -71,7 +71,7 @@
             "pct_of_window": {"type":"number","minimum":0,"maximum":100} } } ] },
         "chain_movement": { "type": "object", "required": ["state"],
           "properties": {
-            "state": { "enum": ["unknown","normal","interrupted"] },
+            "state": { "enum": ["unknown","normal","interrupted"], "description": "normal: the seeds' median rose in every five-minute bucket of the window (and at least the published share). It says nothing about rate." },
             "reason": { "type": "string", "description": "Present on some non-normal states. Examples: no_data, insufficient_buckets, low_advance_ratio, own_height_record_shorter_than_window (rounds recorded under the own-height rule do not cover the window yet; chain movement is not published until they do)." },
             "pct_advancing": { "type": "number" },
             "longest_static_minutes": { "type": "number" },
