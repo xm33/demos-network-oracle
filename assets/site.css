@@ -113,7 +113,13 @@ a.live:hover { color: var(--ink); border-color: var(--metal-1); }
 .menu ul { position: absolute; right: 0; top: calc(100% + 8px); width: 240px; max-height: 70vh; overflow-y: auto; background: #08101d; border: 1px solid #32435c; border-radius: 8px; padding: 8px; z-index: 25; box-shadow: 0 15px 40px rgba(0, 0, 0, .7); }
 .menu li a { display: block; padding: 8px 10px; color: var(--metal-2); text-decoration: none; border-radius: 3px; font-size: 0.875rem; }
 .menu li a:hover, .menu li a[aria-current="page"] { color: var(--ink); background: #18233a; }
-@media (max-width: 1279px) { .indep { display: none; } }
+/* Below the full header width the independence line becomes its own row under the bar: it is never hidden, so every
+   first screen says it (share-fix B2). */
+@media (max-width: 1279px) {
+  .site-head .wrap { flex-wrap: wrap; row-gap: 0; }
+  .indep { order: 9; flex: 1 0 100%; padding: 0 0 10px; border-left: 0; }
+  .indep br { display: none; }
+}
 @media (max-width: 1099px) { .nav { display: none; } .live { margin-left: auto; } }
 @media (max-width: 719px) {
   :root { --pad: 16px; }

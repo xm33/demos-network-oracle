@@ -56,7 +56,7 @@ function hasSelfLiteral(src) {
 // with the same JSON error as before (NOT_FOUND_JSON, src/site-meta.mjs); S7 below checks that body on the served /self.
 function hasTerminal404(src) {
   return /\}\s*else\s*\{\s*notFound\(req, res\);\s*\}\s*\}/.test(src)
-    && /function notFound\(req, res\) \{[\s\S]*?res\.writeHead\(404, \{ "Vary": "Accept" \}\); res\.end\(NOT_FOUND_JSON\);/.test(src);
+    && /function notFound\(req, res\) \{[\s\S]*?res\.writeHead\(404, \{ "Cache-Control": "no-store", "Vary": "Accept" \}\); res\.end\(NOT_FOUND_JSON\);/.test(src);
 }
 
 // S1 — /self responder is gone.

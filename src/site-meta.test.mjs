@@ -101,9 +101,9 @@ const nfFn = (AGENT.match(/function notFound\(req, res\) \{([\s\S]*?)\n  \}\n/) 
 check("W1 one notFound answers both places: an unknown path, and the fleet-only routes on the public listener (so those stay indistinguishable)",
   /if \(!internal && isFleetRoute\(reqPath\)\) \{ notFound\(req, res\); return; \}/.test(AGENT) && /\} else \{\n      notFound\(req, res\);\n    \}\n  \}\n/.test(AGENT)
   && (AGENT.match(/Not found\. Try \/docs/g) || []).length === 0, nfFn.slice(0, 120));
-check("W2 notFound: HTML 404 for a browser with no-store, JSON 404 otherwise, both with Vary: Accept",
+check("W2 notFound: HTML 404 for a browser and JSON 404 otherwise, both no-store and Vary: Accept",
   /if \(wantsHtml\(req\.headers\["accept"\]\)\)/.test(nfFn) && /res\.writeHead\(404, \{ "Content-Type": "text\/html; charset=utf-8", "Cache-Control": "no-store", "Vary": "Accept" \}\)/.test(nfFn)
-  && /notFoundPage\(\{ head: siteHead\(null\), header: siteHeader\(""\), footer: siteFooter\(""\) \}, SITE_PAGES\)/.test(nfFn) && /res\.writeHead\(404, \{ "Vary": "Accept" \}\); res\.end\(NOT_FOUND_JSON\);/.test(nfFn));
+  && /notFoundPage\(\{ head: siteHead\(null\), header: siteHeader\(""\), footer: siteFooter\(""\) \}, SITE_PAGES\)/.test(nfFn) && /res\.writeHead\(404, \{ "Cache-Control": "no-store", "Vary": "Accept" \}\); res\.end\(NOT_FOUND_JSON\);/.test(nfFn));
 check("W3 the root routes: /sitemap.xml as XML, /favicon.ico as an icon, /apple-touch-icon.png as a PNG",
   /reqPath === "\/sitemap\.xml"\) \{\n      res\.writeHead\(200, \{ "Content-Type": "application\/xml; charset=utf-8"/.test(AGENT) && /res\.end\(sitemapXml\(\)\);/.test(AGENT)
   && /reqPath === "\/favicon\.ico" && FAVICON_ICO\) \{\n      res\.writeHead\(200, \{ "Content-Type": "image\/x-icon"/.test(AGENT) && /var FAVICON_ICO = SITE_FAVICON \? icoFromPng\(SITE_FAVICON\.bytes\) : null;/.test(AGENT)

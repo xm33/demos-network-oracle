@@ -230,6 +230,38 @@ function w2HeadOk(html, route) {
   check("H63 W2-1 each static page and the homepage, assembled as the agent does: one description, canonical and og:url on the public origin, og:title its own <title>, the share card, a large card (static twin of S45)",
     asm.length === 8 && asmBad.length === 0, asmBad.map(([r]) => r).join(", "));
 }
+// Share-fix (study 2026-10-30): B1 the UNSTAKING wording site-wide, B2 the independence line on narrow screens, S1 the empty
+// fixnet table, S2 to S4 accessibility and text drift. Served twins: S51 to S53.
+const SF = {
+  oldUnstaking: [/Counts of ACTIVE and UNSTAKING rows/, /DNO counts ACTIVE and UNSTAKING rows/],
+  listWords: "DNO counts the rows of the list two public seeds return alike. That list shows validators as of the block it was read; validators that are leaving or have left may not appear in it, so it is not a count of either.",
+  indep: '<span class="indep">Independent observability · <br>not an official Demos product.</span>',
+};
+{
+  const PAGE_FILES = ["homepage.html", "sources.html", "methodology.html", "criteria.html", "commerce.html", "commerce-methodology.html", "about-demos.html", "agent-guide.html"];
+  const texts = PAGE_FILES.map((f) => [f, readFileSync(join(ROOT, f), "utf8")]).concat([["src/agent.mjs", SRC]]);
+  const stale = texts.filter(([, t]) => SF.oldUnstaking.some((re) => re.test(t))).map(([f]) => f);
+  const ABOUT = readFileSync(join(ROOT, "about-demos.html"), "utf8");
+  check("H64 B1 no page and no server-built page says DNO counts UNSTAKING rows; About Demos uses the homepage's accepted words and points to the caveat",
+    stale.length === 0 && ABOUT.includes(SF.listWords) && HOME.includes(SF.listWords) && ABOUT.includes('Whether the list carries <code>UNSTAKING</code> rows at all is not confirmed (<a href="/methodology#validators">Methodology</a>)'), stale.join(", "));
+  const kitChrome = (() => { const c = readFileSync(join(ROOT, "assets", "site.css"), "utf8"); return c.slice(c.indexOf("/* chrome:start */"), c.indexOf("/* chrome:end */")); })();
+  check("H65 B2 the independence line is never hidden: below the full header width it is its own row; the same words on every page's header",
+    !/\.indep \{ display: none; \}/.test(kitChrome) && kitChrome.includes(".indep { order: 9; flex: 1 0 100%; padding: 0 0 10px; border-left: 0; }") && kitChrome.includes(".site-head .wrap { flex-wrap: wrap; row-gap: 0; }")
+    && count(HOME, SF.indep) === 1 && SRC.includes("'" + SF.indep + "'"));
+  const fx = SRC.slice(SRC.indexOf("h += '<h2>Fixnet probe</h2>';"), SRC.indexOf("h += '<h2>Peer-listed identities</h2>';"));
+  check("H66 S1 the fixnet table is drawn only when it has rows; with none, one sentence says so",
+    /if \(!fxRows\.length\) h \+= '<p class="ref-meta" id="fixnet-empty">No rows this cycle\. This table is reference only and never enters status\.<\/p>';\n        else \{/.test(fx)
+    && fx.indexOf("else {") < fx.indexOf("<table") && fx.indexOf("hosts in this table") > fx.indexOf("else {"), fx.length);
+  const AG = readFileSync(join(ROOT, "agent-guide.html"), "utf8"), METH = readFileSync(join(ROOT, "methodology.html"), "utf8");
+  check("H67 S2 About Demos dims by colour, not opacity; the agent guide's code blocks, the homepage snippet and the methodology parameters table take keyboard focus",
+    !/tr\[data-dim="true"\] \{ opacity/.test(ABOUT) && ABOUT.includes('.sm-moves tr[data-dim="true"] td, .sm-moves tr[data-dim="true"] code { color: var(--metal-0); }')
+    && (AG.match(/<pre\b/g) || []).length > 10 && (AG.match(/<pre\b/g) || []).length === (AG.match(/<pre\b[^>]*tabindex="0"/g) || []).length
+    && HOME.includes('<pre class="snippet" tabindex="0">') && METH.includes('<section id="published-observation-parameters">') && /<section id="published-observation-parameters">[\s\S]*?<div class="tbl-wrap" tabindex="0" role="region" aria-label="Published observation parameters">/.test(METH));
+  check("H68 S3/S4 the agent guide says how a 404 answers, lists the XML and image routes, names /commerce/observations; the methodology names advancing",
+    AG.includes("<p><code>404</code> — Nothing is served at that address. A request that accepts HTML gets a page; every other client gets <code>{\"error\": …}</code> as JSON.</p>")
+    && AG.includes("<code>/sitemap.xml</code> (XML), <code>/favicon.ico</code> and <code>/apple-touch-icon.png</code> (images)") && AG.includes('<a href="/commerce/observations">GET /commerce/observations</a> (Layer 2 only')
+    && !AG.includes('<a href="/commerce">GET /commerce</a>') && METH.includes("The homepage shows <em>normal</em> as <em>advancing</em>: the median rose in every compared five-minute window; it says nothing about rate."));
+}
 check("H50 the on-chain source line is a fill marker (present once, the agent fills the same one), and no fixed agreement wording is left in it",
   count(HOME, '<dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd>') === 1
   && SRC.includes("xSrcList: '<span id=\"x-src-list\">the validator list</span>'") && !HOME.includes("returned alike"), count(HOME, 'id="x-src-list"'));
@@ -423,7 +455,7 @@ check("SA1 the order is plain words, where DNO fits, then the words straight aft
   && ABOUT.slice(abAt(abFits) + abFits.length, abAt(abTerms)).trim() === "" && JSON.stringify([...abNew.matchAll(/<p class="orient-k">(\d\d) \//g)].map((m) => m[1])) === '["01","02","03","04"]');
 const ABOUT_IDS = "cannot-see dahr dno-dahr h-cannot h-dahr h-dno-dahr h-health h-inside h-shards h-sources h-two h-val h-what h-words inside lanes-cap lifecycle main node-health phase-1 sd-block sd-cap sd-hashes sd-next sd-order sd-seed sd-set sd-shard shard-demo shards sm-cap sm-meaning sm-moves sources two-mechanisms validator-reads validators what words words-table".split(" ");
 const abIdList = [...ABOUT.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
-check("SA2 the published About Demos text is byte for byte the article after D9's three sentences (nothing else inside it moved); every id it had is still there, once", createHash("sha256").update(abArticle).digest("hex") === "929e4947c82c88e75ee8ccec43d23ae454da74e67c03650ad630af531476457e"
+check("SA2 the published About Demos text is byte for byte the article after D9's three sentences and share-fix B1 (the list's words in the label table, the UNSTAKING caveat) and S2 (dimming by colour) (nothing else inside it moved); every id it had is still there, once", createHash("sha256").update(abArticle).digest("hex") === "98e31dc9a83bc684e5a5112e25694cf114b0205b9f1f33b76c37f0303438f2c6"
   && !/never sees the second one|<dd>Nothing\.<\/dd>|<li>Who is in a shard\.<\/li>/.test(abArticle) && (abArticle.match(/does not use or check/g) || []).length === 3
   && ABOUT_IDS.every((id) => abIdList.filter((x) => x === id).length === 1) && new Set(abIdList).size === abIdList.length, ABOUT_IDS.filter((id) => abIdList.filter((x) => x === id).length !== 1).join(" "));
 check("D9 the homepage's limits list no longer says DNO cannot see who is in the shard as an absolute: it names what a node publishes and that DNO does not use or check it", !/<li>Who is in the shard, or who the secretary is\.<\/li>/.test(HOME) && /beyond what a node publishes about its own\. DNO does not use or check that\./.test(HOME));
@@ -475,7 +507,7 @@ check("SC2 the orientation (fields, who-decides, outside, full) sits above the a
 { const PAGES = ["homepage.html", "methodology.html", "sources.html", "about-demos.html", "agent-guide.html", "criteria.html", "commerce.html", "commerce-methodology.html"];
   const held = PAGES.filter((f) => /\((date of deploy|date|TBD|TODO)[^)]*\)|\bTODO\b|\bTBD\b/.test(readFileSync(join(ROOT, f), "utf8")));
   check("PH1 no served page carries an unfilled placeholder: '(date of deploy)', '(date …)', TODO or TBD", held.length === 0, held.join(", ")); }
-check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5, D3 and the IP-addresses-targeted entry (dated 2026-10-26) and paragraph: the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "66e40fe83cc4d774b6b353f5c3b4be84b94240003c5f6af9861695d0dfa508a3"
+check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5, D3 and the IP-addresses-targeted entry (dated 2026-10-26) and paragraph, and share-fix S4 (normal shown as advancing) and S2 (the parameters table takes keyboard focus): the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "070c68d606f1b0e93a890d6ed2d2110b83f154002749b89a55de8d2dcff210fc"
   && ["what-the-oracle-is", "what-it-measures", "how-it-works", "validators", "witnesses", "block-identity", "clocks", "known-limitations", "methodology-changelog"].every((id) => count(METHP, 'id="' + id + '"') === 1));
 { const AG = readFileSync(join(ROOT, "agent-guide.html"), "utf8");
   check("D5 the locked sentence is not in the Methodology or Agent Guide text either: the shared footer carries it on every page; the sentences around it stay",
@@ -1006,6 +1038,16 @@ try {
       && /Accept/.test(nfH.headers.get("vary") || "") && /Accept/.test(nfJ.headers.get("vary") || ""), nfH.status + " " + nfJ.status + " " + nfA.status);
     const dH = await get("/dashboard", { Accept: "text/html,application/xhtml+xml,*/*;q=0.8" }), hJ = await get("/history");
     check("S50 W2-5 the fleet-only routes on the public listener answer exactly as an unknown address does, as a page and as JSON", dH.status === 404 && dH.body === nfH.body && hJ.status === 404 && JSON.stringify(hJ.body) === JSON.stringify(nfA.body), dH.status + " " + hJ.status);
+    // Share-fix served twins (H64 to H68 run the same expectations statically).
+    const ref = await get("/reference", { Accept: "text/html" }), about = await get("/about-demos", { Accept: "text/html" });
+    const refBody = typeof ref.body === "string" ? ref.body : "", fxSec = refBody.slice(refBody.indexOf('id="fixnet"'), refBody.indexOf("Peer-listed identities</h2>"));
+    // No section at all when no fixnet probe ran (the agent's own rule); when one ran, the sentence or a table with rows.
+    check("S51 S1 served /reference: the fixnet section is absent, the one sentence, or a table with rows; never an empty table", ref.status === 200
+      && (!refBody.includes('id="fixnet"') || (fxSec.includes('id="fixnet-empty"') ? !fxSec.includes("<table") : /<tbody><tr>/.test(fxSec))), fxSec.slice(0, 200));
+    const aboutBody = typeof about.body === "string" ? about.body : "";
+    check("S52 B1 served /about-demos uses the list's words and never says DNO counts UNSTAKING rows; every served page carries the independence line", about.status === 200 && aboutBody.includes(SF.listWords) && !SF.oldUnstaking.some((re) => re.test(aboutBody))
+      && pages.every(([, p]) => typeof p.body === "string" && p.body.includes(SF.indep)));
+    check("S53 L7 the JSON 404 is not kept by a cache either", nfJ.status === 404 && /no-store/.test(nfJ.headers.get("cache-control") || ""), nfJ.headers.get("cache-control"));
   }
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());
