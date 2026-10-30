@@ -533,7 +533,7 @@ function siteHeader(active) {
     + '<a class="brand" href="/" aria-label="Demos Network Oracle, home">'
     + (MARK_ASSET ? '<img class="mark mark--nav" src="' + MARK_ASSET_PATH + '" width="92" height="92" alt="" decoding="async">' : '')
     + '<span class="brand-name"><b>DNO</b><small>Demos Network Oracle</small></span></a>'
-    + '<span class="indep">Independent observability ·<br>not an official Demos product.</span>'
+    + '<span class="indep">Independent observability · <br>not an official Demos product.</span>'
     + '<nav class="nav" aria-label="Primary">' + links.join("") + '</nav>'
     + '<a class="live" id="live" href="/#this-cycle" data-state="pending" title="Age of the last completed public observation" ' + LIVE_PENDING_LABEL + '><span class="dot"></span>' + LIVE_PENDING_TEXT + '</a>'
     + '<details class="menu"><summary>Menu</summary><ul>' + sitePageLinks(active).map(function(l) { return '<li>' + l + '</li>'; }).join("") + '</ul></details>'
@@ -3446,7 +3446,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(notFoundPage({ head: siteHead(null), header: siteHeader(""), footer: siteFooter("") }, SITE_PAGES));
       return;
     }
-    res.writeHead(404, { "Vary": "Accept" }); res.end(NOT_FOUND_JSON);
+    res.writeHead(404, { "Cache-Control": "no-store", "Vary": "Accept" }); res.end(NOT_FOUND_JSON);
   }
 
   function handleRequest(req, res, internal) {
@@ -3777,12 +3777,6 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         h += '<p class="ref-note">DNO dials these fixnet endpoints when the advertised address is a public http origin. reachable here means that probe answered; not probed means DNO did not dial the row. Heights are the latest reported by a peerlist DNO reads (its operator\'s fixnet nodes\', or an anchor\'s when one is configured) or by the DNO probe, whichever came last. This is not the public testnet catalog: an identity the public seeds\' peerlists list is not kept in this table and is not dialed for it.</p>';
         h += '<p class="ref-meta">' + (fxAgoStr ? 'Updated ' + fxAgoStr : '') + '</p>';
         var fxNotProbedN = fxDiscovered.filter(function(n){return n.probed === false}).length;
-        h += '<p class="ref-meta">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe' + (fxNotProbedN ? ' · ' + fxNotProbedN + ' not probed' : '') + ' · not a count of the public testnet, not network size</p>';
-
-
-        h += '<div class="tbl-wrap"><table class="tbl stack ref-tbl"><thead><tr>';
-        h += '<th>Name</th><th>Source</th><th>Probe</th><th class="num">Block</th><th class="num">Height vs anchor</th><th class="num">Latency</th>';
-        h += '</tr></thead><tbody>';
 
         // Build ordered rows: Anchor, then Fleet (status then block desc), then Discovered (status then block desc)
         var fxFleetSorted = fxFleetN.slice().sort(function(a,b){
@@ -3799,6 +3793,13 @@ function buildPublicMetrics(snapshot, now, staleBound) {
         if (fxAnchorN) fxRows.push({kind:"anchor", data:fxAnchorN});
         // R-A 2026-08-25 P0: operator fleet rows stay off the public /reference table
         for (var dli=0; dli<fxDiscSorted.length; dli++) fxRows.push({kind:"discovered", data:fxDiscSorted[dli]});
+        // Share-fix S1: a table with no row reads as broken. With no row, one sentence says so and no empty table is drawn.
+        if (!fxRows.length) h += '<p class="ref-meta" id="fixnet-empty">No rows this cycle. This table is reference only and never enters status.</p>';
+        else {
+        h += '<p class="ref-meta">' + fxTotalN + ' hosts in this table · ' + fxOnlineN + ' answered the fixnet probe' + (fxNotProbedN ? ' · ' + fxNotProbedN + ' not probed' : '') + ' · not a count of the public testnet, not network size</p>';
+        h += '<div class="tbl-wrap"><table class="tbl stack ref-tbl"><thead><tr>';
+        h += '<th>Name</th><th>Source</th><th>Probe</th><th class="num">Block</th><th class="num">Height vs anchor</th><th class="num">Latency</th>';
+        h += '</tr></thead><tbody>';
 
         for (var fxi=0; fxi<fxRows.length; fxi++) {
           var rowKind = fxRows[fxi].kind;
@@ -3849,6 +3850,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           h += '</tr>';
         }
         h += '</tbody></table></div>';
+        }
 
         // v7.3: "Nodes syncing" — across ALL rows (anchor + fleet + discovered)
         h += '<p class="ref-meta">Advertised heights on this fixnet probe, relative to the fixnet anchor this cycle. Not a public-testnet census.</p>';

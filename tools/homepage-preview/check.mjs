@@ -498,6 +498,16 @@ console.log("\n[HOMEPAGE_PREVIEW] EX: Explain this reading opens from the keyboa
         note: document.body.innerText.includes("Without JavaScript this page shows the reading as it stood when it was served.") })); } catch (e) { /* reported below */ }
     await cx.close();
     check("NJ2 without JavaScript, the served page says which values need it (" + SERVED_MARKS + "), when it was served and that it does not refresh, and shows the note", noScript.said === SERVED_MARKS && noScript.countdown === "served 12:00:00 UTC · not refreshing" && noScript.note, JSON.stringify(noScript)); }
+    // Share-fix B2: the independence line is on the first screen at every width (it was hidden below 1280 px).
+    const ind = [];
+    for (const [w, h] of [[390, 844], [768, 1024], [1100, 800], [1280, 900]]) {
+      const pi = await browser.newPage({ viewport: { width: w, height: h } });
+      await pi.goto(BASE + "/"); await pi.waitForTimeout(150);
+      ind.push(Object.assign({ w }, await pi.evaluate((vh) => { const e = document.querySelector(".site-head .indep"); if (!e) return { ok: false, why: "none" };
+        const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return { ok: cs.display !== "none" && cs.visibility !== "hidden" && r.height > 0 && r.bottom <= vh && /not an official Demos product\./.test(e.textContent) && /observability · not/.test(e.textContent.replace(/\s+/g, " ")), top: Math.round(r.top), bottom: Math.round(r.bottom) }; }, h)));
+      await pi.close();
+    }
+    check("IND1 at 390, 768, 1100 and 1280 px the header's independence line is visible on the first screen and reads as one sentence", ind.every((x) => x.ok), JSON.stringify(ind));
 }
 
 await browser.close(); server.close();
