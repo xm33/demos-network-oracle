@@ -36,6 +36,7 @@ import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleSeeds, seedsCalm, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason } from "./home-cycle.mjs";
 import { readSeedInfo, seedsSufficient } from "./seed-read.mjs";
+import { pageMeta, sitemapXml, icoFromPng, notFoundPage, wantsHtml, NOT_FOUND_JSON } from "./site-meta.mjs";
 import { compareBlockIdentity, createBlockIdentityTracker, describeBlockIdentity } from "./block-identity.mjs";
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
 import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
@@ -286,10 +287,14 @@ docsEntry('GET /commerce/observations', 'The observations of /commerce, as JSON.
 docsEntry('GET /federate', 'Prometheus text, not JSON: the oracle version, plus cross-check RPC reachability and probe latency observed from this vantage, under neutral names.') +
 docsEntry('GET /metrics', 'The same text as /federate.') +
 docsEntry('GET /badge', 'An SVG image, not JSON, of the current status word.') +
+docsEntry('GET /sitemap.xml', 'XML, not JSON: the address of each page above, for search engines. No dates.') +
+docsEntry('GET /favicon.ico', 'The site icon, an image, not JSON.') +
+docsEntry('GET /apple-touch-icon.png', 'The site icon at 180 by 180 pixels, a PNG image, not JSON.') +
 docsEntry('GET /version', 'Running agent version (<code>running</code>); the version label most answering seeds report (<code>nodeVersion</code>); and the newest commit on the master branch of DNO\'s public repository as GitHub gave it at <code>checkedAt</code> (<code>latestCommit</code>, <code>latestMessage</code>, <code>latestDate</code>). That commit need not be the code this server runs.') +
 docsEntry('GET /sentinel', 'Whether DNO\'s own alert process completed a check in the last 15 minutes: status ok or unknown, and last_check. No counts.') +
 docsEntry('GET /consensus', CONSENSUS_ENABLED ? 'An experiment that collects other observers\' reports. Not part of the reading.' : 'An experiment that would collect other observers\' reports. It is switched off on this server and answers {"error":"Consensus not initialized"}. Not part of the reading.') +
-'</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s.</p></section>' +
+'</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s.</p>' +
+'<p>An address nothing serves answers 404: a page when the request accepts HTML, a JSON error otherwise.</p></section>' +
 '<section id="internal"><h2>Internal only</h2><p>Fleet views, <code>/dashboard</code>, <code>/history</code> and <code>/history/export</code>, are served on DNO\'s internal listener only (INTERNAL_PORT). The public site answers 404 for them.</p></section>' +
 '</article></div></main><!--dno:footer--></body></html>';
 
@@ -477,8 +482,17 @@ var FONT_LICENSE = loadKitAsset("assets/fonts/OFL.txt", "geist-ofl", ".txt", "te
 var ART_AVIF = loadKitAsset("assets/dno-planet.avif", "dno-planet", ".avif", "image/avif");
 var ART_WEBP = loadKitAsset("assets/dno-planet.webp", "dno-planet", ".webp", "image/webp");
 var ART_JPG = loadKitAsset("assets/dno-planet.jpg", "dno-planet", ".jpg", "image/jpeg");
+// W2: the share card (no live value in it: platforms cache cards for days) and the touch icon, from tools/share-card.
+var SHARE_CARD_ASSET = loadKitAsset("assets/dno-share.jpg", "dno-share", ".jpg", "image/jpeg");
+var TOUCH_ICON = loadKitAsset("assets/dno-touch-icon.png", "dno-touch-icon", ".png", "image/png");
+var META_ASSETS = { share: SHARE_CARD_ASSET ? SHARE_CARD_ASSET.path : null, touch: TOUCH_ICON ? TOUCH_ICON.path : null };
+// /favicon.ico: the same 64x64 PNG in an ICO container, built here (W2-3).
+var FAVICON_ICO = SITE_FAVICON ? icoFromPng(SITE_FAVICON.bytes) : null;
 var KIT_ASSETS = {};
-[SITE_CSS, SITE_JS, SITE_FAVICON, FONT_SANS, FONT_MONO, FONT_LICENSE, ART_AVIF, ART_WEBP, ART_JPG].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
+[SITE_CSS, SITE_JS, SITE_FAVICON, FONT_SANS, FONT_MONO, FONT_LICENSE, ART_AVIF, ART_WEBP, ART_JPG, SHARE_CARD_ASSET, TOUCH_ICON].forEach(function(a) { if (a) KIT_ASSETS[a.path] = a; });
+// W2: the homepage's head carries one marker for its icon, description, canonical URL and share tags.
+var HOME_META_MARKER = "<!--dno:meta-->";
+HOMEPAGE_HTML = HOMEPAGE_HTML.replace(HOME_META_MARKER, (SITE_FAVICON ? '<link rel="icon" type="image/png" sizes="64x64" href="' + SITE_FAVICON.path + '">' : '') + pageMeta("/", META_ASSETS));
 // The header: five links, the same, in the same order, as the homepage header (src/public-api-v11.test.mjs H22).
 var SITE_NAV = [
   ["/", "home", "Reading"],
@@ -503,12 +517,14 @@ var SITE_PAGES = [
 function siteLink(n, active) { return '<a href="' + n[0] + '"' + (n[1] === active ? ' aria-current="page"' : '') + '>' + n[2] + '</a>'; }
 function siteNavLinks(active) { return SITE_NAV.map(function(n) { return siteLink(n, active); }); }
 function sitePageLinks(active, group) { return SITE_PAGES.filter(function(n) { return !group || n[3] === group; }).map(function(n) { return siteLink(n, active); }); }
-function siteHead() {
+// route: the page's own path, for its description, canonical URL and share tags (src/site-meta.mjs); none on the 404 page.
+function siteHead(route) {
   return '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#000000">'
     + (SITE_FAVICON ? '<link rel="icon" type="image/png" sizes="64x64" href="' + SITE_FAVICON.path + '">' : '')
     + (FONT_SANS ? '<link rel="preload" href="' + FONT_SANS.path + '" as="font" type="font/woff2" crossorigin>' : '')
-    + (SITE_CSS ? '<link rel="stylesheet" href="' + SITE_CSS.path + '">' : '');
+    + (SITE_CSS ? '<link rel="stylesheet" href="' + SITE_CSS.path + '">' : '')
+    + (route ? pageMeta(route, META_ASSETS) : '');
 }
 function siteHeader(active) {
   var links = siteNavLinks(active);
@@ -536,32 +552,32 @@ function siteFooter(active) {
     + '</div></footer>'
     + (SITE_JS ? '<script src="' + SITE_JS.path + '" defer></script>' : '');
 }
-function applySiteKit(html) {
+function applySiteKit(html, route) {
   var name = (String(html).match(/<!--dno:header:([a-z-]+)-->/) || [])[1] || "";
-  return String(html).replace("<!--dno:head-->", siteHead()).replace(/<!--dno:header:[a-z-]+-->/, siteHeader(name)).replace("<!--dno:footer-->", siteFooter(name));
+  return String(html).replace("<!--dno:head-->", siteHead(route)).replace(/<!--dno:header:[a-z-]+-->/, siteHeader(name)).replace("<!--dno:footer-->", siteFooter(name));
 }
 var SOURCES_HTML = "";
-try { SOURCES_HTML = applySiteKit(readFileSync("sources.html", "utf8")); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
+try { SOURCES_HTML = applySiteKit(readFileSync("sources.html", "utf8"), "/sources"); } catch(e) { SOURCES_HTML = "<html><body><h1>Sources page not found</h1></body></html>"; }
 
 var AGENT_GUIDE_HTML = "";
-try { AGENT_GUIDE_HTML = applySiteKit(readFileSync("agent-guide.html", "utf8")); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
+try { AGENT_GUIDE_HTML = applySiteKit(readFileSync("agent-guide.html", "utf8"), "/agent"); } catch(e) { AGENT_GUIDE_HTML = "<html><body><h1>Agent guide not found</h1></body></html>"; }
 var METHODOLOGY_HTML = "";
-try { METHODOLOGY_HTML = applySiteKit(readFileSync("methodology.html", "utf8")); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
+try { METHODOLOGY_HTML = applySiteKit(readFileSync("methodology.html", "utf8"), "/methodology"); } catch(e) { METHODOLOGY_HTML = "<html><body><h1>Methodology page not found</h1></body></html>"; }
 
 var CRITERIA_HTML = "";
-try { CRITERIA_HTML = applySiteKit(readFileSync("criteria.html", "utf8")); } catch(e) { CRITERIA_HTML = "<html><body><h1>Criteria page not found</h1></body></html>"; }
+try { CRITERIA_HTML = applySiteKit(readFileSync("criteria.html", "utf8"), "/criteria"); } catch(e) { CRITERIA_HTML = "<html><body><h1>Criteria page not found</h1></body></html>"; }
 
 var CRITERIA_JSON = "";
 try { CRITERIA_JSON = readFileSync("criteria.json", "utf8"); } catch(e) { CRITERIA_JSON = "{\"error\":\"criteria.json not found\"}"; }
 
 var ABOUT_DEMOS_HTML = "";
-try { ABOUT_DEMOS_HTML = applySiteKit(readFileSync("about-demos.html", "utf8")); } catch(e) { ABOUT_DEMOS_HTML = "<html><body><h1>About Demos page not found</h1></body></html>"; }
+try { ABOUT_DEMOS_HTML = applySiteKit(readFileSync("about-demos.html", "utf8"), "/about-demos"); } catch(e) { ABOUT_DEMOS_HTML = "<html><body><h1>About Demos page not found</h1></body></html>"; }
 
 var COMMERCE_HTML = "";
-try { COMMERCE_HTML = applySiteKit(readFileSync("commerce.html", "utf8")); } catch(e) { COMMERCE_HTML = "<html><body><h1>Commerce page not found</h1></body></html>"; }
+try { COMMERCE_HTML = applySiteKit(readFileSync("commerce.html", "utf8"), "/commerce"); } catch(e) { COMMERCE_HTML = "<html><body><h1>Commerce page not found</h1></body></html>"; }
 
 var COMMERCE_METHODOLOGY_HTML = "";
-try { COMMERCE_METHODOLOGY_HTML = applySiteKit(readFileSync("commerce-methodology.html", "utf8")); } catch(e) { COMMERCE_METHODOLOGY_HTML = "<html><body><h1>Commerce methodology not found</h1></body></html>"; }
+try { COMMERCE_METHODOLOGY_HTML = applySiteKit(readFileSync("commerce-methodology.html", "utf8"), "/commerce/methodology"); } catch(e) { COMMERCE_METHODOLOGY_HTML = "<html><body><h1>Commerce methodology not found</h1></body></html>"; }
 
 // The old canonical header (a 3-dot SVG copied from commerce.html) is gone: every page uses siteHeader().
 
@@ -1335,7 +1351,7 @@ function renderTimelinePage() {
     }
   }
   if (!items) items = '<div class="tl-item"><div class="tl-body"><div class="tl-text">No public-scope events recorded yet. Public incident generation began 2026-06-11.</div></div></div>';
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timeline · Demos Network Oracle</title>' + siteHead()
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timeline · Demos Network Oracle</title>' + siteHead("/timeline")
     + '<style>.tl{max-width:52rem}.tl-item{position:relative;display:grid;grid-template-columns:6.5rem minmax(0,1fr);gap:16px;padding:0 0 24px 22px;border-left:1px solid var(--line);margin-left:5px}'
     + '.tl-item::before{content:"";position:absolute;left:-5px;top:6px;width:9px;height:9px;background:var(--metal-0);border:1px solid var(--metal-0)}'
     + '.sev-warning::before{background:var(--elevated-risk);border-color:var(--elevated-risk)}.sev-critical::before{background:var(--degraded);border-color:var(--degraded)}.sev-release::before{background:var(--bg);border-color:var(--metal-1)}'
@@ -3421,6 +3437,17 @@ function buildPublicMetrics(snapshot, now, staleBound) {
   // Fleet-only routes (/history and everything under it, /dashboard): served on the loopback internal listener only.
   // The public listener answers 404 for them whether or not INTERNAL_PORT is set.
   function isFleetRoute(p) { return p === "/history" || p.indexOf("/history/") === 0 || p === "/dashboard" || p.indexOf("/dashboard/") === 0; }
+  // W2-5: an address nothing serves. Browsers (Accept names text/html) get a page in the site shell; every other client
+  // gets the JSON body it always had. The fleet-only routes on the public listener answer exactly this, so they stay
+  // indistinguishable from any unknown path.
+  function notFound(req, res) {
+    if (wantsHtml(req.headers["accept"])) {
+      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Vary": "Accept" });
+      res.end(notFoundPage({ head: siteHead(null), header: siteHeader(""), footer: siteFooter("") }, SITE_PAGES));
+      return;
+    }
+    res.writeHead(404, { "Vary": "Accept" }); res.end(NOT_FOUND_JSON);
+  }
 
   function handleRequest(req, res, internal) {
     // CORS headers
@@ -3437,9 +3464,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     catch (urlErr) { res.writeHead(400); res.end(JSON.stringify({ error: "Bad request." })); return; }
     var reqPath = reqUrl.pathname;
     var reqQuery = reqUrl.searchParams;
-    if (!internal && isFleetRoute(reqPath)) {
-      res.writeHead(404); res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." })); return;
-    }
+    if (!internal && isFleetRoute(reqPath)) { notFound(req, res); return; }
 
     if (reqPath === "/health") {
       var healthV = observationValidators("health");   // once, before the body: the same validators answer the 304 and go with the 200
@@ -3665,7 +3690,16 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       res.end(JSON.stringify(latestVersionData, null, 2));
     } else if (reqPath === "/docs") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(subpageNoJs(applySiteKit(DOCS_HTML).replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected")));
+      res.end(subpageNoJs(applySiteKit(DOCS_HTML, "/docs").replace("__AGENT_WALLET__", AGENT_WALLET ? escHtml(truncIdentity(AGENT_WALLET)) : "not connected")));
+    } else if (reqPath === "/sitemap.xml") {
+      res.writeHead(200, { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*" });
+      res.end(sitemapXml());
+    } else if (reqPath === "/favicon.ico" && FAVICON_ICO) {
+      res.writeHead(200, { "Content-Type": "image/x-icon", "Content-Length": FAVICON_ICO.length, "Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*" });
+      res.end(FAVICON_ICO);
+    } else if (reqPath === "/apple-touch-icon.png" && TOUCH_ICON) {
+      res.writeHead(200, { "Content-Type": "image/png", "Content-Length": TOUCH_ICON.bytes.length, "Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*" });
+      res.end(TOUCH_ICON.bytes);
     } else if (KIT_ASSETS[reqPath]) {
       var kitAsset = KIT_ASSETS[reqPath];
       res.writeHead(200, { "Content-Type": kitAsset.type, "Content-Length": kitAsset.bytes.length, "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" });
@@ -3689,14 +3723,14 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       // empty page.
       if (!sharedDb) {
         res.writeHead(503, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "30" });
-        res.end(subpageNoJs('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead() + '</head><body>'
+        res.end(subpageNoJs('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead("/reference") + '</head><body>'
           + siteHeader("reference") + '<main id="main"><header class="doc-head"><div class="wrap"><div><p class="doc-kicker">Explore</p><h1>Reference</h1>'
           + '<p class="doc-lede" id="ref-unavailable">The reference tables are unavailable: DNO\'s store is not open. This says nothing about the network. The public reading is at <a href="/organism">/organism</a>.</p>'
           + '</div></div></header></main>' + siteFooter("reference") + '</body></html>'));
         return;
       }
       function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
-      var h = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead();
+      var h = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reference · Demos Network Oracle</title>' + siteHead("/reference");
       h += '<style>.ref-body{padding-block:32px 72px}.ref-sec + .ref-sec{margin-top:48px;padding-top:32px;border-top:1px solid var(--line)}'
         + '.ref-sec h2{font-size:1.375rem;font-weight:500;color:var(--metal-2);margin-bottom:8px}.ref-note{color:var(--metal-1);max-width:46rem;margin-bottom:6px}'
         + '.ref-meta{font:400 .8125rem/1.5 var(--mono);color:var(--mute);margin:8px 0 14px}.ref-tbl td{font-family:var(--mono);font-size:.875rem}'
@@ -4388,8 +4422,7 @@ refresh();setInterval(refresh,20000);
       res.writeHead(200, { "Content-Type": "text/csv", "Content-Disposition": "attachment; filename=fleet-history.csv", "Access-Control-Allow-Origin": "*" });
       res.end(csvLines.join("\n"));
     } else {
-      res.writeHead(404);
-      res.end(JSON.stringify({ error: "Not found. Try /docs for API documentation." }));
+      notFound(req, res);
     }
   }
 
