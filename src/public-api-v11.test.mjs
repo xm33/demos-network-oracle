@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as HC from "./home-cycle.mjs";
 import { escHtml } from "./public-safety.mjs";
+import { PUBLIC_ORIGIN, SITE_META, SITE_ROUTES, pageMeta } from "./site-meta.mjs";
 const { tileOnChain } = HC;
 // The reading panel as the agent fills it for readers without JavaScript, checked by one predicate on the served page
 // (S25b) and on the two operator captures (H52): the band's four tiles filled (none left "reading"); the on-chain count
@@ -197,6 +198,37 @@ const belowPanel = (html) => { const a = html.indexOf('<p class="bound">'), b = 
   const st = (((((SCH.properties || {}).last_24h || {}).properties || {}).chain_movement || {}).properties || {}).state || {};
   check("H59 W1-1 the schema says what `normal` means (description only; the enum is unchanged)",
     JSON.stringify(st.enum) === JSON.stringify(["unknown", "normal", "interrupted"]) && st.description === "normal: the seeds' median rose in every five-minute bucket of the window (and at least the published share). It says nothing about rate.", JSON.stringify(st));
+}
+// W2 (findable and shareable): each page's head carries its own description, canonical URL and share tags.
+// The served twins are S45 to S50; src/site-meta.test.mjs holds the module's own checks.
+const W2_FILES = { "/sources": "sources.html", "/methodology": "methodology.html", "/criteria": "criteria.html", "/commerce": "commerce.html", "/commerce/methodology": "commerce-methodology.html", "/about-demos": "about-demos.html", "/agent": "agent-guide.html" };
+// One page's head as the served page carries it: one of each tag, the canonical URL on the public origin plus the
+// page's own path, og:title equal to the page's <title>, an absolute og:image under /assets/dno-share-.
+function w2HeadOk(html, route) {
+  const head = html.slice(0, html.indexOf("</head>")), one = (re) => (head.match(re) || []).length === 1;
+  const title = (head.match(/<title>([^<]*)<\/title>/) || [])[1], ogt = (head.match(/<meta property="og:title" content="([^"]*)">/) || [])[1];
+  const url = PUBLIC_ORIGIN + route;
+  return one(/<meta name="description" /g) && one(/<link rel="canonical" /g) && one(/<meta property="og:url" /g) && one(/<meta property="og:image" /g) && one(/<meta name="twitter:card" /g)
+    && head.includes('<link rel="canonical" href="' + url + '">') && head.includes('<meta property="og:url" content="' + url + '">')
+    && typeof title === "string" && title === ogt && title === escHtml(SITE_META[route].title)
+    && new RegExp('<meta property="og:image" content="' + PUBLIC_ORIGIN.replace(/[.]/g, "\\.") + '/assets/dno-share-[0-9a-f]{8}\\.jpg">').test(head)
+    && head.includes('<meta name="twitter:card" content="summary_large_image">') && /<link rel="apple-touch-icon" sizes="180x180" href="\/assets\/dno-touch-icon-[0-9a-f]{8}\.png">/.test(head);
+}
+{
+  const notLoaded = Object.entries(W2_FILES).filter(([r, f]) => !SRC.includes('applySiteKit(readFileSync("' + f + '", "utf8"), "' + r + '")') || count(readFileSync(join(ROOT, f), "utf8"), "<!--dno:head-->") !== 1);
+  check("H60 W2-1 every static page is loaded with its own route, and carries the head marker once", notLoaded.length === 0, notLoaded.map(([r]) => r).join(", "));
+  const bare = [...SRC.matchAll(/siteHead\(([^)]*)\)/g)].map((m) => m[1]).filter((a) => a !== "route" && a !== "null" && !/^"\/[a-z/-]*"$/.test(a));
+  check("H61 W2-1 every server-built head names its own route (timeline, reference twice, docs); only the 404 page has none",
+    count(SRC, "<title>Timeline · Demos Network Oracle</title>' + siteHead(\"/timeline\")") === 1 && count(SRC, "<title>Reference · Demos Network Oracle</title>' + siteHead(\"/reference\")") === 2
+    && SRC.includes('applySiteKit(DOCS_HTML, "/docs")') && bare.length === 0 && count(SRC, "siteHead(null)") === 1 && SITE_ROUTES.length === 11, bare.join(", "));
+  check("H62 W2-1/3 the homepage head has one meta marker and neither an inline icon nor a description of its own; the agent fills the marker with the hashed icon and the page's tags",
+    count(HOME, "<!--dno:meta-->") === 1 && HOME.indexOf("<!--dno:meta-->") < HOME.indexOf("</head>") && !HOME.includes("data:image") && !/<meta name="description"/.test(HOME)
+    && SRC.includes("HOMEPAGE_HTML = HOMEPAGE_HTML.replace(HOME_META_MARKER, (SITE_FAVICON ? '<link rel=\"icon\" type=\"image/png\" sizes=\"64x64\" href=\"' + SITE_FAVICON.path + '\">' : '') + pageMeta(\"/\", META_ASSETS));"));
+  const A = { share: "/assets/dno-share-0123abcd.jpg", touch: "/assets/dno-touch-icon-4567ef01.png" };
+  const asm = Object.entries(W2_FILES).map(([r, f]) => [r, readFileSync(join(ROOT, f), "utf8").replace("<!--dno:head-->", pageMeta(r, A))]).concat([["/", HOME.replace("<!--dno:meta-->", pageMeta("/", A))]]);
+  const asmBad = asm.filter(([r, h]) => !w2HeadOk(h, r));
+  check("H63 W2-1 each static page and the homepage, assembled as the agent does: one description, canonical and og:url on the public origin, og:title its own <title>, the share card, a large card (static twin of S45)",
+    asm.length === 8 && asmBad.length === 0, asmBad.map(([r]) => r).join(", "));
 }
 check("H50 the on-chain source line is a fill marker (present once, the agent fills the same one), and no fixed agreement wording is left in it",
   count(HOME, '<dd><span id="x-src-list">the validator list</span>, from <code>/health</code>, <span id="x-at-list">not read yet</span></dd>') === 1
@@ -495,7 +527,7 @@ check("FR9 the Methodology orientation links the recipe", /href="\/agent#repeat-
 {
   const refBranch = (AGENTSRC.match(/reqPath === "\/reference"\) \{\s*([\s\S]*?)\n      function esc\(/) || ["", ""])[1];
   check("REF1 /reference without the store answers 503 in the site's shell (head, header, footer), says the tables are unavailable and that this says nothing about the network — never 200 'No data'",
-    /res\.writeHead\(503,/.test(refBranch) && /siteHead\(\)/.test(refBranch) && /siteHeader\("reference"\)/.test(refBranch) && /siteFooter\("reference"\)/.test(refBranch) && /says nothing about the network/.test(refBranch) && !/No data/.test(refBranch) && !/writeHead\(200/.test(refBranch), refBranch.slice(0, 160));
+    /res\.writeHead\(503,/.test(refBranch) && /siteHead\("\/reference"\)/.test(refBranch) && /siteHeader\("reference"\)/.test(refBranch) && /siteFooter\("reference"\)/.test(refBranch) && /says nothing about the network/.test(refBranch) && !/No data/.test(refBranch) && !/writeHead\(200/.test(refBranch), refBranch.slice(0, 160));
   const COM = readFileSync(join(ROOT, "commerce.html"), "utf8");
   const comScript = (COM.match(/<script>([\s\S]*?)<\/script>/) || ["", ""])[1];
   check("COM1 without JavaScript the Commerce page says where the same observations are (a <noscript> note linking /commerce/observations)", /<noscript><p class="note" id="com-noscript">[^<]*<a href="\/commerce\/observations">\/commerce\/observations<\/a>/.test(COM));
@@ -948,6 +980,33 @@ try {
       !o.observed_at || (/<span id="countdown">served \d\d:\d\d:\d\d UTC · not refreshing<\/span>/.test(html) && !html.includes(">first read in progress<") && !/>reading</.test(b) && / data-nojs>shown with JavaScript</.test(b)), (b.match(/>reading<|data-nojs/g) || []).length);
     check("S43 W1-3 served /docs says the /version commit need not be the running code", docsHtml.includes(W1.docs));
     check("S44 W1-1/2/6 the served homepage carries the new fine print, note and glossary, not the old ones", html.includes(W1.fine) && html.includes(W1.note) && html.includes(W1.glossary) && !html.includes("DNO counts ACTIVE and UNSTAKING rows")); }
+  // W2 served twins (H60 to H63 and src/site-meta.test.mjs run the same expectations statically).
+  { const pages = await Promise.all(SITE_ROUTES.map(async (r) => [r, await get(r, { Accept: "text/html" })]));
+    const pageBad = pages.filter(([r, p]) => p.status !== 200 || typeof p.body !== "string" || !w2HeadOk(p.body, r));
+    check("S45 W2-1 all 11 served pages carry one description, canonical and og:url on the public origin, og:title their own <title>, the share card and a large card", pages.length === 11 && pageBad.length === 0, pageBad.map(([r, p]) => r + ":" + p.status).join(", "));
+    const head0 = typeof pages[0][1].body === "string" ? pages[0][1].body : "";
+    const card = (head0.match(/<meta property="og:image" content="https:\/\/demos-oracle\.com(\/assets\/dno-share-[0-9a-f]{8}\.jpg)">/) || [])[1] || "/missing";
+    const touch = (head0.match(/<link rel="apple-touch-icon" sizes="180x180" href="(\/assets\/dno-touch-icon-[0-9a-f]{8}\.png)">/) || [])[1] || "/missing";
+    const cr = await fetch(BASE + card), tr = await fetch(BASE + touch);
+    const cb = Buffer.from(await cr.arrayBuffer()), tb = Buffer.from(await tr.arrayBuffer());
+    check("S46 W2-2/3 the share card and the touch icon the tags name are served: a JPEG and a PNG, cached as immutable, their bytes matching their hash",
+      cr.status === 200 && cr.headers.get("content-type") === "image/jpeg" && /immutable/.test(cr.headers.get("cache-control") || "") && cb[0] === 0xff && cb[1] === 0xd8
+      && card.includes("-" + createHash("sha256").update(cb).digest("hex").slice(0, 8) + ".")
+      && tr.status === 200 && tr.headers.get("content-type") === "image/png" && touch.includes("-" + createHash("sha256").update(tb).digest("hex").slice(0, 8) + "."), card + " " + cr.status + " " + touch + " " + tr.status);
+    const sm = await get("/sitemap.xml"), locs = [...String(sm.body).matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
+    check("S47 W2-4 /sitemap.xml lists the 11 pages on the public origin, as XML, with no date", sm.status === 200 && /^application\/xml/.test(sm.headers.get("content-type") || "") && locs.length === 11 && SITE_ROUTES.every((r) => locs.includes(PUBLIC_ORIGIN + r)) && !/lastmod/.test(String(sm.body)), sm.status + " " + locs.length);
+    const ir = await fetch(BASE + "/favicon.ico"), ib = Buffer.from(await ir.arrayBuffer()), ar = await fetch(BASE + "/apple-touch-icon.png");
+    check("S48 W2-3 /favicon.ico is an ICO (one entry, a PNG inside) and /apple-touch-icon.png a PNG",
+      ir.status === 200 && ir.headers.get("content-type") === "image/x-icon" && ib.length > 22 && ib.readUInt16LE(2) === 1 && ib.readUInt16LE(4) === 1 && ib.readUInt32LE(18) === 22 && ib.readUInt32BE(22) === 0x89504e47
+      && ar.status === 200 && ar.headers.get("content-type") === "image/png", ir.status + " " + ar.status);
+    const nfH = await get("/no-such-page-w2", { Accept: "text/html,application/xhtml+xml,*/*;q=0.8" }), nfJ = await get("/no-such-page-w2", { Accept: "application/json" }), nfA = await get("/no-such-page-w2");
+    check("S49 W2-5 an address nothing serves: a browser gets a 404 page in the site shell, not for indexing; every other client the JSON it always had; both vary on Accept",
+      nfH.status === 404 && /^text\/html/.test(nfH.headers.get("content-type") || "") && typeof nfH.body === "string" && nfH.body.includes("<h1>Page not found</h1>") && nfH.body.includes('<meta name="robots" content="noindex">') && nfH.body.includes('class="site-head"')
+      && nfJ.status === 404 && nfJ.body && nfJ.body.error === "Not found. Try /docs for API documentation." && nfA.status === 404 && nfA.body && nfA.body.error === "Not found. Try /docs for API documentation."
+      && /Accept/.test(nfH.headers.get("vary") || "") && /Accept/.test(nfJ.headers.get("vary") || ""), nfH.status + " " + nfJ.status + " " + nfA.status);
+    const dH = await get("/dashboard", { Accept: "text/html,application/xhtml+xml,*/*;q=0.8" }), hJ = await get("/history");
+    check("S50 W2-5 the fleet-only routes on the public listener answer exactly as an unknown address does, as a page and as JSON", dH.status === 404 && dH.body === nfH.body && hJ.status === 404 && JSON.stringify(hJ.body) === JSON.stringify(nfA.body), dH.status + " " + hJ.status);
+  }
   const mk = await fetch(BASE + "/assets/dno-mark-" + markSha.slice(0, 8) + ".jpg");
   const mkBytes = Buffer.from(await mk.arrayBuffer());
   check("S26 the mark asset is served byte-for-byte, cached", mk.status === 200 && mk.headers.get("content-type") === "image/jpeg" && /immutable/.test(mk.headers.get("cache-control") || "") && createHash("sha256").update(mkBytes).digest("hex") === markSha);
