@@ -4,7 +4,8 @@
 // public metric surface. Must not claim "attested" while attestation is failing.
 // Published-on-chain (true) != DAHR-attested.
 // DAHR is attempted on the cross-check RPCs only, never on the seeds whose answers enter status; the badge says so.
-// /dashboard is fleet data: internal listener only (the public listener answers 404).
+// The old internal /dashboard (which carried the DAHR badge) is removed: 404 on both listeners. The internal /fleet page
+// makes no attestation claim at all.
 // Run:  bun run src/dahr-attestation-honesty.test.mjs [baseUrl] [internalBaseUrl]   (NOT `bun test`)
 // Breach: re-hardcode `dahrAttestations: 2` -> B1 FAILS; revert -> green.
 
@@ -45,13 +46,10 @@ try {
   const pub = await fetch(BASE + "/dashboard");
   check("A2 /dashboard is not on the public listener", pub.status === 404, "HTTP " + pub.status);
   if (INTERNAL) {
-    const dash = await getText("/dashboard", INTERNAL);
-    check("A3 the badge never says 'DAHR Attested'", !dash.includes("DAHR Attested"));
-    if (att && att.last_count > 0) {
-      check("A3b the badge names the cross-check RPCs and the count", dash.includes("DAHR on cross-check RPCs: " + att.last_count));
-    } else {
-      check("A3bx no count => 'DAHR attestation unavailable'", dash.includes("DAHR attestation unavailable") && !dash.includes("DAHR on cross-check RPCs"));
-    }
+    const gone = await fetch(INTERNAL + "/dashboard");
+    check("A3 the old /dashboard (the badge's only place) is removed: 404 on the internal listener too", gone.status === 404, "HTTP " + gone.status);
+    const fleet = await getText("/fleet", INTERNAL);
+    check("A3b the internal /fleet page makes no attestation claim", !/DAHR|attest/i.test(fleet));
   } else {
     console.log("  skip A3 (no internal base given)");
   }
@@ -82,9 +80,9 @@ check("B1b public metrics excludes the retired DAHR attestation surface (v1 excl
       !/\bdemos_dahr_attestations_total\b/.test(_contractBlk) &&
       !/\bdahrAttestations\s*:/.test(SRC),
       "DAHR metric family in contract block or retired dahrAttestations field restored");
-check("B2 no 'DAHR Attested' claim anywhere; the badge is conditional on latestAttestationState",
-      !/DAHR Attested/.test(SRC) && /latestAttestationState\.lastCount\s*>\s*0[\s\S]{0,120}DAHR on cross-check RPCs: /.test(SRC),
-      "attested claim or unconditional badge");
+check("B2 no 'DAHR Attested' claim anywhere, and no DAHR badge left in any page source (the internal /dashboard that carried it is removed)",
+      !/DAHR Attested/.test(SRC) && !/DAHR on cross-check RPCs: |DAHR attestation unavailable/.test(SRC),
+      "attested claim or a leftover badge");
 check("B3 no unconditional 'publishes DAHR-attested health data'",
       !/publishes DAHR-attested health data/.test(SRC));
 check("B3b no unconditional 'publishes attested health data on-chain'",

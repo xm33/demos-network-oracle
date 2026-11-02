@@ -211,7 +211,7 @@
 <p>The fleet is a reference layer because it is operated by a single entity and may be on a different chain state than the public network; its state does not represent the public network. The fixnet probe keeps no identity that the public seeds' peerlists list. A fleet node that the public peerlists list appears among the peer-listed identities like any other row, as described under <a href="#known-limitations">Known Limitations</a>.</p>
 <h3 id="public-vs-reference-separation-how-separation-is">How separation is enforced</h3>
 <p>In the API: the compact agent feed (<code>/organism</code>) contains zero fleet fields. Fleet incidents are tagged with scope <code>"fleet"</code> and excluded from the public incident count. The <code>/incidents</code> endpoint defaults to public scope only.</p>
-<p>Fleet views (<code>/dashboard</code>, <code>/history</code> and everything under it) are served on DNO's internal listener only; the public site answers 404 for them.</p>
+<p>Fleet views (an internal fleet page, <code>/history</code> and everything under it) are served on DNO's internal listener only; the public site answers 404 for them.</p>
 </section>
 <section id="validators">
 <h2>On-chain Validators</h2>

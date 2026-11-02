@@ -36,6 +36,12 @@ const FORBIDDEN_CANONICAL_REFERENCES = [
   "node_observation_history",
   "meets_published_criteria",
   "discoveredPeers",
+  // The private fleet page (src/fleet-view.mjs) reads public state; nothing of it may flow back into the public reading.
+  "latestFleetBaseline",
+  "fleetMachineSamples",
+  "FLEET_VIEW_CONFIG",
+  "fleetViewNow",
+  "buildFleetView",
   // evaluator exports go here when the evaluator exists, e.g. "evaluateObservations"
 ];
 
