@@ -2593,7 +2593,7 @@ function fleetViewNow(now) {
   var identities = {};
   Object.keys(EXPECTED_FLEET).forEach(function(n) { identities[n] = EXPECTED_FLEET[n] && EXPECTED_FLEET[n].identity; });
   return buildFleetView({ config: FLEET_VIEW_CONFIG, identities: identities, probes: latestFixnetNodes, cycleAt: fixnetObservedAt,
-    cycleIntervalMs: INTERVAL_MS, baseline: latestFleetBaseline, samples: fleetMachineSamples, round: latestValidatorRound,
+    cycleIntervalMs: MONITOR_INTERVAL_MS, baseline: latestFleetBaseline, samples: fleetMachineSamples, round: latestValidatorRound,
     wallet: { balance: lastKnownBalance, lowMark: LOW_BALANCE_THRESHOLD }, agentStartedAt: AGENT_STARTED_AT }, now);
 }
 

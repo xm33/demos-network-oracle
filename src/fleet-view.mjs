@@ -4,6 +4,7 @@
 // here is published, and nothing read here flows back into the public reading.
 
 import { keyOf } from "./public-safety.mjs";
+import { STATUS_ACTIVE, STATUS_UNSTAKING } from "./validator-watch.mjs";
 
 export const FLEET_VIEW_RULE = Object.freeze({
   behindBlocks: 100,          // a testnet node more than this many blocks below the baseline is "behind"
@@ -11,6 +12,7 @@ export const FLEET_VIEW_RULE = Object.freeze({
   validatorStaleMs: 180000,   // the validator round is stale after 3 min
   machineStaleMs: 300000,     // a machine sample is stale after 5 min
   diskNoticePct: 10,          // disk free at or below this share is a notice (a mark, not a failure)
+  cycleStaleMinMs: 300000,    // the fleet cycle is stale after twice its interval, but never sooner than 5 min (a cycle can overrun)
   metricsMaxBytes: 2 * 1024 * 1024,
 });
 const CHAINS = new Set(["testnet", "fixnet", "down"]);
@@ -111,14 +113,16 @@ export function machineState(cfg, sample, now) {
 // The four validator facts for one key from the latest validator round. Every missing input gives null, not "no".
 export function validatorFacts(round, identity, now) {
   var key = keyOf(identity);
-  var out = { at: null, stale: true, listed: null, status: null, confirmed: null, rounds: null, countedRounds: null, windowMinutes: null, listAgreed: null };
+  var out = { at: null, stale: true, listed: null, status: null, statusCode: null, confirmed: null, rounds: null, countedRounds: null, windowMinutes: null, windowComplete: null, listAgreed: null };
   if (!round || !key) return out;
   out.at = Number.isFinite(round.roundAt) ? round.roundAt : null;
   out.stale = out.at === null || now - out.at > FLEET_VIEW_RULE.validatorStaleMs;
   out.listAgreed = !!(round.list && round.list.agreed);
   if (out.listAgreed && Array.isArray(round.list.rows)) {
     var row = round.list.rows.find(function(r) { return r && r.key === key; });
-    out.listed = !!row; out.status = row ? row.status : null;
+    // The list gives a status code; the words are the public page's (validator-watch listedStatus): 2 ACTIVE, 3 UNSTAKING.
+    out.listed = !!row; out.statusCode = row ? row.status : null;
+    out.status = !row ? null : row.status === STATUS_ACTIVE ? "ACTIVE" : row.status === STATUS_UNSTAKING ? "UNSTAKING" : "other";
   }
   if (round.witnessFacts && Array.isArray(round.witnessFacts.rows)) {
     var w = round.witnessFacts.rows.find(function(r) { return r && r.key === key; });
@@ -126,7 +130,7 @@ export function validatorFacts(round, identity, now) {
     else if (out.listed === true) { out.confirmed = false; }
   }
   var win = round.everyRound && round.everyRound.window;
-  if (win) { out.countedRounds = Number.isInteger(win.counted_rounds) ? win.counted_rounds : null; out.windowMinutes = Number.isInteger(win.minutes) ? win.minutes : null; }
+  if (win) { out.countedRounds = Number.isInteger(win.counted_rounds) ? win.counted_rounds : null; out.windowMinutes = Number.isInteger(win.minutes) ? win.minutes : null; out.windowComplete = win.complete === true; }
   return out;
 }
 
@@ -140,8 +144,9 @@ export function buildFleetView(inputs, now) {
   var probes = Array.isArray(i.probes) ? i.probes : [];
   var samples = i.samples && typeof i.samples === "object" ? i.samples : {};
   var cycleAt = Number.isFinite(i.cycleAt) && i.cycleAt > 0 ? i.cycleAt : null;
-  var interval = Number.isFinite(i.cycleIntervalMs) && i.cycleIntervalMs > 0 ? i.cycleIntervalMs : 1200000;
-  var cycleStale = cycleAt === null || now - cycleAt > 2 * interval;
+  var interval = Number.isFinite(i.cycleIntervalMs) && i.cycleIntervalMs > 0 ? i.cycleIntervalMs : 20000;
+  var staleAfter = Math.max(2 * interval, FLEET_VIEW_RULE.cycleStaleMinMs);
+  var cycleStale = cycleAt === null || now - cycleAt > staleAfter;
   var nodes = config.map(function(c) {
     var probe = probes.find(function(p) { return p && (p.name === c.name || p.name === "fleet-" + c.name); });
     // No fresh fleet cycle: every node row says so, in one grey state, instead of a per-node guess.
@@ -169,7 +174,7 @@ export function buildFleetView(inputs, now) {
   var w = i.wallet || {};
   return {
     generatedAt: now,
-    cycle: { at: cycleAt, intervalMs: interval, stale: cycleStale },
+    cycle: { at: cycleAt, intervalMs: interval, staleAfterMs: staleAfter, stale: cycleStale },
     baseline: i.baseline && Number.isInteger(i.baseline.height) ? { height: i.baseline.height, observedAt: i.baseline.observedAt } : null,
     nodes: nodes,
     validator: validator,
@@ -195,6 +200,7 @@ function span(ms, now) {
   var h = Math.max(0, (now - ms) / 3600000), d = Math.floor(h / 24);
   return (d > 0 ? d + " d " : "") + Math.floor(h % 24) + " h";
 }
+function dur(ms) { return !Number.isFinite(ms) ? "—" : ms < 120000 ? Math.round(ms / 1000) + " s" : Math.round(ms / 60000) + " min"; }
 function n0(v) { return Number.isFinite(v) ? Math.round(v).toLocaleString("en-US") : "—"; }
 function gb(b) { return Number.isFinite(b) ? (b / 1e9).toFixed(b >= 1e11 ? 0 : 1) + " GB" : "—"; }
 function lamp(tone, text) { return '<span class="lampt"><span class="ind" data-tone="' + esc(tone) + '"></span>' + esc(text) + '</span>'; }
@@ -241,12 +247,15 @@ export function renderFleetPage(view, kit, now) {
   var valHtml = "";
   if (val) {
     var vt = val.stale ? "unknown" : null;
-    var listedText = val.listAgreed === false ? "list not agreed this round" : val.listed === null ? "unavailable" : val.listed ? val.status : "not on the agreed list";
+    var listedText = val.listAgreed === false ? "list not agreed this round" : val.listed === null ? "unavailable" : val.listed ? (val.status === "other" ? "other status (code " + val.statusCode + ")" : val.status) : "not on the agreed list";
     var listedTone = vt || (val.listed && val.status === "ACTIVE" ? "ok" : val.listed === false ? "warn" : "unknown");
-    var confText = val.confirmed === null ? "unavailable this round" : val.confirmed ? "yes" : "no";
-    var confTone = vt || (val.confirmed === null ? "unknown" : val.confirmed ? "ok" : "warn");
-    var roundsText = Number.isInteger(val.rounds) && Number.isInteger(val.countedRounds) ? val.rounds + " of " + val.countedRounds + " counted rounds" + (val.windowMinutes ? " · last " + val.windowMinutes + " min" : "") : "unavailable";
-    var roundsTone = vt || (Number.isInteger(val.rounds) && Number.isInteger(val.countedRounds) && val.countedRounds > 0 ? (val.rounds === val.countedRounds ? "ok" : "warn") : "unknown");
+    // Not confirmed this round covers not dialed, no answer and off the seeds' height alike: shown as such, not as "no".
+    var confText = val.confirmed === null ? "unavailable this round" : val.confirmed ? "yes, this round" : "not confirmed this round";
+    var confTone = vt || (val.confirmed === null ? "unknown" : val.confirmed ? "ok" : "neutral");
+    // Until the window is complete (e.g. just after a restart) the count is shown as filling, in grey, never as a shortfall.
+    var hasRounds = Number.isInteger(val.rounds) && Number.isInteger(val.countedRounds);
+    var roundsText = !hasRounds ? "unavailable" : val.rounds + " of " + val.countedRounds + " counted rounds" + (val.windowMinutes ? " · last " + val.windowMinutes + " min" : "") + (val.windowComplete ? "" : " · window still filling");
+    var roundsTone = vt || (!hasRounds || !val.windowComplete || val.countedRounds === 0 ? "unknown" : val.rounds === val.countedRounds ? "ok" : "warn");
     valHtml = '<section class="fv-sec" id="validator" aria-labelledby="val-h"><h2 id="val-h">The validator · ' + esc(val.name) + '</h2>'
       + '<p class="fv-note">The facts the public reading shows for every listed validator, looked up here for our own key, from this agent\'s vantage only. ACTIVE is the list\'s state, not proof that the node signs blocks; the round count counts answers to DNO\'s probe at the seeds\' height, not signing. Round at ' + esc(utc(val.at)) + (val.stale ? " · <b>stale</b>" : "") + '.</p>'
       + '<dl class="fv-kv"><div><dt>On the agreed list</dt><dd>' + lamp(listedTone, listedText) + '</dd></div>'
@@ -278,8 +287,8 @@ export function renderFleetPage(view, kit, now) {
     + '<section class="fv-sec" id="now" aria-labelledby="now-h"><h2 id="now-h" class="sr">The fleet now</h2>'
     + '<p class="fv-now"><span class="ind" data-tone="' + topTone + '"></span><span>' + att + '<br>' + esc(line2) + '</span></p>'
     + '<dl class="fv-facts">'
-    + '<div><dt>Fleet cycle</dt><dd>' + (v.cycle.at === null ? esc("none since the agent started · every " + Math.round(v.cycle.intervalMs / 60000) + " min")
-      : esc(utc(v.cycle.at) + " · " + ago(v.cycle.at, now) + " · every " + Math.round(v.cycle.intervalMs / 60000) + " min · stale after " + Math.round(2 * v.cycle.intervalMs / 60000) + " min") + (cycleStale ? " · <b>stale</b>" : "")) + '</dd></div>'
+    + '<div><dt>Fleet cycle</dt><dd>' + (v.cycle.at === null ? esc("none since the agent started · every " + dur(v.cycle.intervalMs))
+      : esc(utc(v.cycle.at) + " · " + ago(v.cycle.at, now) + " · every " + dur(v.cycle.intervalMs) + " · stale after " + dur(v.cycle.staleAfterMs)) + (cycleStale ? " · <b>stale</b>" : "")) + '</dd></div>'
     + '<div><dt>Seeds\' median at that cycle</dt><dd>' + (v.baseline ? esc(n0(v.baseline.height) + " · " + utc(v.baseline.observedAt)) : "unavailable") + '</dd></div>'
     + '<div><dt>Agent wallet</dt><dd>' + esc(walletText) + '</dd></div>'
     + '<div><dt>Agent</dt><dd>' + esc(v.agentStartedAt ? "up since " + new Date(v.agentStartedAt).toISOString().slice(0, 16).replace("T", " ") + " UTC · " + span(v.agentStartedAt, now) : "—") + '</dd></div>'
@@ -299,7 +308,7 @@ export function renderFleetPage(view, kit, now) {
     + '<div><dt>Incomplete</dt><dd>Something the rule needs was missing this cycle: no result for the node, or no height of its own. Absence of a failure is not shown as "no issue".</dd></div>'
     + '<div><dt>Comparison unavailable</dt><dd>The seeds\' median for that cycle is missing, older than 5 minutes, or from fewer than two seeds. No height difference is shown, never a 0.</dd></div>'
     + '<div><dt>Answering · not compared</dt><dd>A fixnet node answered the fleet cycle. The fixnet is a separate, inert chain, so its height is not compared with the testnet.</dd></div>'
-    + '<div><dt>Stale</dt><dd>Each source has its own clock: the fleet cycle (stale after twice its interval), the validator reading (after 3 min) and each machine sample (after 5 min). A stale source turns only its own lamps grey; the top line names it.</dd></div>'
+    + '<div><dt>Stale</dt><dd>Each source has its own clock: the fleet cycle (stale after twice its interval, and never sooner than 5 min), the validator reading (after 3 min) and each machine sample (after 5 min). A stale source turns only its own lamps grey; the top line names it.</dd></div>'
     + '</dl></section></div></main>'
     + '<footer class="pv-foot"><div class="wrap">Private operator page · served on 127.0.0.1 only · Cache-Control: no-store · no public page links here. Generated ' + esc(utc(now)) + '.</div></footer>'
     + '</body></html>';

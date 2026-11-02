@@ -100,8 +100,8 @@ const METRICS = [
 const ID5 = "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
 const K5 = ID5.slice(2);
 const round = function(extra) {
-  return Object.assign({ roundAt: NOW - 30000, list: { agreed: true, rows: [{ key: K5, status: "ACTIVE" }, { key: "ab", status: "ACTIVE" }] },
-    witnessFacts: { rows: [{ key: K5, confirmed: true, rounds: 60 }] }, everyRound: { window: { minutes: 60, counted_rounds: 60 } } }, extra || {});
+  return Object.assign({ roundAt: NOW - 30000, list: { agreed: true, rows: [{ key: K5, status: "2" }, { key: "ab", status: "2" }] },
+    witnessFacts: { rows: [{ key: K5, confirmed: true, rounds: 60 }] }, everyRound: { window: { minutes: 60, counted_rounds: 60, complete: true } } }, extra || {});
 };
 {
   const v = validatorFacts(round(), ID5, NOW);
@@ -113,6 +113,10 @@ const round = function(extra) {
   check("V6 not on list", validatorFacts(round({ list: { agreed: true, rows: [] } }), ID5, NOW).listed === false);
   check("V7 old round → stale", validatorFacts(round({ roundAt: NOW - FLEET_VIEW_RULE.validatorStaleMs - 1 }), ID5, NOW).stale === true);
   check("V8 no round → all unknown", (function(x) { return x.listed === null && x.confirmed === null && x.stale === true; })(validatorFacts(null, ID5, NOW)));
+  // The list carries status codes (validator-watch: "2" ACTIVE, "3" UNSTAKING), as read live on n3 on 2026-11-02.
+  check("V9 code 2 → ACTIVE", validatorFacts(round(), ID5, NOW).status === "ACTIVE" && validatorFacts(round(), ID5, NOW).statusCode === "2");
+  check("V10 code 3 → UNSTAKING, other codes → other", validatorFacts(round({ list: { agreed: true, rows: [{ key: K5, status: "3" }] } }), ID5, NOW).status === "UNSTAKING" && validatorFacts(round({ list: { agreed: true, rows: [{ key: K5, status: "9" }] } }), ID5, NOW).status === "other");
+  check("V11 window completeness carried", validatorFacts(round(), ID5, NOW).windowComplete === true && validatorFacts(round({ everyRound: { window: { minutes: 60, counted_rounds: 1, complete: false } } }), ID5, NOW).windowComplete === false);
 }
 
 // ---- whole view and freshness ---------------------------------------------------------------------------------------
@@ -122,7 +126,7 @@ const CONFIG = readFleetViewConfig({
 }, ["n1", "n3", "n5", "n7"]);
 const PROBES = [probe({ name: "fleet-n1", block: 0 }), probe({ name: "fleet-n3", ok: false }), probe(), probe({ name: "fleet-n7", ok: false })];
 const SAMPLES = { n1: { at: NOW - 20000, ok: true, metrics: parseNodeMetrics(METRICS) }, n3: { at: NOW - 20000, ok: true, metrics: parseNodeMetrics(METRICS) }, n5: { at: NOW - 20000, ok: true, metrics: parseNodeMetrics(METRICS) }, n7: { at: NOW - 20000, ok: false } };
-const INPUT = { config: CONFIG, identities: { n5: ID5 }, probes: PROBES, cycleAt: CYCLE, cycleIntervalMs: 1200000, baseline: BASE, samples: SAMPLES, round: round(), wallet: { balance: 1284.5, lowMark: 500 }, agentStartedAt: NOW - 67 * 3600000 };
+const INPUT = { config: CONFIG, identities: { n5: ID5 }, probes: PROBES, cycleAt: CYCLE, cycleIntervalMs: 20000, baseline: BASE, samples: SAMPLES, round: round(), wallet: { balance: 1284.5, lowMark: 500 }, agentStartedAt: NOW - 67 * 3600000 };
 {
   const v = buildFleetView(INPUT, NOW);
   const by = function(n) { return v.nodes.find(function(x) { return x.name === n; }); };
@@ -133,7 +137,7 @@ const INPUT = { config: CONFIG, identities: { n5: ID5 }, probes: PROBES, cycleAt
   check("W5 validator present and fresh", v.validator && v.validator.name === "n5" && v.validator.stale === false);
   check("W6 JSON-safe", JSON.parse(JSON.stringify(v)).nodes.length === 4);
   // A stale fleet cycle greys the node rows only: machines and the validator keep their own state.
-  const sv = buildFleetView(Object.assign({}, INPUT, { cycleAt: NOW - 2 * 1200000 - 1 }), NOW);
+  const sv = buildFleetView(Object.assign({}, INPUT, { cycleAt: NOW - FLEET_VIEW_RULE.cycleStaleMinMs - 1 }), NOW);
   check("W7 stale cycle → every node row stale, and no per-node guesses in the attention line", sv.nodes.every(function(n) { return n.state.code === "stale"; }) && sv.cycle.stale === true && !sv.attention.some(function(a) { return /^n\d/.test(a); }));
   check("W8 stale cycle does NOT grey machines", sv.machines.find(function(m) { return m.name === "n1"; }).state.code === "reporting");
   check("W9 stale cycle does NOT grey the validator", sv.validator.stale === false && sv.validator.confirmed === true);
@@ -142,6 +146,11 @@ const INPUT = { config: CONFIG, identities: { n5: ID5 }, probes: PROBES, cycleAt
   check("W11 stale validator does NOT grey nodes", nv.nodes.find(function(n) { return n.name === "n5"; }).state.code === "no_issue" && nv.attention.indexOf("validator reading is stale") >= 0);
   const nb = buildFleetView(Object.assign({}, INPUT, { baseline: null }), NOW);
   check("W12 no baseline → n5 comparison unavailable, never 0", nb.nodes.find(function(n) { return n.name === "n5"; }).state.code === "comparison_unavailable");
+  // The fleet cycle runs every MONITOR_INTERVAL_MS (20 s by default): stale after 2 intervals, but never before 5 min.
+  const quick = buildFleetView(Object.assign({}, INPUT, { cycleAt: NOW - 60000 }), NOW);
+  check("W15 a 20 s cycle 60 s old is NOT stale (5-min floor)", quick.cycle.stale === false && quick.cycle.staleAfterMs === FLEET_VIEW_RULE.cycleStaleMinMs);
+  const slow = buildFleetView(Object.assign({}, INPUT, { cycleIntervalMs: 1200000, cycleAt: NOW - 30 * 60000 }), NOW);
+  check("W16 a 20-min cycle stays fresh up to twice its interval", slow.cycle.stale === false && slow.cycle.staleAfterMs === 2400000);
   const empty = buildFleetView({}, NOW);
   check("W13 empty inputs serve", empty.nodes.length === 0 && empty.cycle.stale === true && empty.validator === null);
   const nob = buildFleetView(Object.assign({}, INPUT, { cycleAt: null, probes: [] }), NOW);
@@ -161,8 +170,12 @@ const INPUT = { config: CONFIG, identities: { n5: ID5 }, probes: PROBES, cycleAt
   check("R8 words name the real comparison rule (no 'disagree')", html.indexOf("fewer than two seeds") >= 0 && html.indexOf("disagree") === -1);
   const never = renderFleetPage(buildFleetView(Object.assign({}, INPUT, { cycleAt: null, probes: [] }), NOW), {}, NOW);
   check("R10 never observed: the summary says not observed, never '0 of N answering' or 'stale'", never.indexOf("Nodes: not observed yet") >= 0 && !/\d+ of \d+ answering/.test(never) && never.indexOf("<b>stale</b>") < 0 && never.indexOf("none since the agent started") >= 0);
-  const old = renderFleetPage(buildFleetView(Object.assign({}, INPUT, { cycleAt: NOW - 3 * 1200000 }), NOW), {}, NOW);
+  const old = renderFleetPage(buildFleetView(Object.assign({}, INPUT, { cycleAt: NOW - 3 * FLEET_VIEW_RULE.cycleStaleMinMs }), NOW), {}, NOW);
   check("R11 stale cycle: the summary says stale with the cycle's time, never '0 of N answering'", old.indexOf("Nodes: stale · last fleet cycle") >= 0 && !/\d+ of \d+ answering/.test(old));
+  const vHtml = renderFleetPage(buildFleetView(INPUT, NOW), {}, NOW);
+  check("R12 ACTIVE shown as the word with an ok lamp, never the raw code", /data-tone="ok"><\/span>ACTIVE</.test(vHtml) && !/<\/span>2<\/span>/.test(vHtml));
+  const fresh = renderFleetPage(buildFleetView(Object.assign({}, INPUT, { round: round({ witnessFacts: { rows: [{ key: K5, confirmed: false, rounds: 0 }] }, everyRound: { window: { minutes: 60, counted_rounds: 1, complete: false } } }) }), NOW), {}, NOW);
+  check("R13 just after a restart: 'not confirmed this round' (neutral) and 'window still filling' (grey), no warn lamp in the validator section", (function() { var sec = fresh.slice(fresh.indexOf('id="validator"'), fresh.indexOf('id="machines"')); return sec.indexOf("not confirmed this round") >= 0 && sec.indexOf("window still filling") >= 0 && sec.indexOf('data-tone="warn"') < 0; })());
   const banned = /\b(score|ranking|certified|approved|trusted|SLA|uptime)\b/i;
   check("R9 no banned or retired words", !banned.test(html), (html.match(banned) || [])[0]);
 }
