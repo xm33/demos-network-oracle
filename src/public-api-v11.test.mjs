@@ -218,9 +218,9 @@ function w2HeadOk(html, route) {
   const notLoaded = Object.entries(W2_FILES).filter(([r, f]) => !SRC.includes('applySiteKit(readFileSync("' + f + '", "utf8"), "' + r + '")') || count(readFileSync(join(ROOT, f), "utf8"), "<!--dno:head-->") !== 1);
   check("H60 W2-1 every static page is loaded with its own route, and carries the head marker once", notLoaded.length === 0, notLoaded.map(([r]) => r).join(", "));
   const bare = [...SRC.matchAll(/siteHead\(([^)]*)\)/g)].map((m) => m[1]).filter((a) => a !== "route" && a !== "null" && !/^"\/[a-z/-]*"$/.test(a));
-  check("H61 W2-1 every server-built head names its own route (timeline, reference twice, docs); only the 404 page has none",
+  check("H61 W2-1 every server-built head names its own route (timeline, reference twice, docs); only the 404 page and the internal /fleet page (no share tags, never public) have none",
     count(SRC, "<title>Timeline · Demos Network Oracle</title>' + siteHead(\"/timeline\")") === 1 && count(SRC, "<title>Reference · Demos Network Oracle</title>' + siteHead(\"/reference\")") === 2
-    && SRC.includes('applySiteKit(DOCS_HTML, "/docs")') && bare.length === 0 && count(SRC, "siteHead(null)") === 1 && SITE_ROUTES.length === 11, bare.join(", "));
+    && SRC.includes('applySiteKit(DOCS_HTML, "/docs")') && bare.length === 0 && count(SRC, "siteHead(null)") === 2 && SRC.includes("renderFleetPage(fv, { head: siteHead(null)") && SITE_ROUTES.length === 11, bare.join(", "));
   check("H62 W2-1/3 the homepage head has one meta marker and neither an inline icon nor a description of its own; the agent fills the marker with the hashed icon and the page's tags",
     count(HOME, "<!--dno:meta-->") === 1 && HOME.indexOf("<!--dno:meta-->") < HOME.indexOf("</head>") && !HOME.includes("data:image") && !/<meta name="description"/.test(HOME)
     && SRC.includes("HOMEPAGE_HTML = HOMEPAGE_HTML.replace(HOME_META_MARKER, (SITE_FAVICON ? '<link rel=\"icon\" type=\"image/png\" sizes=\"64x64\" href=\"' + SITE_FAVICON.path + '\">' : '') + pageMeta(\"/\", META_ASSETS));"));
@@ -507,7 +507,7 @@ check("SC2 the orientation (fields, who-decides, outside, full) sits above the a
 { const PAGES = ["homepage.html", "methodology.html", "sources.html", "about-demos.html", "agent-guide.html", "criteria.html", "commerce.html", "commerce-methodology.html"];
   const held = PAGES.filter((f) => /\((date of deploy|date|TBD|TODO)[^)]*\)|\bTODO\b|\bTBD\b/.test(readFileSync(join(ROOT, f), "utf8")));
   check("PH1 no served page carries an unfilled placeholder: '(date of deploy)', '(date …)', TODO or TBD", held.length === 0, held.join(", ")); }
-check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5, D3 and the IP-addresses-targeted entry (dated 2026-10-26) and paragraph, and share-fix S4 (normal shown as advancing) and S2 (the parameters table takes keyboard focus): the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "070c68d606f1b0e93a890d6ed2d2110b83f154002749b89a55de8d2dcff210fc"
+check("SC3 the published Methodology text (section list and article) is byte for byte the article after the 2026-10-25 changelog entries, D5, D3 and the IP-addresses-targeted entry (dated 2026-10-26) and paragraph, and share-fix S4 (normal shown as advancing) and S2 (the parameters table takes keyboard focus), and the fleet view (the removed /dashboard no longer named; the internal fleet page is described, not named by route): the orientation adds nothing inside it; every section id once", createHash("sha256").update(meArticle).digest("hex") === "cb22b69d52d78f030c10797f0d013edb058ed3116823ac8e09cea90bc7ec6acc"
   && ["what-the-oracle-is", "what-it-measures", "how-it-works", "validators", "witnesses", "block-identity", "clocks", "known-limitations", "methodology-changelog"].every((id) => count(METHP, 'id="' + id + '"') === 1));
 { const AG = readFileSync(join(ROOT, "agent-guide.html"), "utf8");
   check("D5 the locked sentence is not in the Methodology or Agent Guide text either: the shared footer carries it on every page; the sentences around it stay",
@@ -517,7 +517,7 @@ check("SC3 the published Methodology text (section list and article) is byte for
 { const beta = [["homepage.html", HOME], ["methodology.html", METHP], ["src/agent.mjs", AGENTSRC]].map(([n, t]) => [n, count(t, "Demos beta")]);
   const NEW = "a census of the public Demos testnet";
   check("D3 'Demos beta' is gone from every page and from the /catalog notes: each place says 'the public Demos testnet', the name the site gives the network elsewhere; only the changelog quotes the old words",
-    count(HOME, NEW) === 2 && count(METHP, "not " + NEW + ", and not a promise of monitoring.") === 1 && count(AGENTSRC, "Not " + NEW + ".") === 3
+    count(HOME, NEW) === 2 && count(METHP, "not " + NEW + ", and not a promise of monitoring.") === 1 && count(AGENTSRC, "Not " + NEW + ".") === 2
     && beta.every(([n, c]) => c === (n === "methodology.html" ? 1 : 0)) && /Peer-listed identities are said not to be a census of the public Demos testnet, the name this site gives the network everywhere else, where the page said "Demos beta"\. No rule changed\.<\/p>/.test(METHP), JSON.stringify(beta)); }
 const FIELDS = ["status", "trend", "risk", "data_quality", "confidence", "agreement"];
 const fieldRows = [...meOrient.matchAll(/<li data-field="([a-z_]+)"><code>([a-z_]+)<\/code><span>([^<]+)<\/span><a href="#([^"]+)">the rule<\/a><\/li>/g)];
@@ -754,7 +754,7 @@ const noRoute = docsPaths.filter((p) => !SRC.includes('reqPath === "' + p + '"')
 check("H28 every endpoint /docs lists has a route in the agent", docsPaths.length >= 15 && noRoute.length === 0, docsPaths.length + " listed; no route: " + noRoute.join(", "));
 // And the other way: every route the public handler serves is on /docs. Not listed, by their nature: /docs itself, /home
 // (a redirect to /), and the routes the public listener answers 404 or 401 for (the internal views and the private one).
-const NOT_PUBLIC = ["/docs", "/home", "/history", "/history/export", "/dashboard", "/private/commerce/status"];
+const NOT_PUBLIC = ["/docs", "/home", "/history", "/history/export", "/fleet", "/fleet.json", "/private/commerce/status"];
 const served = [...new Set([...SRC.matchAll(/reqPath === "(\/[^"]*)"/g)].map((m) => m[1].replace(/(.)\/$/, "$1")))];
 const unlisted = served.filter((p) => !NOT_PUBLIC.includes(p) && !docsPaths.includes(p));
 check("H28b every route the public site serves is listed on /docs, which says 'every route'", served.length >= 28 && unlisted.length === 0 && NOT_PUBLIC.every((p) => served.includes(p)) && /Every route the public site serves/.test(SRC), served.length + " routes; not listed: " + unlisted.join(", "));
@@ -847,6 +847,12 @@ try {
   check("S24 no public JSON key naming readiness", !allKeys.some((k) => /ready|readiness/i.test(k)), allKeys.filter((k) => /ready|readiness/i.test(k)).slice(0, 3).join(","));
   // R4: fleet data is not on the public listener, whatever INTERNAL_PORT is.
   check("S31 /dashboard is not on the public listener", (await get("/dashboard")).status === 404 && (await get("/dashboard/")).status === 404);
+  // Fleet view: the private page and its JSON are not on the public listener, under any spelling.
+  { const fleetPaths = ["/fleet", "/fleet/", "/fleet.json", "/fleet.json?x=1", "/fleet?x=1", "/FLEET", "/Fleet.json", "/fleet%2Fjson", "/fleet/../fleet", "//fleet"];
+    const fleetCodes = [];
+    for (const p of fleetPaths) fleetCodes.push((await get(p)).status);
+    check("S54 /fleet and /fleet.json answer 404 on the public listener, under every spelling tried", fleetCodes.every((c) => c === 404), fleetPaths.map((p, i) => p + "=" + fleetCodes[i]).join(" ")); }
+  check("S55 no fleet-view field in the public JSON read here (/peers, /health, /catalog)", !allKeys.some((k) => /^(machines|machinesReporting|machinesConfigured|exporter|blockFrom|fleetView)$/.test(k)), allKeys.filter((k) => /machines|exporter|blockFrom|fleetView/.test(k)).join(","));
   // R5: the two 1.0 counts that add seeds and catalog rows together say so.
   check("S32 validator_growth labels online and synced as mixed", vg.mixed_fields && Array.isArray(vg.mixed_fields.fields) && vg.mixed_fields.fields.join(",") === "online,synced" && typeof vg.mixed_fields.note === "string");
   // R7: blocks advanced in the window, as observed; no rate.

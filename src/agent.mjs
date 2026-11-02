@@ -31,7 +31,7 @@ import { Demos } from "@kynesyslabs/demosdk/websdk";
 
 import { initConsensus, pollAndProcessConsensus, getConsensusState } from "./consensus.mjs";
 import { PUBLIC_SIGNAL_TYPES, NON_PUBLIC_SIGNAL_TYPES, toPublicSignals } from "./signal-projection.mjs";
-import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, versionOf, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson } from "./public-safety.mjs";
+import { isValidIdentity, truncIdentity, sanitizeHeight, sanitizeLabel, versionOf, escHtml, probeErrorCategory, adminTokenMatches, MIN_ADMIN_TOKEN_LENGTH, resolvePublicProbeOrigin, mapWithConcurrency, cappedJson, cappedText } from "./public-safety.mjs";
 import * as FLEET_CONFIG from "./fleet.config.mjs"; // optional keys (e.g. LOCAL_INFO_URL) are read from here without breaking older configs
 import { runValidatorRound, createWatchHistory, createFirstAgreedStore, keyOf, publicOnChainValidators, publicValidatorWatch, roundLogLine, validatorsSentence, listedStatus, dialsEnabled } from "./validator-watch.mjs";
 import { leadCount, cycleSeeds, seedsCalm, trendReason, tileMedian, tileSeeds, tileOnChain, tileAnswered, tilesBetween, figureClocks, listSource, fieldReason } from "./home-cycle.mjs";
@@ -41,6 +41,7 @@ import { compareBlockIdentity, createBlockIdentityTracker, describeBlockIdentity
 import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHeightClock, heightMovementOf, VALIDATORS_SOURCE } from "./status-rule.mjs";
 import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { sentinelStatePath } from "./sentinel-state.mjs";
+import { readFleetViewConfig, exporterUrl, parseNodeMetrics, buildFleetView, renderFleetPage, FLEET_VIEW_RULE } from "./fleet-view.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -295,7 +296,7 @@ docsEntry('GET /sentinel', 'Whether DNO\'s own alert process completed a check i
 docsEntry('GET /consensus', CONSENSUS_ENABLED ? 'An experiment that collects other observers\' reports. Not part of the reading.' : 'An experiment that would collect other observers\' reports. It is switched off on this server and answers {"error":"Consensus not initialized"}. Not part of the reading.') +
 '</dl><p>Public observation interval: ' + Math.round(MONITOR_INTERVAL_MS / 1000) + ' s.</p>' +
 '<p>An address nothing serves answers 404: a page when the request accepts HTML, a JSON error otherwise.</p></section>' +
-'<section id="internal"><h2>Internal only</h2><p>Fleet views, <code>/dashboard</code>, <code>/history</code> and <code>/history/export</code>, are served on DNO\'s internal listener only (INTERNAL_PORT). The public site answers 404 for them.</p></section>' +
+'<section id="internal"><h2>Internal only</h2><p>Fleet views, an internal fleet page, <code>/history</code> and <code>/history/export</code>, are served on DNO\'s internal listener only (INTERNAL_PORT). The public site answers 404 for them.</p></section>' +
 '</article></div></main><!--dno:footer--></body></html>';
 
 // FIX BUG 6: Write budget constants (SuperColony rate limits)
@@ -702,6 +703,7 @@ for (var _fx in FIXNET_NODES) { if (FIXNET_NODES[_fx] && FIXNET_NODES[_fx].ident
 let latestFixnetNodes = []; // updated each cycle
 let latestDiscoveredFixnet = []; // fixnet peers discovered via anchor peerlist crawl
 let fixnetObservedAt = null; // ms timestamp of last fixnet poll completion
+let latestFleetBaseline = null; // seedMedianReference() taken when the fixnet poll completed (the fleet page's testnet baseline)
 let fixnetCycleCounter = 0; // increments each cycle; used for rate-limited discovered probes
 const BLOCK_LAG_THRESHOLD = 3;
 const STALE_SECONDS_THRESHOLD = 120;
@@ -2556,6 +2558,45 @@ function withTimeout(promise, ms, label) {
   ]).finally(function() { clearTimeout(timer); });
 }
 
+// ---- private fleet page (/fleet, /fleet.json): internal listener only (src/fleet-view.mjs) -------------------------------
+// FLEET_VIEW in the untracked fleet.config.mjs names each node's chain and the loopback port of its machine's node
+// exporter, as reachable on this host's loopback. Without it the page still serves: chains "unknown", no machines.
+const FLEET_VIEW_CONFIG = readFleetViewConfig(FLEET_CONFIG.FLEET_VIEW, Object.keys(EXPECTED_FLEET));
+var fleetMachineSamples = {}; // name -> { at, ok, metrics }: the latest sample of that machine's exporter
+// One exporter read: loopback only (exporterUrl), through cappedText (no redirect, 5 s, the cap). null when the answer
+// is not a 200.
+async function fleetMetricsText(url) {
+  var r = await cappedText(url, {}, { timeoutMs: 5000, maxBytes: FLEET_VIEW_RULE.metricsMaxBytes });
+  return r.ok && typeof r.data === "string" ? r.data : null;
+}
+async function sampleFleetMachines() {
+  await Promise.all(FLEET_VIEW_CONFIG.map(async function(c) {
+    var url = exporterUrl(c.exporter);
+    if (!url) return;
+    var at = Date.now();
+    try {
+      var text = await fleetMetricsText(url);
+      fleetMachineSamples[c.name] = text === null ? { at: at, ok: false } : { at: at, ok: true, metrics: parseNodeMetrics(text) };
+    } catch (e) { fleetMachineSamples[c.name] = { at: at, ok: false }; }
+  }));
+}
+// Every 60 s, on its own clock: the page shows a machine sample for 5 min, so it must not wait for the 20-min fleet cycle.
+function startFleetMachineSampler() {
+  async function tick() {
+    try { await sampleFleetMachines(); }
+    catch (e) { logError("[fleet-view] machine sample failed: " + (e && e.message ? e.message : String(e))); }
+    setTimeout(tick, 60000);
+  }
+  setTimeout(tick, 5000);
+}
+function fleetViewNow(now) {
+  var identities = {};
+  Object.keys(EXPECTED_FLEET).forEach(function(n) { identities[n] = EXPECTED_FLEET[n] && EXPECTED_FLEET[n].identity; });
+  return buildFleetView({ config: FLEET_VIEW_CONFIG, identities: identities, probes: latestFixnetNodes, cycleAt: fixnetObservedAt,
+    cycleIntervalMs: INTERVAL_MS, baseline: latestFleetBaseline, samples: fleetMachineSamples, round: latestValidatorRound,
+    wallet: { balance: lastKnownBalance, lowMark: LOW_BALANCE_THRESHOLD }, agentStartedAt: AGENT_STARTED_AT }, now);
+}
+
 async function probeFixnetNodes() {
   var results = [];
   for (var name in FIXNET_NODES) {
@@ -2567,14 +2608,14 @@ async function probeFixnetNodes() {
       if (res.ok) {
         var data = await res.json();
         // For self-reported block, find this node's own entry in its peerlist
-        var block = null;
+        var block = null, blockFrom = null;
         if (data.peerlist && Array.isArray(data.peerlist)) {
           var selfEntry = data.peerlist.find(function(p) { return p.identity === node.identity; });
           if (selfEntry && selfEntry.sync) {
-            block = sanitizeHeight(selfEntry.sync.block);
+            block = sanitizeHeight(selfEntry.sync.block); blockFrom = block === null ? null : "self";
           } else if (data.peerlist[0] && data.peerlist[0].sync) {
-            // Fallback: first peer (anchor convention)
-            block = sanitizeHeight(data.peerlist[0].sync.block);
+            // Fallback: first peer (anchor convention). Marked "peer": the fleet page never shows it as the node's own height.
+            block = sanitizeHeight(data.peerlist[0].sync.block); blockFrom = block === null ? null : "peer";
           }
         }
         var identityMatch = data.identity === node.identity;
@@ -2586,6 +2627,7 @@ async function probeFixnetNodes() {
           ok: true,
           latencyMs: latencyMs,
           block: block,
+          blockFrom: blockFrom,
           version: versionOf(data.version) || "?",
           peers: data.peerlist ? data.peerlist.length : 0,
           identityMatch: identityMatch,
@@ -3434,9 +3476,10 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     }
     return false;
   }
-  // Fleet-only routes (/history and everything under it, /dashboard): served on the loopback internal listener only.
-  // The public listener answers 404 for them whether or not INTERNAL_PORT is set.
-  function isFleetRoute(p) { return p === "/history" || p.indexOf("/history/") === 0 || p === "/dashboard" || p.indexOf("/dashboard/") === 0; }
+  // Fleet-only routes (/history and everything under it, /fleet, /fleet.json): served on the loopback internal listener
+  // only. The public listener answers 404 for them whether or not INTERNAL_PORT is set. /dashboard was removed (no
+  // handler on either listener); it stays listed so the public answer for it can never change by accident.
+  function isFleetRoute(p) { return p === "/history" || p.indexOf("/history/") === 0 || p === "/fleet" || p === "/fleet.json" || p.indexOf("/fleet/") === 0 || p === "/dashboard" || p.indexOf("/dashboard/") === 0; }
   // W2-5: an address nothing serves. Browsers (Accept names text/html) get a page in the site shell; every other client
   // gets the JSON body it always had. The fleet-only routes on the public listener answer exactly this, so they stay
   // indistinguishable from any unknown path.
@@ -3977,433 +4020,18 @@ function buildPublicMetrics(snapshot, now, staleBound) {
       } catch (se) { /* file missing or unreadable: status stays unknown */ }
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify(sentinelData, null, 2));
-    } else if (reqPath === "/dashboard") {
-      var dashHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Demos Fleet Dashboard</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:20px}
-h1{color:#58a6ff;margin-bottom:4px;font-size:1.4em}
-.sub{color:#8b949e;font-size:0.85em;margin-bottom:20px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
-.node{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px;text-align:center}
-.node.healthy{border-color:#238636}.node.unhealthy{border-color:#da3633}.node.unknown{border-color:#8b949e}
-.node h3{font-size:1.1em;margin-bottom:6px}.node .status{font-size:0.8em;margin-bottom:4px}
-.node .block{color:#8b949e;font-size:0.75em}
-.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
-.metric{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}
-.metric .label{color:#8b949e;font-size:0.8em}.metric .value{font-size:1.4em;font-weight:bold;margin-top:4px}
-.safe{color:#3fb950}.caution{color:#d29922}.unsafe{color:#f85149}.unknown{color:#8b949e}
-.sla{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
-.sla h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
-.sla table{width:100%;border-collapse:collapse;font-size:0.85em}
-.sla th{color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d}
-.sla td{padding:6px 8px;border-bottom:1px solid #21262d}
-.sla tr:last-child td{border-bottom:none}
-.uptime-bar{background:#21262d;border-radius:4px;height:8px;width:100%;margin-top:4px}
-.uptime-fill{height:8px;border-radius:4px;background:#238636}
-.uptime-fill.warn{background:#d29922}.uptime-fill.bad{background:#da3633}
-.chart-box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
-.chart-box h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
-.incidents{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
-.incidents h2{color:#58a6ff;font-size:1.1em;margin-bottom:12px}
-.inc{padding:8px 0;border-bottom:1px solid #21262d;font-size:0.85em}
-.inc:last-child{border-bottom:none}
-.inc .id{color:#58a6ff;font-weight:bold}.inc .sev{padding:2px 6px;border-radius:4px;font-size:0.75em}
-.sev.critical{background:#da3633;color:#fff}.sev.warning{background:#d29922;color:#fff}.sev.info{background:#388bfd;color:#fff}
-.footer{color:#484f58;font-size:0.75em;text-align:center;margin-top:20px}
-.rec-box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center}
-.rec-box .rec{font-size:1.6em;font-weight:bold;margin-bottom:4px}
-.rec-box .reason{color:#8b949e;font-size:0.85em}
-</style></head><body>
-<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
-  <h1 style="margin:0">Demos Network Oracle</h1>
-  <span style="font-size:0.75em;color:#484f58" id="updated">Loading...</span>
-</div>
-<div class="rec-box"><div class="rec" id="rec">—</div><div class="reason" id="rec-reason">—</div></div>
-
-<!-- SECTION 1: Summary cards — public network focused -->
-<div class="metrics" id="metrics"></div>
-
-<!-- SECTION 2: Network Agreement Panel -->
-<div id="agreement-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">📡 Network Agreement</h2>
-  <div id="agreement-status">Loading...</div>
-</div>
-
-<!-- SECTION 2a: Last 24 Hours -->
-<div id="last-24h-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">📊 Last 24 Hours</h2>
-  <div id="last-24h-content">Loading...</div>
-</div>
-
-<!-- SECTION 2b: Network Growth -->
-<div id="growth-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">\ud83d\udcc8 Network Growth</h2>
-  <div id="growth-status">Loading...</div>
-</div>
-
-<!-- SECTION 3: Public network nodes -->
-<div class="public-nodes" id="pub-nodes" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Public network nodes</h2>
-  <div id="pub-list">Loading...</div>
-</div>
-
-<!-- SECTION 4: Network Intelligence -->
-<div id="decision-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🧠 Network Intelligence</h2>
-  <div id="decision-status">Loading...</div>
-</div>
-
-<!-- SECTION 5: Network signals — network-level only -->
-<div id="signals-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-  <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">Network signals</h2>
-  <div id="signals-list">Loading...</div>
-</div>
-
-<!-- SECTION 6: Incidents -->
-<div class="incidents"><h2>Recent Incidents</h2><div id="inc-list">Loading...</div></div>
-
-<!-- SECTION 7: Reference layer — fleet nodes (secondary, collapsed) -->
-<details style="margin-bottom:24px">
-  <summary style="cursor:pointer;color:#484f58;font-size:0.9em;font-weight:500;padding:10px 0;user-select:none">
-    🔧 Reference Layer — Fleet nodes (${FLEET_SIZE} nodes)
-  </summary>
-  <div style="margin-top:12px">
-    <div class="grid" id="nodes"></div>
-    <div id="sentinel-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px;margin-top:12px">
-      <h2 style="color:#58a6ff;font-size:1.1em;margin-bottom:12px">🛡️ Sentinel v1</h2>
-      <div id="sentinel-status">Loading...</div>
-    </div>
-    <div id="rep-box" style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px">
-<!-- reputation panel removed: Path 2, 2026-06-10 -->
-    </div>
-    <div class="sla"><h2>Node SLA — uptime</h2>
-      <table><thead><tr><th>Identity</th><th>Block</th><th>Uptime</th><th></th></tr></thead>
-      <tbody id="sla-body"></tbody></table>
-    </div>
-    <div class="chart-box"><h2>Block height (last 24h)</h2><canvas id="blk-chart" style="width:100%;height:120px;display:block"></canvas></div>
-    <div class="incidents" style="margin-top:16px"><h2>Fleet Incidents</h2><div id="fleet-inc-list">Loading...</div></div>
-  </div>
-</details>
-
-<!-- SECTION 8: How we know -->
-<div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px 16px;margin-bottom:24px;font-size:0.82em;color:#8b949e">
-  <span style="color:#58a6ff;font-weight:600">How we know</span> &nbsp;·&nbsp;
-  Public reading rests on <span id="hw-public-count">—</span> &nbsp;·&nbsp;
-  Updated every 20s &nbsp;·&nbsp;
-  Data quality: <span id="hw-quality">—</span> &nbsp;·&nbsp;
-  <a href="/methodology" style="color:#58a6ff">Methodology</a>
-</div>
-
-<div class="footer" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
-  <span>Demos Network Oracle v${AGENT_VERSION}</span>
-  <span class="dno-tagline">DNO informs context; it does not advise, predict, score, certify, or decide action.</span>
-  ${latestAttestationState.lastCount > 0
-    ? '<span style="color:#c8c8c8;font-weight:600">DAHR on cross-check RPCs: ' + latestAttestationState.lastCount + '</span>'
-    : '<span style="color:#8b949e;font-weight:600" title="DAHR attestation currently unavailable">DAHR attestation unavailable</span>'}
-  <span style="display:flex;align-items:center;gap:5px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:3px 8px;font-size:0.78em">powered by <img src="https://framerusercontent.com/assets/IyyrITqCg67NykDbX6dibaTrhfA.svg" height="14" style="vertical-align:middle;filter:brightness(10)"></span>
-  <span style="color:#444">|</span>
-  <a href="/docs" style="color:#58a6ff">Docs</a>
-  <a href="https://github.com/xm33/demos-network-oracle" style="color:#58a6ff">GitHub</a>
-</div>
-<script>
-function drawChart(hist){
-  var canvas=document.getElementById("blk-chart");
-  if(!canvas||!hist||hist.length<2)return;
-  var dpr=window.devicePixelRatio||1;
-  canvas.width=canvas.offsetWidth*dpr;canvas.height=120*dpr;
-  var ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
-  var pts=hist.slice(-72);
-  var blocks=pts.map(function(p){return p.block||0}).filter(Boolean);
-  if(!blocks.length)return;
-  var minB=Math.min.apply(null,blocks),maxB=Math.max.apply(null,blocks),range=maxB-minB||1;
-  var W=canvas.offsetWidth,H=120,PAD=28;
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle="#238636";ctx.lineWidth=2;ctx.beginPath();
-  var first=true;
-  pts.forEach(function(p,i){
-    if(!p.block)return;
-    var x=PAD+(i/(pts.length-1))*(W-PAD*2);
-    var y=(H-PAD)-((p.block-minB)/range)*(H-PAD*2);
-    first?(ctx.moveTo(x,y),first=false):ctx.lineTo(x,y);
-  });
-  ctx.stroke();
-  ctx.fillStyle="#8b949e";ctx.font="11px sans-serif";
-  ctx.fillText(maxB.toLocaleString(),4,14);
-  ctx.fillText(minB.toLocaleString(),4,H-4);
-  var t0=pts[0]&&new Date(pts[0].ts),t1=pts[pts.length-1]&&new Date(pts[pts.length-1].ts);
-  if(t0)ctx.fillText(t0.toLocaleTimeString(),PAD,H-2);
-  if(t1){ctx.textAlign="right";ctx.fillText(t1.toLocaleTimeString(),W-4,H-2);}
-}
-// Incidents arrive already scoped by the server (/incidents serves public scope on the public listener).
-function isFleetIncident(inc) { return inc && inc.scope === "fleet"; }
-function escD(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
-function render24hSummary(s) {
-  if (!s) return '<div style="color:#8b949e;font-size:0.85em">Summary unavailable.</div>';
-
-  if (!s.sufficient) {
-    return '<div style="color:#8b949e;font-size:0.9em;font-style:italic">' +
-      (s.message || "Insufficient observation in the last 24 hours.") + '</div>';
-  }
-
-  var coverageLine = (s.coverage_pct >= 99.0)
-    ? 'coverage 24/24h'
-    : 'coverage ' + s.coverage_pct + '% of window';
-
-  var rows = [];
-
-  var nodesLine = s.peak_set
-    ? 'typically ' + s.typical_set_size + ', peak ' + s.peak_set.size
-    : String(s.typical_set_size);
-  rows.push(['Public nodes observed', nodesLine, '#c9d1d9']);
-
-  if (s.peak_set) {
-    var peakLine = s.peak_set.size + ' nodes observed; ' +
-                   s.peak_set.avg_reachable.toFixed(1) +
-                   ' answered on average across ' +
-                   s.peak_set.cycles + ' cycles';
-    rows.push(['Peak observation window', peakLine, '#c9d1d9']);
-  }
-
-  var cmCol = s.chain_movement.state === 'normal' ? '#3fb950'
-            : s.chain_movement.state === 'interrupted' ? '#d29922'
-            : '#8b949e';
-  rows.push(['Chain movement', s.chain_movement.state, cmCol]);
-
-  var nsLine = s.longest_non_stable_minutes > 0
-    ? s.longest_non_stable_minutes + 'm'
-    : 'none observed';
-  rows.push(['Longest non-stable interval', nsLine, '#c9d1d9']);
-
-  var incCol = s.active_critical_public_incidents > 0 ? '#f85149' : '#3fb950';
-  rows.push(['Active critical public incidents', String(s.active_critical_public_incidents), incCol]);
-
-  var html = '<div style="display:flex;justify-content:flex-end;font-size:0.75em;color:#8b949e;margin-bottom:8px">' +
-             coverageLine + '</div>';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:0.9em">';
-  rows.forEach(function(r) {
-    html += '<tr>' +
-      '<td style="padding:6px 0;color:#8b949e;width:45%">' + r[0] + '</td>' +
-      '<td style="padding:6px 0;color:' + r[2] + ';font-weight:500">' + r[1] + '</td>' +
-      '</tr>';
-  });
-  html += '</table>';
-  return html;
-}
-async function refresh(){
-  try{
-    var r=await fetch("/health");var d=await r.json();
-    var pubBlock = (d.agreement&&(d.agreement.max_block||d.agreement.median_block)) || "?";
-    var pubTotal = (d.agreement&&d.agreement.total_nodes) || "?";
-    var pubAligned = (d.agreement&&d.agreement.aligned_nodes) || "?";
-    document.getElementById("updated").textContent="Block "+pubBlock+
-      " | "+pubAligned+"/"+pubTotal+" heights aligned | Updated "+new Date(d.last_updated).toLocaleTimeString()+
-      " | Staleness "+(d.staleness_seconds||0)+"s";
-    var re=document.getElementById("rec");
-    re.textContent=(d.status||"unknown").toUpperCase();
-    re.className="rec "+(d.status==="stable"?"safe":d.status==="degraded"?"caution":d.status==="unstable"?"unsafe":"unknown");
-    document.getElementById("rec-reason").textContent=(d.status_reason||"")+" · Risk: "+(d.risk||"?").toUpperCase()+" · Confidence: "+(d.confidence||"?").toUpperCase();
-    var mg=document.getElementById("metrics");mg.innerHTML="";
-    // Summary cards — public network focused only
-    if(d.agreement){
-      var na=d.agreement;
-      var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
-      mg.innerHTML+='<div class="metric"><div class="label">Highest height compared</div><div class="value">'+(na.max_block||na.median_block||"?")+'</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Agreement</div><div class="value" style="color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
-      var compared=typeof na.aligned_nodes==="number"&&typeof na.block_spread==="number";
-      mg.innerHTML+='<div class="metric"><div class="label">Heights compared</div><div class="value">'+(compared?na.aligned_nodes+'/'+na.total_nodes+' aligned':'not computed')+'</div></div>';
-      mg.innerHTML+='<div class="metric"><div class="label">Block Spread</div><div class="value" style="color:'+(!compared?"#8b949e":na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+(compared?na.block_spread:'not computed')+'</div></div>';
-    }
-    var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
-    mg.innerHTML+='<div class="metric"><div class="label">Risk</div><div class="value" style="color:'+riskCol+'">'+d.risk.toUpperCase()+'</div></div>';
-    var confCol=d.confidence==="clear"?"#3fb950":"#d29922";
-    mg.innerHTML+='<div class="metric"><div class="label">Confidence</div><div class="value" style="color:'+confCol+'">'+d.confidence.toUpperCase()+'</div></div>';
-    mg.innerHTML+='<div class="metric"><div class="label">Active Incidents</div><div class="value">'+d.active_incidents+'</div></div>';
-
-    // Network agreement panel
-    var agBox=document.getElementById("agreement-status");
-    if(agBox&&d.agreement){
-      var na=d.agreement;
-      var agCol=na.state==="strong"?"#3fb950":na.state==="moderate"?"#d29922":"#f85149";
-      var html='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement</div><div style="font-size:1.1em;font-weight:bold;color:'+agCol+'">'+na.state.toUpperCase()+'</div></div>';
-      var cmp=typeof na.aligned_nodes==="number"&&typeof na.block_spread==="number";
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Aligned</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(cmp?na.aligned_nodes+'/'+na.total_nodes:'not computed')+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Median Block</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+(na.median_block||"?")+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Block Spread</div><div style="font-size:1.1em;font-weight:bold;color:'+(!cmp?"#8b949e":na.block_spread>100?"#f85149":na.block_spread>10?"#d29922":"#3fb950")+'">'+(cmp?na.block_spread:'not computed')+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:90px"><div style="color:#8b949e;font-size:0.75em">Agreement %</div><div style="font-size:1.1em;font-weight:bold;color:'+(cmp?agCol:"#8b949e")+'">'+(cmp&&na.total_nodes>0?Math.round(na.aligned_nodes/na.total_nodes*100)+'%':'not computed')+'</div></div>';
-      html+='</div>';
-      // The API's own reason string; no aligned/outlier claim of the dashboard's own.
-      html+='<div style="font-size:0.82em;color:#8b949e;margin-top:4px">'+escD(d.agreement_reason||"")+'</div>';
-      agBox.innerHTML=html;
-    }
-
-    // Last 24 Hours panel
-    var l24Box = document.getElementById("last-24h-content");
-    if (l24Box && d.last_24h) {
-      l24Box.innerHTML = render24hSummary(d.last_24h);
-    }
-
-    // How we know box
-    var hwPublic=document.getElementById("hw-public-count");
-    var hwQuality=document.getElementById("hw-quality");
-    // What the reading rests on (witnesses, API 1.2): the seeds, one seed and validators, validators alone, or nothing.
-    if(hwPublic&&d.witnesses){var wv=d.witnesses.validators,wn=wv?wv.counted:0;hwPublic.textContent={seeds_only:d.witnesses.public_seeds.own_height+" seed heights",seed_and_validators:"one seed and "+wn+" validator"+(wn===1?"":"s"),validators_only:wn+" validators, no seed",insufficient:"nothing: no reading"}[d.witnesses.mode]||"not reported";}
-    if(hwQuality&&d.data_quality) hwQuality.textContent=d.data_quality.toUpperCase();
-    var gb=document.getElementById("growth-status");
-    if(gb&&d.validator_growth){
-      var vg=d.validator_growth;
-      var gh='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      // Catalog and probed seeds are separate populations; their counts are never added or mixed.
-      function card(label,val){return '<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">'+label+'</div><div style="font-size:1.1em;font-weight:bold;color:#c9d1d9">'+escD(val)+'</div></div>';}
-      gh+=card('seen',vg.discovered)+card('seeds answered',vg.monitored_online)+card('at head',vg.monitored_at_head)+card('configured seeds',vg.monitored);
-      gh+='</div>';
-      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:8px">Peer-listed identities from the public seeds. Not dialed. Not the on-chain validators table. Not a census of the public Demos testnet.</div>';
-      // New identities: a window the count does not cover is "not reported", with the reason, never +0.
-      var fc=vg.first_counted;
-      var gl=[['today','today'],['week','this week'],['month','this month']].map(function(w){var n=fc?fc[w[0]]:vg[w[0]];return typeof n==='number'?'+'+n+' '+w[1]:w[1]+': not reported';}).join(' \u00b7 ')+(fc&&fc.reason?' ('+fc.reason+')':'');
-      gh+='<div style="font-size:0.82em;color:#8b949e;margin-bottom:12px">'+escD(gl)+'</div>';
-      if(vg.validators&&vg.validators.length>0){
-        gh+='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Validator</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Sync</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Status</th><th style="color:#8b949e;text-align:right;padding:4px 8px;border-bottom:1px solid #21262d">Since</th></tr></thead><tbody>';
-        vg.validators.forEach(function(v){
-          // No grades: seeds show what DNO dialed; catalog rows show what a peerlist reported this cycle.
-          var statusText=v.monitored?(v.online?'probed seed \u00b7 answered':'probed seed \u00b7 no answer'):(v.listed_this_cycle?(v.online?'reported online':'not reported'):'not listed this cycle');
-          var since=v.first_seen_hours_ago<24?v.first_seen_hours_ago+'h ago':Math.round(v.first_seen_hours_ago/24)+'d ago';
-          gh+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+escD(v.display)+'</b></td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(typeof v.block==='number'?v.block.toLocaleString():'not observed')+'</td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;color:#8b949e">'+(v.monitored&&typeof v.sync_pct==='number'?v.sync_pct+'%':'\u2014')+'</td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d">'+statusText+'</td>';
-          gh+='<td style="padding:6px 8px;border-bottom:1px solid #21262d;text-align:right;color:#8b949e">'+since+'</td></tr>';
-        });
-        gh+='</tbody></table>';
-      }
-      gb.innerHTML=gh;
-    }
-  }catch(e){document.getElementById("updated").textContent="Error: "+e.message;}
-  try{
-    var hr=await fetch("/history");var hd=await hr.json();
-    drawChart(Array.isArray(hd)?hd:(hd.history||[]));
-  }catch(e){}
-  try{
-    var db=document.getElementById("decision-status");
-    if(db&&d.status){
-      var statusCol=d.status==="stable"?"#3fb950":d.status==="degraded"?"#d29922":d.status==="unstable"?"#f85149":"#8b949e";
-      var riskCol=d.risk==="low"?"#3fb950":d.risk==="elevated"?"#d29922":"#f85149";
-      var html='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Status</div><div style="font-size:1.1em;font-weight:bold;color:'+statusCol+'">'+d.status.toUpperCase()+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Risk</div><div style="font-size:1.1em;font-weight:bold;color:'+riskCol+'">'+d.risk.toUpperCase()+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Confidence</div><div style="font-size:1.1em;font-weight:bold;color:'+(d.confidence==="clear"?"#3fb950":"#d29922")+'">'+d.confidence.toUpperCase()+'</div></div>';
-      var dqCol=d.data_quality==="sufficient"?"#3fb950":"#d29922";
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center;min-width:80px"><div style="color:#8b949e;font-size:0.75em">Data Quality</div><div style="font-size:1.1em;font-weight:bold;color:'+dqCol+'">'+d.data_quality.toUpperCase()+'</div></div>';
-      html+='</div>';
-      html+='<div style="font-size:0.82em;color:#8b949e;padding:8px 0;border-top:1px solid #21262d;margin-top:4px">'+(d.status_reason||'')+'</div>';
-      db.innerHTML=html;
-    }
-    // NON-AUTHORITATIVE display filter. The server-side projection in
-    // signal-projection.mjs (toPublicSignals, applied at the /health serializer) is
-    // the load-bearing privacy control — /health emits only public types. This
-    // client filter is redundant defense-in-depth; do NOT delete the server
-    // projection believing this covers it (it runs post-network, browser-side only).
-    var FLEET_SIGNAL_TYPES = ["node_offline","block_lag","not_synced","not_ready","identity_mismatch","low_online_count","block_divergence","chain_stall"];
-    if(d.signals) d.signals = d.signals.filter(function(s){ return FLEET_SIGNAL_TYPES.indexOf(s.type) === -1; });
-    if(d.signals_grouped) {
-      ["critical","warning","info"].forEach(function(sev){
-        if(d.signals_grouped[sev]) d.signals_grouped[sev] = d.signals_grouped[sev].filter(function(s){ return FLEET_SIGNAL_TYPES.indexOf(s.type) === -1; });
-      });
-    }
-    var sl=document.getElementById("signals-list");
-    if(sl&&d.signals&&d.signals.length>0){
-      var sevColor={"info":"#58a6ff","warning":"#d29922","critical":"#f85149"};
-      var sevIcon={"info":"\u2139\ufe0f","warning":"\u26a0\ufe0f","critical":"\ud83d\udd34"};
-      var html="";
-      d.signals.forEach(function(s){
-        var col=sevColor[s.severity]||"#8b949e";
-        var icon=sevIcon[s.severity]||"\u2139\ufe0f";
-        html+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #21262d">';
-        html+='<span style="font-size:14px;margin-top:1px">'+icon+'</span>';
-        html+='<div style="flex:1">';
-        html+='<span style="font-size:0.78em;font-weight:500;color:'+col+';text-transform:uppercase;letter-spacing:0.05em">'+s.type.replace(/_/g," ")+'</span>';
-        if(s.nodes&&s.nodes.length>0) html+=' <span style="font-size:0.75em;color:#8b949e">['+s.nodes.join(", ")+']</span>';
-        html+='<div style="font-size:0.82em;color:#c9d1d9;margin-top:2px">'+s.message+'</div>';
-        html+='</div>';
-        if(s.value!==null&&s.value!==undefined&&s.type!=="all_healthy"&&s.type!=="public_network_block"){
-          html+='<span style="font-size:1.1em;font-weight:bold;color:'+col+'">'+s.value+'</span>';
-        }
-        html+='</div>';
-      });
-      sl.innerHTML=html;
-    } else if(sl) { sl.innerHTML='<span style="color:#8b949e;font-size:0.85em">No signals yet</span>'; }
-  }catch(e){}
-  try{
-    var sr=await fetch("/sentinel");var sd=await sr.json();
-    var sb=document.getElementById("sentinel-status");
-    if(sb){
-      // /sentinel on the internal listener (where this page is served): { status, last_check, alerts_24h, recent_alert_keys }. The public one has status and last_check only.
-      var known=sd&&sd.status==="ok"&&typeof sd.alerts_24h==="number";
-      var n24=known?sd.alerts_24h:null;
-      var html='<div style="display:flex;gap:16px;margin-bottom:12px">';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Alerts 24h</div><div style="font-size:1.4em;font-weight:bold;color:'+(!known?"#8b949e":n24===0?"#3fb950":"#f85149")+'">'+(known?n24:"unknown")+'</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Poll interval</div><div style="font-size:1.4em;font-weight:bold;color:#c9d1d9">5min</div></div>';
-      html+='<div style="background:#0d1117;border-radius:6px;padding:10px 16px;text-align:center"><div style="color:#8b949e;font-size:0.75em">Detectors</div><div style="font-size:1.4em;font-weight:bold;color:#c9d1d9">5</div></div>';
-      html+='</div>';
-      if(!known){
-        html+='<div style="color:#8b949e;font-size:0.85em">Sentinel state unknown: its record could not be read.</div>';
-      } else if(n24===0){
-        html+='<div style="color:#3fb950;font-size:0.85em">\u2705 No anomalies detected in last 24h</div>';
+    } else if (reqPath === "/fleet" || reqPath === "/fleet.json") {
+      // The private fleet page (src/fleet-view.mjs). Reached only on the internal listener: isFleetRoute sends the public
+      // listener to 404 before routing. Never cached, never indexed; the site head with no route, so no share tags or canonical.
+      var fvNow = Date.now(), fv = fleetViewNow(fvNow);
+      var fvHeaders = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow, noarchive" };
+      if (reqPath === "/fleet.json") {
+        res.writeHead(200, Object.assign({ "Content-Type": "application/json" }, fvHeaders));
+        res.end(JSON.stringify(fv));
       } else {
-        html+='<div style="font-size:0.82em;color:#8b949e">'+n24+' alert key'+(n24===1?'':'s')+' in the last 24 h. Details are on the internal listener.</div>';
+        res.writeHead(200, Object.assign({ "Content-Type": "text/html; charset=utf-8" }, fvHeaders));
+        res.end(renderFleetPage(fv, { head: siteHead(null), markPath: MARK_ASSET ? MARK_ASSET_PATH : null }, fvNow));
       }
-      sb.innerHTML=html;
-    }
-  }catch(e){}
-  try{
-    var pn=document.getElementById("pub-list");
-    if(pn&&d.publicNodes&&d.publicNodes.length>0){
-      var pt='<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Node</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Block</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Latency</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Peers</th><th style="color:#8b949e;text-align:left;padding:4px 8px;border-bottom:1px solid #21262d">Reachability</th></tr></thead><tbody>';
-      d.publicNodes.forEach(function(n){
-        pt+='<tr><td style="padding:6px 8px;border-bottom:1px solid #21262d"><b>'+n.name+'</b></td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.block||'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.latencyMs?n.latencyMs+'ms':'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.peers||'?')+'</td><td style="padding:6px 8px;border-bottom:1px solid #21262d">'+(n.ok?'\u2705 reachable':'\u26aa unreachable')+'</td></tr>';
-      });
-      pt+='</tbody></table>';pt+='<div style="font-size:0.75em;color:#484f58;margin-top:8px">Reachability is from the Oracle\u2019s vantage point. \u201cUnreachable\u201d means the Oracle could not reach the node \u2014 not proof the node is down.</div>';
-      pn.innerHTML=pt;
-    } else if(pn) { pn.innerHTML='<span style="color:#8b949e">No public nodes data yet</span>'; }
-  }catch(e){}
-  try{
-    var ir=await fetch("/incidents?limit=10");var id=await ir.json();
-    var publicIncs = id.incidents ? id.incidents.filter(function(i){ return !isFleetIncident(i); }) : [];
-    var fleetIncs = id.incidents ? id.incidents.filter(function(i){ return isFleetIncident(i); }) : [];
-    var il=document.getElementById("inc-list");
-    if(!publicIncs||publicIncs.length===0){il.innerHTML='<div style="color:#8b949e;font-size:0.85em">No network incidents recorded</div>';}
-    else {
-      il.innerHTML="";
-      var MAX_INC=5;var incShown=0;
-      publicIncs.forEach(function(inc){
-        if(incShown>=MAX_INC)return;
-        il.innerHTML+='<div class="inc"><span class="id">'+inc.id+'</span> <span class="sev '+inc.severity+'">'+inc.severity.toUpperCase()+'</span> '+inc.description+' <span style="color:#8b949e">'+( inc.status==="active"?"\u23F3 active":"\u2705 resolved in "+(inc.duration_seconds||"?")+"s")+'</span></div>';
-        incShown++;
-      });
-      if(publicIncs.length>MAX_INC){il.innerHTML+='<div style="margin-top:8px;font-size:0.82em"><a href="/incidents" style="color:#58a6ff">View all '+publicIncs.length+' network incidents \u2192</a></div>';}
-    }
-    var fil=document.getElementById("fleet-inc-list");
-    if(fil){
-      if(!fleetIncs||fleetIncs.length===0){fil.innerHTML='<div style="color:#8b949e;font-size:0.85em">No fleet incidents recorded</div>';}
-      else {
-        fil.innerHTML="";
-        var fincShown=0;
-        fleetIncs.forEach(function(inc){
-          if(fincShown>=5)return;
-          fil.innerHTML+='<div class="inc"><span class="id">'+inc.id+'</span> <span class="sev '+inc.severity+'">'+inc.severity.toUpperCase()+'</span> '+inc.description+' <span style="color:#8b949e">'+( inc.status==="active"?"\u23F3 active":"\u2705 resolved in "+(inc.duration_seconds||"?")+"s")+'</span></div>';
-          fincShown++;
-        });
-        if(fleetIncs.length>5){fil.innerHTML+='<div style="margin-top:8px;font-size:0.82em"><a href="/incidents" style="color:#58a6ff">View all \u2192</a></div>';}
-      }
-    }
-  }catch(e){document.getElementById("updated").textContent="Error: "+e.message;}
-}
-refresh();setInterval(refresh,20000);
-</script></body></html>`;
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" });
-      res.end(dashHtml);
     } else if (reqPath === "/history/export" || reqPath.indexOf("/history/export/") === 0) {
       var expFrom = 0, expTo = Infinity;
       if (reqQuery.get("from")) expFrom = parseInt(reqQuery.get("from"), 10) || 0;
@@ -4449,9 +4077,10 @@ refresh();setInterval(refresh,20000);
   } else if (INTERNAL_PORT) {
     var internalServer = createServer(safeHandle(true));
     internalServer.listen(INTERNAL_PORT, "127.0.0.1", function() { log("  Internal API (fleet routes) listening on 127.0.0.1:" + INTERNAL_PORT); });
+    startFleetMachineSampler();
     internalServer.on("error", function(err) { logError("Internal server error: " + err.message); });
   } else {
-    log("  Fleet routes (/history, /history/*, /dashboard) are not served: they exist only on the internal listener. Set INTERNAL_PORT to enable it.");
+    log("  Fleet routes (/history, /history/*, /fleet, /fleet.json) are not served: they exist only on the internal listener. Set INTERNAL_PORT to enable it.");
   }
 
   server.listen(HEALTH_PORT, "127.0.0.1", function() {
@@ -4929,6 +4558,9 @@ async function main() {
       try {
         latestFixnetNodes = await probeFixnetNodes();
         fixnetObservedAt = Date.now();
+        // The seeds' median as it stood when these probes finished: the fleet page compares testnet nodes with this
+        // snapshot only, so a later public reading never changes an earlier cycle's rows (src/fleet-view.mjs).
+        latestFleetBaseline = seedMedianReference();
         fixnetCycleCounter++;
         // v7.2: probe discovered fixnet nodes (rate-limited inside function)
         try {

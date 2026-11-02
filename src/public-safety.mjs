@@ -243,7 +243,25 @@ export async function cappedJson(url, init, opts) {
     return out;
   } finally { clearTimeout(timer); try { ctl.abort(); } catch (e) {} }
 }
-export async function readJsonCapped(resp, maxBytes) {
+// cappedText: cappedJson for a text body (e.g. Prometheus text from a node exporter). The same fixed options: no
+// redirect, identity encoding, its own signal, the cap. data is the body text when the status is read, else undefined.
+export async function cappedText(url, init, opts) {
+  var o = opts || {}, ctl = new AbortController(), started = Date.now();
+  var maxBytes = Number.isFinite(o.maxBytes) && o.maxBytes > 0 ? o.maxBytes : CAPPED_DEFAULT_MAX_BYTES;
+  var timer = setTimeout(function() { ctl.abort(new DOMException("The operation timed out.", "TimeoutError")); }, o.timeoutMs || 5000);
+  try {
+    var headers = new Headers((init && init.headers) || {});
+    Object.keys(CAPPED_FETCH_OPTIONS.headers).forEach(function(k) { headers.set(k, CAPPED_FETCH_OPTIONS.headers[k]); });
+    var resp = await (o.fetch || nativeFetch)(url, Object.assign({}, init || {}, {
+      decompress: CAPPED_FETCH_OPTIONS.decompress, keepalive: CAPPED_FETCH_OPTIONS.keepalive, redirect: "manual", signal: ctl.signal, headers: headers }));
+    var out = { status: resp.status, ok: resp.ok, headersMs: Date.now() - started, data: undefined };
+    if (o.read ? o.read(resp.status) : resp.ok) out.data = await readTextCapped(resp, maxBytes);
+    return out;
+  } finally { clearTimeout(timer); try { ctl.abort(); } catch (e) {} }
+}
+export async function readJsonCapped(resp, maxBytes) { return JSON.parse(await readTextCapped(resp, maxBytes)); }
+// The body as text under the same cap and decoding rules (readJsonCapped parses it). Throws ResponseTooLarge past the cap.
+export async function readTextCapped(resp, maxBytes) {
   var declared = Number(resp.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) throw responseTooLarge(maxBytes);
   var raw = Buffer.alloc(0);
@@ -275,7 +293,7 @@ export async function readJsonCapped(resp, maxBytes) {
       throw new SyntaxError("body could not be decoded");
     }
   }
-  return JSON.parse(text);
+  return text;
 }
 
 // Run async jobs with at most `limit` in flight.

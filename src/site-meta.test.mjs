@@ -26,8 +26,8 @@ const unesc = (s) => String(s).replace(/&#39;/g, "'").replace(/&quot;/g, '"').re
 
 console.log("\n[" + TAG + "] the pages");
 // The HTML routes the agent serves, read from its own router: a route answered with text/html is a page.
-const htmlRoutes = [...AGENT.matchAll(/reqPath === "(\/[^"]*)"\) \{\n(?:(?!\n    \} else if)[\s\S])*?"Content-Type": ?"text\/html/g)].map((m) => m[1]).filter((r) => r !== "/dashboard");
-check("P1 the table names exactly the 11 HTML routes the public router serves (the internal /dashboard aside)",
+const htmlRoutes = [...AGENT.matchAll(/reqPath === "(\/[^"]*)"\) \{\n(?:(?!\n    \} else if)[\s\S])*?"Content-Type": ?"text\/html/g)].map((m) => m[1]).filter((r) => r !== "/fleet.json");   // the internal /fleet page (one branch with /fleet.json) aside
+check("P1 the table names exactly the 11 HTML routes the public router serves (the internal /fleet page aside)",
   SITE_ROUTES.length === 11 && htmlRoutes.length === 11 && htmlRoutes.every((r) => SITE_ROUTES.includes(r)), JSON.stringify(htmlRoutes));
 check("P2 the origin is the fixed public one, never a request's Host header", PUBLIC_ORIGIN === "https://demos-oracle.com" && !/req\.headers\[?\.?["']?host/i.test(readFileSync(join(__dir, "site-meta.mjs"), "utf8")));
 const bad = SITE_ROUTES.filter((r) => { const d = SITE_META[r].description; return typeof d !== "string" || d.length < 50 || d.length > 200 || /["<>]/.test(d) || publicLanguageHit(d) || /\s{2}/.test(d); });
