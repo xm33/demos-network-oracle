@@ -42,6 +42,7 @@ import { RULE, assess, stepConditionRecords, clockRound, newHeightClock, stepHei
 import { createCandidateStore, nextCandidates, readWitnesses, witnessSnapshot } from "./witnesses.mjs";
 import { sentinelStatePath } from "./sentinel-state.mjs";
 import { readFleetViewConfig, exporterUrl, parseNodeMetrics, buildFleetView, renderFleetPage, FLEET_VIEW_RULE } from "./fleet-view.mjs";
+import { attestationAvailable, dahrWindowMs, createDahrErrorLog, etagWithAttestation } from "./dahr-recency.mjs";
 
 // --- Logging setup ---
 var DNO_ADMIN_TOKEN = process.env.DNO_ADMIN_TOKEN || "";
@@ -2243,7 +2244,11 @@ async function publish(demos, post, attestations) {
 }
 
 // --- DAHR Attestation ---
-let dahrAvailable = null; // null = not yet checked, true/false after first attempt
+// dahrAvailable is internal only: false skips DAHR when the SDK lacks createDahr; true marks the first success
+// for its one log line. /health never reads it: attestation.available comes from last_ok_at (dahr-recency.mjs).
+let dahrAvailable = null; // null = not yet checked
+const DAHR_AVAILABLE_WINDOW_MS = dahrWindowMs(MONITOR_INTERVAL_MS); // 15 monitor cycles, 300 s by default
+const dahrErrorLog = createDahrErrorLog(DAHR_AVAILABLE_WINDOW_MS);
 
 async function dahrAttest(demos, url, method) {
   // Check if DAHR is available on this SDK version
@@ -2276,9 +2281,10 @@ async function dahrAttest(demos, url, method) {
       return null;
     }
     if (dahrAvailable !== true) {
-      log("  DAHR: attestation available and working. tx=" + txHash.substring(0, 12) + "...");
+      log("  DAHR: first attestation since start. tx=" + txHash.substring(0, 12) + "...");
       dahrAvailable = true;
     }
+    dahrErrorLog.success().forEach(function(line) { log("  " + line); });
 
     return {
       url: url,
@@ -2288,11 +2294,7 @@ async function dahrAttest(demos, url, method) {
       timestamp: Date.now(),
     };
   } catch (err) {
-    if (dahrAvailable === null) {
-      log("  DAHR: attestation failed (" + err.message + "). Will retry next cycle.");
-    } else {
-      log("  DAHR: attestation error: " + err.message);
-    }
+    dahrErrorLog.error(err && err.message, Date.now()).forEach(function(line) { log("  " + line); });
     return null;
   }
 }
@@ -3230,7 +3232,7 @@ let roundSeedHashes = {};            // seed name -> normalized hash or null, fo
 let latestBlockIdentity = null;      // compareBlockIdentity() of the last round
 const blockIdentityTracker = createBlockIdentityTracker();
 let latestVersionData = { running: AGENT_VERSION, latestCommit: null, latestMessage: null, latestDate: null, nodeVersion: null, checkedAt: null };
-let latestAttestationState = { available: false, lastCount: 0, lastOkAt: null, lastAttemptAt: null }; // honest DAHR attestation state; drives metric + /health (never hardcoded)
+let latestAttestationState = { lastCount: 0, lastOkAt: null, lastAttemptAt: null }; // honest DAHR attestation state; /health derives available from lastOkAt when served (never hardcoded, never latched)
 let latestPublicRpcObservations = null; // null = no public-RPC observation yet; sanitized snapshot refreshed after each completed public-RPC probe; stale snapshots are not served
 let signalAlertDedup = {}; // { "signal_type_nodes": timestamp }
 let signalFirstSeen = {}; // { "signal_type": timestamp } — tracks when each signal type first appeared
@@ -3510,7 +3512,11 @@ function buildPublicMetrics(snapshot, now, staleBound) {
     if (!internal && isFleetRoute(reqPath)) { notFound(req, res); return; }
 
     if (reqPath === "/health") {
+      // attestation.available is evaluated per request (it expires without a new cycle), so it is part of the ETag:
+      // a 304 can never keep an expired true.
+      var healthAttAvailable = attestationAvailable(latestAttestationState.lastOkAt, Date.now(), DAHR_AVAILABLE_WINDOW_MS);
       var healthV = observationValidators("health");   // once, before the body: the same validators answer the 304 and go with the 200
+      healthV.etag = etagWithAttestation(healthV.etag, healthAttAvailable);
       if (notModified(req, res, healthV, {})) return;
       var staleness = getStaleness(); // FIX BUG 7
       var canonical = computeCanonicalState();
@@ -3565,7 +3571,7 @@ function buildPublicMetrics(snapshot, now, staleBound) {
           return out;
         })(),
         discoveredPeers: Object.keys(discoveredPeers).length,
-        attestation: { available: latestAttestationState.available, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
+        attestation: { available: healthAttAvailable, last_count: latestAttestationState.lastCount, last_ok_at: latestAttestationState.lastOkAt },
         on_chain_publication: SUPERCOLONY_ENABLED ? "unavailable" : "disabled",
         on_chain_validators: publicOnChainValidators(latestValidatorRound, Date.now(), validatorPublishConfig()),
         validator_watch: publicValidatorWatch(latestValidatorRound, Date.now(), validatorPublishConfig()),
@@ -4536,7 +4542,6 @@ async function main() {
       var publicRpcResults = publicRpcProbe.results;
       var cycleAttestations = publicRpcProbe.attestations;
       latestAttestationState = {
-        available: dahrAvailable === true,
         lastCount: cycleAttestations.length,
         lastOkAt: cycleAttestations.length > 0 ? Date.now() : latestAttestationState.lastOkAt,
         lastAttemptAt: Date.now()
